@@ -1,0 +1,64 @@
+===============================================================================
+  Connection Info for {{ inventory_hostname }} ({{ ansible_host }})
+  Generated: {{ ansible_date_time.iso8601 }}
+===============================================================================
+
+--- 3x-ui Panel ---
+{% if domain_mode | bool %}
+URL:      https://{{ domain }}/{{ panel_web_base_path }}/
+{% else %}
+Panel binds to localhost only (not exposed to the internet).
+SSH tunnel: ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ ansible_host }}
+Local URL:  http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/
+{% endif %}
+Username: {{ panel_username }}
+Password: {{ panel_password }}
+
+--- Primary: VLESS + Reality (port 443) ---
+{{ vless_reality_url }}
+
+{% if domain_mode | bool %}
+--- Fallback: VLESS + WSS + CDN ---
+{{ vless_wss_url }}
+
+--- Connection Info Page ---
+https://{{ domain }}/{{ info_page_path }}
+{% endif %}
+
+--- Recommended Client Apps ---
+iOS:      v2RayTun (App Store) or Hiddify
+Android:  v2rayNG (Play Store) or Hiddify
+Windows:  v2rayN (github.com/2dust/v2rayN/releases)
+macOS:    Hiddify (github.com/hiddify/hiddify-app/releases)
+Linux:    Hiddify or Nekoray
+
+--- Important Notes ---
+1. TIME SYNC: Device clock must be accurate within 30 seconds.
+   Enable "Set Automatically" in your device's date/time settings.
+
+2. DO NOT run other VPN protocols (OpenVPN, WireGuard, etc.) on this
+   server. They will get the IP flagged and blocked.
+
+3. TO UPDATE: cd /opt/3x-ui && docker compose pull && docker compose up -d
+
+{% if domain_mode | bool %}
+4. CLOUDFLARE SETUP (required for CDN fallback):
+   - Add your domain in Cloudflare dashboard
+   - Create an A record pointing to {{ ansible_host }}
+   - Enable the orange cloud icon (Proxy)
+   - Set SSL/TLS mode to "Full (Strict)"
+   - In Network settings, enable WebSockets
+
+{% endif %}
+5. IF CONNECTION STOPS WORKING:
+   - Try the CDN fallback configuration
+   - Get a new server IP from your hosting provider
+   - Re-run the Ansible playbook with the new IP
+
+6. SNI TARGET: Currently using {{ reality_sni }}.
+   Alternatives: www.apple.com, dl.google.com, www.yahoo.com
+   Use RealiTLScanner to find optimal targets near your server.
+
+===============================================================================
+  KEEP THIS FILE SECURE — it contains all access credentials.
+===============================================================================

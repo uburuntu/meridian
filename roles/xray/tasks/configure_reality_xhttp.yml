@@ -1,0 +1,115 @@
+---
+# Create the VLESS+Reality+XHTTP inbound — relay connection endpoint.
+# Only used in exit mode (chain). The relay node connects to this inbound
+# using XHTTP transport with Reality for stealth.
+#
+# XHTTP mimics standard HTTP traffic, making relay→exit connections
+# harder to detect than raw TCP.
+
+- name: Check if VLESS-Reality-XHTTP inbound already exists
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/list"
+    method: GET
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: inbounds_list_xhttp
+
+- name: Find existing XHTTP Reality inbound
+  ansible.builtin.set_fact:
+    xhttp_inbound_match: "{{ inbounds_list_xhttp.json.obj | default([]) | selectattr('remark', 'equalto', 'VLESS-Reality-XHTTP') | list }}"
+
+- name: Set XHTTP inbound status
+  ansible.builtin.set_fact:
+    xhttp_inbound_exists: "{{ xhttp_inbound_match | length > 0 }}"
+
+# Compute which port XHTTP should use:
+# - Domain mode: behind HAProxy on haproxy_reality_backend_port
+# - No-domain mode: directly on 443
+- name: Compute XHTTP inbound port
+  ansible.builtin.set_fact:
+    xhttp_inbound_port: "{{ (domain_mode | bool) | ternary(haproxy_reality_backend_port, 443) }}"
+
+- name: Create VLESS+Reality+XHTTP inbound
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/add"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+      Content-Type: "application/x-www-form-urlencoded"
+    body_format: form-urlencoded
+    body:
+      remark: "VLESS-Reality-XHTTP"
+      enable: "true"
+      port: "{{ xhttp_inbound_port }}"
+      protocol: "vless"
+      expiryTime: "0"
+      total: "0"
+      settings: >-
+        {
+          "clients": [{
+            "id": "{{ xhttp_uuid }}",
+            "flow": "",
+            "email": "xhttp-relay-user",
+            "limitIp": 0,
+            "totalGB": 0,
+            "expiryTime": 0,
+            "enable": true,
+            "tgId": "",
+            "subId": "",
+            "reset": 0
+          }],
+          "decryption": "none",
+          "fallbacks": []
+        }
+      streamSettings: >-
+        {
+          "network": "xhttp",
+          "security": "reality",
+          "externalProxy": [],
+          "realitySettings": {
+            "show": false,
+            "xver": 0,
+            "dest": "{{ reality_dest }}",
+            "serverNames": ["{{ reality_sni }}"],
+            "privateKey": "{{ reality_private_key }}",
+            "minClient": "",
+            "maxClient": "",
+            "maxTimediff": 0,
+            "shortIds": ["{{ reality_short_id }}"],
+            "settings": {
+              "publicKey": "{{ reality_public_key }}",
+              "fingerprint": "{{ utls_fingerprint }}",
+              "serverName": "",
+              "spiderX": "/"
+            }
+          },
+          "xhttpSettings": {
+            "mode": "{{ xhttp_mode | default('packet-up') }}",
+            "path": "{{ xhttp_path | default('/') }}"
+          }
+        }
+      sniffing: >-
+        {
+          "enabled": true,
+          "destOverride": ["http", "tls", "quic", "fakedns"],
+          "metadataOnly": false,
+          "routeOnly": false
+        }
+    status_code: [200]
+    return_content: true
+  register: xhttp_create_result
+  when: not (xhttp_inbound_exists | bool)
+
+- name: Verify XHTTP Reality inbound was created successfully
+  ansible.builtin.assert:
+    that: xhttp_create_result.json.success | default(false)
+    fail_msg: "Failed to create XHTTP Reality inbound: {{ xhttp_create_result.json.msg | default('unknown error') }}"
+  when: not (xhttp_inbound_exists | bool)
+
+- name: Show XHTTP Reality inbound status
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'VLESS+Reality+XHTTP inbound created on port ' + (xhttp_inbound_port | string)
+      if not (xhttp_inbound_exists | bool)
+      else 'VLESS+Reality+XHTTP inbound already exists — skipping' }}

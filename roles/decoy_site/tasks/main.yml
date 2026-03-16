@@ -1,0 +1,39 @@
+---
+# Deploy decoy website and private connection info page.
+# The decoy site makes the server look like a real business website.
+# The connection info page is served on a secret path with QR codes.
+
+- name: Deploy decoy landing page
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: /var/www/html/index.html
+    mode: "0644"
+    owner: caddy
+    group: caddy
+
+- name: Build Reality VLESS connection URL
+  ansible.builtin.set_fact:
+    vless_reality_url: >-
+      vless://{{ reality_uuid }}@{{ ansible_host }}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Reality
+    vless_wss_url: >-
+      vless://{{ wss_uuid }}@{{ domain }}:443?encryption=none&security=tls&sni={{ domain }}&type=ws&host={{ domain }}&path=%2F{{ ws_path }}#VLESS-WSS-CDN
+
+- name: Generate Reality QR code as base64 PNG
+  ansible.builtin.shell:
+    cmd: printf '%s' '{{ vless_reality_url }}' | qrencode -t PNG -o - -s 6 | base64 -w0
+  register: reality_qr_b64
+  changed_when: false
+
+- name: Generate WSS QR code as base64 PNG
+  ansible.builtin.shell:
+    cmd: printf '%s' '{{ vless_wss_url }}' | qrencode -t PNG -o - -s 6 | base64 -w0
+  register: wss_qr_b64
+  changed_when: false
+
+- name: Deploy connection info page
+  ansible.builtin.template:
+    src: connection-info.html.j2
+    dest: /var/www/private/index.html
+    mode: "0644"
+    owner: caddy
+    group: caddy

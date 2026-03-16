@@ -1,0 +1,14 @@
+---
+# Kernel tuning: enable BBR congestion control for better throughput
+
+- name: Enable BBR congestion control
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    state: present
+    reload: true
+  loop:
+    - { key: "net.core.default_qdisc", value: "fq" }
+    - { key: "net.ipv4.tcp_congestion_control", value: "bbr" }
+  when: bbr_enabled | default(true)

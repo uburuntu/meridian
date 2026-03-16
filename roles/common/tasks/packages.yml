@@ -1,0 +1,38 @@
+---
+# Install required system packages and enable automatic security updates
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install required packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - socat
+      - wget
+      - unzip
+      - jq
+      - qrencode
+      - ufw
+      - gnupg
+      - apt-transport-https
+      - ca-certificates
+      - python3-pip
+      - unattended-upgrades
+      - apt-listchanges
+    state: present
+
+- name: Enable automatic security updates
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    mode: "0644"
+
+- name: Set timezone to UTC
+  community.general.timezone:
+    name: UTC

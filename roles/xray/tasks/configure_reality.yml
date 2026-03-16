@@ -1,0 +1,138 @@
+---
+# Create the VLESS+Reality+TCP inbound — direct user access protocol.
+# Reality makes the server impersonate a real website (e.g., microsoft.com).
+# Active probes see a legitimate TLS certificate; the proxy is invisible.
+#
+# In exit mode (chain): this inbound moves to reality_direct_port (8444) as a
+# fallback for direct connections. The primary port 443 is used by XHTTP.
+#
+# Handles mode switching: if an inbound exists on the wrong port (e.g., switching
+# from no-domain to domain mode), it is deleted and recreated on the correct port.
+
+- name: Check if VLESS-Reality inbound already exists
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/list"
+    method: GET
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: inbounds_list
+
+- name: Find existing Reality inbound details
+  ansible.builtin.set_fact:
+    reality_inbound_match: "{{ inbounds_list.json.obj | default([]) | selectattr('remark', 'equalto', 'VLESS-Reality') | list }}"
+
+- name: Set Reality inbound status flags
+  ansible.builtin.set_fact:
+    reality_inbound_exists: "{{ reality_inbound_match | length > 0 }}"
+    reality_inbound_wrong_port: >-
+      {{ reality_inbound_match | length > 0 and
+         (reality_inbound_match[0].port | string) != (reality_port | string) }}
+    reality_inbound_id: "{{ reality_inbound_match[0].id | default(0) }}"
+
+# If the inbound exists on the wrong port (mode switch), delete it first
+- name: Delete Reality inbound on wrong port (mode switch detected)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/del/{{ reality_inbound_id }}"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  when: reality_inbound_wrong_port | bool
+  register: reality_delete_result
+
+- name: Verify Reality inbound deletion
+  ansible.builtin.assert:
+    that: reality_delete_result.json.success | default(false)
+    fail_msg: "Failed to delete old Reality inbound: {{ reality_delete_result.json.msg | default('unknown error') }}"
+  when: reality_inbound_wrong_port | bool
+
+# Update state after deletion
+- name: Mark Reality inbound as needing creation after deletion
+  ansible.builtin.set_fact:
+    reality_inbound_exists: false
+  when: reality_inbound_wrong_port | bool
+
+- name: Create VLESS+Reality inbound
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/add"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+      Content-Type: "application/x-www-form-urlencoded"
+    body_format: form-urlencoded
+    body:
+      remark: "VLESS-Reality"
+      enable: "true"
+      port: "{{ reality_port }}"
+      protocol: "vless"
+      expiryTime: "0"
+      total: "0"
+      settings: >-
+        {
+          "clients": [{
+            "id": "{{ reality_uuid }}",
+            "flow": "xtls-rprx-vision",
+            "email": "reality-user",
+            "limitIp": {{ client_limit_ip }},
+            "totalGB": {{ (client_total_bytes / 1073741824) | int }},
+            "expiryTime": 0,
+            "enable": true,
+            "tgId": "",
+            "subId": "",
+            "reset": 0
+          }],
+          "decryption": "none",
+          "fallbacks": []
+        }
+      streamSettings: >-
+        {
+          "network": "tcp",
+          "security": "reality",
+          "externalProxy": [],
+          "realitySettings": {
+            "show": false,
+            "xver": 0,
+            "dest": "{{ reality_dest }}",
+            "serverNames": ["{{ reality_sni }}"],
+            "privateKey": "{{ reality_private_key }}",
+            "minClient": "",
+            "maxClient": "",
+            "maxTimediff": 0,
+            "shortIds": ["{{ reality_short_id }}"],
+            "settings": {
+              "publicKey": "{{ reality_public_key }}",
+              "fingerprint": "{{ utls_fingerprint }}",
+              "serverName": "",
+              "spiderX": "/"
+            }
+          },
+          "tcpSettings": {
+            "acceptProxyProtocol": false,
+            "header": { "type": "none" }
+          }
+        }
+      sniffing: >-
+        {
+          "enabled": true,
+          "destOverride": ["http", "tls", "quic", "fakedns"],
+          "metadataOnly": false,
+          "routeOnly": false
+        }
+    status_code: [200]
+    return_content: true
+  register: reality_create_result
+  when: not (reality_inbound_exists | bool)
+
+- name: Verify Reality inbound was created successfully
+  ansible.builtin.assert:
+    that: reality_create_result.json.success | default(false)
+    fail_msg: "Failed to create Reality inbound: {{ reality_create_result.json.msg | default('unknown error') }}"
+  when: not (reality_inbound_exists | bool)
+
+- name: Show Reality inbound status
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'VLESS+Reality inbound created on port ' + (reality_port | string)
+      if not (reality_inbound_exists | bool)
+      else 'VLESS+Reality inbound already exists on correct port — skipping' }}

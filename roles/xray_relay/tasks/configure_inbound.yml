@@ -1,0 +1,83 @@
+---
+# Create the user-facing VLESS+TCP inbound on the relay node.
+# No TLS or Reality — the domestic leg doesn't need obfuscation because
+# the relay is on a whitelisted Russian IP and domestic traffic is less scrutinized.
+
+- name: Check if relay user inbound already exists
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/list"
+    method: GET
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: relay_inbounds_list
+
+- name: Determine if relay user inbound exists
+  ansible.builtin.set_fact:
+    relay_inbound_exists: "{{ relay_inbounds_list.json.obj | default([]) | selectattr('remark', 'equalto', 'VLESS-Relay-User') | list | length > 0 }}"
+
+- name: Create VLESS+TCP user-facing inbound
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/add"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+      Content-Type: "application/x-www-form-urlencoded"
+    body_format: form-urlencoded
+    body:
+      remark: "VLESS-Relay-User"
+      enable: "true"
+      port: "{{ relay_inbound_port | default(443) }}"
+      protocol: "vless"
+      expiryTime: "0"
+      total: "0"
+      settings: >-
+        {
+          "clients": [{
+            "id": "{{ relay_user_uuid }}",
+            "flow": "",
+            "email": "relay-user",
+            "limitIp": {{ client_limit_ip }},
+            "totalGB": {{ (client_total_bytes / 1073741824) | int }},
+            "expiryTime": 0,
+            "enable": true,
+            "tgId": "",
+            "subId": "",
+            "reset": 0
+          }],
+          "decryption": "none",
+          "fallbacks": []
+        }
+      streamSettings: >-
+        {
+          "network": "tcp",
+          "security": "none",
+          "tcpSettings": {
+            "acceptProxyProtocol": false,
+            "header": { "type": "none" }
+          }
+        }
+      sniffing: >-
+        {
+          "enabled": true,
+          "destOverride": ["http", "tls", "quic", "fakedns"],
+          "metadataOnly": false,
+          "routeOnly": false
+        }
+    status_code: [200]
+    return_content: true
+  register: relay_inbound_result
+  when: not (relay_inbound_exists | bool)
+
+- name: Verify relay inbound was created successfully
+  ansible.builtin.assert:
+    that: relay_inbound_result.json.success | default(false)
+    fail_msg: "Failed to create relay inbound: {{ relay_inbound_result.json.msg | default('unknown error') }}"
+  when: not (relay_inbound_exists | bool)
+
+- name: Show relay inbound status
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'VLESS+TCP relay inbound created on port ' + (relay_inbound_port | default(443) | string)
+      if not (relay_inbound_exists | bool)
+      else 'Relay user inbound already exists — skipping' }}

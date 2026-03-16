@@ -1,0 +1,49 @@
+===============================================================================
+  Relay Node Connection Info — {{ inventory_hostname }} ({{ ansible_host }})
+  Exit Node: {{ exit_ip }}
+  Generated: {{ ansible_date_time.iso8601 }}
+===============================================================================
+
+--- 3x-ui Panel ---
+Panel binds to localhost only (not exposed to the internet).
+SSH tunnel: ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ ansible_host }}
+Local URL:  http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/
+Username: {{ panel_username }}
+Password: {{ panel_password }}
+
+--- User Connection: VLESS+TCP (no TLS) ---
+{{ vless_relay_url }}
+
+--- Chain Path ---
+User → {{ ansible_host }}:{{ relay_inbound_port | default(443) }} (relay, VLESS+TCP)
+     → {{ exit_ip }}:443 (exit, VLESS+Reality+XHTTP)
+     → Internet
+
+--- Routing ---
+Russian sites (geosite:ru, geoip:ru) → DIRECT from relay
+Everything else → exit node → Internet
+
+--- Recommended Client Apps ---
+iOS:      v2RayTun (App Store) or Hiddify
+Android:  v2rayNG (Play Store) or Hiddify
+Windows:  v2rayN (github.com/2dust/v2rayN/releases)
+macOS:    Hiddify (github.com/hiddify/hiddify-app/releases)
+
+--- Important Notes ---
+1. WHITELISTED IP: This relay must be on a whitelisted Russian IP.
+   Test by deploying a web server and accessing from mobile (MTS/Megafon).
+
+2. DOMESTIC TRAFFIC: No TLS/Reality on the user→relay leg. This is
+   intentional — domestic traffic is not scrutinized by TSPU.
+
+3. RUSSIAN SITES: Traffic to Russian domains goes directly from the relay
+   without routing through the exit node (lower latency).
+
+4. TIME SYNC: Device clock must be accurate within 30 seconds.
+
+5. IF EXIT NODE CHANGES: Re-run playbook-chain.yml to update the relay's
+   outbound configuration with the new exit node credentials.
+
+===============================================================================
+  KEEP THIS FILE SECURE — it contains access credentials.
+===============================================================================

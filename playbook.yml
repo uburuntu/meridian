@@ -1,0 +1,103 @@
+---
+# =============================================================================
+# Censorship-Resistant Proxy Server Setup
+# =============================================================================
+# Deploys VLESS+Reality (primary) and optionally VLESS+WSS+CDN (fallback)
+# on a Debian/Ubuntu VPS.
+#
+# Usage:
+#   Minimal (Reality only):  ansible-playbook playbook.yml
+#   Full (with CDN fallback): ansible-playbook playbook.yml -e domain=example.com
+#
+# Re-running is safe — all tasks are idempotent.
+# =============================================================================
+
+- name: Deploy censorship-resistant proxy server
+  hosts: all
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    # -- Input validation --
+    - name: Fail if server IP is still the placeholder
+      ansible.builtin.fail:
+        msg: >-
+          You haven't configured your server IP yet.
+          Edit inventory.yml and replace YOUR_SERVER_IP with your actual VPS IP address.
+      when: ansible_host == 'YOUR_SERVER_IP'
+
+    - name: Check that qrencode is installed locally
+      ansible.builtin.command: qrencode --version
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      failed_when: false
+      register: local_qrencode_check
+
+    - name: Fail if qrencode is not installed locally
+      ansible.builtin.fail:
+        msg: >-
+          qrencode is not installed on your local machine. It is needed to generate QR codes.
+          Install it with: brew install qrencode (macOS) or apt install qrencode (Linux)
+      when: local_qrencode_check.rc != 0
+
+    # -- Compute derived variables --
+    - name: Set mode flags and derived ports
+      ansible.builtin.set_fact:
+        domain_mode: "{{ domain | default('') | length > 0 }}"
+        # In exit mode: TCP Reality goes to reality_direct_port (XHTTP takes primary port)
+        # In standalone: port depends on domain mode
+        reality_port: >-
+          {{ (exit_mode | default(false) | bool) | ternary(
+               reality_direct_port | default(8444),
+               (domain | default('') | length > 0) | ternary(haproxy_reality_backend_port, 443)
+             ) }}
+
+    # -- Load previously generated credentials for idempotent re-runs --
+    - name: Create local credentials directory
+      ansible.builtin.file:
+        path: "{{ credentials_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Check if credentials file exists
+      ansible.builtin.stat:
+        path: "{{ credentials_file }}"
+      register: creds_file_stat
+      delegate_to: localhost
+      become: false
+
+    - name: Load saved credentials from previous run
+      ansible.builtin.include_vars:
+        file: "{{ credentials_file }}"
+        name: saved_creds
+      when: creds_file_stat.stat.exists
+
+    - name: Apply saved credentials as facts
+      ansible.builtin.set_fact:
+        panel_username: "{{ saved_creds.panel_username }}"
+        panel_password: "{{ saved_creds.panel_password }}"
+        panel_web_base_path: "{{ saved_creds.panel_web_base_path }}"
+        info_page_path: "{{ saved_creds.info_page_path }}"
+        ws_path: "{{ saved_creds.ws_path }}"
+        reality_uuid: "{{ saved_creds.reality_uuid }}"
+        reality_private_key: "{{ saved_creds.reality_private_key }}"
+        reality_public_key: "{{ saved_creds.reality_public_key }}"
+        reality_short_id: "{{ saved_creds.reality_short_id }}"
+        wss_uuid: "{{ saved_creds.wss_uuid | default('') }}"
+        panel_configured: "{{ saved_creds.panel_configured | default(false) }}"
+      when: creds_file_stat.stat.exists
+
+  roles:
+    - role: common
+    - role: docker
+    - role: xray
+    - role: haproxy
+      when: domain_mode | bool
+    - role: caddy
+      when: domain_mode | bool
+    - role: decoy_site
+      when: domain_mode | bool
+    - role: output

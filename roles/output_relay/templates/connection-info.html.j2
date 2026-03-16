@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Relay Connection — {{ inventory_hostname }}</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --text-dim: #94a3b8; --accent: #38bdf8;
+    --success: #4ade80; --warn: #fbbf24; --radius: 12px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f8fafc; --surface: #fff; --border: #e2e8f0;
+      --text: #1e293b; --text-dim: #64748b; --accent: #0284c7;
+      --success: #16a34a; --warn: #d97706;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+    padding: 20px; max-width: 480px; margin: 0 auto;
+  }
+  h1 { font-size: 1.5rem; text-align: center; margin: 20px 0 8px; }
+  .subtitle { text-align: center; color: var(--text-dim); font-size: 0.9rem; margin-bottom: 24px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 1rem; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .badge {
+    font-size: 0.7rem; padding: 2px 8px; border-radius: 99px;
+    font-weight: 600; text-transform: uppercase;
+    background: #16a34a20; color: var(--success);
+  }
+  .card .desc { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 16px; }
+  .qr-wrap { text-align: center; margin: 16px 0; }
+  .qr-wrap img { max-width: 220px; border-radius: 8px; background: #fff; padding: 8px; }
+  .url-box {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; font-family: monospace;
+    font-size: 0.7rem; word-break: break-all; color: var(--text-dim);
+    cursor: pointer; transition: border-color 0.2s; line-height: 1.4;
+  }
+  .url-box:hover { border-color: var(--accent); }
+  .copy-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--success); color: #fff; padding: 10px 20px;
+    border-radius: 99px; font-size: 0.9rem; font-weight: 600;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 10;
+  }
+  .copy-toast.show { opacity: 1; }
+  .apps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .app-link {
+    display: block; text-align: center; padding: 10px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; text-decoration: none; color: var(--text);
+    font-size: 0.85rem; transition: border-color 0.2s;
+  }
+  .app-link:hover { border-color: var(--accent); }
+  .app-link .platform { font-size: 0.75rem; color: var(--text-dim); }
+  .chain-path {
+    background: var(--bg); border-radius: 8px; padding: 12px;
+    font-family: monospace; font-size: 0.8rem; color: var(--text-dim);
+    margin: 12px 0; line-height: 1.6;
+  }
+  .note {
+    background: #f59e0b15; border: 1px solid #f59e0b30;
+    border-radius: var(--radius); padding: 16px; margin-top: 16px;
+  }
+  .note h3 { font-size: 0.9rem; color: var(--warn); margin-bottom: 6px; }
+  .note p { font-size: 0.85rem; color: var(--text-dim); line-height: 1.5; }
+  .steps li {
+    font-size: 0.85rem; color: var(--text-dim); line-height: 1.6;
+    margin-bottom: 4px; list-style-position: inside;
+  }
+  .footer {
+    text-align: center; color: var(--text-dim); font-size: 0.75rem;
+    margin-top: 24px; padding-bottom: 20px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Relay Connection</h1>
+<p class="subtitle">Scan QR code or tap the URL to copy</p>
+
+<div class="card">
+  <h2>Connection <span class="badge">Relay</span></h2>
+  <p class="desc">Connect to the relay server. Traffic is automatically forwarded securely.</p>
+  <a href="{{ vless_relay_url }}" class="url-box" style="display:block;text-align:center;font-family:var(--sans,sans-serif);font-size:0.95rem;font-weight:500;color:var(--ok,#5ce88e);text-decoration:none;margin-bottom:12px;padding:14px;">Open in App</a>
+  <div class="qr-wrap">
+    <img src="data:image/png;base64,{{ relay_qr_b64.stdout }}" alt="QR Code">
+  </div>
+  <div class="url-box" onclick="copyUrl(this)" data-url="{{ vless_relay_url }}">
+    {{ vless_relay_url }}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Download Client App</h2>
+  <p class="desc">Install one of these apps, then scan the QR code or import the URL.</p>
+  <div class="apps">
+    <a class="app-link" href="https://apps.apple.com/app/v2raytun/id6476628951" target="_blank">
+      v2RayTun<br><span class="platform">iOS</span>
+    </a>
+    <a class="app-link" href="https://play.google.com/store/apps/details?id=com.v2ray.ang" target="_blank">
+      v2rayNG<br><span class="platform">Android</span>
+    </a>
+    <a class="app-link" href="https://github.com/hiddify/hiddify-app/releases/latest" target="_blank">
+      Hiddify<br><span class="platform">All Platforms</span>
+    </a>
+    <a class="app-link" href="https://github.com/2dust/v2rayN/releases/latest" target="_blank">
+      v2rayN<br><span class="platform">Windows</span>
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Quick Setup</h2>
+  <ol class="steps">
+    <li>Install a client app from the list above</li>
+    <li>Tap <strong>"Open in App"</strong> above — the connection imports automatically</li>
+    <li>If that doesn't work: scan the QR code from another device, or long-press the URL to copy it</li>
+    <li>Tap the connection in the app to activate it</li>
+  </ol>
+</div>
+
+<div class="note">
+  <h3>&#9888; Time Sync Required</h3>
+  <p>Your device clock must be accurate within 30 seconds or the connection will fail.
+     Go to Settings &gt; Date &amp; Time and enable "Set Automatically".</p>
+</div>
+
+<p class="footer">Generated {{ ansible_date_time.iso8601 }}</p>
+
+<div class="copy-toast" id="toast">Copied to clipboard</div>
+
+<script>
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch(e) {}
+  document.body.removeChild(ta);
+  return Promise.resolve();
+}
+function copyUrl(el) {
+  const url = el.getAttribute('data-url');
+  if (!url) return;
+  (navigator.clipboard ? navigator.clipboard.writeText(url) : fallbackCopy(url)).then(() => {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  });
+}
+(function() {
+  const ua = navigator.userAgent;
+  let target = null;
+  if (/iPhone|iPad|iPod/i.test(ua)) target = 'iOS';
+  else if (/Android/i.test(ua)) target = 'Android';
+  else if (/Win/i.test(ua)) target = 'Windows';
+  if (target) {
+    document.querySelectorAll('.app-link').forEach(a => {
+      if (a.querySelector('.platform').textContent === target) {
+        a.style.borderColor = 'var(--accent)';
+        a.style.fontWeight = '600';
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

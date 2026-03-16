@@ -1,0 +1,62 @@
+---
+# Deploy the 3x-ui panel as a Docker container
+
+- name: Create 3x-ui data directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - /opt/3x-ui
+    - /opt/3x-ui/db
+    - /opt/3x-ui/cert
+
+- name: Deploy docker-compose.yml for 3x-ui
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /opt/3x-ui/docker-compose.yml
+    mode: "0644"
+
+- name: Start 3x-ui container
+  block:
+    - name: Run docker compose up
+      ansible.builtin.command:
+        cmd: docker compose up -d
+        chdir: /opt/3x-ui
+      register: compose_result
+      changed_when: >-
+        'Started' in (compose_result.stdout + compose_result.stderr) or
+        'Creating' in (compose_result.stdout + compose_result.stderr)
+  rescue:
+    - name: Fetch container logs for diagnosis
+      ansible.builtin.command:
+        cmd: docker compose logs --tail 50
+        chdir: /opt/3x-ui
+      register: docker_logs
+      failed_when: false
+      changed_when: false
+
+    - name: Fail with helpful context
+      ansible.builtin.fail:
+        msg: |
+          Docker compose failed to start 3x-ui container.
+
+          Error: {{ compose_result.stderr | default('unknown') }}
+
+          Docker logs:
+          {{ docker_logs.stdout | default('no logs available') }}
+
+          Common fixes:
+          - Check if port 443 is already in use: ss -tlnp | grep 443
+          - Check disk space: df -h
+          - Check Docker status: systemctl status docker
+
+- name: Wait for 3x-ui panel to become responsive
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/"
+    method: GET
+    status_code: [200, 302, 301]
+  register: panel_health
+  until: panel_health is succeeded
+  retries: 30
+  delay: 2

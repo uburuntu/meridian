@@ -1,0 +1,211 @@
+---
+# Final output: display connection info, QR codes, and save files locally.
+# This role always runs (both domain and no-domain mode).
+
+# -- Build connection URLs --
+- name: Build Reality VLESS connection URL
+  ansible.builtin.set_fact:
+    vless_reality_url: >-
+      vless://{{ reality_uuid }}@{{ ansible_host }}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Reality
+
+- name: Build WSS VLESS connection URL (domain mode)
+  ansible.builtin.set_fact:
+    vless_wss_url: >-
+      vless://{{ wss_uuid }}@{{ domain }}:443?encryption=none&security=tls&sni={{ domain }}&type=ws&host={{ domain }}&path=%2F{{ ws_path }}#VLESS-WSS-CDN
+  when: domain_mode | bool
+
+- name: Set empty WSS URL for no-domain mode
+  ansible.builtin.set_fact:
+    vless_wss_url: ""
+  when: not (domain_mode | bool)
+
+# -- Generate QR codes in terminal --
+- name: Generate Reality QR code for terminal display
+  ansible.builtin.command:
+    cmd: "qrencode -t ANSIUTF8 '{{ vless_reality_url }}'"
+  register: reality_qr_terminal
+  changed_when: false
+  delegate_to: localhost
+  become: false
+
+- name: Generate WSS QR code for terminal display
+  ansible.builtin.command:
+    cmd: "qrencode -t ANSIUTF8 '{{ vless_wss_url }}'"
+  register: wss_qr_terminal
+  changed_when: false
+  delegate_to: localhost
+  become: false
+  when: domain_mode | bool
+
+# -- Generate QR codes as base64 PNGs for HTML file --
+# Use 'base64' without -w0 flag and pipe through 'tr' to strip newlines.
+# This works on both Linux (GNU coreutils) and macOS (BSD base64).
+- name: Generate Reality QR code as base64 PNG
+  ansible.builtin.shell:
+    cmd: "printf '%s' '{{ vless_reality_url }}' | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'"
+  register: reality_qr_b64_local
+  changed_when: false
+  delegate_to: localhost
+  become: false
+
+- name: Generate WSS QR code as base64 PNG
+  ansible.builtin.shell:
+    cmd: "printf '%s' '{{ vless_wss_url }}' | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'"
+  register: wss_qr_b64_local
+  changed_when: false
+  delegate_to: localhost
+  become: false
+  when: domain_mode | bool
+
+# -- Display connection info in terminal --
+- name: Display panel credentials
+  ansible.builtin.debug:
+    msg: |
+
+      ======================================================================
+                        CONNECTION SETUP COMPLETE
+      ======================================================================
+
+      --- 3x-ui Panel ---
+      {% if domain_mode | bool %}
+      URL:      https://{{ domain }}/{{ panel_web_base_path }}/
+      {% else %}
+      The panel binds to localhost only (not exposed to the internet).
+      Access it via SSH tunnel:
+        ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ ansible_host }}
+        Then open: http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/
+      {% endif %}
+      Username: {{ panel_username }}
+      Password: {{ panel_password }}
+
+- name: Build direct Reality fallback URL (exit mode)
+  ansible.builtin.set_fact:
+    vless_direct_url: >-
+      vless://{{ reality_uuid }}@{{ ansible_host }}:{{ reality_direct_port | default(8444) }}?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Direct-Fallback
+  when: exit_mode | default(false) | bool
+
+- name: Display Reality connection info
+  ansible.builtin.debug:
+    msg: |
+      {% if exit_mode | default(false) | bool %}
+
+      --- Direct Fallback: VLESS+Reality+TCP (port {{ reality_direct_port | default(8444) }}) ---
+      Use when the IP whitelist is not active (can connect directly).
+      {{ vless_direct_url }}
+      {% else %}
+
+      --- Primary: VLESS + Reality (port 443) ---
+      {{ vless_reality_url }}
+      {% endif %}
+
+      {{ reality_qr_terminal.stdout }}
+
+- name: Display WSS connection info
+  ansible.builtin.debug:
+    msg: |
+
+      --- Fallback: VLESS + WSS + CDN ---
+      {{ vless_wss_url }}
+
+      {{ wss_qr_terminal.stdout }}
+
+      --- Connection Info Page ---
+      https://{{ domain }}/{{ info_page_path }}
+
+      Share this URL with your friend — it has QR codes,
+      copy buttons, and setup instructions for all platforms.
+  when: domain_mode | bool
+
+- name: Display exit node relay credentials (for relay node setup)
+  ansible.builtin.debug:
+    msg: |
+
+      --- Exit Node Credentials (for Relay Configuration) ---
+      These values are automatically passed to the relay node.
+      XHTTP UUID:    {{ xhttp_uuid }}
+      Public Key:    {{ reality_public_key }}
+      Short ID:      {{ reality_short_id }}
+      Reality SNI:   {{ reality_sni }}
+      Server IP:     {{ ansible_host }}
+  when: exit_mode | default(false) | bool
+
+- name: Display client apps and notes
+  ansible.builtin.debug:
+    msg: |
+
+      --- Recommended Client Apps ---
+      iOS:      v2RayTun or Hiddify
+      Android:  v2rayNG or Hiddify
+      Windows:  v2rayN or Hiddify
+      macOS:    Hiddify
+      Linux:    Hiddify or Nekoray
+
+      --- Important Notes ---
+      1. TIME SYNC: Device clock must be within 30 seconds.
+         Enable "Set Automatically" in date/time settings.
+
+      2. DO NOT run other VPN protocols (OpenVPN, WireGuard)
+         on this server — it will get the IP flagged.
+
+      3. UPDATE: cd /opt/3x-ui &&
+         docker compose pull && docker compose up -d
+      {% if domain_mode | bool %}
+
+      4. CLOUDFLARE SETUP (for CDN fallback):
+         - Add domain in Cloudflare dashboard
+         - Create A record pointing to {{ ansible_host }}
+         - Enable orange cloud (Proxy)
+         - SSL/TLS mode: Full (Strict)
+         - Network: Enable WebSockets
+      {% endif %}
+
+      5. IF CONNECTION STOPS: Try the CDN fallback config,
+         or get a new server IP from your hosting provider.
+
+# -- Save connection info text file locally --
+- name: Save connection summary to local file
+  ansible.builtin.template:
+    src: connection-summary.txt.j2
+    dest: "{{ credentials_dir }}/{{ inventory_hostname }}-connection-info.txt"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+
+# -- Generate self-contained HTML file locally --
+- name: Save connection info HTML page locally
+  ansible.builtin.template:
+    src: connection-info.html.j2
+    dest: "{{ credentials_dir }}/{{ inventory_hostname }}-connection-info.html"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+
+# -- Verify the proxy is actually listening --
+- name: Verify port 443 is listening
+  ansible.builtin.command:
+    cmd: ss -tlnp sport = :443
+  register: port_443_check
+  changed_when: false
+
+- name: Verify Reality port is listening (exit mode fallback)
+  ansible.builtin.command:
+    cmd: "ss -tlnp sport = :{{ reality_direct_port | default(8444) }}"
+  register: port_direct_check
+  changed_when: false
+  when: exit_mode | default(false) | bool
+
+- name: Show deployment verification
+  ansible.builtin.debug:
+    msg: |
+
+      --- Deployment Verification ---
+      Port 443: {{ 'LISTENING' if '*:443' in port_443_check.stdout or '0.0.0.0:443' in port_443_check.stdout or ':::443' in port_443_check.stdout else 'NOT LISTENING — check docker logs' }}
+      {% if exit_mode | default(false) | bool %}
+      Port {{ reality_direct_port | default(8444) }}: {{ 'LISTENING' if port_direct_check.stdout | length > 50 else 'NOT LISTENING — check docker logs' }}
+      {% endif %}
+
+      Files saved locally:
+        Credentials:     {{ credentials_file }}
+        Connection info: {{ credentials_dir }}/{{ inventory_hostname }}-connection-info.txt
+        HTML page:       {{ credentials_dir }}/{{ inventory_hostname }}-connection-info.html
+      Open the HTML file in a browser or send it to your friend.

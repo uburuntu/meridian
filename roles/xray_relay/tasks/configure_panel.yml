@@ -1,0 +1,167 @@
+---
+# Configure the relay node's 3x-ui panel: change default credentials, generate UUID.
+# Credentials saved BEFORE password change to prevent lockout on failure.
+
+- name: Skip panel configuration if already done
+  when: not (panel_configured | default(false) | bool)
+  block:
+    - name: Generate panel credentials
+      ansible.builtin.set_fact:
+        panel_username: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=12') }}"
+        panel_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=24') }}"
+        panel_web_base_path: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=16') }}"
+      no_log: true
+
+    - name: Generate UUID for relay user
+      ansible.builtin.command:
+        cmd: docker exec 3x-ui xray uuid
+      register: relay_uuid_output
+      changed_when: false
+      no_log: true
+
+    - name: Set relay user UUID
+      ansible.builtin.set_fact:
+        relay_user_uuid: "{{ relay_uuid_output.stdout | trim }}"
+      no_log: true
+
+    # Save credentials BEFORE changing the password
+    - name: Save relay credentials to local file
+      ansible.builtin.copy:
+        content: |
+          ---
+          # Auto-generated credentials for relay {{ inventory_hostname }}
+          # Created: {{ ansible_date_time.iso8601 }}
+          panel_configured: true
+          panel_username: "{{ panel_username }}"
+          panel_password: "{{ panel_password }}"
+          panel_web_base_path: "{{ panel_web_base_path }}"
+          relay_user_uuid: "{{ relay_user_uuid }}"
+        dest: "{{ credentials_file }}"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    # Now change the panel credentials
+    - name: Login to 3x-ui with default credentials
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ panel_internal_port }}/login"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          username: admin
+          password: admin
+        status_code: [200]
+        return_content: true
+      register: default_login
+      no_log: true
+
+    - name: Extract session cookie
+      ansible.builtin.set_fact:
+        session_cookie: "{{ default_login.cookies_string }}"
+      no_log: true
+
+    - name: Update panel settings (bind to localhost)
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ panel_internal_port }}/panel/setting/update"
+        method: POST
+        body_format: json
+        headers:
+          Cookie: "{{ session_cookie }}"
+        body:
+          webListen: "127.0.0.1"
+          webDomain: ""
+          webPort: "{{ panel_internal_port }}"
+          webCertFile: ""
+          webKeyFile: ""
+          webBasePath: "/{{ panel_web_base_path }}/"
+          sessionMaxAge: 60
+          expireDiff: 0
+          trafficDiff: 0
+          remarkModel: "-full"
+          tgBotEnable: false
+          tgBotToken: ""
+          tgBotChatId: ""
+          tgRunTime: "@daily"
+          tgBotBackup: false
+          tgBotLoginNotify: true
+          tgCpu: 80
+          subEnable: false
+          subListen: ""
+          subPort: 2096
+          subPath: "/sub/"
+          subDomain: ""
+          subCertFile: ""
+          subKeyFile: ""
+          subUpdates: 12
+          subEncrypt: true
+          subShowInfo: false
+          subURI: ""
+          subJsonPath: "/json/"
+          subJsonURI: ""
+          subJsonFragment: ""
+          subJsonMux: ""
+          subJsonRules: ""
+          datepicker: "gregorian"
+          pageSize: 50
+          loginSecurity: true
+        status_code: [200]
+        return_content: true
+      no_log: true
+
+    - name: Update admin credentials
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ panel_internal_port }}/panel/setting/updateUser"
+        method: POST
+        body_format: json
+        headers:
+          Cookie: "{{ session_cookie }}"
+        body:
+          oldUsername: "admin"
+          oldPassword: "admin"
+          newUsername: "{{ panel_username }}"
+          newPassword: "{{ panel_password }}"
+        status_code: [200]
+        return_content: true
+      no_log: true
+
+    - name: Login with new credentials
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/login"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          username: "{{ panel_username }}"
+          password: "{{ panel_password }}"
+        status_code: [200]
+        return_content: true
+      register: new_login
+      no_log: true
+
+    - name: Update session cookie
+      ansible.builtin.set_fact:
+        session_cookie: "{{ new_login.cookies_string }}"
+      no_log: true
+
+    - name: Mark panel as configured
+      ansible.builtin.set_fact:
+        panel_configured: true
+
+# Ensure session cookie for subsequent API calls
+- name: Login to panel (for inbound/outbound configuration)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/login"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ panel_username }}"
+      password: "{{ panel_password }}"
+    status_code: [200]
+    return_content: true
+  register: api_login
+  no_log: true
+
+- name: Set session cookie for API calls
+  ansible.builtin.set_fact:
+    session_cookie: "{{ api_login.cookies_string }}"
+  no_log: true

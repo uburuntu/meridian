@@ -1,0 +1,15 @@
+---
+# Common server setup: packages, hardening, firewall, performance tuning
+
+- name: Install system packages
+  ansible.builtin.import_tasks: packages.yml
+
+- name: Harden SSH configuration
+  ansible.builtin.import_tasks: hardening.yml
+  when: ssh_disable_password | default(true)
+
+- name: Configure kernel network parameters
+  ansible.builtin.import_tasks: sysctl.yml
+
+- name: Configure firewall
+  ansible.builtin.import_tasks: firewall.yml

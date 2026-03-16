@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meridian — Deploy a Censorship-Resistant Proxy</title>
+<meta name="description" content="One command deploys a fully configured, undetectable proxy server. Open source.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08080a; --s1: #111114; --s2: #19191e;
+  --b1: #252530; --b2: #35354a;
+  --t1: #ececec; --t2: #9090a0; --t3: #505060;
+  --ac: #d4a24e; --ac2: #d4a24e20;
+  --ok: #5ce88e; --ok2: #5ce88e18;
+  --r: 8px;
+  --serif: 'Newsreader', Georgia, serif;
+  --sans: 'DM Sans', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--sans);background:var(--bg);color:var(--t1);
+  line-height:1.6;-webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--ac);color:var(--bg)}
+
+.w{max-width:660px;margin:0 auto;padding:0 20px}
+
+/* --- hero --- */
+.hero{padding:min(18vh,140px) 0 80px;position:relative}
+.hero::before{
+  content:'';position:absolute;top:-30%;left:10%;
+  width:80%;height:80%;
+  background:radial-gradient(ellipse at 40% 50%,#d4a24e08,transparent 70%);
+  pointer-events:none;
+}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:.72rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ac);background:var(--ac2);border:1px solid #d4a24e44;
+  border-radius:99px;padding:5px 14px;margin-bottom:28px;
+}
+.chip i{width:5px;height:5px;border-radius:50%;background:var(--ac);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+h1{
+  font-family:var(--serif);font-size:clamp(2.4rem,6vw,3.8rem);
+  font-weight:400;line-height:1.12;letter-spacing:-.01em;margin-bottom:20px;
+}
+h1 em{font-style:italic;color:var(--ac)}
+.sub{font-size:1.05rem;color:var(--t2);max-width:480px;margin-bottom:36px}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:12px 24px;border-radius:var(--r);font-family:var(--sans);
+  font-size:.9rem;font-weight:500;text-decoration:none;border:none;cursor:pointer;
+  transition:filter .06s,transform .06s;
+}
+.btn-p{background:var(--ac);color:var(--bg)}
+.btn-p:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.btn-s{background:var(--s1);color:var(--t1);border:1px solid var(--b1)}
+.btn-s:hover{border-color:var(--b2);background:var(--s2)}
+
+/* --- sections --- */
+section{padding:64px 0}
+.label{font-size:.7rem;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--ac);margin-bottom:10px}
+h2{font-family:var(--serif);font-size:clamp(1.6rem,3.5vw,2.2rem);font-weight:400;line-height:1.2;margin-bottom:12px}
+.desc{color:var(--t2);font-size:.95rem;max-width:480px;margin-bottom:32px}
+
+/* --- the one-liner --- */
+.oneliner{
+  background:var(--s1);border:1px solid var(--b1);border-radius:12px;
+  padding:24px 28px;margin:24px 0;position:relative;
+}
+.oneliner pre{
+  font-family:var(--mono);font-size:.88rem;line-height:1.5;
+  color:var(--t1);white-space:pre-wrap;word-break:break-all;padding-right:60px;
+}
+.oneliner .cp{
+  position:absolute;top:12px;right:12px;
+  background:var(--s2);border:1px solid var(--b1);color:var(--t2);
+  font-family:var(--mono);font-size:.68rem;padding:5px 12px;border-radius:6px;
+  cursor:pointer;transition:all .06s;
+}
+.oneliner .cp:hover{color:var(--t1);border-color:var(--b2)}
+.oneliner .cp.ok{color:var(--ok);border-color:var(--ok)}
+.or-sep{
+  text-align:center;color:var(--t3);font-size:.8rem;margin:16px 0;
+  display:flex;align-items:center;gap:16px;
+}
+.or-sep::before,.or-sep::after{content:'';flex:1;height:1px;background:var(--b1)}
+
+/* --- what happens --- */
+.timeline{margin:24px 0}
+.tl-item{
+  display:flex;gap:16px;padding:14px 0;
+  border-bottom:1px solid var(--b1);
+  font-size:.9rem;
+}
+.tl-item:last-child{border-bottom:none}
+.tl-n{
+  width:24px;height:24px;border-radius:50%;
+  background:var(--ac2);color:var(--ac);
+  font-family:var(--mono);font-size:.7rem;font-weight:500;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  margin-top:1px;
+}
+.tl-text{color:var(--t2)}
+.tl-text strong{color:var(--t1);font-weight:500}
+
+/* --- options --- */
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}
+@media(max-width:540px){.opts{grid-template-columns:1fr}}
+.opt{
+  background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);
+  padding:20px;transition:border-color .06s;
+}
+.opt:hover{border-color:var(--b2)}
+.opt h4{font-size:.9rem;font-weight:500;margin-bottom:4px}
+.opt p{font-size:.82rem;color:var(--t2);line-height:1.5}
+.opt-tag{
+  display:inline-block;font-size:.65rem;font-weight:600;text-transform:uppercase;
+  letter-spacing:.04em;padding:2px 7px;border-radius:4px;margin-bottom:10px;
+}
+.opt-tag-a{background:var(--ok2);color:var(--ok)}
+.opt-tag-b{background:#60a5fa18;color:#60a5fa}
+
+/* --- apps grid --- */
+.apps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}
+@media(max-width:540px){.apps{grid-template-columns:1fr 1fr}}
+.app{
+  background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);
+  padding:14px;text-align:center;font-size:.82rem;
+  text-decoration:none;color:var(--t1);transition:border-color .06s;
+}
+.app:hover{border-color:var(--b2)}
+.app span{display:block;font-size:.72rem;color:var(--t3);margin-top:2px}
+
+/* --- callout --- */
+.note{
+  background:var(--ac2);border:1px solid #d4a24e33;border-radius:var(--r);
+  padding:14px 18px;margin:20px 0;font-size:.85rem;color:var(--ac);
+  display:flex;gap:10px;line-height:1.5;
+}
+
+/* --- advanced section --- */
+details{
+  background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);
+  margin:12px 0;overflow:hidden;
+}
+details summary{
+  padding:16px 20px;cursor:pointer;font-size:.9rem;font-weight:500;
+  list-style:none;display:flex;justify-content:space-between;align-items:center;
+  transition:background .06s;
+}
+details summary:hover{background:var(--s2)}
+details summary::after{content:'↓';color:var(--t3);transition:transform .08s}
+details[open] summary::after{transform:rotate(180deg)}
+details .inner{padding:0 20px 20px;font-size:.88rem;color:var(--t2);line-height:1.7}
+details .inner p{margin-bottom:12px}
+.code{
+  background:var(--bg);border:1px solid var(--b1);border-radius:6px;
+  padding:12px 16px;margin:10px 0;font-family:var(--mono);font-size:.8rem;
+  line-height:1.6;overflow-x:auto;position:relative;white-space:pre;
+}
+.code .cp{
+  position:absolute;top:6px;right:6px;
+  background:var(--s2);border:1px solid var(--b1);color:var(--t3);
+  font-family:var(--mono);font-size:.65rem;padding:3px 8px;border-radius:4px;
+  cursor:pointer;transition:all .06s;
+}
+.code .cp:hover{color:var(--t1);border-color:var(--b2)}
+.code .cp.ok{color:var(--ok);border-color:var(--ok)}
+.cm{color:var(--t3)}
+.st{color:var(--ac)}
+
+/* --- footer --- */
+.foot{
+  padding:40px 0;border-top:1px solid var(--b1);
+  text-align:center;color:var(--t3);font-size:.8rem;
+}
+.foot a{color:var(--t2);text-decoration:none;transition:color .06s}
+.foot a:hover{color:var(--ac)}
+
+/* --- reveal --- */
+.rv{opacity:0;transform:translateY(10px);transition:opacity .08s,transform .08s}
+.rv.v{opacity:1;transform:translateY(0)}
+</style>
+</head>
+<body>
+
+<section class="hero">
+<div class="w">
+  <div class="chip"><i></i> Open Source</div>
+  <h1>Undetectable proxy,<br><em>one command</em></h1>
+  <p class="sub">Deploy a VLESS+Reality proxy server that's invisible to censorship systems. Fully automated. Takes 2 minutes.</p>
+  <div class="actions">
+    <a href="#setup" class="btn btn-p">Get started ↓</a>
+    <a href="https://github.com/rmbk/meridian" class="btn btn-s" target="_blank">GitHub</a>
+  </div>
+</div>
+</section>
+
+<section class="rv" id="setup">
+<div class="w">
+  <p class="label">Setup</p>
+  <h2>One command</h2>
+  <p class="desc">You need a VPS (Debian/Ubuntu, root SSH access) and a terminal. That's it.</p>
+
+  <div class="oneliner">
+    <button class="cp" onclick="copyEl(this)">Copy</button>
+    <pre>curl -sS https://raw.githubusercontent.com/rmbk/meridian/main/setup.sh | bash</pre>
+  </div>
+
+  <p style="font-size:.85rem;color:var(--t2)">The script asks for your server IP, installs dependencies, configures the proxy, and outputs a QR code. Or pass the IP directly:</p>
+
+  <div class="oneliner" style="margin-top:12px">
+    <button class="cp" onclick="copyEl(this)">Copy</button>
+    <pre>curl -sS https://raw.githubusercontent.com/rmbk/meridian/main/setup.sh | bash -s -- <span class="st">YOUR_IP</span></pre>
+  </div>
+
+  <div class="or-sep">or with a domain (adds a decoy website)</div>
+
+  <div class="oneliner">
+    <button class="cp" onclick="copyEl(this)">Copy</button>
+    <pre>curl -sS https://raw.githubusercontent.com/rmbk/meridian/main/setup.sh | bash -s -- <span class="st">YOUR_IP</span> --domain <span class="st">example.com</span></pre>
+  </div>
+</div>
+</section>
+
+<section class="rv">
+<div class="w">
+  <p class="label">What happens</p>
+  <h2>Under the hood</h2>
+  <div class="timeline">
+    <div class="tl-item"><div class="tl-n">1</div><div class="tl-text"><strong>Installs Ansible &amp; qrencode</strong> if not already present</div></div>
+    <div class="tl-item"><div class="tl-n">2</div><div class="tl-text"><strong>Downloads the playbook</strong> from GitHub (no git needed)</div></div>
+    <div class="tl-item"><div class="tl-n">3</div><div class="tl-text"><strong>Hardens the server</strong> — firewall, SSH keys only, BBR congestion control</div></div>
+    <div class="tl-item"><div class="tl-n">4</div><div class="tl-text"><strong>Deploys VLESS+Reality</strong> via Docker — looks like microsoft.com to any probe</div></div>
+    <div class="tl-item"><div class="tl-n">5</div><div class="tl-text"><strong>Outputs a QR code</strong> and saves an HTML file you can send to anyone</div></div>
+  </div>
+  <div class="note">
+    <span>⏱</span>
+    <span>Safe to re-run at any time. The script is fully idempotent — it picks up where it left off.</span>
+  </div>
+</div>
+</section>
+
+<section class="rv">
+<div class="w">
+  <p class="label">Connect</p>
+  <h2>Scan and go</h2>
+  <p class="desc">After the script finishes, you get an HTML file with a QR code. Send it to whoever needs it. They scan it, connect, done.</p>
+
+  <div class="apps">
+    <a class="app" href="https://apps.apple.com/app/v2raytun/id6476628951" target="_blank">v2RayTun<span>iOS</span></a>
+    <a class="app" href="https://play.google.com/store/apps/details?id=com.v2ray.ang" target="_blank">v2rayNG<span>Android</span></a>
+    <a class="app" href="https://github.com/hiddify/hiddify-app/releases/latest" target="_blank">Hiddify<span>All platforms</span></a>
+    <a class="app" href="https://github.com/2dust/v2rayN/releases/latest" target="_blank">v2rayN<span>Windows</span></a>
+  </div>
+
+  <div class="note">
+    <span>⚠</span>
+    <span>The device clock must be accurate within 30 seconds or the connection will fail. Enable automatic date/time in settings.</span>
+  </div>
+</div>
+</section>
+
+<section class="rv">
+<div class="w">
+  <p class="label">Advanced</p>
+  <h2>More options</h2>
+
+  <details>
+    <summary>Add a decoy website (domain mode) <span></span></summary>
+    <div class="inner">
+      <p>If you have a domain, the server also serves a fake business website and supports CDN fallback through Cloudflare. Pass <code>--domain</code> to the setup command.</p>
+      <p>The server uses HAProxy to route traffic by SNI — censors see a legitimate website, your traffic goes through Reality.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Relay chain (IP whitelist bypass) <span></span></summary>
+    <div class="inner">
+      <p>If direct foreign connections are blocked (IP whitelisting), use a two-server chain: a domestic relay on a whitelisted IP forwards traffic to the exit server abroad.</p>
+      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>git clone https://github.com/rmbk/meridian.git && cd meridian
+cp inventory-chain.yml.example inventory-chain.yml
+<span class="cm"># Edit inventory-chain.yml with both server IPs</span>
+ansible-playbook -i inventory-chain.yml playbook-chain.yml</div>
+      <p>The relay accepts plain VLESS+TCP (no TLS needed for domestic traffic) and forwards everything abroad via VLESS+Reality+XHTTP. Local sites are routed directly.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Manual Ansible setup (full control) <span></span></summary>
+    <div class="inner">
+      <p>If you prefer to manage inventory and variables yourself:</p>
+      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>git clone https://github.com/rmbk/meridian.git && cd meridian
+pip3 install ansible
+ansible-galaxy collection install -r requirements.yml
+<span class="cm"># Edit inventory.yml with your server IP</span>
+ansible-playbook playbook.yml</div>
+      <p>See <code>group_vars/all.yml</code> for all configurable variables (SNI target, ports, client limits, etc.).</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>How to update <span></span></summary>
+    <div class="inner">
+      <p>SSH into the server and run:</p>
+      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>cd /opt/3x-ui && docker compose pull && docker compose up -d</div>
+      <p>Or re-run the setup command — it's safe to run repeatedly.</p>
+    </div>
+  </details>
+</div>
+</section>
+
+<footer class="foot">
+<div class="w">
+  <p style="margin-bottom:6px">Open source. No tracking. No accounts.</p>
+  <a href="https://github.com/rmbk/meridian" target="_blank">GitHub</a> · <a href="https://github.com/rmbk/meridian/issues" target="_blank">Issues</a>
+</div>
+</footer>
+
+<script>
+function copyEl(btn){
+  const block=btn.closest('.oneliner,.code');
+  const pre=block.querySelector('pre')||block;
+  const text=(pre.innerText||block.innerText).replace(/^Copy\n?/,'').trim();
+  navigator.clipboard.writeText(text).then(()=>{
+    btn.textContent='Copied';btn.classList.add('ok');
+    setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok')},1200);
+  });
+}
+const obs=new IntersectionObserver(es=>{
+  es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('v')})
+},{threshold:.15});
+document.querySelectorAll('.rv').forEach(el=>obs.observe(el));
+</script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+---
+# Install Docker CE from the official repository.
+# CRITICAL: Skips installation entirely if Docker is already running with containers,
+# to avoid disrupting existing workloads.
+
+- name: Check if Docker is already installed
+  ansible.builtin.command: docker --version
+  register: docker_version_check
+  changed_when: false
+  failed_when: false
+
+- name: Check for running Docker containers
+  ansible.builtin.command: docker ps -q
+  register: docker_running_containers
+  changed_when: false
+  failed_when: false
+  when: docker_version_check.rc == 0
+
+- name: Determine if Docker has active containers
+  ansible.builtin.set_fact:
+    docker_has_containers: >-
+      {{ docker_version_check.rc == 0 and
+         docker_running_containers.stdout | default('') | length > 0 }}
+
+- name: Show Docker status
+  ansible.builtin.debug:
+    msg: >-
+      Docker {{ 'is installed with running containers - skipping installation'
+      if docker_has_containers | bool
+      else ('is installed but has no containers' if docker_version_check.rc == 0
+      else 'is not installed') }}
+
+# -- Install Docker only when safe to do so --
+- name: Install Docker (when not running with containers)
+  when: not (docker_has_containers | bool)
+  block:
+    - name: Install Docker prerequisite packages
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+
+    - name: Create keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Add Docker apt repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') | replace('aarch64', 'arm64') }}
+          signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/{{ ansible_distribution | lower }}
+          {{ ansible_distribution_release }} stable
+        filename: docker
+        state: present
+
+    - name: Install Docker CE packages
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+# Always ensure Docker is running (idempotent)
+- name: Ensure Docker service is started and enabled
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true

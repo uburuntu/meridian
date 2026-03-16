@@ -1,0 +1,8 @@
+# Credentials contain all secrets — NEVER commit these
+credentials/
+
+# Ansible retry files
+*.retry
+
+# macOS
+.DS_Store

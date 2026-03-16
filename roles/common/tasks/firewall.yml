@@ -1,0 +1,56 @@
+---
+# UFW firewall: allow only necessary ports, deny everything else.
+# Handles both domain and no-domain mode, and cleans up stale rules
+# when switching between modes.
+#
+# SECURITY: In no-domain mode, the 3x-ui panel is NOT exposed to the internet.
+# It binds to localhost and is only accessible via SSH tunnel.
+
+- name: Allow SSH through firewall
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Allow HTTPS (port 443) through firewall
+  community.general.ufw:
+    rule: allow
+    port: "443"
+    proto: tcp
+
+# Domain mode: allow port 80 for ACME challenges
+- name: Allow HTTP (port 80) for ACME challenges (domain mode)
+  community.general.ufw:
+    rule: allow
+    port: "80"
+    proto: tcp
+  when: domain_mode | bool
+
+# Exit mode: allow direct Reality fallback port
+- name: Allow direct Reality port (exit mode)
+  community.general.ufw:
+    rule: allow
+    port: "{{ reality_direct_port | default(8444) }}"
+    proto: tcp
+  when: exit_mode | default(false) | bool
+
+# Cleanup: remove stale rules when switching modes
+- name: Remove stale HTTP port 80 rule (switching to no-domain mode)
+  community.general.ufw:
+    rule: allow
+    port: "80"
+    proto: tcp
+    delete: true
+  when: not (domain_mode | bool)
+  failed_when: false
+
+- name: Set default firewall policy to deny incoming
+  community.general.ufw:
+    state: enabled
+    default: deny
+    direction: incoming
+
+- name: Set default firewall policy to allow outgoing
+  community.general.ufw:
+    default: allow
+    direction: outgoing

@@ -1,0 +1,235 @@
+---
+# Configure the 3x-ui panel: change default credentials, generate cryptographic keys.
+# Skipped entirely on re-runs when credentials are already saved locally.
+#
+# SAFETY: Credentials are saved to the local file BEFORE the panel password is
+# changed. This prevents lockout if the playbook fails mid-credential-change.
+
+- name: Skip panel configuration if already done
+  when: not (panel_configured | default(false) | bool)
+  block:
+    # -- Generate random secrets --
+    - name: Generate panel credentials and secret paths
+      ansible.builtin.set_fact:
+        panel_username: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=12') }}"
+        panel_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=24') }}"
+        panel_web_base_path: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=16') }}"
+        info_page_path: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=16') }}"
+        ws_path: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=12') }}"
+      no_log: true
+
+    # -- Generate cryptographic keys (before any API calls) --
+    - name: Generate x25519 keypair for Reality
+      ansible.builtin.command:
+        cmd: docker exec 3x-ui xray x25519
+      register: x25519_output
+      changed_when: false
+      no_log: true
+
+    - name: Parse Reality private and public keys
+      ansible.builtin.set_fact:
+        reality_private_key: "{{ x25519_output.stdout | regex_search('Private key: (.+)', '\\1') | first }}"
+        reality_public_key: "{{ x25519_output.stdout | regex_search('Public key: (.+)', '\\1') | first }}"
+      no_log: true
+
+    - name: Generate UUID for Reality client
+      ansible.builtin.command:
+        cmd: docker exec 3x-ui xray uuid
+      register: uuid_output
+      changed_when: false
+      no_log: true
+
+    - name: Set Reality UUID
+      ansible.builtin.set_fact:
+        reality_uuid: "{{ uuid_output.stdout | trim }}"
+      no_log: true
+
+    - name: Generate UUID for WSS client
+      ansible.builtin.command:
+        cmd: docker exec 3x-ui xray uuid
+      register: wss_uuid_output
+      changed_when: false
+      no_log: true
+
+    - name: Set WSS UUID
+      ansible.builtin.set_fact:
+        wss_uuid: "{{ wss_uuid_output.stdout | trim }}"
+      no_log: true
+
+    - name: Generate short ID for Reality
+      ansible.builtin.set_fact:
+        reality_short_id: "{{ lookup('password', '/dev/null chars=hexdigits length=8') | lower }}"
+      no_log: true
+
+    - name: Generate UUID for XHTTP relay connections (exit mode only)
+      ansible.builtin.command:
+        cmd: docker exec 3x-ui xray uuid
+      register: xhttp_uuid_output
+      changed_when: false
+      no_log: true
+      when: exit_mode | default(false) | bool
+
+    - name: Set XHTTP UUID
+      ansible.builtin.set_fact:
+        xhttp_uuid: "{{ xhttp_uuid_output.stdout | trim }}"
+      no_log: true
+      when: exit_mode | default(false) | bool
+
+    - name: Set empty XHTTP UUID for non-exit mode
+      ansible.builtin.set_fact:
+        xhttp_uuid: ""
+      when: not (exit_mode | default(false) | bool)
+
+    # -- SAVE CREDENTIALS FIRST (before changing the panel password) --
+    # This prevents lockout if the playbook fails during password change.
+    - name: Save credentials to local file
+      ansible.builtin.copy:
+        content: |
+          ---
+          # Auto-generated credentials for {{ inventory_hostname }}
+          # Created: {{ ansible_date_time.iso8601 }}
+          # DO NOT share this file. It contains all secrets for your proxy server.
+          panel_configured: true
+          panel_username: "{{ panel_username }}"
+          panel_password: "{{ panel_password }}"
+          panel_web_base_path: "{{ panel_web_base_path }}"
+          info_page_path: "{{ info_page_path }}"
+          ws_path: "{{ ws_path }}"
+          reality_uuid: "{{ reality_uuid }}"
+          reality_private_key: "{{ reality_private_key }}"
+          reality_public_key: "{{ reality_public_key }}"
+          reality_short_id: "{{ reality_short_id }}"
+          reality_sni: "{{ reality_sni }}"
+          wss_uuid: "{{ wss_uuid }}"
+          xhttp_uuid: "{{ xhttp_uuid | default('') }}"
+          exit_ip: "{{ ansible_host }}"
+        dest: "{{ credentials_file }}"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    # -- Now change the panel credentials --
+    - name: Login to 3x-ui with default credentials
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ panel_internal_port }}/login"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          username: admin
+          password: admin
+        status_code: [200]
+        return_content: true
+      register: default_login
+      no_log: true
+
+    - name: Extract session cookie from login response
+      ansible.builtin.set_fact:
+        session_cookie: "{{ default_login.cookies_string }}"
+      no_log: true
+
+    # Bind panel to localhost (security: no cleartext HTTP exposure)
+    - name: Update panel settings and web base path
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ panel_internal_port }}/panel/setting/update"
+        method: POST
+        body_format: json
+        headers:
+          Cookie: "{{ session_cookie }}"
+        body:
+          webListen: "127.0.0.1"
+          webDomain: ""
+          webPort: "{{ panel_internal_port }}"
+          webCertFile: ""
+          webKeyFile: ""
+          webBasePath: "/{{ panel_web_base_path }}/"
+          sessionMaxAge: 60
+          expireDiff: 0
+          trafficDiff: 0
+          remarkModel: "-full"
+          tgBotEnable: false
+          tgBotToken: ""
+          tgBotChatId: ""
+          tgRunTime: "@daily"
+          tgBotBackup: false
+          tgBotLoginNotify: true
+          tgCpu: 80
+          subEnable: false
+          subListen: ""
+          subPort: 2096
+          subPath: "/sub/"
+          subDomain: ""
+          subCertFile: ""
+          subKeyFile: ""
+          subUpdates: 12
+          subEncrypt: true
+          subShowInfo: false
+          subURI: ""
+          subJsonPath: "/json/"
+          subJsonURI: ""
+          subJsonFragment: ""
+          subJsonMux: ""
+          subJsonRules: ""
+          datepicker: "gregorian"
+          pageSize: 50
+          loginSecurity: true
+        status_code: [200]
+        return_content: true
+      no_log: true
+
+    - name: Update admin username and password
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ panel_internal_port }}/panel/setting/updateUser"
+        method: POST
+        body_format: json
+        headers:
+          Cookie: "{{ session_cookie }}"
+        body:
+          oldUsername: "admin"
+          oldPassword: "admin"
+          newUsername: "{{ panel_username }}"
+          newPassword: "{{ panel_password }}"
+        status_code: [200]
+        return_content: true
+      no_log: true
+
+    - name: Login with new credentials
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/login"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          username: "{{ panel_username }}"
+          password: "{{ panel_password }}"
+        status_code: [200]
+        return_content: true
+      register: new_login
+      no_log: true
+
+    - name: Update session cookie
+      ansible.builtin.set_fact:
+        session_cookie: "{{ new_login.cookies_string }}"
+      no_log: true
+
+    - name: Mark panel as configured
+      ansible.builtin.set_fact:
+        panel_configured: true
+
+# Ensure we have a valid session cookie for subsequent API calls
+- name: Login to panel (for inbound configuration)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/login"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ panel_username }}"
+      password: "{{ panel_password }}"
+    status_code: [200]
+    return_content: true
+  register: api_login
+  no_log: true
+
+- name: Set session cookie for API calls
+  ansible.builtin.set_fact:
+    session_cookie: "{{ api_login.cookies_string }}"
+  no_log: true

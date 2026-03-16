@@ -1,0 +1,72 @@
+# Caddy Configuration
+# Managed by Ansible. Manual edits will be overwritten on next run.
+#
+# Architecture: HAProxy (port 443) → Caddy (port {{ caddy_internal_port }})
+# HAProxy terminates nothing — just routes by SNI. Caddy handles TLS.
+#
+# Routes:
+#   /{{ ws_path }}              → VLESS+WSS (Xray WebSocket proxy)
+#   /{{ panel_web_base_path }}/ → 3x-ui management panel
+#   /{{ info_page_path }}       → Connection info page (QR codes + setup)
+#   /*                          → Decoy website (static landing page)
+
+# Caddy listens on internal port (HAProxy forwards non-Reality traffic here)
+{{ domain }}:{{ caddy_internal_port }} {
+    # Caddy handles Let's Encrypt TLS automatically (HTTP-01 on port 80)
+{% if email | default('') | length > 0 %}
+    tls {{ email }}
+{% endif %}
+
+    # --- VLESS+WSS Fallback (Cloudflare CDN path) ---
+    # WebSocket upgrade is handled automatically by Caddy v2
+    handle /{{ ws_path }} {
+        reverse_proxy 127.0.0.1:{{ wss_internal_port }} {
+            # Keep WebSocket connections alive for long sessions
+            transport http {
+                read_timeout 360s
+            }
+        }
+    }
+
+    # --- 3x-ui Panel (management interface on secret path) ---
+    # Use handle + rewrite instead of handle_path so the panel receives
+    # requests with its configured webBasePath prefix intact.
+    handle /{{ panel_web_base_path }}/* {
+        reverse_proxy 127.0.0.1:{{ panel_internal_port }}
+    }
+
+    # --- Connection Info Page (QR codes and setup instructions) ---
+    # Rewrite the secret path to index.html so file_server can find it
+    handle /{{ info_page_path }} {
+        rewrite * /index.html
+        root * /var/www/private
+        file_server
+        header Cache-Control "no-store"
+    }
+
+    # --- Decoy Website (default for all other requests) ---
+    handle {
+        root * /var/www/html
+        file_server
+        encode zstd gzip
+    }
+
+    # Security: strip server identification headers
+    header -Server
+    header X-Content-Type-Options "nosniff"
+    header X-Frame-Options "DENY"
+    header Referrer-Policy "no-referrer"
+
+    # Access logging
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 10mb
+            roll_keep 3
+        }
+    }
+}
+
+# HTTP handler: ACME challenges + redirect to HTTPS
+http://{{ domain }} {
+    redir https://{{ domain }}{uri} permanent
+}

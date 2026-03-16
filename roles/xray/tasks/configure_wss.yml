@@ -1,0 +1,88 @@
+---
+# Create the VLESS+WSS inbound — fallback protocol for Cloudflare CDN routing.
+# Traffic flows: User → Cloudflare → HAProxy → Caddy (TLS) → this inbound (WebSocket).
+# If the server IP is ever blocked, this path still works via Cloudflare's network.
+# Only created when domain mode is enabled.
+
+- name: Check if VLESS-WSS inbound already exists
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/list"
+    method: GET
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: inbounds_list_wss
+
+- name: Determine if WSS inbound exists
+  ansible.builtin.set_fact:
+    wss_inbound_exists: "{{ inbounds_list_wss.json.obj | default([]) | selectattr('remark', 'equalto', 'VLESS-WSS') | list | length > 0 }}"
+
+- name: Create VLESS+WSS inbound
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/add"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+      Content-Type: "application/x-www-form-urlencoded"
+    body_format: form-urlencoded
+    body:
+      remark: "VLESS-WSS"
+      enable: "true"
+      listen: "127.0.0.1"
+      port: "{{ wss_internal_port }}"
+      protocol: "vless"
+      expiryTime: "0"
+      total: "0"
+      settings: >-
+        {
+          "clients": [{
+            "id": "{{ wss_uuid }}",
+            "flow": "",
+            "email": "wss-user",
+            "limitIp": {{ client_limit_ip }},
+            "totalGB": {{ (client_total_bytes / 1073741824) | int }},
+            "expiryTime": 0,
+            "enable": true,
+            "tgId": "",
+            "subId": "",
+            "reset": 0
+          }],
+          "decryption": "none",
+          "fallbacks": []
+        }
+      streamSettings: >-
+        {
+          "network": "ws",
+          "security": "none",
+          "externalProxy": [],
+          "wsSettings": {
+            "acceptProxyProtocol": false,
+            "path": "/{{ ws_path }}",
+            "host": "",
+            "headers": {}
+          }
+        }
+      sniffing: >-
+        {
+          "enabled": true,
+          "destOverride": ["http", "tls", "quic", "fakedns"],
+          "metadataOnly": false,
+          "routeOnly": false
+        }
+    status_code: [200]
+    return_content: true
+  register: wss_create_result
+  when: not (wss_inbound_exists | bool)
+
+- name: Verify WSS inbound was created successfully
+  ansible.builtin.assert:
+    that: wss_create_result.json.success | default(false)
+    fail_msg: "Failed to create WSS inbound: {{ wss_create_result.json.msg | default('unknown error') }}"
+  when: not (wss_inbound_exists | bool)
+
+- name: Show WSS inbound status
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'VLESS+WSS inbound created on 127.0.0.1:' + (wss_internal_port | string)
+      if not (wss_inbound_exists | bool)
+      else 'VLESS+WSS inbound already exists — skipping' }}

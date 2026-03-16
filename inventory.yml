@@ -1,0 +1,23 @@
+# =============================================================================
+# Server Inventory
+# =============================================================================
+# Edit this file to configure your server(s).
+#
+# MINIMAL SETUP (Reality only, no domain needed):
+#   Just set ansible_host to your server IP and run:
+#   ansible-playbook playbook.yml
+#
+# FULL SETUP (Reality + CDN fallback):
+#   Also set domain, then run:
+#   ansible-playbook playbook.yml -e domain=example.com
+#
+# You can also add multiple servers by duplicating the "proxy" block.
+# =============================================================================
+
+all:
+  hosts:
+    proxy:
+      ansible_host: "YOUR_SERVER_IP"    # <-- Replace with your VPS IP address
+      ansible_user: root                # <-- Change if using a non-root user (must have sudo)
+      # domain: "example.com"           # <-- Uncomment to enable CDN fallback + decoy site
+      # email: "you@example.com"        # <-- Optional: for Let's Encrypt notifications

@@ -1,0 +1,90 @@
+---
+# Relay node output: display connection info, QR codes, and save files locally.
+
+# -- Build connection URL --
+- name: Build relay VLESS connection URL
+  ansible.builtin.set_fact:
+    vless_relay_url: >-
+      vless://{{ relay_user_uuid }}@{{ ansible_host }}:{{ relay_inbound_port | default(443) }}?encryption=none&type=tcp&security=none#VLESS-Relay
+
+# -- Generate QR codes --
+- name: Generate relay QR code for terminal display
+  ansible.builtin.command:
+    cmd: "qrencode -t ANSIUTF8 '{{ vless_relay_url }}'"
+  register: relay_qr_terminal
+  changed_when: false
+  delegate_to: localhost
+  become: false
+
+- name: Generate relay QR code as base64 PNG
+  ansible.builtin.shell:
+    cmd: "printf '%s' '{{ vless_relay_url }}' | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'"
+  register: relay_qr_b64
+  changed_when: false
+  delegate_to: localhost
+  become: false
+
+# -- Display connection info --
+- name: Display relay connection information
+  ansible.builtin.debug:
+    msg: |
+
+      ======================================================================
+                    RELAY NODE SETUP COMPLETE
+      ======================================================================
+
+      --- 3x-ui Panel (SSH tunnel required) ---
+      ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ ansible_host }}
+      Then open: http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/
+      Username: {{ panel_username }}
+      Password: {{ panel_password }}
+
+      --- User Connection: VLESS+TCP (no TLS) ---
+      {{ vless_relay_url }}
+
+      {{ relay_qr_terminal.stdout }}
+
+      --- Chain Path ---
+      User → {{ ansible_host }}:{{ relay_inbound_port | default(443) }} (relay)
+           → {{ exit_ip }}:443 (exit, via XHTTP+Reality)
+           → Internet
+
+      --- Important Notes ---
+      1. This relay must be on a WHITELISTED Russian IP.
+         Test: deploy a web server, try accessing from mobile on MTS/Megafon.
+
+      2. Russian sites (geosite:ru) go DIRECT from the relay — no exit hop.
+
+      3. The user connects with plain VLESS+TCP (no TLS). This is intentional:
+         domestic traffic is not scrutinized by TSPU.
+
+      4. If the exit node IP changes, re-run playbook-chain.yml to update
+         the relay's outbound configuration.
+
+      5. TIME SYNC: Device clock must be within 30 seconds.
+
+# -- Save files locally --
+- name: Save relay connection summary
+  ansible.builtin.template:
+    src: connection-summary.txt.j2
+    dest: "{{ credentials_dir }}/{{ inventory_hostname }}-connection-info.txt"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+
+- name: Save relay connection info HTML
+  ansible.builtin.template:
+    src: connection-info.html.j2
+    dest: "{{ credentials_dir }}/{{ inventory_hostname }}-connection-info.html"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+
+- name: Show local file paths
+  ansible.builtin.debug:
+    msg: |
+      Files saved locally:
+        Credentials:     {{ credentials_file }}
+        Connection info: {{ credentials_dir }}/{{ inventory_hostname }}-connection-info.txt
+        HTML page:       {{ credentials_dir }}/{{ inventory_hostname }}-connection-info.html
+      Open the HTML file in a browser or send it to your friend.
