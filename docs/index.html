@@ -174,7 +174,7 @@ details .inner p{margin-bottom:12px}
   <p class="desc">The script generates an HTML file with a QR code and an "Open in App" deep link. Send it to whoever needs it — they tap once and connect.</p>
   <div class="apps">
     <a class="app" href="https://apps.apple.com/app/v2raytun/id6476628951" target="_blank">v2RayTun<span>iOS</span></a>
-    <a class="app" href="https://play.google.com/store/apps/details?id=com.v2ray.ang" target="_blank">v2rayNG<span>Android</span></a>
+    <a class="app" href="https://github.com/2dust/v2rayNG/releases/latest" target="_blank">v2rayNG<span>Android</span></a>
     <a class="app" href="https://github.com/hiddify/hiddify-app/releases/latest" target="_blank">Hiddify<span>All platforms</span></a>
     <a class="app" href="https://github.com/2dust/v2rayN/releases/latest" target="_blank">v2rayN<span>Windows</span></a>
   </div>
@@ -277,6 +277,15 @@ ansible-playbook playbook.yml</div>
       <p><strong>Connection stops after days:</strong> Server IP may have been blocked. Switch to CDN fallback, or get a new IP and re-run.</p>
       <p><strong>Slow speeds:</strong> Some hosting IP ranges are throttled. Try a different provider or datacenter (Finland, Netherlands, Sweden).</p>
       <p><strong>Do NOT</strong> run other protocols (OpenVPN, WireGuard) on the same server — it flags the IP.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Uninstall <span></span></summary>
+    <div class="inner">
+      <p>Remove the proxy from your server:</p>
+      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>curl -sS https://raw.githubusercontent.com/uburuntu/meridian/main/setup.sh | bash -s -- --uninstall</div>
+      <p>Removes the proxy container, configs, and firewall rules. Does <strong>not</strong> remove Docker or system packages — those may be used by other applications. The script finds the server IP from saved credentials automatically.</p>
     </div>
   </details>
 

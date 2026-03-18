@@ -26,14 +26,16 @@ SERVER_IP=""
 DOMAIN=""
 EMAIL=""
 EXTRA_ARGS=""
+UNINSTALL=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --domain) DOMAIN="$2"; shift 2 ;;
-    --email)  EMAIL="$2"; shift 2 ;;
-    --chain)  EXTRA_ARGS="chain"; shift ;;
-    -*)       fail "Unknown flag: $1" ;;
-    *)        SERVER_IP="$1"; shift ;;
+    --domain)    DOMAIN="$2"; shift 2 ;;
+    --email)     EMAIL="$2"; shift 2 ;;
+    --chain)     EXTRA_ARGS="chain"; shift ;;
+    --uninstall) UNINSTALL=true; shift ;;
+    -*)          fail "Unknown flag: $1" ;;
+    *)           SERVER_IP="$1"; shift ;;
   esac
 done
 
@@ -133,6 +135,50 @@ all:
       ansible_host: "$SERVER_IP"
       ansible_user: "$ANSIBLE_USER"
 EOF
+
+# --- Handle uninstall ---
+if [[ "$UNINSTALL" == true ]]; then
+  # Find the server IP: from argument, saved credentials, or prompt
+  if [[ -z "$SERVER_IP" ]]; then
+    # Check saved credentials
+    CRED_FILE=$(ls "$ORIG_PWD"/vpn-credentials/*.yml 2>/dev/null | head -1)
+    if [[ -n "$CRED_FILE" ]]; then
+      SAVED_IP=$(grep 'exit_ip:' "$CRED_FILE" 2>/dev/null | awk '{print $2}' | tr -d '"')
+      if [[ -n "$SAVED_IP" ]]; then
+        SERVER_IP="$SAVED_IP"
+        info "Found server IP from saved credentials: $SERVER_IP"
+      fi
+    fi
+  fi
+  if [[ -z "$SERVER_IP" ]]; then
+    ask "Server IP to uninstall from"
+    read -r SERVER_IP
+    [[ -z "$SERVER_IP" ]] && fail "Server IP is required for uninstall"
+  fi
+
+  warn "This will remove the Meridian proxy from $SERVER_IP."
+  warn "Docker and system packages will NOT be removed (they may be used by other apps)."
+  printf "\n"
+  ask "Continue? [y/N]"
+  read -r CONFIRM
+  if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+    info "Cancelled."
+    exit 0
+  fi
+
+  cat > inventory.yml <<EOF
+all:
+  hosts:
+    proxy:
+      ansible_host: "$SERVER_IP"
+      ansible_user: "$ANSIBLE_USER"
+EOF
+
+  printf "\n"
+  ansible-playbook playbook-uninstall.yml
+  printf "\n${G}${B}Uninstall complete.${R}\n\n"
+  exit 0
+fi
 
 # --- Build ansible-playbook command ---
 PLAY_CMD="ansible-playbook playbook.yml -e server_public_ip=$SERVER_IP"
