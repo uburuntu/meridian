@@ -284,6 +284,11 @@ elif [[ "$OS" == "linux" ]]; then
   install_if_missing ansible ansible "install_ansible"
 fi
 
+# Ensure pip --user bin directories are in PATH (pip3 install --user puts binaries there)
+for p in "$HOME/.local/bin" "$HOME/Library/Python"/*/bin; do
+  [[ -d "$p" ]] && [[ ":$PATH:" != *":$p:"* ]] && export PATH="$p:$PATH"
+done
+
 # --- Download project ---
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -303,7 +308,8 @@ cd "$WORK_DIR"
 # --- Install Ansible collections ---
 info "Installing Ansible collections..."
 if ! ansible-galaxy collection install -r requirements.yml --quiet 2>/dev/null; then
-  ansible-galaxy collection install -r requirements.yml >/dev/null 2>&1 || fail "Failed to install Ansible collections"
+  # Retry without suppressing output so the user can see what went wrong
+  ansible-galaxy collection install -r requirements.yml || fail "Failed to install Ansible collections"
 fi
 ok "Collections ready"
 
