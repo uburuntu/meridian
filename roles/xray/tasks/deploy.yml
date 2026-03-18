@@ -83,12 +83,14 @@
 
 # On first run: panel serves on / (no webBasePath yet)
 # On re-run: panel has webBasePath set, so / returns 404
-# Try both paths to handle either case
+# Try the basepath URL first if known, otherwise try root
+# Wait for ANY HTTP response — panel is up regardless of webBasePath.
+# We accept 200, 301, 302, 404 — all mean the panel process is running.
 - name: Wait for 3x-ui panel to become responsive
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path | default('') }}/"
+    url: "http://127.0.0.1:{{ panel_internal_port }}/"
     method: GET
-    status_code: [200, 302, 301]
+    status_code: [200, 301, 302, 404]
   register: panel_health
   until: panel_health is succeeded
   retries: 30

@@ -64,9 +64,9 @@
 
 - name: Wait for 3x-ui panel to become responsive
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path | default('') }}/"
+    url: "http://127.0.0.1:{{ panel_internal_port }}/"
     method: GET
-    status_code: [200, 302, 301]
+    status_code: [200, 301, 302, 404]
   register: panel_health
   until: panel_health is succeeded
   retries: 30

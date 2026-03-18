@@ -250,6 +250,16 @@ if ! ansible-galaxy collection install -r requirements.yml --quiet 2>/dev/null; 
 fi
 ok "Collections ready"
 
+# --- Restore credentials from previous run (for idempotent re-runs) ---
+for cred_dir in "$ORIG_PWD/meridian" "$ORIG_PWD/vpn-credentials" "$HOME/meridian"; do
+  if [[ -d "$cred_dir" ]] && ls "$cred_dir"/*.yml &>/dev/null; then
+    mkdir -p credentials
+    cp "$cred_dir"/*.yml credentials/ 2>/dev/null || true
+    ok "Loaded credentials from $cred_dir"
+    break
+  fi
+done
+
 # --- Write inventory ---
 if [[ "$LOCAL_MODE" == true ]]; then
   cat > inventory.yml <<EOF
