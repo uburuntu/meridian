@@ -21,7 +21,7 @@
     # -- Generate cryptographic keys (before any API calls) --
     - name: Generate x25519 keypair for Reality
       ansible.builtin.command:
-        cmd: docker exec 3x-ui xray x25519
+        cmd: docker exec 3x-ui /app/bin/xray-linux-amd64 x25519
       register: x25519_output
       changed_when: false
       no_log: true
@@ -34,7 +34,7 @@
 
     - name: Generate UUID for Reality client
       ansible.builtin.command:
-        cmd: docker exec 3x-ui xray uuid
+        cmd: docker exec 3x-ui /app/bin/xray-linux-amd64 uuid
       register: uuid_output
       changed_when: false
       no_log: true
@@ -46,7 +46,7 @@
 
     - name: Generate UUID for WSS client
       ansible.builtin.command:
-        cmd: docker exec 3x-ui xray uuid
+        cmd: docker exec 3x-ui /app/bin/xray-linux-amd64 uuid
       register: wss_uuid_output
       changed_when: false
       no_log: true
@@ -63,7 +63,7 @@
 
     - name: Generate UUID for XHTTP relay connections (exit mode only)
       ansible.builtin.command:
-        cmd: docker exec 3x-ui xray uuid
+        cmd: docker exec 3x-ui /app/bin/xray-linux-amd64 uuid
       register: xhttp_uuid_output
       changed_when: false
       no_log: true
