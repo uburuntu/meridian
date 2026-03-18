@@ -346,16 +346,6 @@ for cred_dir in "$ORIG_PWD/meridian" "$HOME/meridian" "$ORIG_PWD/vpn-credentials
     break
   fi
 done
-# Also check /tmp for orphaned credentials from failed setup.sh runs
-if [[ "$CRED_FOUND" != true ]]; then
-  ORPHAN=$(find /tmp -maxdepth 3 -name "proxy.yml" -path "*/credentials/*" 2>/dev/null | head -1)
-  if [[ -n "$ORPHAN" ]]; then
-    mkdir -p credentials
-    cp "$(dirname "$ORPHAN")"/*.yml credentials/ 2>/dev/null || true
-    ok "Recovered credentials from previous run"
-    CRED_FOUND=true
-  fi
-fi
 # Fetch credentials from the server if not found locally (e.g., previous run was in local mode)
 if [[ "$CRED_FOUND" != true && "$LOCAL_MODE" != true ]]; then
   REMOTE_CRED=$(ssh -o BatchMode=yes -o ConnectTimeout=3 "${ANSIBLE_USER}@${SERVER_IP}" \
