@@ -125,6 +125,20 @@
         return_content: true
       no_log: true
 
+    - name: Restart 3x-ui to apply new settings
+      ansible.builtin.command: docker restart 3x-ui
+      changed_when: true
+
+    - name: Wait for panel to come back up
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/login"
+        method: GET
+        status_code: [200, 302, 301]
+      register: panel_restart_wait
+      until: panel_restart_wait is succeeded
+      retries: 30
+      delay: 2
+
     - name: Login with new credentials
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/login"
