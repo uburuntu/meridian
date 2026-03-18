@@ -129,6 +129,7 @@
           wss_uuid: "{{ wss_uuid }}"
           xhttp_uuid: "{{ xhttp_uuid | default('') }}"
           exit_ip: "{{ server_public_ip }}"
+          domain: "{{ domain | default('') }}"
         dest: "{{ credentials_file }}"
         mode: "0600"
       delegate_to: localhost

@@ -118,17 +118,44 @@ if [[ -z "$SERVER_IP" && "$UNINSTALL" != true ]]; then
   printf "\n"
   printf "  ${B}Optional — decoy website + CDN fallback:${R}\n\n"
 
-  # Try to detect domains pointing to this IP via reverse DNS
+  # Try to detect a domain already configured on this server:
+  # 1. Check saved credentials from previous run
+  # 2. Check Caddy config on the server (if accessible via SSH)
+  # 3. Fall back to reverse DNS
   SUGGESTED_DOMAIN=""
-  if command -v dig &>/dev/null; then
-    REVERSE_DNS=$(dig -x "$SERVER_IP" +short </dev/null 2>/dev/null | head -1 | sed 's/\.$//')
-    if [[ -n "$REVERSE_DNS" && "$REVERSE_DNS" != *"in-addr"* ]]; then
-      SUGGESTED_DOMAIN="$REVERSE_DNS"
+
+  # Check local credentials for a previously used domain
+  for cred_dir in "$ORIG_PWD/meridian" "$HOME/meridian"; do
+    if [[ -f "$cred_dir/proxy.yml" ]]; then
+      PREV_DOMAIN=$(grep '^domain:' "$cred_dir/proxy.yml" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
+      if [[ -n "$PREV_DOMAIN" ]]; then
+        SUGGESTED_DOMAIN="$PREV_DOMAIN"
+        break
+      fi
     fi
-  elif command -v host &>/dev/null; then
-    REVERSE_DNS=$(host "$SERVER_IP" </dev/null 2>/dev/null | grep "domain name pointer" | head -1 | awk '{print $NF}' | sed 's/\.$//')
-    if [[ -n "$REVERSE_DNS" ]]; then
-      SUGGESTED_DOMAIN="$REVERSE_DNS"
+  done
+
+  # Check Caddy config on the server (works in local mode or via SSH)
+  if [[ -z "$SUGGESTED_DOMAIN" ]]; then
+    CADDY_DOMAIN=""
+    if [[ "$LOCAL_MODE" == true ]]; then
+      CADDY_DOMAIN=$(grep -oE '^[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-z]{2,}' /etc/caddy/Caddyfile 2>/dev/null | head -1 || true)
+    else
+      CADDY_DOMAIN=$(ssh -o BatchMode=yes -o ConnectTimeout=3 "${ANSIBLE_USER}@${SERVER_IP}" \
+        "grep -oE '^[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-z]{2,}' /etc/caddy/Caddyfile 2>/dev/null | head -1" </dev/null 2>/dev/null || true)
+    fi
+    if [[ -n "$CADDY_DOMAIN" ]]; then
+      SUGGESTED_DOMAIN="$CADDY_DOMAIN"
+    fi
+  fi
+
+  # Fall back to reverse DNS
+  if [[ -z "$SUGGESTED_DOMAIN" ]]; then
+    if command -v dig &>/dev/null; then
+      REVERSE_DNS=$(dig -x "$SERVER_IP" +short </dev/null 2>/dev/null | head -1 | sed 's/\.$//')
+      if [[ -n "$REVERSE_DNS" && "$REVERSE_DNS" != *"in-addr"* ]]; then
+        SUGGESTED_DOMAIN="$REVERSE_DNS"
+      fi
     fi
   fi
 
