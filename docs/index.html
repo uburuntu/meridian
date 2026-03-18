@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -117,6 +117,22 @@ details .inner p{margin-bottom:12px}
 .bi:focus{border-color:var(--b2)}
 .bh{display:block;font-size:.72rem;color:var(--t3);margin-top:3px;line-height:1.4}
 
+/* language picker */
+.lang-picker{position:fixed;top:16px;right:20px;z-index:100;display:flex;gap:2px;background:var(--s1);border:1px solid var(--b1);border-radius:6px;padding:2px;font-size:.72rem}
+.lang-picker button{background:none;border:none;color:var(--t3);padding:4px 8px;border-radius:4px;cursor:pointer;font-family:var(--sans);font-size:.72rem;font-weight:500;transition:all .06s}
+.lang-picker button:hover{color:var(--t2)}
+.lang-picker button.active{background:var(--ac2);color:var(--ac)}
+
+/* RTL support */
+[dir="rtl"] .code,[dir="rtl"] pre,[dir="rtl"] .oneliner pre,[dir="rtl"] .bi,[dir="rtl"] .mono{direction:ltr;text-align:left;unicode-bidi:embed}
+[dir="rtl"] .tl-item{flex-direction:row-reverse}
+[dir="rtl"] .note{flex-direction:row-reverse}
+[dir="rtl"] .oneliner .cp{right:auto;left:12px}
+[dir="rtl"] .code .cp{right:auto;left:6px}
+[dir="rtl"] .tbl th{text-align:right}
+[dir="rtl"] details summary::after{content:'↓'}
+[dir="rtl"] .lang-picker{right:auto;left:20px}
+
 /* reveal */
 .rv{opacity:0;transform:translateY(10px);transition:opacity .08s,transform .08s}
 .rv.v{opacity:1;transform:translateY(0)}
@@ -124,14 +140,22 @@ details .inner p{margin-bottom:12px}
 </head>
 <body>
 
+<!-- Language picker -->
+<div class="lang-picker">
+  <button onclick="setLang('en')" class="active">EN</button>
+  <button onclick="setLang('ru')">RU</button>
+  <button onclick="setLang('fa')">فا</button>
+  <button onclick="setLang('zh')">中文</button>
+</div>
+
 <!-- HERO -->
 <section class="hero">
 <div class="w">
-  <div class="chip"><i></i> Open Source</div>
-  <h1>Undetectable proxy,<br><em>one command</em></h1>
-  <p class="sub">Deploy a VLESS+Reality proxy server that's invisible to DPI, active probing, and TLS fingerprinting. Fully automated. Takes 2&nbsp;minutes.</p>
+  <div class="chip"><i></i> <span data-i18n="badge">Open Source</span></div>
+  <h1 data-i18n="hero.title">Undetectable proxy,<br><em>one command</em></h1>
+  <p class="sub" data-i18n="hero.sub">Deploy a VLESS+Reality proxy server that's invisible to DPI, active probing, and TLS fingerprinting. Fully automated. Takes 2&nbsp;minutes.</p>
   <div class="actions">
-    <a href="#setup" class="btn btn-p">Get started ↓</a>
+    <a href="#setup" class="btn btn-p" data-i18n="hero.cta">Get started ↓</a>
     <a href="https://github.com/uburuntu/meridian" class="btn btn-s" target="_blank">GitHub</a>
   </div>
 </div>
@@ -140,69 +164,69 @@ details .inner p{margin-bottom:12px}
 <!-- SETUP -->
 <section class="rv" id="setup">
 <div class="w">
-  <p class="label">Setup</p>
-  <h2>One command</h2>
-  <p class="desc">You need a VPS (Debian/Ubuntu, root SSH key access) and a terminal. Run it directly or build a command below.</p>
+  <p class="label" data-i18n="setup.label">Setup</p>
+  <h2 data-i18n="setup.title">One command</h2>
+  <p class="desc" data-i18n="setup.desc">You need a VPS (Debian/Ubuntu, root SSH key access) and a terminal. Run it directly or build a command below.</p>
 
-  <p style="font-size:.78rem;color:var(--t2);margin-bottom:8px">Install the CLI:</p>
+  <p style="font-size:.78rem;color:var(--t2);margin-bottom:8px" data-i18n="setup.install">Install the CLI:</p>
   <div class="oneliner">
     <button class="cp" onclick="copyEl(this)">Copy</button>
     <pre>curl -sSf https://meridian.msu.rocks/install.sh | bash</pre>
   </div>
 
-  <p style="font-size:.78rem;color:var(--t2);margin-top:12px;margin-bottom:8px">Then deploy:</p>
+  <p style="font-size:.78rem;color:var(--t2);margin-top:12px;margin-bottom:8px" data-i18n="setup.deploy">Then deploy:</p>
   <div class="oneliner">
     <button class="cp" onclick="copyEl(this)">Copy</button>
     <pre>meridian setup</pre>
   </div>
 
-  <p style="font-size:.82rem;color:var(--t2);margin-top:16px">The interactive wizard asks for everything. Or configure your command:</p>
+  <p style="font-size:.82rem;color:var(--t2);margin-top:16px" data-i18n="setup.wizard">The interactive wizard asks for everything. Or configure your command:</p>
 
   <!-- Command builder -->
   <div id="builder" style="background:var(--s1);border:1px solid var(--b1);border-radius:12px;margin:20px 0;overflow:hidden">
     <!-- Tabs -->
     <div style="display:flex;border-bottom:1px solid var(--b1)">
-      <button class="btab active" onclick="setTab('install')">Install</button>
-      <button class="btab" onclick="setTab('check')">Pre-flight</button>
-      <button class="btab" onclick="setTab('diag')">Diagnostics</button>
-      <button class="btab" onclick="setTab('uninstall')">Uninstall</button>
+      <button class="btab active" onclick="setTab('install')" data-i18n="tab.install">Install</button>
+      <button class="btab" onclick="setTab('check')" data-i18n="tab.check">Pre-flight</button>
+      <button class="btab" onclick="setTab('diag')" data-i18n="tab.diag">Diagnostics</button>
+      <button class="btab" onclick="setTab('uninstall')" data-i18n="tab.uninstall">Uninstall</button>
     </div>
     <div style="padding:20px 24px 24px">
       <!-- Tab descriptions -->
-      <p id="tab-desc" style="font-size:.78rem;color:var(--t3);margin-bottom:16px">Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.</p>
+      <p id="tab-desc" style="font-size:.78rem;color:var(--t3);margin-bottom:16px" data-i18n="tab.install.desc">Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.</p>
 
       <!-- Fields -->
       <div id="fields">
         <div class="bf" id="row-ip">
-          <label class="bl">Server IP</label>
+          <label class="bl" data-i18n="field.ip">Server IP</label>
           <input id="f-ip" type="text" placeholder="123.45.67.89" class="bi" oninput="buildCmd()">
-          <span class="bh" id="ip-hint">Your VPS public IPv4 address. Leave empty for interactive mode.</span>
+          <span class="bh" id="ip-hint" data-i18n="field.ip.hint">Your VPS public IPv4 address. Leave empty for interactive mode.</span>
         </div>
         <div class="bf" id="row-user">
-          <label class="bl">SSH user</label>
+          <label class="bl" data-i18n="field.user">SSH user</label>
           <input id="f-user" type="text" value="root" placeholder="root" class="bi" style="width:120px" oninput="buildCmd()">
-          <span class="bh">Default: root. Non-root users get sudo automatically.</span>
+          <span class="bh" data-i18n="field.user.hint">Default: root. Non-root users get sudo automatically.</span>
         </div>
         <div class="bf" id="row-domain">
-          <label class="bl" style="cursor:pointer"><input id="f-domain-on" type="checkbox" onchange="buildCmd()" style="accent-color:var(--ac);margin-right:6px">Domain</label>
+          <label class="bl" style="cursor:pointer"><input id="f-domain-on" type="checkbox" onchange="buildCmd()" style="accent-color:var(--ac);margin-right:6px"><span data-i18n="field.domain">Domain</span></label>
           <input id="f-domain" type="text" placeholder="example.com" class="bi" oninput="buildCmd()" style="display:none">
-          <span class="bh">Optional. Adds decoy website, CDN fallback via Cloudflare, and web panel access.</span>
+          <span class="bh" data-i18n="field.domain.hint">Optional. Adds decoy website, CDN fallback via Cloudflare, and web panel access.</span>
         </div>
         <div class="bf" id="row-sni">
-          <label class="bl" style="cursor:pointer"><input id="f-sni-on" type="checkbox" onchange="buildCmd()" style="accent-color:var(--ac);margin-right:6px">Custom SNI</label>
+          <label class="bl" style="cursor:pointer"><input id="f-sni-on" type="checkbox" onchange="buildCmd()" style="accent-color:var(--ac);margin-right:6px"><span data-i18n="field.sni">Custom SNI</span></label>
           <input id="f-sni" type="text" placeholder="www.microsoft.com" class="bi" oninput="buildCmd()" style="display:none">
           <span class="bh">Site that Reality impersonates. Default: www.microsoft.com. Use <a href="https://github.com/XTLS/RealiTLScanner" style="color:var(--ac)">RealiTLScanner</a> to find optimal targets.</span>
         </div>
         <div class="bf" id="row-yes">
-          <label class="bl" style="cursor:pointer"><input id="f-yes" type="checkbox" onchange="buildCmd()" style="accent-color:var(--ac);margin-right:6px">Skip prompts</label>
-          <span class="bh">Add --yes flag. For CI/automation or non-interactive SSH sessions.</span>
+          <label class="bl" style="cursor:pointer"><input id="f-yes" type="checkbox" onchange="buildCmd()" style="accent-color:var(--ac);margin-right:6px"><span data-i18n="field.yes">Skip prompts</span></label>
+          <span class="bh" data-i18n="field.yes.hint">Add --yes flag. For CI/automation or non-interactive SSH sessions.</span>
         </div>
       </div>
 
       <!-- Output -->
       <div class="oneliner" style="margin:16px 0 0;padding:16px 20px">
         <button class="cp" onclick="copyEl(this)">Copy</button>
-        <pre id="cmd-pre" style="padding-right:60px">curl -sS https://meridian.msu.rocks/setup.sh | bash</pre>
+        <pre id="cmd-pre" style="padding-right:60px">meridian setup</pre>
       </div>
       <p id="cmd-hint" style="font-size:.78rem;color:var(--t3);margin-top:8px"></p>
     </div>
@@ -213,29 +237,29 @@ details .inner p{margin-bottom:12px}
 <!-- WHY IT WORKS -->
 <section class="rv">
 <div class="w">
-  <p class="label">Technology</p>
-  <h2>Why it's undetectable</h2>
-  <p class="desc">Censorship systems use three methods to detect proxies. Reality defeats all of them.</p>
+  <p class="label" data-i18n="tech.label">Technology</p>
+  <h2 data-i18n="tech.title">Why it's undetectable</h2>
+  <p class="desc" data-i18n="tech.desc">Censorship systems use three methods to detect proxies. Reality defeats all of them.</p>
 
   <details open>
-    <summary>Deep Packet Inspection (DPI)</summary>
-    <div class="inner">
+    <summary data-i18n="tech.dpi">Deep Packet Inspection (DPI)</summary>
+    <div class="inner" data-i18n="tech.dpi.body">
       <p>DPI analyzes traffic patterns to identify proxy protocols. VPNs like OpenVPN and WireGuard have distinctive packet signatures that are trivial to block.</p>
       <p><strong>VLESS+Reality</strong> produces traffic that is byte-for-byte identical to a normal HTTPS connection. There are no headers, no handshake patterns, no packet sizes that distinguish it from regular web browsing.</p>
     </div>
   </details>
 
   <details>
-    <summary>Active probing</summary>
-    <div class="inner">
+    <summary data-i18n="tech.probe">Active probing</summary>
+    <div class="inner" data-i18n="tech.probe.body">
       <p>Censors connect to suspicious servers and try to fingerprint them. If a server responds differently than the website it claims to be, it gets blocked.</p>
       <p><strong>Reality</strong> steals the TLS certificate from a real website (e.g., microsoft.com). When a probe connects, your server completes the TLS handshake using Microsoft's actual certificate. The probe sees a legitimate Microsoft server — because, at the TLS level, it <em>is</em> one. Only clients with your private key get the proxy tunnel.</p>
     </div>
   </details>
 
   <details>
-    <summary>TLS fingerprinting</summary>
-    <div class="inner">
+    <summary data-i18n="tech.fp">TLS fingerprinting</summary>
+    <div class="inner" data-i18n="tech.fp.body">
       <p>Every TLS client (Chrome, Firefox, curl) sends a unique "Client Hello" fingerprint. Censors flag connections where the fingerprint doesn't match the claimed application.</p>
       <p>Meridian uses <strong>uTLS</strong> to impersonate Chrome's exact TLS fingerprint — the same one used by billions of devices. Your traffic is indistinguishable from someone browsing the web with Chrome.</p>
     </div>
@@ -246,20 +270,20 @@ details .inner p{margin-bottom:12px}
 <!-- WHAT HAPPENS -->
 <section class="rv">
 <div class="w">
-  <p class="label">What happens</p>
-  <h2>Setup steps</h2>
-  <p class="desc">The script connects to your server via SSH and runs an Ansible playbook that configures everything automatically.</p>
+  <p class="label" data-i18n="steps.label">What happens</p>
+  <h2 data-i18n="steps.title">Setup steps</h2>
+  <p class="desc" data-i18n="steps.desc">The script connects to your server via SSH and runs an Ansible playbook that configures everything automatically.</p>
   <div class="timeline">
-    <div class="tl-item"><div class="tl-n">1</div><div class="tl-text"><strong>Installs Docker</strong> and deploys <strong>Xray</strong> (the proxy engine) via the <strong>3x-ui</strong> management panel</div></div>
-    <div class="tl-item"><div class="tl-n">2</div><div class="tl-text"><strong>Generates x25519 keypair</strong> — unique encryption keys for Reality protocol authentication</div></div>
-    <div class="tl-item"><div class="tl-n">3</div><div class="tl-text"><strong>Hardens the server</strong> — UFW firewall (ports 22 + 443 only), SSH key-only auth, <strong>BBR</strong> congestion control for faster throughput</div></div>
-    <div class="tl-item"><div class="tl-n">4</div><div class="tl-text"><strong>Configures VLESS+Reality inbound</strong> on port 443 — the proxy that impersonates a real TLS server</div></div>
-    <div class="tl-item"><div class="tl-n">5</div><div class="tl-text"><strong>With a domain:</strong> adds HAProxy (TLS SNI routing), Caddy (auto-TLS + decoy website), and a VLESS+WSS fallback for CDN routing through Cloudflare</div></div>
-    <div class="tl-item"><div class="tl-n">6</div><div class="tl-text"><strong>Outputs QR codes</strong> and saves an HTML page with connection links, copy buttons, and setup instructions</div></div>
+    <div class="tl-item"><div class="tl-n">1</div><div class="tl-text" data-i18n="step.1"><strong>Installs Docker</strong> and deploys <strong>Xray</strong> (the proxy engine) via the <strong>3x-ui</strong> management panel</div></div>
+    <div class="tl-item"><div class="tl-n">2</div><div class="tl-text" data-i18n="step.2"><strong>Generates x25519 keypair</strong> — unique encryption keys for Reality protocol authentication</div></div>
+    <div class="tl-item"><div class="tl-n">3</div><div class="tl-text" data-i18n="step.3"><strong>Hardens the server</strong> — UFW firewall (ports 22 + 443 only), SSH key-only auth, <strong>BBR</strong> congestion control for faster throughput</div></div>
+    <div class="tl-item"><div class="tl-n">4</div><div class="tl-text" data-i18n="step.4"><strong>Configures VLESS+Reality inbound</strong> on port 443 — the proxy that impersonates a real TLS server</div></div>
+    <div class="tl-item"><div class="tl-n">5</div><div class="tl-text" data-i18n="step.5"><strong>With a domain:</strong> adds HAProxy (TLS SNI routing), Caddy (auto-TLS + decoy website), and a VLESS+WSS fallback for CDN routing through Cloudflare</div></div>
+    <div class="tl-item"><div class="tl-n">6</div><div class="tl-text" data-i18n="step.6"><strong>Outputs QR codes</strong> and saves an HTML page with connection links, copy buttons, and setup instructions</div></div>
   </div>
   <div class="note">
     <span>⏱</span>
-    <span>Safe to re-run at any time. Fully idempotent — credentials are preserved, settings are updated in place.</span>
+    <span data-i18n="steps.note">Safe to re-run at any time. Fully idempotent — credentials are preserved, settings are updated in place.</span>
   </div>
 </div>
 </section>
@@ -267,18 +291,18 @@ details .inner p{margin-bottom:12px}
 <!-- CONNECT -->
 <section class="rv">
 <div class="w">
-  <p class="label">Connect</p>
-  <h2>Scan and go</h2>
-  <p class="desc">The script generates an HTML file with a QR code and an "Open in App" deep link. Send it to whoever needs it — they tap once and connect.</p>
+  <p class="label" data-i18n="connect.label">Connect</p>
+  <h2 data-i18n="connect.title">Scan and go</h2>
+  <p class="desc" data-i18n="connect.desc">The script generates an HTML file with a QR code and an "Open in App" deep link. Send it to whoever needs it — they tap once and connect.</p>
   <div class="apps">
     <a class="app" href="https://apps.apple.com/app/v2raytun/id6476628951" target="_blank">v2RayTun<span>iOS</span></a>
     <a class="app" href="https://github.com/2dust/v2rayNG/releases/latest" target="_blank">v2rayNG<span>Android</span></a>
-    <a class="app" href="https://github.com/hiddify/hiddify-app/releases/latest" target="_blank">Hiddify<span>All platforms</span></a>
+    <a class="app" href="https://github.com/hiddify/hiddify-app/releases/latest" target="_blank">Hiddify<span data-i18n="app.all">All platforms</span></a>
     <a class="app" href="https://github.com/2dust/v2rayN/releases/latest" target="_blank">v2rayN<span>Windows</span></a>
   </div>
   <div class="note">
     <span>⚠</span>
-    <span>Device clock must be accurate within 30 seconds. Enable automatic date/time.</span>
+    <span data-i18n="connect.clock">Device clock must be accurate within 30 seconds. Enable automatic date/time.</span>
   </div>
 </div>
 </section>
@@ -286,20 +310,20 @@ details .inner p{margin-bottom:12px}
 <!-- ARCHITECTURE -->
 <section class="rv">
 <div class="w">
-  <p class="label">Architecture</p>
-  <h2>How it works</h2>
+  <p class="label" data-i18n="arch.label">Architecture</p>
+  <h2 data-i18n="arch.title">How it works</h2>
 
   <details open>
-    <summary>Standalone mode (no domain) <span></span></summary>
-    <div class="inner">
+    <summary data-i18n="arch.standalone">Standalone mode (no domain)</summary>
+    <div class="inner" data-i18n="arch.standalone.body">
       <p><strong>Xray</strong> listens on port 443 with VLESS+Reality. Every connection looks like HTTPS to microsoft.com. When censors probe the server, they get Microsoft's real TLS certificate back. Only clients with your private key get through to the proxy.</p>
       <p>The 3x-ui panel is bound to localhost — you access it via SSH tunnel. No cleartext HTTP is ever exposed.</p>
     </div>
   </details>
 
   <details>
-    <summary>Domain mode (decoy site + CDN fallback) <span></span></summary>
-    <div class="inner">
+    <summary data-i18n="arch.domain">Domain mode (decoy site + CDN fallback)</summary>
+    <div class="inner" data-i18n="arch.domain.body">
       <p>Adds three components on top of the standalone setup:</p>
       <p><strong>HAProxy</strong> sits on port 443 and inspects the TLS SNI header (the hostname in the Client Hello) <em>without</em> terminating encryption. Reality traffic (SNI = microsoft.com) routes to Xray. Domain traffic (SNI = your domain) routes to Caddy.</p>
       <p><strong>Caddy</strong> terminates TLS for your domain using automatic Let's Encrypt certificates. It serves a realistic decoy website (randomized business template) and reverse-proxies the 3x-ui panel.</p>
@@ -308,8 +332,8 @@ details .inner p{margin-bottom:12px}
   </details>
 
   <details>
-    <summary>Chain mode (IP whitelist bypass) <span></span></summary>
-    <div class="inner">
+    <summary data-i18n="arch.chain">Chain mode (IP whitelist bypass)</summary>
+    <div class="inner" data-i18n="arch.chain.body">
       <p>For countries that whitelist allowed IP ranges (blocking all foreign IPs by default). Two servers work together:</p>
       <p><strong>Relay node</strong> (on a whitelisted domestic IP) accepts VLESS+TCP from the user and forwards everything to the exit node via VLESS+Reality+XHTTP — a multiplexed transport that looks like normal web traffic.</p>
       <p><strong>Exit node</strong> (abroad) decrypts and forwards traffic to the internet. It also keeps a direct Reality+TCP fallback on port 8444.</p>
@@ -325,8 +349,8 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml</div>
 <!-- REFERENCE -->
 <section class="rv">
 <div class="w">
-  <p class="label">Reference</p>
-  <h2>Configuration &amp; operations</h2>
+  <p class="label" data-i18n="ref.label">Reference</p>
+  <h2 data-i18n="ref.title">Configuration &amp; operations</h2>
 
   <details>
     <summary>Customization (group_vars/all.yml) <span></span></summary>
@@ -363,7 +387,7 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml</div>
       <p>Update Xray and 3x-ui:</p>
       <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>ssh root@YOUR_SERVER
 cd /opt/3x-ui && docker compose pull && docker compose up -d</div>
-      <p>Or re-run the setup command — it's safe to repeat. Add more users via the 3x-ui panel (access through SSH tunnel).</p>
+      <p>Or re-run <code>meridian setup</code> — it's safe to repeat. Manage clients with <code>meridian client add|list|remove</code>.</p>
     </div>
   </details>
 
@@ -383,26 +407,26 @@ ansible-playbook playbook.yml</div>
     <summary>Pre-flight check <span></span></summary>
     <div class="inner">
       <p>Not sure if your server is compatible? Run a pre-flight check first:</p>
-      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>curl -sS https://meridian.msu.rocks/setup.sh | bash -s -- IP --check</div>
-      <p>This tests SNI target reachability, port availability, DNS resolution, OS compatibility, and disk space — without installing anything. Helps distinguish between setup issues and censorship-related blocks.</p>
+      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian check 1.2.3.4</div>
+      <p>This tests SNI target reachability, port availability, DNS resolution, OS compatibility, and disk space — without installing anything.</p>
     </div>
   </details>
 
   <details>
-    <summary>Troubleshooting <span></span></summary>
+    <summary data-i18n="ref.troubleshoot">Troubleshooting <span></span></summary>
     <div class="inner">
       <p><strong>Connection fails immediately:</strong> Check device clock is accurate within 30 seconds. Enable "Set Automatically" in date/time settings.</p>
       <p><strong>Connection stops after days:</strong> Server IP may have been blocked. Switch to CDN fallback, or get a new IP and re-run.</p>
       <p><strong>Slow speeds:</strong> Some hosting IP ranges are throttled. Try a different provider or datacenter (Finland, Netherlands, Sweden).</p>
       <p><strong>Do NOT</strong> run other protocols (OpenVPN, WireGuard) on the same server — it flags the IP.</p>
       <p>For bug reports, collect diagnostics (secrets are auto-redacted):</p>
-      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>curl -sS https://meridian.msu.rocks/setup.sh | bash -s -- IP --rage</div>
+      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian diagnostics</div>
       <p>Then open an issue with the output: <a href="https://github.com/uburuntu/meridian/issues" style="color:var(--ac)">github.com/uburuntu/meridian/issues</a></p>
     </div>
   </details>
 
   <details>
-    <summary>Client management <span></span></summary>
+    <summary data-i18n="ref.clients">Client management <span></span></summary>
     <div class="inner">
       <p>Share access with friends — each gets their own key:</p>
       <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian client add alice</div>
@@ -415,18 +439,18 @@ ansible-playbook playbook.yml</div>
   </details>
 
   <details>
-    <summary>Uninstall <span></span></summary>
+    <summary data-i18n="ref.uninstall">Uninstall <span></span></summary>
     <div class="inner">
       <p>Remove the proxy from your server:</p>
       <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian uninstall</div>
-      <p>Removes the proxy container, configs, and firewall rules. Does <strong>not</strong> remove Docker or system packages — those may be used by other applications. The script finds the server IP from saved credentials automatically.</p>
+      <p>Removes the proxy container, configs, and firewall rules. Does <strong>not</strong> remove Docker or system packages — those may be used by other applications.</p>
     </div>
   </details>
 
   <details>
     <summary>Security notes <span></span></summary>
     <div class="inner">
-      <p>Credentials are saved locally in <code>credentials/</code> (git-ignored, mode 0600). The panel binds to localhost — access via SSH tunnel only. SSH password auth is disabled. UFW allows only ports 22 and 443. Automatic security updates are enabled.</p>
+      <p>Credentials are stored at <code>/etc/meridian/</code> on the server (source of truth) and cached locally at <code>~/.meridian/credentials/</code>. The panel binds to localhost — access via SSH tunnel only. SSH password auth is disabled. UFW allows only ports 22 and 443.</p>
       <p>The 3x-ui Docker image is pinned to a tested version. All secrets use <code>no_log: true</code> in Ansible output.</p>
     </div>
   </details>
@@ -436,12 +460,225 @@ ansible-playbook playbook.yml</div>
 <!-- FOOTER -->
 <footer class="foot">
 <div class="w">
-  <p style="margin-bottom:6px">Open source. No tracking. No accounts. Evolving based on your feedback.</p>
+  <p style="margin-bottom:6px" data-i18n="footer">Open source. No tracking. No accounts. Evolving based on your feedback.</p>
   <a href="https://github.com/uburuntu/meridian" target="_blank">GitHub</a> · <a href="https://github.com/uburuntu/meridian/issues" target="_blank">Report Issue</a> · <a href="https://github.com/uburuntu/meridian/issues" target="_blank">Request Feature</a>
 </div>
 </footer>
 
 <script>
+/* --- i18n translations --- */
+var T={
+en:{},
+ru:{
+'badge':'Открытый код',
+'hero.title':'Невидимый прокси,<br><em>одной командой</em>',
+'hero.sub':'Разверните прокси-сервер VLESS+Reality, невидимый для DPI, активного зондирования и TLS-фингерпринтинга. Полная автоматизация. Занимает 2&nbsp;минуты.',
+'hero.cta':'Начать ↓',
+'setup.label':'Установка',
+'setup.title':'Одна команда',
+'setup.desc':'Вам нужен VPS (Debian/Ubuntu, root SSH-ключ) и терминал. Запустите напрямую или настройте команду ниже.',
+'setup.install':'Установите CLI:',
+'setup.deploy':'Затем разверните:',
+'setup.wizard':'Интерактивный мастер спросит всё сам. Или настройте команду:',
+'tab.install':'Установка',
+'tab.check':'Проверка',
+'tab.diag':'Диагностика',
+'tab.uninstall':'Удаление',
+'tab.install.desc':'Развёртывание прокси VLESS+Reality. Настраивает Docker, Xray, фаервол и TLS автоматически.',
+'field.ip':'IP сервера',
+'field.ip.hint':'Публичный IPv4-адрес вашего VPS. Оставьте пустым для интерактивного режима.',
+'field.user':'SSH-пользователь',
+'field.user.hint':'По умолчанию: root. Для других пользователей sudo настраивается автоматически.',
+'field.domain':'Домен',
+'field.domain.hint':'Опционально. Добавляет сайт-прикрытие, CDN-фолбэк через Cloudflare и веб-панель.',
+'field.sni':'SNI-цель',
+'field.yes':'Без подтверждений',
+'field.yes.hint':'Флаг --yes. Для CI/автоматизации или неинтерактивных SSH-сессий.',
+'tech.label':'Технология',
+'tech.title':'Почему он невидим',
+'tech.desc':'Системы цензуры используют три метода обнаружения прокси. Reality побеждает все три.',
+'tech.dpi':'Глубокая инспекция пакетов (DPI)',
+'tech.dpi.body':'<p>DPI анализирует паттерны трафика для определения прокси-протоколов. VPN типа OpenVPN и WireGuard имеют характерные сигнатуры пакетов, которые легко блокировать.</p><p><strong>VLESS+Reality</strong> генерирует трафик, побайтово идентичный обычному HTTPS-соединению. Нет заголовков, паттернов рукопожатия или размеров пакетов, отличающих его от обычного веб-серфинга.</p>',
+'tech.probe':'Активное зондирование',
+'tech.probe.body':'<p>Цензоры подключаются к подозрительным серверам и пытаются определить их тип. Если сервер отвечает не так, как сайт, за который себя выдаёт, — его блокируют.</p><p><strong>Reality</strong> заимствует TLS-сертификат реального сайта (например, microsoft.com). При подключении зонда ваш сервер выполняет TLS-рукопожатие с настоящим сертификатом Microsoft. Зонд видит легитимный сервер Microsoft — потому что на уровне TLS он и <em>есть</em> Microsoft. Только клиенты с вашим приватным ключом получают доступ к прокси.</p>',
+'tech.fp':'TLS-фингерпринтинг',
+'tech.fp.body':'<p>Каждый TLS-клиент (Chrome, Firefox, curl) отправляет уникальный отпечаток «Client Hello». Цензоры помечают соединения, где отпечаток не соответствует заявленному приложению.</p><p>Meridian использует <strong>uTLS</strong> для имитации точного TLS-отпечатка Chrome — того же, что используют миллиарды устройств. Ваш трафик неотличим от обычного просмотра веба в Chrome.</p>',
+'steps.label':'Что происходит',
+'steps.title':'Этапы настройки',
+'steps.desc':'Скрипт подключается к серверу по SSH и запускает Ansible-плейбук, который настраивает всё автоматически.',
+'step.1':'<strong>Устанавливает Docker</strong> и разворачивает <strong>Xray</strong> (движок прокси) через панель управления <strong>3x-ui</strong>',
+'step.2':'<strong>Генерирует ключевую пару x25519</strong> — уникальные ключи шифрования для аутентификации Reality',
+'step.3':'<strong>Защищает сервер</strong> — фаервол UFW (порты 22 + 443), только SSH-ключи, <strong>BBR</strong> для ускорения соединения',
+'step.4':'<strong>Настраивает VLESS+Reality</strong> на порту 443 — прокси, имитирующий настоящий TLS-сервер',
+'step.5':'<strong>С доменом:</strong> добавляет HAProxy (маршрутизация по TLS SNI), Caddy (авто-TLS + сайт-прикрытие) и VLESS+WSS-фолбэк через CDN Cloudflare',
+'step.6':'<strong>Выводит QR-коды</strong> и сохраняет HTML-страницу с ссылками для подключения, кнопками копирования и инструкциями',
+'steps.note':'Безопасно перезапускать в любое время. Полная идемпотентность — учётные данные сохраняются, настройки обновляются на месте.',
+'connect.label':'Подключение',
+'connect.title':'Сканируй и подключайся',
+'connect.desc':'Скрипт создаёт HTML-файл с QR-кодом и ссылкой «Открыть в приложении». Отправьте его тому, кому нужен доступ — одно нажатие и подключение готово.',
+'app.all':'Все платформы',
+'connect.clock':'Часы устройства должны быть точными с отклонением не более 30 секунд. Включите автоматическую установку даты/времени.',
+'arch.label':'Архитектура',
+'arch.title':'Как это работает',
+'arch.standalone':'Автономный режим (без домена)',
+'arch.standalone.body':'<p><strong>Xray</strong> слушает порт 443 с VLESS+Reality. Каждое соединение выглядит как HTTPS к microsoft.com. При зондировании цензоры получают настоящий TLS-сертификат Microsoft. Только клиенты с вашим приватным ключом проходят к прокси.</p><p>Панель 3x-ui привязана к localhost — доступ через SSH-туннель. HTTP в открытом виде никогда не используется.</p>',
+'arch.domain':'Доменный режим (сайт-прикрытие + CDN-фолбэк)',
+'arch.domain.body':'<p>Добавляет три компонента поверх автономного режима:</p><p><strong>HAProxy</strong> на порту 443 инспектирует TLS SNI заголовок (имя хоста в Client Hello) <em>без</em> терминации шифрования. Трафик Reality (SNI = microsoft.com) направляется в Xray. Доменный трафик (SNI = ваш домен) — в Caddy.</p><p><strong>Caddy</strong> терминирует TLS для вашего домена с автоматическими сертификатами Let\'s Encrypt. Показывает реалистичный сайт-прикрытие и проксирует панель 3x-ui.</p><p><strong>VLESS+WSS</strong> обеспечивает CDN-фолбэк. Трафик идёт через CDN Cloudflare по WebSocket — соединение работает даже если IP сервера заблокирован.</p>',
+'arch.chain':'Цепочка (обход белых списков IP)',
+'arch.chain.body':'<p>Для стран с белыми списками разрешённых IP (все иностранные IP блокируются по умолчанию). Два сервера работают вместе:</p><p><strong>Реле</strong> (на разрешённом домашнем IP) принимает VLESS+TCP от пользователя и пересылает всё на выходной узел через VLESS+Reality+XHTTP — мультиплексированный транспорт, похожий на обычный веб-трафик.</p><p><strong>Выходной узел</strong> (за рубежом) расшифровывает и пересылает трафик в интернет. Также сохраняет прямой Reality+TCP-фолбэк на порту 8444.</p>',
+'ref.label':'Справочник',
+'ref.title':'Настройка и управление',
+'ref.troubleshoot':'Решение проблем',
+'ref.clients':'Управление клиентами',
+'ref.uninstall':'Удаление',
+'footer':'Открытый код. Без трекинга. Без аккаунтов. Развивается на основе вашей обратной связи.'
+},
+fa:{
+'badge':'متن‌باز',
+'hero.title':'پراکسی غیرقابل شناسایی،<br><em>با یک دستور</em>',
+'hero.sub':'یک سرور پراکسی VLESS+Reality راه‌اندازی کنید که برای DPI، کاوش فعال و اثرانگشت TLS نامرئی است. کاملاً خودکار. ۲&nbsp;دقیقه.',
+'hero.cta':'شروع ↓',
+'setup.label':'نصب',
+'setup.title':'یک دستور',
+'setup.desc':'یک VPS (دبیان/اوبونتو، دسترسی root با کلید SSH) و یک ترمینال نیاز دارید. مستقیماً اجرا کنید یا دستور را پایین بسازید.',
+'setup.install':'نصب CLI:',
+'setup.deploy':'سپس راه‌اندازی:',
+'setup.wizard':'ویزارد تعاملی همه چیز را می‌پرسد. یا دستور را تنظیم کنید:',
+'tab.install':'نصب',
+'tab.check':'پیش‌بررسی',
+'tab.diag':'عیب‌یابی',
+'tab.uninstall':'حذف',
+'tab.install.desc':'استقرار پراکسی VLESS+Reality. داکر، Xray، فایروال و TLS را به‌طور خودکار پیکربندی می‌کند.',
+'field.ip':'آی‌پی سرور',
+'field.ip.hint':'آدرس IPv4 عمومی VPS شما. برای حالت تعاملی خالی بگذارید.',
+'field.user':'کاربر SSH',
+'field.user.hint':'پیش‌فرض: root. کاربران غیر root به‌طور خودکار sudo دریافت می‌کنند.',
+'field.domain':'دامنه',
+'field.domain.hint':'اختیاری. وب‌سایت پوششی، CDN از طریق Cloudflare و دسترسی به پنل وب اضافه می‌کند.',
+'field.sni':'SNI سفارشی',
+'field.yes':'بدون تأیید',
+'field.yes.hint':'فلگ --yes. برای CI/اتوماسیون یا SSH غیرتعاملی.',
+'tech.label':'فناوری',
+'tech.title':'چرا غیرقابل شناسایی است',
+'tech.desc':'سیستم‌های سانسور از سه روش برای شناسایی پراکسی استفاده می‌کنند. Reality هر سه را شکست می‌دهد.',
+'tech.dpi':'بازرسی عمیق بسته (DPI)',
+'tech.dpi.body':'<p>DPI الگوهای ترافیک را برای شناسایی پروتکل‌های پراکسی تحلیل می‌کند. VPN‌هایی مانند OpenVPN و WireGuard امضاهای بسته متمایزی دارند که مسدودسازی آن‌ها ساده است.</p><p><strong>VLESS+Reality</strong> ترافیکی تولید می‌کند که بایت‌به‌بایت با یک اتصال HTTPS عادی یکسان است. هیچ هدر، الگوی دست‌دهی یا اندازه بسته‌ای آن را از مرور عادی وب متمایز نمی‌کند.</p>',
+'tech.probe':'کاوش فعال',
+'tech.probe.body':'<p>سانسورچی‌ها به سرورهای مشکوک متصل می‌شوند و سعی در شناسایی آن‌ها دارند. اگر سروری متفاوت از وب‌سایتی که ادعا می‌کند پاسخ دهد، مسدود می‌شود.</p><p><strong>Reality</strong> گواهی TLS را از یک وب‌سایت واقعی (مثلاً microsoft.com) قرض می‌گیرد. وقتی کاوشگر متصل می‌شود، سرور شما دست‌دهی TLS را با گواهی واقعی مایکروسافت انجام می‌دهد. کاوشگر یک سرور واقعی مایکروسافت می‌بیند — چون در سطح TLS واقعاً <em>هست</em>. فقط کلاینت‌هایی با کلید خصوصی شما به پراکسی دسترسی دارند.</p>',
+'tech.fp':'اثرانگشت TLS',
+'tech.fp.body':'<p>هر کلاینت TLS (کروم، فایرفاکس، curl) یک اثرانگشت «Client Hello» منحصربه‌فرد ارسال می‌کند. سانسورچی‌ها اتصالاتی را که اثرانگشت آن‌ها با برنامه ادعاشده مطابقت ندارد علامت‌گذاری می‌کنند.</p><p>Meridian از <strong>uTLS</strong> برای جعل اثرانگشت دقیق TLS کروم استفاده می‌کند — همان اثرانگشتی که میلیاردها دستگاه استفاده می‌کنند. ترافیک شما از مرور عادی وب با کروم قابل تشخیص نیست.</p>',
+'steps.label':'مراحل',
+'steps.title':'مراحل نصب',
+'steps.desc':'اسکریپت از طریق SSH به سرور متصل می‌شود و یک پلی‌بوک Ansible را اجرا می‌کند که همه چیز را به‌طور خودکار پیکربندی می‌کند.',
+'step.1':'<strong>داکر را نصب</strong> و <strong>Xray</strong> (موتور پراکسی) را از طریق پنل مدیریت <strong>3x-ui</strong> مستقر می‌کند',
+'step.2':'<strong>جفت کلید x25519 تولید</strong> می‌کند — کلیدهای رمزنگاری منحصربه‌فرد برای احراز هویت Reality',
+'step.3':'<strong>سرور را امن می‌کند</strong> — فایروال UFW (پورت‌های 22 + 443)، فقط کلید SSH، <strong>BBR</strong> برای سرعت بیشتر',
+'step.4':'<strong>VLESS+Reality را پیکربندی</strong> می‌کند روی پورت 443 — پراکسی‌ای که یک سرور TLS واقعی را جعل می‌کند',
+'step.5':'<strong>با دامنه:</strong> HAProxy (مسیریابی TLS SNI)، Caddy (TLS خودکار + وب‌سایت پوششی) و VLESS+WSS برای CDN از طریق Cloudflare اضافه می‌کند',
+'step.6':'<strong>کدهای QR خروجی</strong> می‌دهد و یک صفحه HTML با لینک‌های اتصال، دکمه‌های کپی و دستورالعمل‌ها ذخیره می‌کند',
+'steps.note':'در هر زمانی می‌توان دوباره اجرا کرد. کاملاً idempotent — اعتبارنامه‌ها حفظ و تنظیمات در جا به‌روز می‌شوند.',
+'connect.label':'اتصال',
+'connect.title':'اسکن کن و وصل شو',
+'connect.desc':'اسکریپت یک فایل HTML با کد QR و لینک عمیق «باز کردن در برنامه» ایجاد می‌کند. آن را به هر کسی که نیاز دارد بفرستید — یک ضربه و متصل می‌شوند.',
+'app.all':'همه پلتفرم‌ها',
+'connect.clock':'ساعت دستگاه باید با دقت ۳۰ ثانیه تنظیم باشد. تاریخ/ساعت خودکار را فعال کنید.',
+'arch.label':'معماری',
+'arch.title':'نحوه کار',
+'arch.standalone':'حالت مستقل (بدون دامنه)',
+'arch.standalone.body':'<p><strong>Xray</strong> روی پورت 443 با VLESS+Reality گوش می‌دهد. هر اتصال مانند HTTPS به microsoft.com به نظر می‌رسد. وقتی سانسورچی‌ها سرور را بررسی می‌کنند، گواهی واقعی TLS مایکروسافت را دریافت می‌کنند. فقط کلاینت‌هایی با کلید خصوصی شما به پراکسی دسترسی دارند.</p><p>پنل 3x-ui به localhost متصل است — دسترسی از طریق تونل SSH. هیچ HTTP متن‌بازی فاش نمی‌شود.</p>',
+'arch.domain':'حالت دامنه (سایت پوششی + CDN)',
+'arch.domain.body':'<p>سه مؤلفه به حالت مستقل اضافه می‌کند:</p><p><strong>HAProxy</strong> روی پورت 443 هدر TLS SNI را <em>بدون</em> خاتمه رمزنگاری بررسی می‌کند. ترافیک Reality (SNI = microsoft.com) به Xray و ترافیک دامنه (SNI = دامنه شما) به Caddy هدایت می‌شود.</p><p><strong>Caddy</strong> با گواهی‌های خودکار Let\'s Encrypt، TLS را برای دامنه شما خاتمه می‌دهد. یک وب‌سایت پوششی واقع‌گرایانه نمایش می‌دهد و پنل 3x-ui را پراکسی می‌کند.</p><p><strong>VLESS+WSS</strong> مسیر CDN جایگزین فراهم می‌کند. ترافیک از طریق CDN Cloudflare عبور می‌کند — حتی اگر IP سرور مسدود باشد.</p>',
+'arch.chain':'حالت زنجیره (دور زدن لیست سفید IP)',
+'arch.chain.body':'<p>برای کشورهایی که IP‌های مجاز را لیست سفید می‌کنند. دو سرور با هم کار می‌کنند:</p><p><strong>رله</strong> (روی IP داخلی مجاز) VLESS+TCP را از کاربر می‌پذیرد و همه چیز را به نود خروجی از طریق VLESS+Reality+XHTTP ارسال می‌کند.</p><p><strong>نود خروجی</strong> (خارج از کشور) ترافیک را رمزگشایی و به اینترنت ارسال می‌کند. یک فال‌بک مستقیم Reality+TCP روی پورت 8444 نیز دارد.</p>',
+'ref.label':'مرجع',
+'ref.title':'تنظیمات و مدیریت',
+'ref.troubleshoot':'عیب‌یابی',
+'ref.clients':'مدیریت کلاینت‌ها',
+'ref.uninstall':'حذف',
+'footer':'متن‌باز. بدون ردیابی. بدون حساب کاربری. بر اساس بازخورد شما توسعه می‌یابد.'
+},
+zh:{
+'badge':'开源项目',
+'hero.title':'不可检测的代理，<br><em>一条命令部署</em>',
+'hero.sub':'部署一台对 DPI、主动探测和 TLS 指纹识别不可见的 VLESS+Reality 代理服务器。全自动化，仅需 2&nbsp;分钟。',
+'hero.cta':'开始使用 ↓',
+'setup.label':'安装',
+'setup.title':'一条命令',
+'setup.desc':'你需要一台 VPS（Debian/Ubuntu，root SSH 密钥访问）和一个终端。直接运行或在下方配置命令。',
+'setup.install':'安装 CLI：',
+'setup.deploy':'然后部署：',
+'setup.wizard':'交互式向导会询问所有信息。或者配置你的命令：',
+'tab.install':'安装',
+'tab.check':'预检',
+'tab.diag':'诊断',
+'tab.uninstall':'卸载',
+'tab.install.desc':'部署 VLESS+Reality 代理。自动配置 Docker、Xray、防火墙和 TLS。',
+'field.ip':'服务器 IP',
+'field.ip.hint':'VPS 的公网 IPv4 地址。留空进入交互模式。',
+'field.user':'SSH 用户',
+'field.user.hint':'默认：root。非 root 用户自动获得 sudo 权限。',
+'field.domain':'域名',
+'field.domain.hint':'可选。添加伪装网站、通过 Cloudflare 的 CDN 回退和 Web 面板访问。',
+'field.sni':'自定义 SNI',
+'field.yes':'跳过确认',
+'field.yes.hint':'添加 --yes 标志。用于 CI/自动化或非交互式 SSH 会话。',
+'tech.label':'技术',
+'tech.title':'为什么不可检测',
+'tech.desc':'审查系统使用三种方法检测代理。Reality 击败了所有三种。',
+'tech.dpi':'深度包检测 (DPI)',
+'tech.dpi.body':'<p>DPI 分析流量模式以识别代理协议。OpenVPN 和 WireGuard 等 VPN 具有明显的数据包特征，很容易被封锁。</p><p><strong>VLESS+Reality</strong> 产生的流量与正常 HTTPS 连接逐字节相同。没有任何头部、握手模式或数据包大小能将其与正常网页浏览区分开。</p>',
+'tech.probe':'主动探测',
+'tech.probe.body':'<p>审查者连接到可疑服务器并尝试识别它们。如果服务器的响应与其声称的网站不同，就会被封锁。</p><p><strong>Reality</strong> 借用真实网站（如 microsoft.com）的 TLS 证书。当探测器连接时，你的服务器使用微软的真实证书完成 TLS 握手。探测器看到的是一个合法的微软服务器——因为在 TLS 层面，它<em>确实是</em>。只有持有你私钥的客户端才能访问代理。</p>',
+'tech.fp':'TLS 指纹识别',
+'tech.fp.body':'<p>每个 TLS 客户端（Chrome、Firefox、curl）都会发送独特的"Client Hello"指纹。审查者会标记指纹与声称应用不匹配的连接。</p><p>Meridian 使用 <strong>uTLS</strong> 模拟 Chrome 的精确 TLS 指纹——与数十亿设备使用的相同。你的流量与使用 Chrome 浏览网页无法区分。</p>',
+'steps.label':'部署过程',
+'steps.title':'安装步骤',
+'steps.desc':'脚本通过 SSH 连接到你的服务器，运行 Ansible 剧本自动配置一切。',
+'step.1':'<strong>安装 Docker</strong> 并通过 <strong>3x-ui</strong> 管理面板部署 <strong>Xray</strong>（代理引擎）',
+'step.2':'<strong>生成 x25519 密钥对</strong>——用于 Reality 协议认证的唯一加密密钥',
+'step.3':'<strong>加固服务器</strong>——UFW 防火墙（仅 22 + 443 端口）、仅 SSH 密钥认证、<strong>BBR</strong> 拥塞控制提升速度',
+'step.4':'<strong>配置 VLESS+Reality 入站</strong> 在 443 端口——模拟真实 TLS 服务器的代理',
+'step.5':'<strong>使用域名时：</strong>添加 HAProxy（TLS SNI 路由）、Caddy（自动 TLS + 伪装网站）和通过 Cloudflare CDN 的 VLESS+WSS 回退',
+'step.6':'<strong>输出 QR 码</strong>并保存包含连接链接、复制按钮和设置说明的 HTML 页面',
+'steps.note':'可以随时安全地重新运行。完全幂等——凭证保留，设置原地更新。',
+'connect.label':'连接',
+'connect.title':'扫描即连',
+'connect.desc':'脚本生成一个包含 QR 码和"在应用中打开"深度链接的 HTML 文件。发送给需要的人——一键连接。',
+'app.all':'全平台',
+'connect.clock':'设备时钟必须精确到 30 秒以内。请启用自动日期/时间。',
+'arch.label':'架构',
+'arch.title':'工作原理',
+'arch.standalone':'独立模式（无域名）',
+'arch.standalone.body':'<p><strong>Xray</strong> 在 443 端口以 VLESS+Reality 监听。每个连接看起来都像是到 microsoft.com 的 HTTPS。审查者探测服务器时，会收到微软的真实 TLS 证书。只有持有你私钥的客户端才能通过代理。</p><p>3x-ui 面板绑定到 localhost——通过 SSH 隧道访问。不会暴露明文 HTTP。</p>',
+'arch.domain':'域名模式（伪装站 + CDN 回退）',
+'arch.domain.body':'<p>在独立模式之上添加三个组件：</p><p><strong>HAProxy</strong> 在 443 端口检查 TLS SNI 头（Client Hello 中的主机名）<em>而不</em>终止加密。Reality 流量（SNI = microsoft.com）路由到 Xray。域名流量（SNI = 你的域名）路由到 Caddy。</p><p><strong>Caddy</strong> 使用自动 Let\'s Encrypt 证书为你的域名终止 TLS。提供逼真的伪装网站并反向代理 3x-ui 面板。</p><p><strong>VLESS+WSS 入站</strong>提供 CDN 回退路径。流量通过 Cloudflare CDN 经 WebSocket 传输——即使服务器 IP 被封也能连接。</p>',
+'arch.chain':'链式模式（IP 白名单绕过）',
+'arch.chain.body':'<p>适用于将允许的 IP 范围列入白名单的国家（默认封锁所有外国 IP）。两台服务器协同工作：</p><p><strong>中继节点</strong>（在白名单内的国内 IP 上）接受用户的 VLESS+TCP，通过 VLESS+Reality+XHTTP 转发到出口节点——一种看起来像普通网络流量的多路复用传输。</p><p><strong>出口节点</strong>（境外）解密并将流量转发到互联网。同时在 8444 端口保留直接 Reality+TCP 回退。</p>',
+'ref.label':'参考',
+'ref.title':'配置与运维',
+'ref.troubleshoot':'故障排除',
+'ref.clients':'客户端管理',
+'ref.uninstall':'卸载',
+'footer':'开源。无追踪。无账户。根据你的反馈不断改进。'
+}
+};
+
+function setLang(lang){
+  document.documentElement.lang=lang;
+  document.documentElement.dir=lang==='fa'?'rtl':'ltr';
+  document.querySelectorAll('[data-i18n]').forEach(function(el){
+    var key=el.dataset.i18n;
+    var text=(T[lang]&&T[lang][key])||T.en[key];
+    if(text)el.innerHTML=text;
+    else if(lang==='en'){}// keep original
+  });
+  document.querySelectorAll('.lang-picker button').forEach(function(b){b.classList.toggle('active',b.textContent.trim()==={'en':'EN','ru':'RU','fa':'فا','zh':'中文'}[lang])});
+  localStorage.setItem('meridian-lang',lang);
+  // Update tab description for current tab
+  if(typeof setTab==='function'){var cfg=tabConfig[curTab];if(cfg){var dk='tab.'+curTab+'.desc';var td=(T[lang]&&T[lang][dk])||cfg.desc;document.getElementById('tab-desc').textContent=td;}}
+}
+
+/* --- Copy & flash --- */
 function copyEl(btn){
   const block=btn.closest('.oneliner,.code');
   const pre=block.querySelector('pre')||block;
@@ -450,6 +687,8 @@ function copyEl(btn){
   else{const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);flash(btn)}
 }
 function flash(btn){btn.textContent='Copied';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok')},1200)}
+
+/* --- Command builder --- */
 var curTab='install';
 var tabConfig={
   install:{desc:'Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.',show:['ip','user','domain','sni','yes'],cmd:'setup'},
@@ -461,7 +700,10 @@ function setTab(t){
   curTab=t;
   document.querySelectorAll('.btab').forEach(function(b,i){b.classList.toggle('active',['install','check','diag','uninstall'][i]===t)});
   var cfg=tabConfig[t];
-  document.getElementById('tab-desc').textContent=cfg.desc;
+  var lang=localStorage.getItem('meridian-lang')||'en';
+  var dk='tab.'+t+'.desc';
+  var td=(T[lang]&&T[lang][dk])||cfg.desc;
+  document.getElementById('tab-desc').textContent=td;
   ['ip','user','domain','sni','yes'].forEach(function(f){
     var r=document.getElementById('row-'+f);
     if(r)r.style.display=cfg.show.indexOf(f)>=0?'block':'none';
@@ -478,7 +720,6 @@ function buildCmd(){
   var yes=document.getElementById('f-yes').checked;
   var hint=document.getElementById('cmd-hint');
   var cfg=tabConfig[curTab];
-  // Toggle conditional inputs
   document.getElementById('f-domain').style.display=domOn?'block':'none';
   document.getElementById('f-sni').style.display=sniOn?'block':'none';
   var args=[];
@@ -496,7 +737,6 @@ function buildCmd(){
   var cmd='meridian '+cfg.cmd;
   if(args.length)cmd+=' '+args.join(' ');
   document.getElementById('cmd-pre').textContent=cmd;
-  // Hints
   if(curTab==='install'){
     if(!ip){hint.textContent='Enter your server IP, or just run the base command — the interactive wizard will ask.';hint.style.color='var(--t3)';}
     else if(domOn&&!dom){hint.textContent='Enter a domain or uncheck to skip.';hint.style.color='var(--t3)';}
@@ -512,8 +752,20 @@ function buildCmd(){
     hint.style.color=ip?'var(--ok)':'var(--t3)';
   }
 }
+
+/* --- Reveal animation --- */
 const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('v')})},{threshold:.15});
 document.querySelectorAll('.rv').forEach(el=>obs.observe(el));
+
+/* --- Auto-detect language on load --- */
+!function(){
+  var saved=localStorage.getItem('meridian-lang');
+  if(saved&&T[saved]){setLang(saved);return}
+  var bl=navigator.language||navigator.userLanguage||'en';
+  if(bl.startsWith('ru'))setLang('ru');
+  else if(bl.startsWith('fa'))setLang('fa');
+  else if(bl.startsWith('zh'))setLang('zh');
+}();
 </script>
 </body>
 </html>
