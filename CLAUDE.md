@@ -74,9 +74,9 @@ These are easy to break by editing one file without updating the others:
 - `meridian` CLI installed to `~/.local/bin/meridian` via `install.sh`
 - Data directory: `~/.meridian/` (playbooks, credentials, cache)
 - Playbooks cached in `~/.meridian/playbooks/` with `.version` marker — re-downloaded when CLI version changes
-- Credentials stored in `~/.meridian/credentials/<IP>/` (per-server subdirectories)
-- Server as source of truth: credentials also saved to `/etc/meridian/` on the server
-- Server index: `~/.meridian/servers` (line-oriented: `host user name`)
+- Credentials cached locally in `~/.meridian/credentials/<IP>/` (per-server subdirectories)
+- Server as source of truth: credentials stored at `/etc/meridian/` on the server (synced by playbook post_tasks)
+- Server index: `~/.meridian/servers` (line-oriented: `host user name`, no spaces in names)
 - Auto-update check on each run (throttled to 1x/24h), fetches `meridian.msu.rocks/version`
 - `VERSION` file at repo root is the single source of truth — must match `MERIDIAN_VERSION` in `meridian` script
 - `setup.sh` is a compat shim that installs the CLI and forwards args

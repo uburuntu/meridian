@@ -358,14 +358,18 @@ fetch_credentials_from_server() {
     "cat /etc/meridian/proxy.yml 2>/dev/null" </dev/null 2>/dev/null || true)
 
   if [[ -n "$remote_cred" && "$remote_cred" == *"panel_configured"* ]]; then
-    mkdir -p "$creds_dir"
+    mkdir -p "$creds_dir" && chmod 700 "$creds_dir"
     printf '%s\n' "$remote_cred" > "$creds_dir/proxy.yml"
+    chmod 600 "$creds_dir/proxy.yml"
 
     # Also fetch clients file
     local remote_clients
     remote_clients=$(ssh -o BatchMode=yes -o ConnectTimeout=3 "${ANSIBLE_USER}@${SERVER_IP}" \
       "cat /etc/meridian/proxy-clients.yml 2>/dev/null" </dev/null 2>/dev/null || true)
-    [[ -n "$remote_clients" ]] && printf '%s\n' "$remote_clients" > "$creds_dir/proxy-clients.yml"
+    if [[ -n "$remote_clients" ]]; then
+      printf '%s\n' "$remote_clients" > "$creds_dir/proxy-clients.yml"
+      chmod 600 "$creds_dir/proxy-clients.yml"
+    fi
 
     ok "Fetched credentials from server"
     return 0
@@ -659,6 +663,9 @@ cmd_server() {
         esac
       done
       [[ -z "$host" ]] && fail "Usage: meridian server add IP [--name NAME] [--user USER]"
+      if [[ -n "$name" ]] && ! [[ "$name" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]*$ ]]; then
+        fail "Server name must be alphanumeric (hyphens and underscores allowed)"
+      fi
 
       SERVER_IP="$host"
       ANSIBLE_USER="$user"
@@ -1036,7 +1043,7 @@ main() {
   local args=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --server) REQUESTED_SERVER="$2"; shift 2 ;;
+      --server) [[ $# -ge 2 ]] || fail "--server requires a value"; REQUESTED_SERVER="$2"; shift 2 ;;
       *)        args+=("$1"); shift ;;
     esac
   done

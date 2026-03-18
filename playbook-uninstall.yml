@@ -7,7 +7,7 @@
 #
 # Usage:
 #   ansible-playbook playbook-uninstall.yml
-#   Or via setup.sh: curl ... | bash -s -- IP --uninstall
+#   Or via CLI: meridian uninstall
 #
 # What gets removed:
 #   - 3x-ui container and image
@@ -61,13 +61,13 @@
         enabled: false
       failed_when: false
 
-    - name: Remove Meridian Caddy config
+    - name: Remove Meridian Caddy config and web files
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
       loop:
         - /etc/caddy/conf.d/meridian.caddy
-        - /var/www/html
+        - /var/www/html/index.html
         - /var/www/private
       failed_when: false
 
@@ -118,7 +118,7 @@
             - HAProxy config (if present)
             - Caddy Meridian config and web files (if present)
             - Firewall rules for ports 443, 80, 8444
-            - Saved credentials (server and local ~/meridian/)
+            - Saved credentials (/etc/meridian/ and meridian CLI on server)
 
           NOT removed (may be used by other apps):
             - Docker engine
