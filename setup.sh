@@ -182,24 +182,28 @@ install_if_missing() {
   local cmd="$1" name="$2" install_cmd="$3"
   if command -v "$cmd" &>/dev/null; then
     ok "$name already installed"
-  else
-    info "Installing $name..."
-    eval "$install_cmd" || fail "Failed to install $name"
+    return 0
+  fi
+  info "Installing $name..."
+  if eval "$install_cmd"; then
     ok "$name installed"
+  else
+    fail "Failed to install $name"
   fi
 }
 
 install_ansible() {
-  # Try pipx first (modern, no PEP 668 issues), then pip with --user,
-  # then pip with --break-system-packages (Debian 12+/Ubuntu 23.04+)
+  # Try multiple install methods — first success wins.
+  # Each attempt is guarded so set -e doesn't kill the script on failure.
   if command -v pipx &>/dev/null; then
-    pipx install ansible --quiet 2>/dev/null && return 0
+    if pipx install ansible --quiet 2>/dev/null; then return 0; fi
   fi
-  pip3 install --quiet --user ansible 2>/dev/null && return 0
-  pip3 install --quiet --user --break-system-packages ansible 2>/dev/null && return 0
-  # Last resort: system package
+  if command -v pip3 &>/dev/null; then
+    if pip3 install --quiet --user ansible 2>/dev/null; then return 0; fi
+    if pip3 install --quiet --user --break-system-packages ansible 2>/dev/null; then return 0; fi
+  fi
   if [[ "$OS" == "linux" ]]; then
-    sudo apt-get install -y -qq ansible >/dev/null 2>&1 && return 0
+    if sudo apt-get install -y -qq ansible >/dev/null 2>&1; then return 0; fi
   fi
   return 1
 }
