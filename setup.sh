@@ -144,10 +144,10 @@ if [[ -z "$SERVER_IP" && "$UNINSTALL" != true ]]; then
   if [[ -z "$SUGGESTED_DOMAIN" ]]; then
     CADDY_DOMAIN=""
     if [[ "$LOCAL_MODE" == true ]]; then
-      CADDY_DOMAIN=$(grep -oE '^[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-z]{2,}' /etc/caddy/Caddyfile 2>/dev/null | head -1 || true)
+      CADDY_DOMAIN=$(grep -ohE '^[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-z]{2,}' /etc/caddy/conf.d/meridian.caddy /etc/caddy/Caddyfile 2>/dev/null | head -1 || true)
     else
       CADDY_DOMAIN=$(ssh -o BatchMode=yes -o ConnectTimeout=3 "${ANSIBLE_USER}@${SERVER_IP}" \
-        "grep -oE '^[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-z]{2,}' /etc/caddy/Caddyfile 2>/dev/null | head -1" </dev/null 2>/dev/null || true)
+        "grep -ohE '^[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-z]{2,}' /etc/caddy/conf.d/meridian.caddy /etc/caddy/Caddyfile 2>/dev/null | head -1" </dev/null 2>/dev/null || true)
     fi
     if [[ -n "$CADDY_DOMAIN" ]]; then
       SUGGESTED_DOMAIN="$CADDY_DOMAIN"

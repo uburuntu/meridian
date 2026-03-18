@@ -3,6 +3,10 @@
 # Handles TLS termination, decoy website, WebSocket proxy for VLESS+WSS,
 # 3x-ui panel proxy, and the connection info page.
 # Receives traffic from HAProxy on the internal port.
+#
+# Config strategy: Meridian writes its config to /etc/caddy/conf.d/meridian.caddy
+# and ensures the main Caddyfile imports /etc/caddy/conf.d/*. This way the user's
+# own Caddyfile is never overwritten — they can add their own site blocks freely.
 
 # -- Pre-flight: check that the domain resolves to this server --
 - name: Resolve domain DNS to check it points to this server
@@ -60,7 +64,7 @@
     state: present
     update_cache: true
 
-- name: Create web directories
+- name: Create web and config directories
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
@@ -71,11 +75,20 @@
     - /var/www/html
     - /var/www/private
     - /var/log/caddy
+    - /etc/caddy/conf.d
 
-- name: Deploy Caddyfile
+- name: Deploy Meridian Caddy config
   ansible.builtin.template:
     src: Caddyfile.j2
-    dest: /etc/caddy/Caddyfile
+    dest: /etc/caddy/conf.d/meridian.caddy
+    mode: "0644"
+  notify: Reload Caddy
+
+- name: Ensure main Caddyfile imports conf.d
+  ansible.builtin.lineinfile:
+    path: /etc/caddy/Caddyfile
+    line: "import /etc/caddy/conf.d/*.caddy"
+    create: true
     mode: "0644"
   notify: Reload Caddy
 

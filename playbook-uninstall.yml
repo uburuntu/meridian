@@ -61,12 +61,12 @@
         enabled: false
       failed_when: false
 
-    - name: Remove Caddy configuration
+    - name: Remove Meridian Caddy config
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
       loop:
-        - /etc/caddy/Caddyfile
+        - /etc/caddy/conf.d/meridian.caddy
         - /var/www/html
         - /var/www/private
       failed_when: false
@@ -91,7 +91,7 @@
           Removed:
             - 3x-ui container and data
             - HAProxy config (if present)
-            - Caddy config and web files (if present)
+            - Caddy Meridian config and web files (if present)
             - Firewall rules for ports 443, 80, 8444
 
           NOT removed (may be used by other apps):
