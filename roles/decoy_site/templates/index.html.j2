@@ -1,59 +1,143 @@
+{% set themes = [
+  {'bg': 'linear-gradient(135deg,#1a365d,#2b6cb0)', 'accent': '#2b6cb0', 'light': '#ebf4ff'},
+  {'bg': 'linear-gradient(135deg,#1a202c,#4a5568)', 'accent': '#4a5568', 'light': '#f7fafc'},
+  {'bg': 'linear-gradient(135deg,#22543d,#38a169)', 'accent': '#38a169', 'light': '#f0fff4'},
+  {'bg': 'linear-gradient(135deg,#553c9a,#805ad5)', 'accent': '#805ad5', 'light': '#faf5ff'},
+  {'bg': 'linear-gradient(135deg,#744210,#d69e2e)', 'accent': '#b7791f', 'light': '#fffff0'},
+  {'bg': 'linear-gradient(135deg,#742a2a,#e53e3e)', 'accent': '#c53030', 'light': '#fff5f5'},
+  {'bg': 'linear-gradient(135deg,#234e52,#319795)', 'accent': '#319795', 'light': '#e6fffa'},
+  {'bg': 'linear-gradient(135deg,#1a202c,#2d3748)', 'accent': '#2d3748', 'light': '#edf2f7'}
+] %}
+{% set businesses = [
+  {'name': 'Apex Consulting Group', 'tag': 'Strategic insights for growing businesses', 'type': 'consulting',
+   'features': [
+     {'icon': '&#9881;', 'title': 'Strategy', 'desc': 'Data-driven business strategies tailored to your market.'},
+     {'icon': '&#128200;', 'title': 'Analytics', 'desc': 'Performance dashboards and KPI tracking for informed decisions.'},
+     {'icon': '&#128101;', 'title': 'Team Building', 'desc': 'Organizational design and talent development programs.'}
+   ]},
+  {'name': 'Nordic Design Lab', 'tag': 'Minimal design, maximum impact', 'type': 'design',
+   'features': [
+     {'icon': '&#9998;', 'title': 'Brand Identity', 'desc': 'Logos, typography, and visual systems that tell your story.'},
+     {'icon': '&#128187;', 'title': 'Web Design', 'desc': 'Responsive websites built with clean code and modern standards.'},
+     {'icon': '&#127912;', 'title': 'UI/UX', 'desc': 'User-centered interfaces designed for clarity and engagement.'}
+   ]},
+  {'name': 'Pinnacle Engineering', 'tag': 'Precision engineering for complex challenges', 'type': 'engineering',
+   'features': [
+     {'icon': '&#128295;', 'title': 'Prototyping', 'desc': 'Rapid iteration from concept to functional prototype.'},
+     {'icon': '&#128202;', 'title': 'Simulation', 'desc': 'Computational modeling and stress analysis for critical systems.'},
+     {'icon': '&#9878;', 'title': 'Compliance', 'desc': 'Regulatory alignment and quality assurance processes.'}
+   ]},
+  {'name': 'Greenfield Analytics', 'tag': 'Turn raw data into clear decisions', 'type': 'analytics',
+   'features': [
+     {'icon': '&#128200;', 'title': 'Dashboards', 'desc': 'Real-time visualization of your key business metrics.'},
+     {'icon': '&#128270;', 'title': 'Research', 'desc': 'Market analysis and competitive intelligence reports.'},
+     {'icon': '&#9889;', 'title': 'Automation', 'desc': 'Automated reporting pipelines that save hours every week.'}
+   ]},
+  {'name': 'Clearwater Solutions', 'tag': 'Cloud infrastructure, simplified', 'type': 'cloud',
+   'features': [
+     {'icon': '&#9729;', 'title': 'Migration', 'desc': 'Seamless transition from on-premise to cloud environments.'},
+     {'icon': '&#128274;', 'title': 'Security', 'desc': 'Zero-trust architecture and continuous compliance monitoring.'},
+     {'icon': '&#128736;', 'title': 'DevOps', 'desc': 'CI/CD pipelines and infrastructure as code.'}
+   ]},
+  {'name': 'Atlas Digital Media', 'tag': 'Stories that connect brands to people', 'type': 'media',
+   'features': [
+     {'icon': '&#127909;', 'title': 'Video', 'desc': 'Brand films, product demos, and social media content.'},
+     {'icon': '&#128247;', 'title': 'Photography', 'desc': 'Professional product and lifestyle photography.'},
+     {'icon': '&#128240;', 'title': 'Content', 'desc': 'SEO-optimized articles, whitepapers, and case studies.'}
+   ]},
+  {'name': 'Ironwood Logistics', 'tag': 'Reliable supply chain management worldwide', 'type': 'logistics',
+   'features': [
+     {'icon': '&#128666;', 'title': 'Shipping', 'desc': 'Global freight forwarding with real-time tracking.'},
+     {'icon': '&#128230;', 'title': 'Warehousing', 'desc': 'Strategically located fulfillment centers.'},
+     {'icon': '&#128196;', 'title': 'Customs', 'desc': 'Import/export documentation and regulatory compliance.'}
+   ]},
+  {'name': 'Horizon Education', 'tag': 'Professional development for the modern workforce', 'type': 'education',
+   'features': [
+     {'icon': '&#127891;', 'title': 'Courses', 'desc': 'Self-paced online programs in technology and leadership.'},
+     {'icon': '&#128218;', 'title': 'Workshops', 'desc': 'Hands-on sessions led by industry practitioners.'},
+     {'icon': '&#127942;', 'title': 'Certification', 'desc': 'Accredited credentials recognized by employers.'}
+   ]}
+] %}
+{% set seed = (inventory_hostname + (ansible_host | default('x'))) | hash('md5') %}
+{% set theme_idx = (seed[0:4] | int(base=16)) % (themes | length) %}
+{% set biz_idx = (seed[4:8] | int(base=16)) % (businesses | length) %}
+{% set theme = themes[theme_idx] %}
+{% set biz = businesses[biz_idx] %}
+{% set site_name = decoy_site_title if decoy_site_title != 'Meridian Digital Solutions' else biz.name %}
+{% set site_tag = decoy_site_tagline if decoy_site_tagline != 'Modern technology consulting for growing businesses' else biz.tag %}
+{% set layout_var = (seed[8:10] | int(base=16)) % 3 %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ decoy_site_title }}</title>
+<title>{{ site_name }}</title>
+<meta name="description" content="{{ site_tag }}">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
-    color: #2d3748; line-height: 1.7; background: #fff;
-  }
-  .hero {
-    background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
-    color: #fff; padding: 80px 24px; text-align: center;
-  }
-  .hero h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 16px; }
-  .hero p { font-size: 1.2rem; opacity: 0.9; max-width: 600px; margin: 0 auto; }
-  .features {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 32px; padding: 64px 24px; max-width: 960px; margin: 0 auto;
-  }
-  .feature { text-align: center; }
-  .feature .icon { font-size: 2rem; margin-bottom: 12px; }
-  .feature h3 { font-size: 1.1rem; margin-bottom: 8px; color: #1a365d; }
-  .feature p { font-size: 0.95rem; color: #4a5568; }
-  .footer {
-    text-align: center; padding: 32px 24px; color: #a0aec0;
-    font-size: 0.85rem; border-top: 1px solid #e2e8f0;
-  }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#2d3748;line-height:1.7;background:#fff}
+{% if layout_var == 0 %}
+.hero{background:{{ theme.bg }};color:#fff;padding:100px 24px;text-align:center}
+.hero h1{font-size:2.8rem;font-weight:700;margin-bottom:16px;letter-spacing:-.02em}
+.hero p{font-size:1.15rem;opacity:.85;max-width:520px;margin:0 auto}
+{% elif layout_var == 1 %}
+.hero{background:{{ theme.bg }};color:#fff;padding:80px 24px;text-align:left;display:flex;align-items:center;justify-content:center}
+.hero-inner{max-width:600px}
+.hero h1{font-size:2.4rem;font-weight:800;margin-bottom:12px;line-height:1.15}
+.hero p{font-size:1.1rem;opacity:.8;line-height:1.6}
+{% else %}
+.hero{background:{{ theme.light }};color:#1a202c;padding:100px 24px;text-align:center;border-bottom:4px solid {{ theme.accent }}}
+.hero h1{font-size:2.6rem;font-weight:700;margin-bottom:16px;color:{{ theme.accent }}}
+.hero p{font-size:1.1rem;color:#4a5568;max-width:520px;margin:0 auto}
+{% endif %}
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:40px;padding:72px 24px;max-width:960px;margin:0 auto}
+.feature{text-align:center}
+.feature .ic{font-size:2rem;margin-bottom:14px}
+.feature h3{font-size:1.05rem;margin-bottom:6px;color:{{ theme.accent }};font-weight:600}
+.feature p{font-size:.92rem;color:#4a5568;line-height:1.6}
+.foot{text-align:center;padding:36px 24px;color:#a0aec0;font-size:.82rem;border-top:1px solid #e2e8f0}
+nav{background:#fff;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8f0}
+nav .logo{font-weight:700;font-size:1.1rem;color:{{ theme.accent }}}
+nav .links{display:flex;gap:24px}
+nav a{text-decoration:none;color:#4a5568;font-size:.9rem}
+nav a:hover{color:{{ theme.accent }}}
+.cta{display:inline-block;margin-top:28px;padding:14px 32px;background:{% if layout_var == 2 %}{{ theme.accent }}{% else %}rgba(255,255,255,.15){% endif %};color:{% if layout_var == 2 %}#fff{% else %}#fff{% endif %};border:{% if layout_var == 2 %}none{% else %}1px solid rgba(255,255,255,.3){% endif %};border-radius:6px;font-size:.95rem;font-weight:500;text-decoration:none;backdrop-filter:blur(4px)}
+@media(max-width:640px){.hero h1{font-size:1.8rem}.hero{padding:60px 20px}nav .links{display:none}}
 </style>
 </head>
 <body>
+<nav>
+  <div class="logo">{{ site_name }}</div>
+  <div class="links">
+    <a href="#">Services</a>
+    <a href="#">About</a>
+    <a href="#">Contact</a>
+  </div>
+</nav>
+{% if layout_var == 1 %}
+<div class="hero"><div class="hero-inner">
+  <h1>{{ site_name }}</h1>
+  <p>{{ site_tag }}</p>
+  <a href="#" class="cta">Learn More</a>
+</div></div>
+{% else %}
 <div class="hero">
-  <h1>{{ decoy_site_title }}</h1>
-  <p>{{ decoy_site_tagline }}</p>
+  <h1>{{ site_name }}</h1>
+  <p>{{ site_tag }}</p>
+  <a href="#" class="cta">Get Started</a>
 </div>
+{% endif %}
 <div class="features">
+{% for f in biz.features %}
   <div class="feature">
-    <div class="icon">&#9881;</div>
-    <h3>Infrastructure</h3>
-    <p>Cloud architecture and deployment solutions tailored for your business needs.</p>
+    <div class="ic">{{ f.icon }}</div>
+    <h3>{{ f.title }}</h3>
+    <p>{{ f.desc }}</p>
   </div>
-  <div class="feature">
-    <div class="icon">&#128274;</div>
-    <h3>Security</h3>
-    <p>Comprehensive security audits and compliance frameworks to protect your data.</p>
-  </div>
-  <div class="feature">
-    <div class="icon">&#128200;</div>
-    <h3>Analytics</h3>
-    <p>Data-driven insights and performance monitoring for informed decision-making.</p>
-  </div>
+{% endfor %}
 </div>
-<div class="footer">
-  &copy; {{ ansible_date_time.year }} {{ decoy_site_title }}. All rights reserved.
+<div class="foot">
+  &copy; {{ ansible_date_time.year }} {{ site_name }}. All rights reserved.
 </div>
 </body>
 </html>
