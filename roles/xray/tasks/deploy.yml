@@ -81,9 +81,12 @@
           - Check disk space: df -h
           - Check Docker status: systemctl status docker
 
+# On first run: panel serves on / (no webBasePath yet)
+# On re-run: panel has webBasePath set, so / returns 404
+# Try both paths to handle either case
 - name: Wait for 3x-ui panel to become responsive
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ panel_internal_port }}/"
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path | default('') }}/"
     method: GET
     status_code: [200, 302, 301]
   register: panel_health
