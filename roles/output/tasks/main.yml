@@ -6,7 +6,7 @@
 - name: Build Reality VLESS connection URL
   ansible.builtin.set_fact:
     vless_reality_url: >-
-      vless://{{ reality_uuid }}@{{ ansible_host }}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Reality
+      vless://{{ reality_uuid }}@{{ server_public_ip }}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Reality
 
 - name: Build WSS VLESS connection URL (domain mode)
   ansible.builtin.set_fact:
@@ -72,7 +72,7 @@
       {% else %}
       The panel binds to localhost only (not exposed to the internet).
       Access it via SSH tunnel:
-        ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ ansible_host }}
+        ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ server_public_ip }}
         Then open: http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/
       {% endif %}
       Username: {{ panel_username }}
@@ -81,7 +81,7 @@
 - name: Build direct Reality fallback URL (exit mode)
   ansible.builtin.set_fact:
     vless_direct_url: >-
-      vless://{{ reality_uuid }}@{{ ansible_host }}:{{ reality_direct_port | default(8444) }}?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Direct-Fallback
+      vless://{{ reality_uuid }}@{{ server_public_ip }}:{{ reality_direct_port | default(8444) }}?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Direct-Fallback
   when: exit_mode | default(false) | bool
 
 - name: Display Reality connection info
@@ -126,7 +126,7 @@
       Public Key:    {{ reality_public_key }}
       Short ID:      {{ reality_short_id }}
       Reality SNI:   {{ reality_sni }}
-      Server IP:     {{ ansible_host }}
+      Server IP:     {{ server_public_ip }}
   when: exit_mode | default(false) | bool
 
 - name: Display client apps and notes
@@ -153,7 +153,7 @@
 
       4. CLOUDFLARE SETUP (for CDN fallback):
          - Add domain in Cloudflare dashboard
-         - Create A record pointing to {{ ansible_host }}
+         - Create A record pointing to {{ server_public_ip }}
          - Enable orange cloud (Proxy)
          - SSL/TLS mode: Full (Strict)
          - Network: Enable WebSockets

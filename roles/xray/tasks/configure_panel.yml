@@ -18,10 +18,26 @@
         ws_path: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=12') }}"
       no_log: true
 
+    # -- Discover Xray binary path (architecture-independent) --
+    - name: Discover Xray binary path inside container
+      ansible.builtin.command:
+        cmd: docker exec 3x-ui sh -c 'ls /app/bin/xray-linux-* 2>/dev/null || which xray 2>/dev/null || echo NOT_FOUND'
+      register: xray_binary_discovery
+      changed_when: false
+
+    - name: Set Xray binary path
+      ansible.builtin.set_fact:
+        xray_cmd: "docker exec 3x-ui {{ xray_binary_discovery.stdout_lines[0] }}"
+
+    - name: Fail if Xray binary not found in container
+      ansible.builtin.fail:
+        msg: "Xray binary not found in 3x-ui container. Try: docker exec 3x-ui find / -name 'xray*' -type f"
+      when: "'NOT_FOUND' in xray_binary_discovery.stdout"
+
     # -- Generate cryptographic keys (before any API calls) --
     - name: Generate x25519 keypair for Reality
       ansible.builtin.command:
-        cmd: docker exec 3x-ui sh -c '/app/bin/xray-linux-* x25519'
+        cmd: "{{ xray_cmd }} x25519"
       register: x25519_output
       changed_when: false
       no_log: true
@@ -35,9 +51,16 @@
         reality_public_key: "{{ x25519_output.stdout | regex_search('(?:Public key|Password):\\s*(.+)', '\\1') | first }}"
       no_log: true
 
+    - name: Verify Reality keys were parsed
+      ansible.builtin.assert:
+        that:
+          - reality_private_key | length > 20
+          - reality_public_key | length > 20
+        fail_msg: "Failed to parse x25519 output. The Xray version may have changed the output format."
+
     - name: Generate UUID for Reality client
       ansible.builtin.command:
-        cmd: docker exec 3x-ui sh -c '/app/bin/xray-linux-* uuid'
+        cmd: "{{ xray_cmd }} uuid"
       register: uuid_output
       changed_when: false
       no_log: true
@@ -49,7 +72,7 @@
 
     - name: Generate UUID for WSS client
       ansible.builtin.command:
-        cmd: docker exec 3x-ui sh -c '/app/bin/xray-linux-* uuid'
+        cmd: "{{ xray_cmd }} uuid"
       register: wss_uuid_output
       changed_when: false
       no_log: true
@@ -66,7 +89,7 @@
 
     - name: Generate UUID for XHTTP relay connections (exit mode only)
       ansible.builtin.command:
-        cmd: docker exec 3x-ui sh -c '/app/bin/xray-linux-* uuid'
+        cmd: "{{ xray_cmd }} uuid"
       register: xhttp_uuid_output
       changed_when: false
       no_log: true
@@ -105,7 +128,7 @@
           reality_sni: "{{ reality_sni }}"
           wss_uuid: "{{ wss_uuid }}"
           xhttp_uuid: "{{ xhttp_uuid | default('') }}"
-          exit_ip: "{{ ansible_host }}"
+          exit_ip: "{{ server_public_ip }}"
         dest: "{{ credentials_file }}"
         mode: "0600"
       delegate_to: localhost

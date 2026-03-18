@@ -15,7 +15,7 @@
 - name: Fail if domain does not resolve to this server
   ansible.builtin.fail:
     msg: |
-      {{ domain }} does not resolve to this server's IP ({{ ansible_host }}).
+      {{ domain }} does not resolve to this server's IP ({{ server_public_ip }}).
       DNS returned: {{ domain_dns_check.stdout | default('(empty)') }}
 
       Caddy needs the domain to point DIRECTLY to this server for TLS certificates.
@@ -26,7 +26,7 @@
       To skip this check: add -e skip_dns_check=true
   when:
     - not (skip_dns_check | default(false) | bool)
-    - domain_dns_check.stdout | default('') | trim != ansible_host
+    - domain_dns_check.stdout | default('') | trim != server_public_ip
     - domain_dns_check.stdout | default('') | trim != ''
 
 - name: Install Caddy prerequisites

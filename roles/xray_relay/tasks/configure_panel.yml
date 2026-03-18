@@ -12,9 +12,19 @@
         panel_web_base_path: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=16') }}"
       no_log: true
 
+    - name: Discover Xray binary path inside container
+      ansible.builtin.command:
+        cmd: docker exec 3x-ui sh -c 'ls /app/bin/xray-linux-* 2>/dev/null || which xray 2>/dev/null || echo NOT_FOUND'
+      register: xray_binary_discovery
+      changed_when: false
+
+    - name: Set Xray binary path
+      ansible.builtin.set_fact:
+        xray_cmd: "docker exec 3x-ui {{ xray_binary_discovery.stdout_lines[0] }}"
+
     - name: Generate UUID for relay user
       ansible.builtin.command:
-        cmd: docker exec 3x-ui sh -c '/app/bin/xray-linux-* uuid'
+        cmd: "{{ xray_cmd }} uuid"
       register: relay_uuid_output
       changed_when: false
       no_log: true

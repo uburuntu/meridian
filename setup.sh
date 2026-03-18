@@ -135,7 +135,7 @@ all:
 EOF
 
 # --- Build ansible-playbook command ---
-PLAY_CMD="ansible-playbook playbook.yml"
+PLAY_CMD="ansible-playbook playbook.yml -e server_public_ip=$SERVER_IP"
 [[ -n "$DOMAIN" ]] && PLAY_CMD="$PLAY_CMD -e domain=$DOMAIN"
 [[ -n "$EMAIL" ]]  && PLAY_CMD="$PLAY_CMD -e email=$EMAIL"
 

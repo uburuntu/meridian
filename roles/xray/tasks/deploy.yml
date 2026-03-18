@@ -17,6 +17,34 @@
     dest: /opt/3x-ui/docker-compose.yml
     mode: "0644"
 
+- name: Check for services already using port 443
+  ansible.builtin.shell:
+    cmd: ss -tlnp sport = :443
+  register: port_443_precheck
+  changed_when: false
+  failed_when: false
+
+- name: Fail if port 443 is in use by another service
+  ansible.builtin.fail:
+    msg: |
+      Port 443 is already in use:
+      {{ port_443_precheck.stdout }}
+      Stop the conflicting service: systemctl stop nginx apache2 haproxy
+  when:
+    - port_443_precheck.stdout | default('') | regex_search(':443\\s')
+    - "'3x-ui' not in (port_443_precheck.stdout | default(''))"
+    - "'xray' not in (port_443_precheck.stdout | default(''))"
+
+- name: Pull 3x-ui Docker image
+  ansible.builtin.command:
+    cmd: docker compose pull
+    chdir: /opt/3x-ui
+  register: pull_result
+  changed_when: "'Pull complete' in (pull_result.stderr | default('')) or 'Downloaded' in (pull_result.stderr | default(''))"
+  retries: 3
+  delay: 10
+  until: pull_result is succeeded
+
 - name: Start 3x-ui container
   block:
     - name: Run docker compose up

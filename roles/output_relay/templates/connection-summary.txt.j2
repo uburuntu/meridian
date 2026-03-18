@@ -1,12 +1,12 @@
 ===============================================================================
-  Relay Node Connection Info — {{ inventory_hostname }} ({{ ansible_host }})
+  Relay Node Connection Info — {{ inventory_hostname }} ({{ server_public_ip }})
   Exit Node: {{ exit_ip }}
   Generated: {{ ansible_date_time.iso8601 }}
 ===============================================================================
 
 --- 3x-ui Panel ---
 Panel binds to localhost only (not exposed to the internet).
-SSH tunnel: ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ ansible_host }}
+SSH tunnel: ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ server_public_ip }}
 Local URL:  http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/
 Username: {{ panel_username }}
 Password: {{ panel_password }}
@@ -15,7 +15,7 @@ Password: {{ panel_password }}
 {{ vless_relay_url }}
 
 --- Chain Path ---
-User → {{ ansible_host }}:{{ relay_inbound_port | default(443) }} (relay, VLESS+TCP)
+User → {{ server_public_ip }}:{{ relay_inbound_port | default(443) }} (relay, VLESS+TCP)
      → {{ exit_ip }}:443 (exit, VLESS+Reality+XHTTP)
      → Internet
 

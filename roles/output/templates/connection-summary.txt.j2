@@ -1,5 +1,5 @@
 ===============================================================================
-  Connection Info for {{ inventory_hostname }} ({{ ansible_host }})
+  Connection Info for {{ inventory_hostname }} ({{ server_public_ip }})
   Generated: {{ ansible_date_time.iso8601 }}
 ===============================================================================
 
@@ -8,7 +8,7 @@
 URL:      https://{{ domain }}/{{ panel_web_base_path }}/
 {% else %}
 Panel binds to localhost only (not exposed to the internet).
-SSH tunnel: ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ ansible_host }}
+SSH tunnel: ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ server_public_ip }}
 Local URL:  http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/
 {% endif %}
 Username: {{ panel_username }}
@@ -44,7 +44,7 @@ Linux:    Hiddify or Nekoray
 {% if domain_mode | bool %}
 4. CLOUDFLARE SETUP (required for CDN fallback):
    - Add your domain in Cloudflare dashboard
-   - Create an A record pointing to {{ ansible_host }}
+   - Create an A record pointing to {{ server_public_ip }}
    - Enable the orange cloud icon (Proxy)
    - Set SSL/TLS mode to "Full (Strict)"
    - In Network settings, enable WebSockets

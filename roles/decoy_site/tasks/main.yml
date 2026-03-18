@@ -14,7 +14,7 @@
 - name: Build Reality VLESS connection URL
   ansible.builtin.set_fact:
     vless_reality_url: >-
-      vless://{{ reality_uuid }}@{{ ansible_host }}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Reality
+      vless://{{ reality_uuid }}@{{ server_public_ip }}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Reality
     vless_wss_url: >-
       vless://{{ wss_uuid }}@{{ domain }}:443?encryption=none&security=tls&sni={{ domain }}&type=ws&host={{ domain }}&path=%2F{{ ws_path }}#VLESS-WSS-CDN
 

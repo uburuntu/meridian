@@ -5,7 +5,7 @@
 - name: Build relay VLESS connection URL
   ansible.builtin.set_fact:
     vless_relay_url: >-
-      vless://{{ relay_user_uuid }}@{{ ansible_host }}:{{ relay_inbound_port | default(443) }}?encryption=none&type=tcp&security=none#VLESS-Relay
+      vless://{{ relay_user_uuid }}@{{ server_public_ip }}:{{ relay_inbound_port | default(443) }}?encryption=none&type=tcp&security=none#VLESS-Relay
 
 # -- Generate QR codes --
 - name: Generate relay QR code for terminal display
@@ -34,7 +34,7 @@
       ======================================================================
 
       --- 3x-ui Panel (SSH tunnel required) ---
-      ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ ansible_host }}
+      ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ server_public_ip }}
       Then open: http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/
       Username: {{ panel_username }}
       Password: {{ panel_password }}
@@ -45,7 +45,7 @@
       {{ relay_qr_terminal.stdout }}
 
       --- Chain Path ---
-      User → {{ ansible_host }}:{{ relay_inbound_port | default(443) }} (relay)
+      User → {{ server_public_ip }}:{{ relay_inbound_port | default(443) }} (relay)
            → {{ exit_ip }}:443 (exit, via XHTTP+Reality)
            → Internet
 
