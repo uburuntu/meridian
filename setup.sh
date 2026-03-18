@@ -3,8 +3,8 @@
 # Meridian — One-command proxy server setup
 #
 # Interactive:  curl -sS https://meridian.msu.rocks/setup.sh | bash
-# With flags:   curl -sS ... | bash -s -- 1.2.3.4 --domain example.com
-# Uninstall:    curl -sS ... | bash -s -- --uninstall
+# With flags:   curl -sS https://meridian.msu.rocks/setup.sh | bash -s -- 1.2.3.4 --domain example.com
+# Uninstall:    curl -sS https://meridian.msu.rocks/setup.sh | bash -s -- --uninstall
 # =============================================================================
 set -euo pipefail
 
@@ -63,9 +63,9 @@ while [[ $# -gt 0 ]]; do
       printf "\n  ${B}Meridian${R} — Proxy Server Setup\n\n"
       printf "  Usage:\n"
       printf "    curl -sS https://...setup.sh | bash              ${D}# interactive wizard${R}\n"
-      printf "    curl -sS ... | bash -s -- IP                     ${D}# with server IP${R}\n"
-      printf "    curl -sS ... | bash -s -- IP --domain example.com\n"
-      printf "    curl -sS ... | bash -s -- --uninstall\n\n"
+      printf "    curl -sS https://meridian.msu.rocks/setup.sh | bash -s -- IP\n"
+      printf "    curl -sS https://meridian.msu.rocks/setup.sh | bash -s -- IP --domain example.com\n"
+      printf "    curl -sS https://meridian.msu.rocks/setup.sh | bash -s -- --uninstall\n\n"
       printf "  Flags:\n"
       printf "    --domain DOMAIN   Add decoy website + CDN fallback\n"
       printf "    --sni HOST        Reality camouflage target (default: www.microsoft.com)\n"

@@ -44,10 +44,10 @@ A Debian/Ubuntu VPS with root SSH key access. The script handles the rest.
 
 ```bash
 # Pre-flight check — test if your server is compatible (without installing)
-curl -sS ... | bash -s -- IP --check
+curl -sS https://meridian.msu.rocks/setup.sh | bash -s -- IP --check
 
 # Collect diagnostics for bug reports (secrets are auto-redacted)
-curl -sS ... | bash -s -- IP --rage
+curl -sS https://meridian.msu.rocks/setup.sh | bash -s -- IP --rage
 ```
 
 ## Uninstall
