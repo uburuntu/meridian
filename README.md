@@ -81,7 +81,7 @@ A VPS (Debian/Ubuntu) with root SSH key access. $3–5/month from any provider. 
 
 Full documentation, interactive command builder, and client app links:
 
-**[meridian.msu.rocks](https://meridian.msu.rocks)**
+**[meridian.msu.rocks](https://meridian.msu.rocks)** · [Connection page demo](https://meridian.msu.rocks/demo)
 
 ## Feedback
 
