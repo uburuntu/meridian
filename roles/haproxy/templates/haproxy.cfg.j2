@@ -45,8 +45,8 @@ frontend tls_router
 
 # --- Backend: Xray Reality ---
 backend xray_reality
-    server xray 127.0.0.1:{{ haproxy_reality_backend_port }} check
+    server xray 127.0.0.1:{{ haproxy_reality_backend_port }}
 
 # --- Backend: Caddy HTTPS ---
 backend caddy_https
-    server caddy 127.0.0.1:{{ caddy_internal_port }} check
+    server caddy 127.0.0.1:{{ caddy_internal_port }}
