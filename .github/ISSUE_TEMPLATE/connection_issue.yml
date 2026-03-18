@@ -1,0 +1,67 @@
+name: Connection Issue
+description: Setup completed but the proxy connection doesn't work
+labels: ["connection"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before reporting, please check:
+        - **Clock sync**: Device clock must be accurate within 30 seconds
+        - **Client app**: Try a different app (v2rayNG, Hiddify, v2RayTun)
+        - **Pre-flight**: Run `--check` to test your server environment
+
+  - type: dropdown
+    id: symptom
+    attributes:
+      label: What happens?
+      options:
+        - Connection fails immediately
+        - Connection works briefly then drops
+        - Connection worked before but stopped
+        - Very slow speeds
+        - Connection works but some sites don't load
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Client app & version
+      placeholder: "e.g., v2rayNG 1.9.0 on Android 14"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection_type
+    attributes:
+      label: Which connection?
+      options:
+        - Primary (Reality)
+        - Backup (WSS/CDN)
+        - Both fail
+        - Relay chain
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Server location
+      description: Country/provider of your VPS (no IP address needed)
+      placeholder: "e.g., Finland / Hetzner"
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: Pre-flight check output
+      description: |
+        Run: `curl -sS https://...setup.sh | bash -s -- YOUR_IP --check`
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: Additional context
+      description: Any other details (error messages, logs, etc.)
+    validations:
+      required: false

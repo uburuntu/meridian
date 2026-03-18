@@ -1,0 +1,75 @@
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please run `--rage` to collect diagnostics:
+        ```
+        curl -sS https://raw.githubusercontent.com/uburuntu/meridian/main/setup.sh | bash -s -- YOUR_IP --rage
+        ```
+        Secrets are auto-redacted. Paste the output below.
+
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Describe the problem. What did you expect vs. what actually happened?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Setup mode
+      options:
+        - Standalone (no domain)
+        - Domain mode (with Caddy + HAProxy)
+        - Chain mode (relay + exit)
+        - Uninstall
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: When does it fail?
+      options:
+        - During setup.sh (before Ansible runs)
+        - During Ansible playbook execution
+        - After setup — connection doesn't work
+        - After setup — connection stopped working
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Diagnostics (--rage output)
+      description: Paste the output from `--rage` here. Review it first — secrets are auto-redacted but double-check.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: Error output
+      description: Paste the exact error message or Ansible task failure.
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    attributes:
+      label: Server OS
+      placeholder: "e.g., Ubuntu 24.04"
+    validations:
+      required: false
+
+  - type: input
+    attributes:
+      label: Local OS
+      placeholder: "e.g., macOS 15, Ubuntu 22.04"
+    validations:
+      required: false

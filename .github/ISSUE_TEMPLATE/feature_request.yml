@@ -1,0 +1,32 @@
+name: Feature Request
+description: Suggest an improvement or new feature
+labels: ["enhancement"]
+body:
+  - type: textarea
+    attributes:
+      label: What would you like?
+      description: Describe the feature or improvement. What problem does it solve?
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Use case
+      description: How would you use this? What's your setup or situation?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Setup script (setup.sh)
+        - Ansible playbook / roles
+        - Connection info page
+        - Website (meridian.msu.rocks)
+        - Documentation
+        - Chain mode (relay)
+        - Other
+    validations:
+      required: false

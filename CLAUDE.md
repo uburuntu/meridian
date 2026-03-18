@@ -202,9 +202,18 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml
 
 ## Known issues / tech debt
 
-- `configure_panel.yml` is ~90% duplicated between `xray` and `xray_relay` roles (the 35-field settings payload is copy-pasted). Should extract to a shared task file.
-- Three connection-info HTML templates drift independently. Should use a single template with conditional blocks.
-- Pre-tasks (IP resolution, credential loading, qrencode check) are duplicated across playbook.yml and playbook-chain.yml.
-- No key/credential rotation mechanism. Re-deploy with deleted credentials file is the only option.
+- `configure_panel.yml` is ~90% duplicated between `xray` and `xray_relay` roles (277 vs 191 lines). The 35-field settings payload is copy-pasted. Extracting to a shared task file is possible but risky — it touches the critical credential flow and needs careful testing on both standalone and chain mode.
+- Three connection-info HTML templates share the same design but different Jinja2 variables. They now have a unified visual design, but CSS/JS is still duplicated across all three. A single template with conditional blocks would reduce drift risk.
+- Pre-tasks (IP resolution, credential loading, qrencode check) are duplicated across playbook.yml and playbook-chain.yml. Could extract to a shared pre_tasks file.
+- No key/credential rotation mechanism. To rotate: uninstall (deletes credentials) then reinstall.
 - No post-deployment monitoring or health checks (cron/watchdog).
-- 3x-ui database at `/opt/3x-ui/db/` grows without bound (traffic stats).
+- 3x-ui database at `/opt/3x-ui/db/` grows without bound (traffic stats). No cleanup mechanism.
+
+## GitHub community files
+
+- `.github/ISSUE_TEMPLATE/bug_report.yml` — structured bug report with --rage prompt
+- `.github/ISSUE_TEMPLATE/connection_issue.yml` — connection troubleshooting with --check prompt
+- `.github/ISSUE_TEMPLATE/feature_request.yml` — feature requests by area
+- `.github/ISSUE_TEMPLATE/config.yml` — disables blank issues, links to docs
+- `SECURITY.md` — vulnerability reporting policy and security design overview
+- `CONTRIBUTING.md` — development setup, PR guidelines, testing approach
