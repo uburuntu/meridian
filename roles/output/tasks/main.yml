@@ -96,24 +96,20 @@
   changed_when: false
   when: exit_mode | default(false) | bool
 
-# -- Display QR codes first (noisy, scrolls up) --
-- name: Display Reality QR code
-  ansible.builtin.debug:
-    msg: |
+# -- Print output directly to terminal (bypasses Ansible's JSON-escaping) --
+# Using shell echo instead of debug so ANSI QR codes render properly.
 
-      {{ reality_qr_terminal.stdout }}
-
-- name: Display WSS QR code
-  ansible.builtin.debug:
-    msg: |
-
-      {{ wss_qr_terminal.stdout }}
-  when: domain_mode | bool
-
-# -- Display connection details AFTER the QR noise --
-- name: Display connection summary
-  ansible.builtin.debug:
-    msg: |
+- name: Display QR codes and connection summary
+  ansible.builtin.shell:
+    cmd: |
+      printf '\n'
+      printf '%s\n' '{{ reality_qr_terminal.stdout | replace("'", "'\\''") }}'
+      {% if domain_mode | bool %}
+      printf '\n'
+      printf '%s\n' '{{ wss_qr_terminal.stdout | replace("'", "'\\''") }}'
+      {% endif %}
+      printf '\n'
+      cat <<'SUMMARY'
 
       ======================================================================
                         CONNECTION SETUP COMPLETE
@@ -174,10 +170,7 @@
       Password: {{ panel_password }}
 
       ======================================================================
-
-- name: Display exit node relay credentials (for relay node setup)
-  ansible.builtin.debug:
-    msg: |
+      {% if exit_mode | default(false) | bool %}
 
       --- Exit Node Credentials (for Relay Configuration) ---
       These values are automatically passed to the relay node.
@@ -186,4 +179,8 @@
       Short ID:      {{ reality_short_id }}
       Reality SNI:   {{ reality_sni }}
       Server IP:     {{ server_public_ip }}
-  when: exit_mode | default(false) | bool
+      {% endif %}
+      SUMMARY
+  delegate_to: localhost
+  become: false
+  changed_when: false
