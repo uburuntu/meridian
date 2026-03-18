@@ -468,8 +468,10 @@ ansible-playbook playbook.yml</div>
 
 <script>
 /* --- i18n translations --- */
-var T={
-en:{},
+// Capture original English content on first load
+var T={en:{}};
+document.querySelectorAll('[data-i18n]').forEach(function(el){T.en[el.dataset.i18n]=el.innerHTML});
+T={en:T.en,
 ru:{
 'badge':'Открытый код',
 'hero.title':'Невидимый прокси,<br><em>одной командой</em>',
