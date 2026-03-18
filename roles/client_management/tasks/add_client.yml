@@ -140,7 +140,7 @@
   ansible.builtin.set_fact:
     clients_data:
       clients: []
-  when: clients_data is not defined or clients_data.clients is not defined
+  when: clients_data is not defined or clients_data.clients is not defined or clients_data.clients is none
 
 - name: Save updated clients file
   ansible.builtin.copy:
