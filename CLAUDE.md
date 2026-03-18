@@ -35,10 +35,15 @@ group_vars/exit.yml        Exit node defaults (chain)
 group_vars/relay.yml       Relay node defaults (chain)
 setup.sh                   One-command installer (interactive wizard + flag mode)
 docs/index.html            Website hosted on meridian.msu.rocks (GitHub Pages)
+docs/setup.sh              Copy of setup.sh served by GitHub Pages (synced by CD)
 docs/CNAME                 Custom domain for GitHub Pages
+pre_tasks/                 Shared pre-task files (resolve_ip, check_qrencode, load_credentials)
 tests/render_templates.py  CI template rendering test (with Ansible filter mocks)
 .github/workflows/ci.yml   CI pipeline (lint, syntax, templates, shell, dry-run)
+.github/workflows/cd.yml   CD pipeline (sync setup.sh → docs/setup.sh)
 .ansible-lint              Ansible lint configuration
+SECURITY.md                Vulnerability reporting policy
+CONTRIBUTING.md            Development setup and PR guidelines
 roles/
   common/                  OS packages, SSH hardening, UFW, BBR
   docker/                  Docker CE installation (idempotent)
@@ -76,8 +81,8 @@ These are easy to break by editing one file without updating the others:
 - `--yes` / `-y` — skip confirmation prompts (for non-interactive/CI use)
 
 ### docs/index.html ↔ setup.sh
-- Website command builder generates `curl ... setup.sh | bash -s -- IP` commands — flag names must match `setup.sh`
-- The raw GitHub URL in the website must match the actual repo path
+- Website command builder has tabbed interface (Install/Pre-flight/Diagnostics/Uninstall) — flag names must match `setup.sh`
+- setup.sh is served from `meridian.msu.rocks/setup.sh` — the `docs/setup.sh` copy is synced by CD workflow (`.github/workflows/cd.yml`)
 - Website references the same app download links as the HTML templates in roles
 
 ### Connection info HTML templates (3 copies)
@@ -191,15 +196,22 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml
 - **Decoy site default title**: must NOT contain "Meridian" — would link the decoy site back to this GitHub repo. Currently "Westbridge Partners", randomized per deployment via hostname hash
 - **setup.sh interactive prompts**: use `read -r VAR < /dev/tty` (not stdin) so it works in `curl | bash`; detect public IPv4 with `curl -4` to avoid IPv6; suggest domain from Caddy config or saved credentials
 - **setup.sh info() function**: uses `printf "%s"` which prints arguments literally — do NOT embed escape codes like `${B}` in arguments passed to `info()`
-- **GitHub raw CDN caching**: raw.githubusercontent.com caches for ~60-120s; can't bust with query params or headers, just wait
+- **GitHub raw CDN caching**: raw.githubusercontent.com caches for ~60-120s; can't bust with query params or headers, just wait. Serving from meridian.msu.rocks avoids this.
+- **HAProxy health checks**: do NOT use `check` on TLS backends (Caddy, Xray) — TCP probes fail on TLS-only ports, causing "backend has no server available" errors. These are local systemd services, not load-balanced pools.
+- **setup.sh docs/ sync**: `docs/setup.sh` must stay in sync with root `setup.sh`. The CD workflow auto-syncs on push, but manual edits to docs/setup.sh will be overwritten.
 
-## CI pipeline
+## CI/CD pipelines
 
+### CI (`.github/workflows/ci.yml`) — runs on push and PR
 - **Lint**: `ansible/ansible-lint@main` — catches FQCN, YAML style, deprecated patterns
 - **Validate**: syntax check all playbooks + template rendering test with Ansible filter mocks
 - **Shell**: `bash -n` syntax check + shellcheck + `--help` flag test
 - **Dry run**: `ansible-playbook --check` with local connection (validates task structure)
 - Skipped lint rules: `var-naming[no-role-prefix]` (would require renaming 90+ variables), `command-instead-of-module` (curl/dig used intentionally)
+
+### CD (`.github/workflows/cd.yml`) — runs on push to main when setup.sh changes
+- Copies `setup.sh` → `docs/setup.sh` and auto-commits with `[skip ci]`
+- Ensures `meridian.msu.rocks/setup.sh` always serves the latest version
 
 ## Known issues / tech debt
 
