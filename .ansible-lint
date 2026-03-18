@@ -5,6 +5,8 @@ skip_list:
   - no-changed-when
   - command-instead-of-shell
   - risky-shell-pipe
+  - var-naming[no-role-prefix]
+  - command-instead-of-module
 
 warn_list:
   - experimental

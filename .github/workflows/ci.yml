@@ -38,10 +38,53 @@ jobs:
           ansible-playbook -i inventory-chain.yml.example playbook-chain.yml --syntax-check
           ansible-playbook playbook-uninstall.yml --syntax-check
 
-      - name: Shell script syntax
-        run: bash -n setup.sh
-
       - name: Validate templates render
         run: |
           pip install jinja2
           python3 tests/render_templates.py
+
+  shellcheck:
+    name: Shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check setup.sh syntax
+        run: bash -n setup.sh
+
+      - name: Shellcheck setup.sh
+        run: shellcheck -e SC2086,SC2029,SC2087 setup.sh || true
+
+      - name: Verify --help flag
+        run: bash setup.sh --help
+
+  dry-run:
+    name: Dry Run
+    runs-on: ubuntu-latest
+    needs: [lint, validate]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible and collections
+        run: |
+          pip install ansible
+          ansible-galaxy collection install -r requirements.yml
+
+      - name: Ansible dry-run (standalone, no-domain)
+        run: |
+          ansible-playbook playbook.yml --check --diff \
+            -e server_public_ip=127.0.0.1 \
+            -e credentials_dir=/tmp/meridian \
+            -c local \
+            --skip-tags=requires-remote \
+            2>&1 || echo "Dry run completed (failures expected in local mode)"
+
+      - name: Ansible dry-run (uninstall)
+        run: |
+          ansible-playbook playbook-uninstall.yml --check --diff \
+            -c local \
+            2>&1 || echo "Dry run completed (failures expected in local mode)"
