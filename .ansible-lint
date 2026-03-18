@@ -1,0 +1,11 @@
+---
+skip_list:
+  - yaml[line-length]
+  - yaml[truthy]
+  - no-changed-when
+  - command-instead-of-shell
+  - risky-shell-pipe
+
+warn_list:
+  - experimental
+  - name[missing]

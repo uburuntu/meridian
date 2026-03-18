@@ -278,14 +278,26 @@ fi
 ok "Collections ready"
 
 # --- Restore credentials from previous run (for idempotent re-runs) ---
-for cred_dir in "$ORIG_PWD/meridian" "$ORIG_PWD/vpn-credentials" "$HOME/meridian"; do
+# Search common locations + orphaned temp dirs from failed runs
+CRED_FOUND=false
+for cred_dir in "$ORIG_PWD/meridian" "$HOME/meridian" "$ORIG_PWD/vpn-credentials"; do
   if [[ -d "$cred_dir" ]] && ls "$cred_dir"/*.yml &>/dev/null; then
     mkdir -p credentials
     cp "$cred_dir"/*.yml credentials/ 2>/dev/null || true
     ok "Loaded credentials from $cred_dir"
+    CRED_FOUND=true
     break
   fi
 done
+# Also check /tmp for orphaned credentials from failed setup.sh runs
+if [[ "$CRED_FOUND" != true ]]; then
+  ORPHAN=$(find /tmp -maxdepth 3 -name "proxy.yml" -path "*/credentials/*" 2>/dev/null | head -1)
+  if [[ -n "$ORPHAN" ]]; then
+    mkdir -p credentials
+    cp "$(dirname "$ORPHAN")"/*.yml credentials/ 2>/dev/null || true
+    ok "Recovered credentials from previous run"
+  fi
+fi
 
 # --- Write inventory ---
 BECOME_LINE=""
@@ -323,7 +335,10 @@ if [[ "$UNINSTALL" == true ]]; then
 fi
 
 # --- Build and run playbook ---
-PLAY_CMD="ansible-playbook playbook.yml -e server_public_ip=$SERVER_IP"
+# Point credentials to a stable location (survives temp dir cleanup)
+STABLE_CREDS="$HOME/meridian"
+mkdir -p "$STABLE_CREDS"
+PLAY_CMD="ansible-playbook playbook.yml -e server_public_ip=$SERVER_IP -e credentials_dir=$STABLE_CREDS"
 [[ -n "$DOMAIN" ]] && PLAY_CMD="$PLAY_CMD -e domain=$DOMAIN"
 [[ -n "$EMAIL" ]]  && PLAY_CMD="$PLAY_CMD -e email=$EMAIL"
 
@@ -334,14 +349,7 @@ printf "\n"
 
 $PLAY_CMD
 
-# --- Copy output files ---
-ORIG_DIR="$ORIG_PWD"
-if [[ -d credentials ]]; then
-  mkdir -p "$ORIG_DIR/meridian"
-  cp credentials/* "$ORIG_DIR/meridian/" 2>/dev/null || true
-  printf "\n  ${G}${B}Done!${R}\n\n"
-  printf "  Credentials saved to: ${B}$ORIG_DIR/meridian/${R}\n"
-  printf "  Send the HTML file to whoever needs it — they scan the QR code and connect.\n\n"
-else
-  printf "\n  ${G}${B}Done!${R} Check the output above for connection details.\n\n"
-fi
+# --- Done ---
+printf "\n  ${G}${B}Done!${R}\n\n"
+printf "  Credentials saved to: ${B}$STABLE_CREDS/${R}\n"
+printf "  Send the HTML file to whoever needs it — they scan the QR code and connect.\n\n"
