@@ -34,6 +34,8 @@
     - port_443_precheck.stdout | default('') | regex_search(':443') is not none
     - "'3x-ui' not in (port_443_precheck.stdout | default(''))"
     - "'xray' not in (port_443_precheck.stdout | default(''))"
+    - "'haproxy' not in (port_443_precheck.stdout | default(''))"
+    - "'caddy' not in (port_443_precheck.stdout | default(''))"
 
 - name: Pull 3x-ui Docker image
   ansible.builtin.command:
