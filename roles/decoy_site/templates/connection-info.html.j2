@@ -5,193 +5,200 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Connection Setup</title>
 <style>
-  :root {
-    --bg: #0f172a; --surface: #1e293b; --border: #334155;
-    --text: #e2e8f0; --text-dim: #94a3b8; --accent: #38bdf8;
-    --success: #4ade80; --radius: 12px;
-  }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #f8fafc; --surface: #fff; --border: #e2e8f0;
-      --text: #1e293b; --text-dim: #64748b; --accent: #0284c7;
-      --success: #16a34a;
-    }
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg); color: var(--text);
-    padding: 20px; max-width: 480px; margin: 0 auto;
-    -webkit-font-smoothing: antialiased;
-  }
-  h1 { font-size: 1.5rem; text-align: center; margin: 20px 0 8px; }
-  .subtitle { text-align: center; color: var(--text-dim); font-size: 0.9rem; margin-bottom: 24px; }
-  .card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
-  }
-  .card h2 {
-    font-size: 1rem; margin-bottom: 4px; display: flex;
-    align-items: center; gap: 8px;
-  }
-  .badge {
-    font-size: 0.7rem; padding: 2px 8px; border-radius: 99px;
-    font-weight: 600; text-transform: uppercase;
-  }
-  .badge-primary { background: #0284c720; color: var(--accent); }
-  .badge-fallback { background: #f59e0b20; color: #f59e0b; }
-  .card .desc { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 16px; }
-  .qr-wrap { text-align: center; margin: 16px 0; }
-  .qr-wrap img { max-width: 220px; border-radius: 8px; background: #fff; padding: 8px; }
-  .url-box {
-    background: var(--bg); border: 1px solid var(--border);
-    border-radius: 8px; padding: 10px 12px; font-family: monospace;
-    font-size: 0.7rem; word-break: break-all; color: var(--text-dim);
-    position: relative; cursor: pointer; transition: border-color 0.2s;
-    line-height: 1.4;
-  }
-  .url-box:hover { border-color: var(--accent); }
-  .url-box:active { transform: scale(0.99); }
-  .copy-toast {
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: var(--success); color: #fff; padding: 10px 20px;
-    border-radius: 99px; font-size: 0.9rem; font-weight: 600;
-    opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 10;
-  }
-  .copy-toast.show { opacity: 1; }
-  .apps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
-  .app-link {
-    display: block; text-align: center; padding: 10px;
-    background: var(--bg); border: 1px solid var(--border);
-    border-radius: 8px; text-decoration: none; color: var(--text);
-    font-size: 0.85rem; transition: border-color 0.2s;
-  }
-  .app-link:hover { border-color: var(--accent); }
-  .app-link .platform { font-size: 0.75rem; color: var(--text-dim); }
-  .note {
-    background: #f59e0b15; border: 1px solid #f59e0b30;
-    border-radius: var(--radius); padding: 16px; margin-top: 16px;
-  }
-  .note h3 { font-size: 0.9rem; color: #f59e0b; margin-bottom: 6px; }
-  .note p { font-size: 0.85rem; color: var(--text-dim); line-height: 1.5; }
-  .steps { margin-top: 12px; }
-  .steps li {
-    font-size: 0.85rem; color: var(--text-dim); line-height: 1.6;
-    margin-bottom: 4px; list-style-position: inside;
-  }
-  .footer {
-    text-align: center; color: var(--text-dim); font-size: 0.75rem;
-    margin-top: 24px; padding-bottom: 20px;
-  }
+:root {
+  --bg: #0c0e14; --bg2: #12151e; --sf: #181c28; --sf2: #1e2333;
+  --br: #282d3e; --br2: #353b52;
+  --tx: #e8eaf0; --tx2: #8b90a8; --tx3: #555a72;
+  --blue: #5b9cf5; --blue-bg: #5b9cf512; --blue-br: #5b9cf530;
+  --amber: #e5a44e; --amber-bg: #e5a44e12; --amber-br: #e5a44e30;
+  --green: #4cd68a; --red: #ef6b6b;
+  --r: 10px; --r2: 14px;
+}
+@media(prefers-color-scheme:light){:root{
+  --bg: #f0f2f5; --bg2: #e8ebf0; --sf: #fff; --sf2: #f7f8fa;
+  --br: #d8dce6; --br2: #c0c6d4;
+  --tx: #1a1e2e; --tx2: #5a6078; --tx3: #8a90a8;
+  --blue: #2b7de9; --blue-bg: #2b7de90a; --blue-br: #2b7de925;
+  --amber: #c4882a; --amber-bg: #c4882a0a; --amber-br: #c4882a25;
+  --green: #1a9d5a; --red: #d44;
+}}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg);color:var(--tx);-webkit-font-smoothing:antialiased;
+  min-height:100vh;
+  background-image:radial-gradient(var(--br) .5px,transparent .5px);
+  background-size:24px 24px;
+}
+.wrap{max-width:460px;margin:0 auto;padding:24px 16px 40px}
+.hdr{text-align:center;padding:20px 0 28px}
+.hdr h1{font-size:1.35rem;font-weight:700;letter-spacing:-.02em;margin-bottom:4px}
+.hdr p{font-size:.82rem;color:var(--tx2)}
+.card{
+  background:var(--sf);border:1px solid var(--br);
+  border-radius:var(--r2);padding:20px;margin-bottom:14px;
+  position:relative;overflow:hidden;
+}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.card-blue::before{background:var(--blue)}
+.card-amber::before{background:var(--amber)}
+.card-label{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 10px 3px 8px;border-radius:99px;margin-bottom:12px;
+}
+.card-blue .card-label{background:var(--blue-bg);border:1px solid var(--blue-br);color:var(--blue)}
+.card-amber .card-label{background:var(--amber-bg);border:1px solid var(--amber-br);color:var(--amber)}
+.card-label i{width:5px;height:5px;border-radius:50%;display:inline-block}
+.card-blue .card-label i{background:var(--blue)}
+.card-amber .card-label i{background:var(--amber)}
+.card-desc{font-size:.82rem;color:var(--tx2);margin-bottom:16px;line-height:1.4}
+.open-btn{
+  display:block;width:100%;padding:13px;border-radius:var(--r);
+  font-size:.92rem;font-weight:600;text-align:center;text-decoration:none;
+  border:none;cursor:pointer;transition:filter .06s,transform .06s;
+}
+.open-btn:hover{filter:brightness(1.08)}
+.open-btn:active{transform:scale(.985)}
+.card-blue .open-btn{background:var(--blue);color:#fff}
+.card-amber .open-btn{background:var(--amber);color:#fff}
+.qr{text-align:center;margin:16px 0}
+.qr img{width:200px;height:200px;border-radius:8px;background:#fff;padding:6px}
+.url{
+  background:var(--bg2);border:1px solid var(--br);
+  border-radius:8px;padding:10px 12px;
+  font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:.65rem;word-break:break-all;color:var(--tx3);
+  cursor:pointer;transition:border-color .06s;line-height:1.5;position:relative;
+}
+.url:hover{border-color:var(--tx2)}
+.url::after{
+  content:'tap to copy';position:absolute;top:8px;right:10px;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-size:.6rem;color:var(--tx3);opacity:.6;pointer-events:none;
+  text-transform:uppercase;letter-spacing:.04em;font-weight:500;
+}
+.apps{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.app{
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:12px 8px;background:var(--bg2);border:1px solid var(--br);
+  border-radius:var(--r);text-decoration:none;color:var(--tx);
+  font-size:.82rem;font-weight:500;transition:border-color .06s;
+}
+.app:hover{border-color:var(--tx2)}
+.app.detected{border-color:var(--blue);background:var(--blue-bg)}
+.app span{font-size:.68rem;color:var(--tx3);font-weight:400}
+.steps{counter-reset:s;margin-top:14px}
+.step{
+  display:flex;gap:12px;padding:10px 0;
+  border-bottom:1px solid var(--br);font-size:.82rem;color:var(--tx2);line-height:1.5;
+}
+.step:last-child{border-bottom:none}
+.step::before{
+  counter-increment:s;content:counter(s);
+  min-width:22px;height:22px;border-radius:50%;
+  background:var(--bg2);border:1px solid var(--br);
+  font-size:.68rem;font-weight:600;color:var(--tx3);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;
+}
+.warn{
+  background:var(--amber-bg);border:1px solid var(--amber-br);
+  border-radius:var(--r2);padding:16px;margin-top:14px;
+}
+.warn h3{font-size:.82rem;color:var(--amber);margin-bottom:4px;font-weight:600}
+.warn p{font-size:.78rem;color:var(--tx2);line-height:1.5}
+.foot{
+  text-align:center;padding:24px 0 8px;font-size:.7rem;color:var(--tx3);
+  display:flex;flex-direction:column;gap:6px;align-items:center;
+}
+.foot a{color:var(--tx2);text-decoration:none;transition:color .06s}
+.foot a:hover{color:var(--blue)}
+.foot .links{display:flex;gap:4px;align-items:center}
+.foot .links .sep{opacity:.3}
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);
+  background:var(--green);color:#0c0e14;padding:8px 20px;
+  border-radius:99px;font-size:.82rem;font-weight:600;
+  opacity:0;transition:opacity .08s,transform .08s;pointer-events:none;z-index:10;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
+<div class="wrap">
 
-<h1>Connection Setup</h1>
-<p class="subtitle">Scan QR code or tap the URL to copy</p>
-
-<!-- Primary connection -->
-<div class="card">
-  <h2>Main Connection <span class="badge badge-primary">Primary</span></h2>
-  <p class="desc">Fastest and most reliable. Use this first.</p>
-  <a href="{{ vless_reality_url }}" class="url-box" style="display:block;text-align:center;font-size:0.95rem;font-weight:500;color:var(--accent);text-decoration:none;margin-bottom:12px;padding:14px;">Open in App</a>
-  <div class="qr-wrap">
-    <img src="data:image/png;base64,{{ reality_qr_b64.stdout }}" alt="QR Code">
-  </div>
-  <div class="url-box" onclick="copyUrl(this)" data-url="{{ vless_reality_url }}">
-    {{ vless_reality_url }}
-  </div>
+<div class="hdr">
+  <h1>Connection Setup</h1>
+  <p>Scan QR code or tap to open in your app</p>
 </div>
 
-<!-- Backup connection -->
-<div class="card">
-  <h2>Backup Connection <span class="badge badge-fallback">Backup</span></h2>
-  <p class="desc">Alternative route. Use if the main connection stops working.</p>
-  <a href="{{ vless_wss_url }}" class="url-box" style="display:block;text-align:center;font-size:0.95rem;font-weight:500;color:#f59e0b;text-decoration:none;margin-bottom:12px;padding:14px;">Open in App</a>
-  <div class="qr-wrap">
-    <img src="data:image/png;base64,{{ wss_qr_b64.stdout }}" alt="QR Code">
-  </div>
-  <div class="url-box" onclick="copyUrl(this)" data-url="{{ vless_wss_url }}">
-    {{ vless_wss_url }}
-  </div>
+<div class="card card-blue">
+  <div class="card-label"><i></i> Primary</div>
+  <p class="card-desc">Fastest route. Use this as your default connection.</p>
+  <a href="{{ vless_reality_url }}" class="open-btn">Open in App</a>
+  <div class="qr"><img src="data:image/png;base64,{{ reality_qr_b64.stdout }}" alt="QR" loading="lazy"></div>
+  <div class="url" onclick="cp(this)" data-url="{{ vless_reality_url }}">{{ vless_reality_url }}</div>
 </div>
 
-<!-- Client Apps -->
+<div class="card card-amber">
+  <div class="card-label"><i></i> Backup</div>
+  <p class="card-desc">CDN fallback. Use if the primary connection is blocked.</p>
+  <a href="{{ vless_wss_url }}" class="open-btn">Open in App</a>
+  <div class="qr"><img src="data:image/png;base64,{{ wss_qr_b64.stdout }}" alt="QR" loading="lazy"></div>
+  <div class="url" onclick="cp(this)" data-url="{{ vless_wss_url }}">{{ vless_wss_url }}</div>
+</div>
+
 <div class="card">
-  <h2>Download Client App</h2>
-  <p class="desc">Install one of these apps, then scan the QR code or import the URL.</p>
+  <div style="font-size:.82rem;font-weight:600;margin-bottom:4px">Client Apps</div>
+  <p class="card-desc">Install one, then tap "Open in App" or scan the QR code.</p>
   <div class="apps" id="apps">
-    <a class="app-link" href="https://apps.apple.com/app/v2raytun/id6476628951" target="_blank">
-      v2RayTun<br><span class="platform">iOS</span>
-    </a>
-    <a class="app-link" href="https://github.com/2dust/v2rayNG/releases/latest" target="_blank">
-      v2rayNG<br><span class="platform">Android</span>
-    </a>
-    <a class="app-link" href="https://github.com/hiddify/hiddify-app/releases/latest" target="_blank">
-      Hiddify<br><span class="platform">All Platforms</span>
-    </a>
-    <a class="app-link" href="https://github.com/2dust/v2rayN/releases/latest" target="_blank">
-      v2rayN<br><span class="platform">Windows</span>
-    </a>
+    <a class="app" href="https://apps.apple.com/app/v2raytun/id6476628951" target="_blank" data-os="iOS">v2RayTun<span>iOS</span></a>
+    <a class="app" href="https://github.com/2dust/v2rayNG/releases/latest" target="_blank" data-os="Android">v2rayNG<span>Android</span></a>
+    <a class="app" href="https://github.com/hiddify/hiddify-app/releases/latest" target="_blank" data-os="All">Hiddify<span>All platforms</span></a>
+    <a class="app" href="https://github.com/2dust/v2rayN/releases/latest" target="_blank" data-os="Windows">v2rayN<span>Windows</span></a>
   </div>
 </div>
 
-<!-- Setup Instructions -->
 <div class="card">
-  <h2>Quick Setup</h2>
-  <ol class="steps">
-    <li>Install a client app from the list above</li>
-    <li>Tap <strong>"Open in App"</strong> above — the connection imports automatically</li>
-    <li>If that doesn't work: scan the QR code from another device, or long-press the URL to copy it</li>
-    <li>Tap the connection in the app to activate it</li>
-  </ol>
+  <div style="font-size:.82rem;font-weight:600;margin-bottom:4px">Quick Setup</div>
+  <div class="steps">
+    <div class="step">Install a client app from the list above</div>
+    <div class="step">Tap <strong>Open in App</strong> — the connection imports automatically</div>
+    <div class="step">Or scan the QR code from another device</div>
+    <div class="step">Activate the connection in the app</div>
+  </div>
 </div>
 
-<!-- Important Note -->
-<div class="note">
-  <h3>&#9888; Time Sync Required</h3>
-  <p>Your device clock must be accurate within 30 seconds or the connection will fail.
-     Go to Settings &gt; Date &amp; Time and enable "Set Automatically".</p>
+<div class="warn">
+  <h3>Clock Sync Required</h3>
+  <p>Your device clock must be accurate within 30 seconds. Go to Settings &gt; Date &amp; Time &gt; enable "Set Automatically".</p>
 </div>
 
-<p class="footer">Generated {{ ansible_date_time.iso8601 }}</p>
+<div class="foot">
+  <div class="links">
+    <a href="https://meridian.msu.rocks" target="_blank">Powered by Meridian</a>
+    <span class="sep">&middot;</span>
+    <a href="https://github.com/uburuntu/meridian" target="_blank">GitHub</a>
+  </div>
+  <div>{{ ansible_date_time.iso8601 }}</div>
+</div>
 
-<div class="copy-toast" id="toast">Copied to clipboard</div>
-
+</div>
+<div class="toast" id="toast">Copied</div>
 <script>
-function fallbackCopy(text) {
-  const ta = document.createElement('textarea');
-  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-  document.body.appendChild(ta); ta.select();
-  try { document.execCommand('copy'); } catch(e) {}
-  document.body.removeChild(ta);
-  return Promise.resolve();
+function cp(el){
+  var u=el.getAttribute('data-url');if(!u)return;
+  if(navigator.clipboard)navigator.clipboard.writeText(u).then(flash);
+  else{var t=document.createElement('textarea');t.value=u;t.style.cssText='position:fixed;opacity:0';document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);flash()}
 }
-function copyUrl(el) {
-  const url = el.getAttribute('data-url');
-  if (!url) return;
-  (navigator.clipboard ? navigator.clipboard.writeText(url) : fallbackCopy(url)).then(() => {
-    const t = document.getElementById('toast');
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 1500);
-  });
-}
-// Highlight recommended app based on detected platform
-(function() {
-  const ua = navigator.userAgent;
-  let target = null;
-  if (/iPhone|iPad|iPod/i.test(ua)) target = 'iOS';
-  else if (/Android/i.test(ua)) target = 'Android';
-  else if (/Win/i.test(ua)) target = 'Windows';
-  if (target) {
-    document.querySelectorAll('.app-link').forEach(a => {
-      if (a.querySelector('.platform').textContent === target) {
-        a.style.borderColor = 'var(--accent)';
-        a.style.fontWeight = '600';
-      }
-    });
-  }
-})();
+function flash(){var t=document.getElementById('toast');t.classList.add('show');setTimeout(function(){t.classList.remove('show')},1200)}
+!function(){
+  var ua=navigator.userAgent,os=null;
+  if(/iPhone|iPad|iPod/i.test(ua))os='iOS';
+  else if(/Android/i.test(ua))os='Android';
+  else if(/Win/i.test(ua))os='Windows';
+  if(os)document.querySelectorAll('.app').forEach(function(a){if(a.getAttribute('data-os')===os)a.classList.add('detected')});
+}();
 </script>
 </body>
 </html>
