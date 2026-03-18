@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible
+        run: pip install ansible ansible-lint
+
+      - name: Install collections
+        run: ansible-galaxy collection install -r requirements.yml
+
+      # --- YAML syntax ---
+      - name: Validate YAML syntax
+        run: |
+          python3 -c "
+          import yaml, glob, sys
+          errors = []
+          for f in sorted(glob.glob('**/*.yml', recursive=True)):
+              if '.github' in f: continue
+              try:
+                  with open(f) as fh: yaml.safe_load(fh)
+              except Exception as e:
+                  errors.append(f'{f}: {e}')
+          if errors:
+              for e in errors: print(f'ERROR: {e}')
+              sys.exit(1)
+          print(f'All YAML files valid')
+          "
+
+      # --- Ansible syntax check ---
+      - name: Syntax check — standalone playbook
+        run: ansible-playbook playbook.yml --syntax-check
+
+      - name: Syntax check — chain playbook
+        run: ansible-playbook -i inventory-chain.yml.example playbook-chain.yml --syntax-check
+
+      - name: Syntax check — uninstall playbook
+        run: ansible-playbook playbook-uninstall.yml --syntax-check
+
+      # --- Shell script ---
+      - name: Validate setup.sh syntax
+        run: bash -n setup.sh
+
+      # --- HTML validation ---
+      - name: Validate HTML structure
+        run: |
+          python3 -c "
+          from html.parser import HTMLParser
+          import re, sys, glob
+          class V(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.stack=[]; self.errors=[]
+                  self.void={'meta','link','br','hr','img','input','area','base','col','embed','source','track','wbr'}
+              def handle_starttag(self,t,a):
+                  if t not in self.void: self.stack.append((t,self.getpos()))
+              def handle_endtag(self,t):
+                  if t in self.void: return
+                  if not self.stack: self.errors.append(f'unexpected </{t}> at line {self.getpos()[0]}')
+                  elif self.stack[-1][0]!=t: self.errors.append(f'</{t}> vs <{self.stack[-1][0]}> at line {self.getpos()[0]}')
+                  else: self.stack.pop()
+          ok = True
+          for f in glob.glob('**/*.html*', recursive=True):
+              html = open(f).read()
+              html = re.sub(r'\{%.*?%\}', '', html)
+              html = re.sub(r'\{\{.*?\}\}', 'X', html)
+              v = V(); v.feed(html)
+              if v.errors or v.stack:
+                  print(f'FAIL: {f}: {v.errors or [\"unclosed <\" + t + \">\" for t,_ in v.stack]}')
+                  ok = False
+              else:
+                  print(f'OK: {f}')
+          if not ok: sys.exit(1)
+          "
+
+      # --- Ansible lint (advisory) ---
+      - name: Ansible lint (advisory)
+        run: ansible-lint playbook.yml playbook-chain.yml || true
+
+      # --- Template rendering test ---
+      - name: Test Jinja2 template rendering
+        run: |
+          python3 -c "
+          from jinja2 import Environment, FileSystemLoader
+          import os, sys
+
+          # Mock variables that templates expect
+          mock_vars = {
+              'domain': 'example.com', 'email': '', 'domain_mode': True,
+              'panel_internal_port': 2053, 'panel_web_base_path': 'testpath',
+              'panel_username': 'testuser', 'panel_password': 'testpass',
+              'info_page_path': 'testinfo', 'ws_path': 'testws',
+              'caddy_internal_port': 8443, 'wss_internal_port': 28000,
+              'reality_sni': 'www.microsoft.com', 'server_public_ip': '1.2.3.4',
+              'vless_reality_url': 'vless://test@1.2.3.4:443',
+              'vless_wss_url': 'vless://test@example.com:443',
+              'reality_qr_b64': type('obj',(object,),{'stdout':'dGVzdA=='})(),
+              'wss_qr_b64': type('obj',(object,),{'stdout':'dGVzdA=='})(),
+              'reality_qr_b64_local': type('obj',(object,),{'stdout':'dGVzdA=='})(),
+              'wss_qr_b64_local': type('obj',(object,),{'stdout':'dGVzdA=='})(),
+              'relay_qr_b64': type('obj',(object,),{'stdout':'dGVzdA=='})(),
+              'vless_relay_url': 'vless://test@5.6.7.8:443',
+              'ansible_date_time': {'iso8601': '2026-01-01T00:00:00Z', 'year': '2026'},
+              'ansible_host': '1.2.3.4', 'inventory_hostname': 'proxy',
+              'threexui_version': '2.8.11',
+              'decoy_site_title': 'Westbridge Partners',
+              'decoy_site_tagline': 'Strategic advisory for modern enterprises',
+              'relay_mode': False, 'exit_mode': False, 'relay_inbound_port': 443,
+              'panel_external_port': 12345, 'exit_ip': '1.2.3.4',
+          }
+
+          templates = [
+              ('roles/decoy_site/templates', 'index.html.j2'),
+              ('roles/decoy_site/templates', 'connection-info.html.j2'),
+              ('roles/output/templates', 'connection-info.html.j2'),
+              ('roles/output/templates', 'connection-summary.txt.j2'),
+              ('roles/output_relay/templates', 'connection-info.html.j2'),
+              ('roles/output_relay/templates', 'connection-summary.txt.j2'),
+              ('roles/xray/templates', 'docker-compose.yml.j2'),
+              ('roles/caddy/templates', 'Caddyfile.j2'),
+              ('roles/haproxy/templates', 'haproxy.cfg.j2'),
+          ]
+
+          ok = True
+          for tpl_dir, tpl_name in templates:
+              try:
+                  env = Environment(loader=FileSystemLoader(tpl_dir))
+                  t = env.get_template(tpl_name)
+                  result = t.render(**mock_vars)
+                  if len(result) < 10:
+                      print(f'WARN: {tpl_dir}/{tpl_name} rendered to only {len(result)} chars')
+                  else:
+                      print(f'OK: {tpl_dir}/{tpl_name} ({len(result)} chars)')
+              except Exception as e:
+                  print(f'FAIL: {tpl_dir}/{tpl_name}: {e}')
+                  ok = False
+          if not ok: sys.exit(1)
+          "
+
+      # --- Link checker ---
+      - name: Check external links in HTML
+        run: |
+          python3 -c "
+          import re, urllib.request, sys, glob
+          links = set()
+          for f in ['docs/index.html'] + glob.glob('roles/*/templates/*.html.j2'):
+              for m in re.finditer(r'href=\"(https?://[^\"]+)\"', open(f).read()):
+                  links.add(m.group(1))
+          broken = []
+          for url in sorted(links):
+              try:
+                  req = urllib.request.Request(url, method='HEAD',
+                      headers={'User-Agent': 'Mozilla/5.0 Meridian-CI'})
+                  resp = urllib.request.urlopen(req, timeout=10)
+                  print(f'OK ({resp.status}): {url}')
+              except Exception as e:
+                  print(f'BROKEN: {url} — {e}')
+                  broken.append(url)
+          if broken:
+              print(f'\n{len(broken)} broken link(s) found')
+              sys.exit(1)
+          "
