@@ -119,7 +119,7 @@ details .inner p{margin-bottom:12px}
 <div class="w">
   <div class="chip"><i></i> Open Source</div>
   <h1>Undetectable proxy,<br><em>one command</em></h1>
-  <p class="sub">Deploy a VLESS+Reality proxy server that's invisible to censorship systems. Fully automated. Takes 2&nbsp;minutes.</p>
+  <p class="sub">Deploy a VLESS+Reality proxy server that's invisible to DPI, active probing, and TLS fingerprinting. Fully automated. Takes 2&nbsp;minutes.</p>
   <div class="actions">
     <a href="#setup" class="btn btn-p">Get started ↓</a>
     <a href="https://github.com/uburuntu/meridian" class="btn btn-s" target="_blank">GitHub</a>
@@ -162,21 +162,56 @@ details .inner p{margin-bottom:12px}
 </div>
 </section>
 
+<!-- WHY IT WORKS -->
+<section class="rv">
+<div class="w">
+  <p class="label">Technology</p>
+  <h2>Why it's undetectable</h2>
+  <p class="desc">Censorship systems use three methods to detect proxies. Reality defeats all of them.</p>
+
+  <details open>
+    <summary>Deep Packet Inspection (DPI)</summary>
+    <div class="inner">
+      <p>DPI analyzes traffic patterns to identify proxy protocols. VPNs like OpenVPN and WireGuard have distinctive packet signatures that are trivial to block.</p>
+      <p><strong>VLESS+Reality</strong> produces traffic that is byte-for-byte identical to a normal HTTPS connection. There are no headers, no handshake patterns, no packet sizes that distinguish it from regular web browsing.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Active probing</summary>
+    <div class="inner">
+      <p>Censors connect to suspicious servers and try to fingerprint them. If a server responds differently than the website it claims to be, it gets blocked.</p>
+      <p><strong>Reality</strong> steals the TLS certificate from a real website (e.g., microsoft.com). When a probe connects, your server completes the TLS handshake using Microsoft's actual certificate. The probe sees a legitimate Microsoft server — because, at the TLS level, it <em>is</em> one. Only clients with your private key get the proxy tunnel.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>TLS fingerprinting</summary>
+    <div class="inner">
+      <p>Every TLS client (Chrome, Firefox, curl) sends a unique "Client Hello" fingerprint. Censors flag connections where the fingerprint doesn't match the claimed application.</p>
+      <p>Meridian uses <strong>uTLS</strong> to impersonate Chrome's exact TLS fingerprint — the same one used by billions of devices. Your traffic is indistinguishable from someone browsing the web with Chrome.</p>
+    </div>
+  </details>
+</div>
+</section>
+
 <!-- WHAT HAPPENS -->
 <section class="rv">
 <div class="w">
   <p class="label">What happens</p>
-  <h2>Under the hood</h2>
+  <h2>Setup steps</h2>
+  <p class="desc">The script connects to your server via SSH and runs an Ansible playbook that configures everything automatically.</p>
   <div class="timeline">
-    <div class="tl-item"><div class="tl-n">1</div><div class="tl-text"><strong>Installs Ansible &amp; qrencode</strong> if not already present</div></div>
-    <div class="tl-item"><div class="tl-n">2</div><div class="tl-text"><strong>Downloads the playbook</strong> from GitHub (no git clone needed)</div></div>
-    <div class="tl-item"><div class="tl-n">3</div><div class="tl-text"><strong>Hardens the server</strong> — firewall, SSH keys only, BBR congestion control</div></div>
-    <div class="tl-item"><div class="tl-n">4</div><div class="tl-text"><strong>Deploys VLESS+Reality</strong> via Docker — looks like microsoft.com to any probe</div></div>
-    <div class="tl-item"><div class="tl-n">5</div><div class="tl-text"><strong>Outputs a QR code</strong> and saves an HTML file you can send to anyone</div></div>
+    <div class="tl-item"><div class="tl-n">1</div><div class="tl-text"><strong>Installs Docker</strong> and deploys <strong>Xray</strong> (the proxy engine) via the <strong>3x-ui</strong> management panel</div></div>
+    <div class="tl-item"><div class="tl-n">2</div><div class="tl-text"><strong>Generates x25519 keypair</strong> — unique encryption keys for Reality protocol authentication</div></div>
+    <div class="tl-item"><div class="tl-n">3</div><div class="tl-text"><strong>Hardens the server</strong> — UFW firewall (ports 22 + 443 only), SSH key-only auth, <strong>BBR</strong> congestion control for faster throughput</div></div>
+    <div class="tl-item"><div class="tl-n">4</div><div class="tl-text"><strong>Configures VLESS+Reality inbound</strong> on port 443 — the proxy that impersonates a real TLS server</div></div>
+    <div class="tl-item"><div class="tl-n">5</div><div class="tl-text"><strong>With a domain:</strong> adds HAProxy (TLS SNI routing), Caddy (auto-TLS + decoy website), and a VLESS+WSS fallback for CDN routing through Cloudflare</div></div>
+    <div class="tl-item"><div class="tl-n">6</div><div class="tl-text"><strong>Outputs QR codes</strong> and saves an HTML page with connection links, copy buttons, and setup instructions</div></div>
   </div>
   <div class="note">
     <span>⏱</span>
-    <span>Safe to re-run at any time. Fully idempotent — picks up where it left off.</span>
+    <span>Safe to re-run at any time. Fully idempotent — credentials are preserved, settings are updated in place.</span>
   </div>
 </div>
 </section>
@@ -207,22 +242,33 @@ details .inner p{margin-bottom:12px}
   <h2>How it works</h2>
 
   <details open>
-    <summary>Standalone mode <span></span></summary>
+    <summary>Standalone mode (no domain) <span></span></summary>
     <div class="inner">
-      <p>Single server. VLESS+Reality on port 443 — traffic looks like a normal HTTPS connection to microsoft.com. Censors and probes see a legitimate TLS certificate.</p>
-      <p>With a domain: HAProxy routes by TLS SNI on port 443 without terminating encryption. Reality traffic goes to Xray, domain traffic goes to Caddy (decoy website + CDN fallback via Cloudflare).</p>
+      <p><strong>Xray</strong> listens on port 443 with VLESS+Reality. Every connection looks like HTTPS to microsoft.com. When censors probe the server, they get Microsoft's real TLS certificate back. Only clients with your private key get through to the proxy.</p>
+      <p>The 3x-ui panel is bound to localhost — you access it via SSH tunnel. No cleartext HTTP is ever exposed.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Domain mode (decoy site + CDN fallback) <span></span></summary>
+    <div class="inner">
+      <p>Adds three components on top of the standalone setup:</p>
+      <p><strong>HAProxy</strong> sits on port 443 and inspects the TLS SNI header (the hostname in the Client Hello) <em>without</em> terminating encryption. Reality traffic (SNI = microsoft.com) routes to Xray. Domain traffic (SNI = your domain) routes to Caddy.</p>
+      <p><strong>Caddy</strong> terminates TLS for your domain using automatic Let's Encrypt certificates. It serves a realistic decoy website (randomized business template) and reverse-proxies the 3x-ui panel.</p>
+      <p><strong>VLESS+WSS inbound</strong> provides a CDN fallback path. Traffic flows through Cloudflare's CDN to your domain via WebSocket, making the connection work even if your server's IP is blocked — Cloudflare's IP ranges are too widely used to block.</p>
     </div>
   </details>
 
   <details>
     <summary>Chain mode (IP whitelist bypass) <span></span></summary>
     <div class="inner">
-      <p>Two servers for when direct foreign connections are blocked. A domestic relay on a whitelisted IP accepts VLESS+TCP and forwards everything abroad via VLESS+Reality+XHTTP.</p>
+      <p>For countries that whitelist allowed IP ranges (blocking all foreign IPs by default). Two servers work together:</p>
+      <p><strong>Relay node</strong> (on a whitelisted domestic IP) accepts VLESS+TCP from the user and forwards everything to the exit node via VLESS+Reality+XHTTP — a multiplexed transport that looks like normal web traffic.</p>
+      <p><strong>Exit node</strong> (abroad) decrypts and forwards traffic to the internet. It also keeps a direct Reality+TCP fallback on port 8444.</p>
       <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>git clone https://github.com/uburuntu/meridian.git && cd meridian
 cp inventory-chain.yml.example inventory-chain.yml
 <span class="cm"># Edit inventory-chain.yml with both server IPs</span>
 ansible-playbook -i inventory-chain.yml playbook-chain.yml</div>
-      <p>Local sites are routed directly from the relay. The exit node also keeps a direct Reality+TCP fallback on port 8444.</p>
     </div>
   </details>
 </div>

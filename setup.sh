@@ -89,9 +89,10 @@ printf "\n"
 
 # --- Interactive mode (no args) ---
 if [[ -z "$SERVER_IP" && "$UNINSTALL" != true ]]; then
-  printf "  Deploy a censorship-resistant proxy server.\n"
-  printf "  The server will look like ${D}${SNI:-www.microsoft.com}${R} to any probe.\n"
-  printf "  Takes ~2 minutes. Safe to re-run.\n"
+  printf "  Deploy a VLESS+Reality proxy server.\n"
+  printf "  Invisible to DPI, active probing, and TLS fingerprinting.\n"
+  printf "  Your server will impersonate ${D}${SNI:-www.microsoft.com}${R} — probes\n"
+  printf "  get a real TLS certificate back. Takes ~2 minutes. Safe to re-run.\n"
   printf "\n"
   line
   printf "\n"
@@ -181,6 +182,21 @@ if [[ -z "$SERVER_IP" && "$UNINSTALL" != true ]]; then
     printf "  Domain:  ${D}(none)${R}\n"
     printf "  Mode:    Standalone (Reality only)\n"
   fi
+  printf "\n"
+  printf "  ${B}What will happen:${R}\n\n"
+  printf "  ${D}1.${R} Install Docker and deploy ${B}Xray${R} (VLESS+Reality proxy)\n"
+  printf "  ${D}2.${R} Generate unique encryption keys and credentials\n"
+  printf "  ${D}3.${R} Configure firewall (UFW), enable ${B}BBR${R} congestion control\n"
+  if [[ -n "$DOMAIN" ]]; then
+    printf "  ${D}4.${R} Set up ${B}HAProxy${R} (SNI routing) + ${B}Caddy${R} (TLS + decoy site)\n"
+    printf "  ${D}5.${R} Add VLESS+WSS inbound for CDN fallback through Cloudflare\n"
+    printf "  ${D}6.${R} Output QR codes + save connection files\n"
+  else
+    printf "  ${D}4.${R} Output QR codes + save connection files\n"
+  fi
+  printf "\n"
+  printf "  ${D}Your server will respond to probes with a real TLS certificate\n"
+  printf "  from ${SNI:-www.microsoft.com} — indistinguishable from the genuine site.${R}\n"
   printf "\n"
   line
 
