@@ -163,18 +163,26 @@ if [[ "$UNINSTALL" == true ]]; then
   printf "\n"
 fi
 
-# --- Check SSH access ---
-info "Checking SSH access to ${ANSIBLE_USER}@${SERVER_IP}..."
-if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "${ANSIBLE_USER}@${SERVER_IP}" true 2>/dev/null; then
-  ok "SSH connection successful"
+# --- Detect if we're running on the target server itself ---
+LOCAL_MODE=false
+LOCAL_IP=$(curl -s --max-time 3 https://ifconfig.me 2>/dev/null || true)
+if [[ "$LOCAL_IP" == "$SERVER_IP" ]]; then
+  LOCAL_MODE=true
+  ok "Running on the target server (local mode)"
 else
-  printf "\n"
-  fail "Cannot SSH to ${ANSIBLE_USER}@${SERVER_IP}
+  # Check SSH access (only needed when deploying remotely)
+  info "Checking SSH access to ${ANSIBLE_USER}@${SERVER_IP}..."
+  if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "${ANSIBLE_USER}@${SERVER_IP}" true 2>/dev/null; then
+    ok "SSH connection successful"
+  else
+    printf "\n"
+    fail "Cannot SSH to ${ANSIBLE_USER}@${SERVER_IP}
 
   Possible fixes:
   1. Copy your SSH key:  ssh-copy-id ${ANSIBLE_USER}@${SERVER_IP}
   2. Test manually:      ssh ${ANSIBLE_USER}@${SERVER_IP}
   3. Different user:     pass --user ubuntu"
+  fi
 fi
 
 # --- Install dependencies ---
@@ -243,13 +251,23 @@ fi
 ok "Collections ready"
 
 # --- Write inventory ---
-cat > inventory.yml <<EOF
+if [[ "$LOCAL_MODE" == true ]]; then
+  cat > inventory.yml <<EOF
+all:
+  hosts:
+    proxy:
+      ansible_host: "$SERVER_IP"
+      ansible_connection: local
+EOF
+else
+  cat > inventory.yml <<EOF
 all:
   hosts:
     proxy:
       ansible_host: "$SERVER_IP"
       ansible_user: "$ANSIBLE_USER"
 EOF
+fi
 
 # --- Run uninstall if requested ---
 if [[ "$UNINSTALL" == true ]]; then
