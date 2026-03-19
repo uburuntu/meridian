@@ -126,7 +126,7 @@
 
       --- Not connecting? ---
       Test from your phone/laptop:  meridian ping
-      Or use the web tool:          https://meridian.msu.rocks/ping
+      Or use the web tool:          https://meridian.msu.rocks/ping?ip={{ server_public_ip }}{% if domain | default('') %}&domain={{ domain }}{% endif %}
 
       --- Feedback ---
       Something not working? Run: meridian diagnostics

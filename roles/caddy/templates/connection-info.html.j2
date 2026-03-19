@@ -197,7 +197,7 @@ body{
 
 <div class="warn" style="border-color:#d4a24e33;background:#d4a24e08">
   <h3>Not connecting?</h3>
-  <p>Test if the server is reachable from your device: <a href="https://meridian.msu.rocks/ping" target="_blank" style="color:#d4a24e">meridian.msu.rocks/ping</a></p>
+  <p>Test if the server is reachable from your device: <a href="https://meridian.msu.rocks/ping?ip={{ server_public_ip }}{% if domain | default('') %}&domain={{ domain }}{% endif %}" target="_blank" style="color:#d4a24e">Run ping test</a></p>
 </div>
 
 <div class="foot">

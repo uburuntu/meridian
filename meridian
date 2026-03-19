@@ -840,7 +840,9 @@ cmd_check() {
   if [[ "$issues" -eq 0 ]]; then
     printf "  ${G}${B}All checks passed.${R} Ready to install.\n\n"
     printf "  ${D}After setup, test from your phone/laptop: meridian ping${R}\n"
-    printf "  ${D}Or use: https://meridian.msu.rocks/ping${R}\n\n"
+    local ping_url="https://meridian.msu.rocks/ping?ip=${SERVER_IP}"
+    [[ -n "${domain:-}" ]] && ping_url="${ping_url}&domain=${domain}"
+    printf "  ${D}Or use: %s${R}\n\n" "$ping_url"
   else
     printf "  ${Y}${B}$issues issue(s) found.${R} Review the warnings above.\n\n"
   fi

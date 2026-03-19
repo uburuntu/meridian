@@ -65,7 +65,7 @@
 
       --- Not connecting? ---
       Test from your phone/laptop:  meridian ping
-      Or use the web tool:          https://meridian.msu.rocks/ping
+      Or use the web tool:          https://meridian.msu.rocks/ping?ip={{ server_public_ip }}
 
 # -- Save files locally --
 - name: Save relay connection summary
