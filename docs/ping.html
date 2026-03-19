@@ -172,7 +172,8 @@ h2{font-family:var(--serif);font-size:1.2rem;font-weight:400;margin-bottom:12px}
   </div>
 
   <div class="cli-hint">
-    Also available in the CLI: <code>meridian ping 1.2.3.4</code>
+    <code>meridian ping</code> \u2014 test reachability from any device<br>
+    <code>meridian diagnostics</code> \u2014 collect server-side debug info for bug reports
   </div>
 </div>
 </div>
@@ -533,13 +534,25 @@ async function runPing() {
 
   // --- Summary ---
   var sumEl = $('summary');
+  var domainFailedButPortOk = domain && !domainOk && portOk;
+
   if (issues === 0) {
     sumEl.innerHTML = '<div class="summary all-pass">' +
       '<p><strong>All ' + checks + ' checks passed.</strong> Your server is reachable from this device.</p>' +
       '<p>If your VPN app still can\'t connect:</p>' +
       '<p>\u2022 Re-scan the QR code (or re-copy the connection link)<br>' +
       '\u2022 Check your device clock is accurate (within 30 seconds)<br>' +
-      '\u2022 Try a different VPN app (v2rayNG, Hiddify, v2RayTun)</p></div>';
+      '\u2022 Try a different VPN app (v2rayNG, Hiddify, v2RayTun)</p>' +
+      '<p>Still not working? Collect server-side debug info:<br>' +
+      '<code style="font-size:.82rem;color:var(--t1)">meridian diagnostics</code></p></div>';
+  } else if (domainFailedButPortOk) {
+    // Port 443 works but domain doesn't — server-side issue (Caddy/HAProxy/DNS)
+    sumEl.innerHTML = '<div class="summary has-fail">' +
+      '<p><strong>Port 443 works, but the domain does not.</strong> This is likely a server-side configuration issue.</p>' +
+      '<p><strong>Check on the server:</strong><br>' +
+      '\u2022 DNS: does <strong>' + esc(domain) + '</strong> point to <strong>' + ip + '</strong>?<br>' +
+      '\u2022 Is Caddy running? Is HAProxy routing the domain correctly?<br>' +
+      '\u2022 Run <code style="font-size:.82rem;color:var(--t1)">meridian diagnostics</code> to collect debug info</p></div>';
   } else {
     sumEl.innerHTML = '<div class="summary has-fail">' +
       '<p><strong>' + issues + ' issue(s) found.</strong> The server is not fully reachable from this device.</p>' +

@@ -239,6 +239,9 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml
   - `meridian.msu.rocks` — for docs, setup guides, command builder
   - Connection info pages — for end-user onboarding and troubleshooting
   - The pattern: error/failure messages → suggest ping first (network issue?), then diagnostics (server issue?), then GitHub issues (bug?)
+  - **Context-sensitive upsells**: don't blindly suggest every tool — only suggest the tool that helps for the specific failure mode. Example: if ping shows port 443 is blocked, suggesting `meridian diagnostics` doesn't help (it's a firewall issue). But if ping passes and VPN still fails, diagnostics is the right next step.
+  - **Pre-fill URLs with known data**: when server IP and domain are available in context (templates, CLI output), always generate pre-filled `meridian.msu.rocks/ping?ip=...&domain=...` URLs so users land on a ready-to-run test.
+- **When the user says "remember"**: save the instruction to this CLAUDE.md file so it persists across sessions. Don't use auto-memory — CLAUDE.md is the canonical place for project conventions.
 
 ## CI/CD pipelines
 
