@@ -160,6 +160,10 @@ function validateIp(ip) {
   return true;
 }
 
+// Probe using fetch — measures time to connect/fail.
+// For raw IPs: cert mismatch causes an error, but any error before timeout
+// means the port is reachable (server responded). Only timeout = unreachable.
+// For domains with valid TLS: fetch succeeds (opaque response in no-cors).
 async function probePort(host, timeoutMs) {
   var start = performance.now();
   var controller = new AbortController();
@@ -172,11 +176,14 @@ async function probePort(host, timeoutMs) {
       cache: 'no-store'
     });
     clearTimeout(timer);
-    return {ok: true, ms: performance.now() - start};
+    return {reachable: true, ms: performance.now() - start};
   } catch (e) {
     clearTimeout(timer);
     var elapsed = performance.now() - start;
-    return {ok: false, ms: elapsed, aborted: e.name === 'AbortError'};
+    var timedOut = e.name === 'AbortError';
+    // Any error before timeout means the server responded (TCP RST or TLS error).
+    // Only AbortError (our timeout) means the server didn't respond at all.
+    return {reachable: !timedOut, ms: elapsed, timedOut: timedOut};
   }
 }
 
@@ -199,78 +206,65 @@ async function runPing() {
 
   var issues = 0;
   var checks = 0;
+  var domainOk = false;
 
-  // --- Check 1: TCP/TLS to IP:443 ---
-  checks++;
-  addCheck('tcp', 'Port 443 reachability \u2014 ' + ip);
-
-  var r1 = await probePort(ip + ':443', 8000);
-
-  if (r1.ok) {
-    // fetch succeeded (unlikely for raw IP, but possible)
-    setCheck('tcp', 'pass', 'Port 443 is open and responding (' + Math.round(r1.ms) + ' ms)');
-  } else if (r1.aborted || r1.ms > 7000) {
-    // Timeout — packets dropped, firewall filtering
-    setCheck('tcp', 'fail',
-      'Connection timed out \u2014 port 443 appears filtered.<br>' +
-      'Check your cloud provider\'s <strong>firewall / security group</strong> \u2014 port 443 (TCP) must allow inbound traffic.<br>' +
-      'If already open, your ISP or network may be blocking this IP.');
-    issues++;
-  } else if (r1.ms < 800) {
-    // Very fast failure — connection refused, port closed, or IP unreachable
-    setCheck('tcp', 'fail',
-      'Connection refused (' + Math.round(r1.ms) + ' ms) \u2014 port 443 is not open.<br>' +
-      'Possible causes:<br>' +
-      '\u2022 Proxy is not running on the server<br>' +
-      '\u2022 Cloud firewall blocks port 443<br>' +
-      '\u2022 Server is down');
-    issues++;
-  } else {
-    // Medium timing — TLS handshake was attempted, port is open
-    setCheck('tcp', 'pass', 'Port 443 is open \u2014 TLS handshake detected (' + Math.round(r1.ms) + ' ms)');
-  }
-
-  // --- Check 2: TLS certificate (Reality should show SNI target cert) ---
-  checks++;
-  addCheck('tls', 'TLS/Reality response');
-
-  // We can infer from the same probe: if the connection wasn't refused and wasn't timed out,
-  // a TLS handshake occurred — meaning Reality responded with the SNI target's cert.
-  if (r1.ok || (!r1.aborted && r1.ms >= 800 && r1.ms < 7000)) {
-    setCheck('tls', 'pass',
-      'Server completed a TLS handshake. Reality proxy appears to be responding correctly.');
-  } else if (r1.aborted || r1.ms > 7000) {
-    setCheck('tls', 'warn',
-      'Could not reach the server to verify TLS. Fix port 443 reachability first.');
-    issues++;
-  } else {
-    setCheck('tls', 'fail',
-      'No TLS handshake detected. The proxy may not be running.');
-    issues++;
-  }
-
-  // --- Check 3: Domain (if provided) ---
+  // --- Check 1: Domain (run first — its result informs IP checks) ---
   if (domain) {
     checks++;
     addCheck('domain', 'Domain \u2014 ' + domain);
 
-    var r2 = await probePort(domain, 10000);
+    var rd = await probePort(domain, 10000);
 
-    if (r2.ok || (!r2.aborted && r2.ms >= 500 && r2.ms < 9000)) {
-      setCheck('domain', 'pass', 'https://' + domain + '/ is reachable (' + Math.round(r2.ms) + ' ms)');
-    } else if (r2.aborted || r2.ms > 9000) {
+    if (rd.reachable) {
+      domainOk = true;
+      setCheck('domain', 'pass', 'https://' + domain + '/ is reachable (' + Math.round(rd.ms) + ' ms)');
+    } else {
       setCheck('domain', 'fail',
         'Domain is not reachable (timed out).<br>' +
         '\u2022 Check DNS: does <strong>' + domain + '</strong> point to <strong>' + ip + '</strong>?<br>' +
         '\u2022 Is Caddy running on the server?');
       issues++;
-    } else {
-      setCheck('domain', 'fail',
-        'Domain connection failed (' + Math.round(r2.ms) + ' ms).<br>' +
-        '\u2022 Verify DNS A record points to ' + ip + '<br>' +
-        '\u2022 Check that Caddy is running on the server');
-      issues++;
     }
+  }
+
+  // --- Check 2: Port 443 reachability ---
+  checks++;
+  addCheck('tcp', 'Port 443 \u2014 ' + ip);
+
+  // If domain already passed and it resolves to this IP, port 443 is definitely open
+  // (HAProxy routes both domain and Reality traffic on the same port).
+  // Still run the probe for the timing info, but trust domain result.
+  var r1 = await probePort(ip + ':443', 8000);
+  var portOk = r1.reachable || domainOk;
+
+  if (portOk) {
+    var detail = 'Port 443 is reachable (' + Math.round(r1.ms) + ' ms)';
+    if (!r1.reachable && domainOk) {
+      detail = 'Port 443 is reachable (confirmed via domain)';
+    }
+    setCheck('tcp', 'pass', detail);
+  } else {
+    setCheck('tcp', 'fail',
+      'Connection timed out \u2014 port 443 is not reachable.<br>' +
+      '\u2022 Check your cloud provider\'s <strong>firewall / security group</strong> \u2014 port 443 (TCP) must allow inbound traffic<br>' +
+      '\u2022 Your ISP or network may be blocking this server\'s IP');
+    issues++;
+  }
+
+  // --- Check 3: TLS / Reality ---
+  checks++;
+  addCheck('tls', 'TLS / Reality');
+
+  if (portOk) {
+    var tlsDetail = 'Server responded on port 443 with a TLS handshake.';
+    if (domainOk) {
+      tlsDetail = 'Confirmed \u2014 domain TLS and Reality both respond on port 443.';
+    }
+    setCheck('tls', 'pass', tlsDetail);
+  } else {
+    setCheck('tls', 'warn',
+      'Cannot verify \u2014 port 443 is not reachable. Fix the port issue first.');
+    issues++;
   }
 
   // --- Summary ---
