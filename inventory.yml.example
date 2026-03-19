@@ -19,5 +19,5 @@ all:
     proxy:
       ansible_host: "YOUR_SERVER_IP"    # <-- Replace with your VPS IP address
       ansible_user: root                # <-- Change if using a non-root user (must have sudo)
-      # domain: "example.com"           # <-- Uncomment to enable CDN fallback + decoy site
+      # domain: "example.com"           # <-- Uncomment to enable CDN fallback
       # email: "you@example.com"        # <-- Optional: for Let's Encrypt notifications

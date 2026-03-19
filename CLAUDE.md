@@ -223,7 +223,6 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml
 - **Ansible debug vs shell for terminal output**: use `shell` with `printf`/`cat` for output containing ANSI codes (QR codes); `debug msg:` JSON-escapes them
 - **pip3 install on modern Debian/Ubuntu**: must handle PEP 668 "externally managed environment" — try pipx, then `--user`, then `--break-system-packages`, then apt
 - **pip user bin PATH**: after pip3 install --user, add `~/.local/bin` (Linux) and `~/Library/Python/*/bin` (macOS) to PATH
-- **No decoy site**: domain mode serves only proxy paths (WSS, panel, connection info). No default handler — unknown paths get Caddy's default 404. The old static templated decoy was removed as it was fingerprintable.
 - **meridian interactive prompts**: use `read -r VAR < /dev/tty` for robustness; detect public IPv4 with `curl -4` to avoid IPv6; suggest domain from saved credentials
 - **info() function**: uses `printf "%s"` which prints arguments literally — do NOT embed escape codes like `${B}` in arguments passed to `info()`
 - **GitHub raw CDN caching**: raw.githubusercontent.com caches for ~60-120s; can't bust with query params or headers, just wait. Serving from meridian.msu.rocks avoids this.
@@ -245,6 +244,19 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml
 - Auto-commits with `[skip ci]`
 - Ensures `meridian.msu.rocks/` always serves the latest CLI, installer, and version
 
+## Version bumping
+
+To release a new version:
+
+1. Update `VERSION` file with the new version (e.g., `1.1.0`)
+2. Update `MERIDIAN_VERSION="1.1.0"` in the `meridian` script (line 14) to match
+3. Commit both changes together
+4. Push to main — CD workflow syncs `VERSION` → `docs/version` and `meridian` → `docs/meridian`
+5. Users running `meridian self-update` will pick up the new version (checked against `meridian.msu.rocks/version`)
+6. The playbook cache (`~/.meridian/playbooks/`) auto-invalidates when the CLI version changes
+
+CI validates that `VERSION` and `MERIDIAN_VERSION` match on every push.
+
 ## Known issues / tech debt
 
 - Three connection-info HTML templates share the same design but different Jinja2 variables. CSS/JS is duplicated across all three. A single template with conditional blocks would reduce drift risk.
@@ -253,7 +265,7 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml
 
 ### Recently addressed
 - Panel settings payload extracted to `roles/xray/tasks/apply_panel_settings.yml` — shared by both `xray` and `xray_relay` roles.
-- Pre-tasks extracted to `pre_tasks/` directory — `resolve_ip.yml`, `check_qrencode.yml`, `load_credentials.yml` shared by both playbooks.
+- Shared tasks in `roles/_shared/tasks/` — `resolve_ip.yml`, `check_qrencode.yml`, `load_credentials.yml` used by all playbooks.
 - Database and log growth: weekly cron jobs vacuum the 3x-ui database (deletes traffic stats older than 30 days) and truncate Docker container logs.
 
 ## GitHub community files

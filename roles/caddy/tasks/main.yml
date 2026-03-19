@@ -1,6 +1,6 @@
 ---
 # Caddy Web Server (domain mode only)
-# Handles TLS termination, decoy website, WebSocket proxy for VLESS+WSS,
+# Handles TLS termination, WebSocket proxy for VLESS+WSS,
 # 3x-ui panel proxy, and the connection info page.
 # Receives traffic from HAProxy on the internal port.
 #

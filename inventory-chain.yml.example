@@ -19,7 +19,7 @@ all:
         exit_server:
           ansible_host: "EXIT_SERVER_IP"    # <-- German VPS IP
           ansible_user: root
-          # domain: "example.com"           # <-- Optional: enables decoy site + CDN fallback
+          # domain: "example.com"           # <-- Optional: enables CDN fallback
           # email: "you@example.com"        # <-- Optional: for Let's Encrypt notifications
 
     relay:

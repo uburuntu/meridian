@@ -88,8 +88,6 @@ MOCK_VARS = {
     "ansible_date_time": {"iso8601": "2026-01-01T00:00:00Z", "year": "2026"},
     "threexui_version": "2.8.11",
     "utls_fingerprint": "chrome",
-    "decoy_site_title": "Westbridge Partners",
-    "decoy_site_tagline": "Strategic advisory for modern enterprises",
     "relay_inbound_port": 443,
     "exit_ip": "1.2.3.4",
     "xhttp_mode": "packet-up",
