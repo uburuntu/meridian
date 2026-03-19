@@ -10,7 +10,7 @@
     client_name: "{{ first_client_name | default('default') }}"
 
 - name: Generate client output files
-  ansible.builtin.include_tasks: generate_client_output.yml
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/roles/shared/tasks/generate_client_output.yml"
 
 # -- Save admin connection summary (includes panel credentials) --
 - name: Save admin connection summary to local file

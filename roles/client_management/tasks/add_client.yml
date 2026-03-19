@@ -165,7 +165,7 @@
 
 # -- Generate output (URLs, QR codes, HTML) using shared include --
 - name: Generate client output files
-  ansible.builtin.include_tasks: "{{ playbook_dir }}/roles/output/tasks/generate_client_output.yml"
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/roles/shared/tasks/generate_client_output.yml"
 
 # -- Display terminal output --
 - name: Display new client connection info
