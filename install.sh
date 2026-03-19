@@ -67,6 +67,7 @@ if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
   esac
 
   PATH_LINE="export PATH=\"$INSTALL_DIR:\$PATH\""
+  PATH_ADDED=1
 
   if [[ -n "$PROFILE" ]]; then
     if ! grep -qF "$INSTALL_DIR" "$PROFILE" 2>/dev/null; then
@@ -83,13 +84,16 @@ INSTALLED_VERSION=$(grep '^MERIDIAN_VERSION=' "$INSTALL_DIR/meridian" 2>/dev/nul
 
 printf "\n"
 printf "  ${G}${B}Meridian ${INSTALLED_VERSION:-CLI} installed.${R}\n\n"
-printf "  Get started:\n"
+
+if [[ "${PATH_ADDED:-}" == "1" ]]; then
+  PROFILE_NAME=$(basename "${PROFILE:-~/.bashrc}")
+  printf "  ${D}To start using meridian, run:${R}\n\n"
+  printf "     ${C}source ~/${PROFILE_NAME}${R}\n\n"
+  printf "  ${D}Then:${R}\n"
+else
+  printf "  Get started:\n"
+fi
 printf "     ${C}meridian setup${R}              ${D}# interactive wizard${R}\n"
 printf "     ${C}meridian setup 1.2.3.4${R}      ${D}# deploy to server${R}\n"
 printf "     ${C}meridian help${R}               ${D}# all commands${R}\n"
 printf "\n"
-
-if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-  printf "  ${D}Note: restart your shell or run:${R}\n"
-  printf "     ${C}export PATH=\"$INSTALL_DIR:\$PATH\"${R}\n\n"
-fi
