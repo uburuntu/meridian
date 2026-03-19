@@ -39,7 +39,7 @@ G='\033[32m' Y='\033[33m' C='\033[36m' RED='\033[31m'
 info()  { printf "  ${C}→${R} %s\n" "$*"; }
 ok()    { printf "  ${G}✓${R} %s\n" "$*"; }
 warn()  { printf "  ${Y}!${R} %s\n" "$*"; }
-fail()  { printf "\n  ${RED}✗ %s${R}\n" "$*" >&2; printf "  ${D}Need help? Run: meridian diagnostics, then: https://github.com/uburuntu/meridian/issues${R}\n\n" >&2; exit 1; }
+fail()  { printf "\n  ${RED}✗ %s${R}\n" "$*" >&2; printf "  ${D}Not connecting? Run: meridian ping | Other issues? Run: meridian diagnostics${R}\n  ${D}Report: https://github.com/uburuntu/meridian/issues${R}\n\n" >&2; exit 1; }
 line()  { printf "  ${D}─────────────────────────────────────────${R}\n"; }
 
 prompt() {
@@ -839,6 +839,8 @@ cmd_check() {
   printf "\n"
   if [[ "$issues" -eq 0 ]]; then
     printf "  ${G}${B}All checks passed.${R} Ready to install.\n\n"
+    printf "  ${D}After setup, test from your phone/laptop: meridian ping${R}\n"
+    printf "  ${D}Or use: https://meridian.msu.rocks/ping${R}\n\n"
   else
     printf "  ${Y}${B}$issues issue(s) found.${R} Review the warnings above.\n\n"
   fi

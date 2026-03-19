@@ -6,6 +6,7 @@ body:
     attributes:
       value: |
         Before reporting, please check:
+        - **Ping test**: Run `meridian ping` or use [meridian.msu.rocks/ping](https://meridian.msu.rocks/ping) to verify the server is reachable
         - **Clock sync**: Device clock must be accurate within 30 seconds
         - **Client app**: Try a different app (v2rayNG, Hiddify, v2RayTun)
         - **Pre-flight**: Run `meridian check` to test your server environment
@@ -52,9 +53,9 @@ body:
 
   - type: textarea
     attributes:
-      label: Pre-flight check output
+      label: Ping / pre-flight check output
       description: |
-        Run: `meridian check`
+        Run: `meridian ping` and/or `meridian check`
       render: text
     validations:
       required: false

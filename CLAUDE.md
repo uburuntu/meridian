@@ -43,6 +43,7 @@ docs/meridian              CLI served from website (CD sync)
 docs/install.sh            Installer served from website (CD sync)
 docs/setup.sh              Compat shim served from website (CD sync)
 docs/version               Version file served from website (CD sync)
+docs/ping.html             Web-based ping tool (server reachability test)
 docs/CNAME                 Custom domain for GitHub Pages
 roles/shared/tasks/       Shared task files (resolve_ip, check_qrencode, load_credentials)
 tests/render_templates.py  CI template rendering test (with Ansible filter mocks)
@@ -93,6 +94,7 @@ These are easy to break by editing one file without updating the others:
 - `meridian client add|list|remove NAME` — manage clients via `playbook-client.yml`
 - `meridian server add|list|remove` — manage known servers
 - `meridian check [IP]` — pre-flight validation (SNI, ports, DNS, OS, disk)
+- `meridian ping [IP]` — test proxy reachability from client device (no SSH needed)
 - `meridian diagnostics [IP]` — collect system info for bug reports
 - `meridian uninstall [IP]` — remove proxy via `playbook-uninstall.yml`
 - `meridian self-update` — update CLI + clear playbook cache
@@ -102,6 +104,7 @@ These are easy to break by editing one file without updating the others:
 - Website command builder has tabbed interface generating `meridian` subcommands
 - CLI files served from `meridian.msu.rocks/` — synced by CD workflow: `meridian`, `install.sh`, `setup.sh`, `version`
 - Website references the same app download links as the HTML templates in roles
+- `docs/ping.html` — standalone web ping tool, uses `fetch()` timing to test server reachability from browser. Supports URL params (`?ip=...&domain=...&name=...`) for shareable pre-filled links. Stores server history in localStorage.
 
 ### Connection info HTML templates (3 copies)
 - `roles/caddy/templates/connection-info.html.j2` — served on the server (domain mode)
@@ -229,6 +232,13 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml
 - **HAProxy health checks**: do NOT use `check` on TLS backends (Caddy, Xray) — TCP probes fail on TLS-only ports, causing "backend has no server available" errors. These are local systemd services, not load-balanced pools.
 - **docs/ sync**: `docs/meridian`, `docs/install.sh`, `docs/setup.sh`, `docs/version` are synced by CD workflow. Manual edits to docs/ copies will be overwritten.
 - **VERSION consistency**: `VERSION` file and `MERIDIAN_VERSION` in `meridian` script must match — CI validates this.
+- **Ecosystem cross-promotion**: Always upsell/reference related Meridian tools where contextually appropriate. When adding error messages, output, templates, issue templates, or docs — promote the relevant tool for that context. Current tools to cross-promote:
+  - `meridian ping` / `meridian.msu.rocks/ping` — for connection issues, reachability testing
+  - `meridian check` — for pre-deployment server validation
+  - `meridian diagnostics` — for bug reports and server-side debugging
+  - `meridian.msu.rocks` — for docs, setup guides, command builder
+  - Connection info pages — for end-user onboarding and troubleshooting
+  - The pattern: error/failure messages → suggest ping first (network issue?), then diagnostics (server issue?), then GitHub issues (bug?)
 
 ## CI/CD pipelines
 

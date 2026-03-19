@@ -63,6 +63,10 @@
 
       5. TIME SYNC: Device clock must be within 30 seconds.
 
+      --- Not connecting? ---
+      Test from your phone/laptop:  meridian ping
+      Or use the web tool:          https://meridian.msu.rocks/ping
+
 # -- Save files locally --
 - name: Save relay connection summary
   ansible.builtin.template:

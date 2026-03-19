@@ -67,6 +67,7 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 | `meridian client remove NAME` | Remove a client key |
 | `meridian server list` | List managed servers |
 | `meridian check [IP]` | Pre-flight validation |
+| `meridian ping [IP]` | Test proxy reachability from this device |
 | `meridian diagnostics [IP]` | Collect info for bug reports |
 | `meridian uninstall [IP]` | Remove proxy from server |
 | `meridian self-update` | Update CLI |
@@ -100,4 +101,6 @@ Full documentation, interactive command builder, and setup guides:
 
 ## Feedback
 
-Something not working? Run `meridian diagnostics` and [open an issue](https://github.com/uburuntu/meridian/issues).
+Not connecting? Run `meridian ping` to check if the server is reachable, or use the [web-based ping tool](https://meridian.msu.rocks/ping).
+
+Something else not working? Run `meridian diagnostics` and [open an issue](https://github.com/uburuntu/meridian/issues).
