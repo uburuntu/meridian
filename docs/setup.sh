@@ -22,26 +22,30 @@ printf "\n"
 printf "  ${Y}!${R} setup.sh has been replaced by the ${B}meridian${R} CLI.\n"
 printf "\n"
 
-# Check if meridian is already installed
+# Check if meridian is already installed (and not the old bash version)
 if command -v meridian &>/dev/null; then
-  printf "  ${G}✓${R} meridian CLI is already installed.\n\n"
-  printf "  Usage:\n"
-  printf "    ${C}meridian setup${R}              ${D}# interactive wizard${R}\n"
-  printf "    ${C}meridian setup 1.2.3.4${R}      ${D}# deploy to server${R}\n"
-  printf "    ${C}meridian client add alice${R}    ${D}# share access${R}\n"
-  printf "    ${C}meridian help${R}               ${D}# all commands${R}\n"
-  printf "\n"
+  MERIDIAN_PATH=$(command -v meridian)
+  if ! grep -q 'MERIDIAN_VERSION=' "$MERIDIAN_PATH" 2>/dev/null; then
+    # It's the new Python CLI
+    printf "  ${G}✓${R} meridian CLI is already installed.\n\n"
+    printf "  Usage:\n"
+    printf "    ${C}meridian setup${R}              ${D}# interactive wizard${R}\n"
+    printf "    ${C}meridian setup 1.2.3.4${R}      ${D}# deploy to server${R}\n"
+    printf "    ${C}meridian client add alice${R}    ${D}# share access${R}\n"
+    printf "    ${C}meridian help${R}               ${D}# all commands${R}\n"
+    printf "\n"
 
-  # If arguments were passed, forward them to meridian
-  if [[ $# -gt 0 ]]; then
-    printf "  ${C}→${R} Running: meridian setup %s\n\n" "$*"
-    exec meridian setup "$@"
+    # If arguments were passed, forward them to meridian
+    if [[ $# -gt 0 ]]; then
+      printf "  ${C}→${R} Running: meridian setup %s\n\n" "$*"
+      exec meridian setup "$@"
+    fi
+
+    exit 0
   fi
-
-  exit 0
 fi
 
-# Install meridian CLI
+# Install meridian CLI (handles old bash CLI migration automatically)
 printf "  Installing meridian CLI...\n\n"
 
 INSTALL_URL="https://meridian.msu.rocks/install.sh"

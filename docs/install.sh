@@ -2,7 +2,8 @@
 # =============================================================================
 # Meridian CLI Installer
 #
-# Installs the `meridian` command to ~/.local/bin/meridian
+# Installs `meridian` from PyPI via uv (preferred) or pipx (fallback).
+# Detects and migrates old bash CLI installations automatically.
 #
 # Usage:
 #   curl -sSf https://meridian.msu.rocks/install.sh | bash
@@ -10,83 +11,139 @@
 set -euo pipefail
 
 R='\033[0m' B='\033[1m' D='\033[2m'
-G='\033[32m' C='\033[36m' RED='\033[31m'
+G='\033[32m' C='\033[36m' Y='\033[33m' RED='\033[31m'
 
 info()  { printf "  ${C}→${R} %s\n" "$*"; }
 ok()    { printf "  ${G}✓${R} %s\n" "$*"; }
+warn()  { printf "  ${Y}!${R} %s\n" "$*"; }
 fail()  { printf "\n  ${RED}✗ %s${R}\n" "$*" >&2; exit 1; }
 
-INSTALL_DIR="${MERIDIAN_INSTALL_DIR:-$HOME/.local/bin}"
-DOWNLOAD_URL="https://meridian.msu.rocks/meridian"
-FALLBACK_URL="https://raw.githubusercontent.com/uburuntu/meridian/main/meridian"
+PYPI_PACKAGE="meridian-vpn"
 
 printf "\n"
 printf "  ${B}Meridian Installer${R}\n"
 printf "\n"
 
-# --- Download CLI ---
-info "Downloading meridian CLI..."
-CLI_CONTENT=""
-if command -v curl &>/dev/null; then
-  CLI_CONTENT=$(curl -sSf "$DOWNLOAD_URL" </dev/null 2>/dev/null) || \
-  CLI_CONTENT=$(curl -sSf "$FALLBACK_URL" </dev/null 2>/dev/null) || true
-elif command -v wget &>/dev/null; then
-  CLI_CONTENT=$(wget -qO- "$DOWNLOAD_URL" </dev/null 2>/dev/null) || \
-  CLI_CONTENT=$(wget -qO- "$FALLBACK_URL" </dev/null 2>/dev/null) || true
-else
-  fail "curl or wget is required"
+# =============================================================================
+# Detect and migrate old bash CLI
+# =============================================================================
+OLD_MERIDIAN=$(command -v meridian 2>/dev/null || true)
+if [[ -n "$OLD_MERIDIAN" ]] && grep -q 'MERIDIAN_VERSION=' "$OLD_MERIDIAN" 2>/dev/null; then
+  warn "Found old bash CLI at $OLD_MERIDIAN"
+  info "Migrating to Python package..."
+  rm -f "$OLD_MERIDIAN"
+  # Clean up old playbook cache (now bundled in package)
+  rm -rf "$HOME/.meridian/playbooks"
+  # Credentials, servers, and cache are preserved (compatible format)
+  ok "Old CLI removed (credentials preserved)"
 fi
 
-if [[ -z "$CLI_CONTENT" ]]; then
-  fail "Failed to download meridian CLI"
-fi
+# =============================================================================
+# Install uv if not present
+# =============================================================================
+install_uv() {
+  info "Installing uv (Python package manager)..."
+  if command -v curl &>/dev/null; then
+    curl -LsSf https://astral.sh/uv/install.sh </dev/null 2>/dev/null | bash 2>/dev/null
+  elif command -v wget &>/dev/null; then
+    wget -qO- https://astral.sh/uv/install.sh </dev/null 2>/dev/null | bash 2>/dev/null
+  else
+    return 1
+  fi
+  # Source uv's env to get it on PATH
+  # shellcheck disable=SC1091
+  [[ -f "$HOME/.local/bin/env" ]] && source "$HOME/.local/bin/env" 2>/dev/null || true
+  export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+}
 
-# Validate it looks like the right script
-if [[ "$CLI_CONTENT" != *"MERIDIAN_VERSION"* ]]; then
-  fail "Downloaded file doesn't look like the meridian CLI"
-fi
+# =============================================================================
+# Install meridian-vpn from PyPI
+# =============================================================================
+INSTALLED=false
 
-# --- Install ---
-mkdir -p "$INSTALL_DIR"
-printf '%s\n' "$CLI_CONTENT" > "$INSTALL_DIR/meridian"
-chmod +x "$INSTALL_DIR/meridian"
-ok "Installed to $INSTALL_DIR/meridian"
-
-# --- Ensure PATH ---
-if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-  SHELL_NAME=$(basename "${SHELL:-/bin/bash}")
-  PROFILE=""
-  case "$SHELL_NAME" in
-    zsh)  PROFILE="$HOME/.zshrc" ;;
-    bash)
-      if [[ -f "$HOME/.bashrc" ]]; then
-        PROFILE="$HOME/.bashrc"
-      elif [[ -f "$HOME/.bash_profile" ]]; then
-        PROFILE="$HOME/.bash_profile"
-      fi ;;
-  esac
-
-  PATH_LINE="export PATH=\"$INSTALL_DIR:\$PATH\""
-  PATH_ADDED=1
-
-  if [[ -n "$PROFILE" ]]; then
-    if ! grep -qF "$INSTALL_DIR" "$PROFILE" 2>/dev/null; then
-      printf '\n# Meridian CLI\n%s\n' "$PATH_LINE" >> "$PROFILE"
-      ok "Added $INSTALL_DIR to PATH in $PROFILE"
+# Strategy 1: uv tool install (preferred — fastest, manages Python)
+if command -v uv &>/dev/null || install_uv; then
+  if command -v uv &>/dev/null; then
+    info "Installing meridian via uv..."
+    if uv tool install "$PYPI_PACKAGE" </dev/null 2>&1; then
+      INSTALLED=true
+      ok "Installed via uv"
     fi
   fi
-
-  export PATH="$INSTALL_DIR:$PATH"
 fi
 
-# --- Extract version ---
-INSTALLED_VERSION=$(grep '^MERIDIAN_VERSION=' "$INSTALL_DIR/meridian" 2>/dev/null | head -1 | cut -d'"' -f2)
+# Strategy 2: pipx (fallback — available via apt/brew on many systems)
+if [[ "$INSTALLED" != true ]] && command -v pipx &>/dev/null; then
+  info "Installing meridian via pipx..."
+  if pipx install "$PYPI_PACKAGE" </dev/null 2>&1; then
+    INSTALLED=true
+    ok "Installed via pipx"
+  fi
+fi
+
+# Strategy 3: pip3 --user (last resort)
+if [[ "$INSTALLED" != true ]] && command -v pip3 &>/dev/null; then
+  info "Installing meridian via pip3..."
+  if pip3 install --user "$PYPI_PACKAGE" </dev/null 2>&1; then
+    INSTALLED=true
+    ok "Installed via pip3"
+  elif pip3 install --user --break-system-packages "$PYPI_PACKAGE" </dev/null 2>&1; then
+    INSTALLED=true
+    ok "Installed via pip3"
+  fi
+fi
+
+if [[ "$INSTALLED" != true ]]; then
+  fail "Could not install meridian. Please install uv first: curl -LsSf https://astral.sh/uv/install.sh | sh"
+fi
+
+# =============================================================================
+# Ensure PATH includes tool bin directories
+# =============================================================================
+ensure_path() {
+  local dir="$1"
+  if [[ ":$PATH:" != *":$dir:"* ]] && [[ -d "$dir" ]]; then
+    SHELL_NAME=$(basename "${SHELL:-/bin/bash}")
+    PROFILE=""
+    case "$SHELL_NAME" in
+      zsh)  PROFILE="$HOME/.zshrc" ;;
+      bash)
+        if [[ -f "$HOME/.bashrc" ]]; then
+          PROFILE="$HOME/.bashrc"
+        elif [[ -f "$HOME/.bash_profile" ]]; then
+          PROFILE="$HOME/.bash_profile"
+        fi ;;
+    esac
+
+    if [[ -n "$PROFILE" ]] && ! grep -qF "$dir" "$PROFILE" 2>/dev/null; then
+      printf '\n# Meridian CLI\nexport PATH="%s:$PATH"\n' "$dir" >> "$PROFILE"
+      ok "Added $dir to PATH in $PROFILE"
+      PATH_ADDED=1
+    fi
+    export PATH="$dir:$PATH"
+  fi
+}
+
+PATH_ADDED=0
+ensure_path "$HOME/.local/bin"
+# macOS pip3 --user installs to ~/Library/Python/*/bin
+for pybin in "$HOME"/Library/Python/*/bin; do
+  [[ -d "$pybin" ]] && ensure_path "$pybin"
+done
+
+# =============================================================================
+# Verify and show success
+# =============================================================================
+INSTALLED_VERSION=""
+if command -v meridian &>/dev/null; then
+  INSTALLED_VERSION=$(meridian version 2>/dev/null | awk '{print $2}' || true)
+fi
 
 printf "\n"
 printf "  ${G}${B}Meridian ${INSTALLED_VERSION:-CLI} installed.${R}\n\n"
 
-if [[ "${PATH_ADDED:-}" == "1" ]]; then
-  PROFILE_NAME=$(basename "${PROFILE:-~/.bashrc}")
+if [[ "$PATH_ADDED" == "1" ]]; then
+  PROFILE_NAME=$(basename "${PROFILE:-shell config}")
   printf "  ${D}To start using meridian, run:${R}\n\n"
   printf "     ${C}source ~/${PROFILE_NAME}${R}\n\n"
   printf "  ${D}Then:${R}\n"
