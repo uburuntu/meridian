@@ -139,7 +139,7 @@ prompt() {
   local value
   read -r value < /dev/tty || true
   [[ -z "$value" && -n "$default" ]] && value="$default"
-  eval "$varname=\$value"
+  printf -v "$varname" '%s' "$value"
 }
 
 confirm() {
