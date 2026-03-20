@@ -16,3 +16,6 @@
 
 - name: Configure outbound chain to exit node
   ansible.builtin.import_tasks: configure_outbound.yml
+
+- name: Verify Xray core is running
+  ansible.builtin.include_tasks: ../../shared/tasks/verify_xray.yml

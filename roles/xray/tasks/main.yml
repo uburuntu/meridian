@@ -18,5 +18,8 @@
   ansible.builtin.include_tasks: configure_wss.yml
   when: domain_mode | bool
 
+- name: Verify Xray core is running
+  ansible.builtin.include_tasks: ../../shared/tasks/verify_xray.yml
+
 - name: Set up maintenance cron jobs
   ansible.builtin.import_tasks: maintenance.yml
