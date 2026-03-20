@@ -94,6 +94,32 @@ jobs:
           print('OK: No form-urlencoded on inbound/client API calls')
           "
 
+      - name: Verify connection-info app links are in sync
+        run: |
+          python3 -c "
+          import re, sys
+          files = [
+              'roles/caddy/templates/connection-info.html.j2',
+              'roles/output/templates/connection-info.html.j2',
+          ]
+          def extract_links(path):
+              content = open(path).read()
+              return sorted(set(re.findall(r'https://(?:play\.google\.com|apps\.apple\.com|github\.com/\S+/releases)[^\s\"<]*', content)))
+          baseline = extract_links(files[0])
+          ok = True
+          for f in files[1:]:
+              links = extract_links(f)
+              if links != baseline:
+                  print(f'MISMATCH: {f}')
+                  print(f'  Expected: {baseline}')
+                  print(f'  Got:      {links}')
+                  ok = False
+          if ok:
+              print(f'OK: App download links match across {len(files)} templates')
+          else:
+              sys.exit(1)
+          "
+
       - name: Verify VERSION file matches script
         run: |
           FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
