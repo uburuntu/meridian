@@ -25,6 +25,7 @@ SERVER_CREDS_DIR="/etc/meridian"
 TARBALL_URL="https://github.com/uburuntu/meridian/archive/refs/heads/main.tar.gz"
 VERSION_URL="https://meridian.msu.rocks/version"
 CLI_URL="https://meridian.msu.rocks/meridian"
+AI_DOCS_URL="https://meridian.msu.rocks/ai/reference.md"
 
 # --- State (set during execution) ---
 SERVER_IP=""
@@ -39,8 +40,95 @@ G='\033[32m' Y='\033[33m' C='\033[36m' RED='\033[31m'
 info()  { printf "  ${C}→${R} %s\n" "$*"; }
 ok()    { printf "  ${G}✓${R} %s\n" "$*"; }
 warn()  { printf "  ${Y}!${R} %s\n" "$*"; }
-fail()  { printf "\n  ${RED}✗ %s${R}\n" "$*" >&2; printf "  ${D}Not connecting? Run: meridian ping | Other issues? Run: meridian diagnostics${R}\n  ${D}Report: https://github.com/uburuntu/meridian/issues${R}\n\n" >&2; exit 1; }
+fail()  { printf "\n  ${RED}✗ %s${R}\n" "$*" >&2; printf "  ${D}Not connecting? Run: meridian ping | Other issues? Run: meridian diagnostics --ai${R}\n  ${D}Report: https://github.com/uburuntu/meridian/issues${R}\n\n" >&2; exit 1; }
 line()  { printf "  ${D}─────────────────────────────────────────${R}\n"; }
+
+# --- AI prompt helpers ---
+
+fetch_ai_docs() {
+  local cache="$CACHE_DIR/ai-reference.md"
+  local cache_ver="$CACHE_DIR/ai-reference.version"
+
+  if [[ -f "$cache" && -f "$cache_ver" ]] && [[ "$(cat "$cache_ver")" == "$MERIDIAN_VERSION" ]]; then
+    cat "$cache"
+    return 0
+  fi
+
+  local docs
+  docs=$(curl -sSf --max-time 10 "$AI_DOCS_URL" </dev/null 2>/dev/null) || {
+    # Fallback to cache even if version mismatches
+    [[ -f "$cache" ]] && { cat "$cache"; return 0; }
+    return 1
+  }
+
+  mkdir -p "$CACHE_DIR"
+  printf '%s\n' "$docs" > "$cache"
+  printf '%s' "$MERIDIAN_VERSION" > "$cache_ver"
+  cat "$cache"
+}
+
+copy_to_clipboard() {
+  local text="$1"
+  if command -v pbcopy &>/dev/null; then
+    printf '%s' "$text" | pbcopy
+    return 0
+  elif command -v xclip &>/dev/null; then
+    printf '%s' "$text" | xclip -selection clipboard 2>/dev/null
+    return 0
+  elif command -v xsel &>/dev/null; then
+    printf '%s' "$text" | xsel --clipboard 2>/dev/null
+    return 0
+  fi
+  return 1
+}
+
+build_ai_prompt() {
+  local command_name="$1" output="$2"
+  local docs
+  docs=$(fetch_ai_docs) || docs="(AI reference docs unavailable. Meridian is a CLI tool that deploys VLESS+Reality proxy servers. See https://github.com/uburuntu/meridian)"
+
+  local size
+  local prompt
+  prompt="$(cat <<EOF
+You are helping troubleshoot a Meridian VPN proxy server deployment.
+Meridian is an open-source CLI tool that deploys censorship-resistant VLESS+Reality proxy servers.
+The user ran \`meridian $command_name\` and needs help interpreting the results and fixing any issues.
+
+## Meridian Reference Documentation
+
+$docs
+
+## $command_name Output
+
+\`\`\`
+$output
+\`\`\`
+
+Analyze the output above. Identify any issues and provide specific, actionable steps to fix them.
+If you need more information, tell the user what commands to run on their server.
+EOF
+  )"
+
+  size=$(printf '%s' "$prompt" | wc -c | tr -d ' ')
+  local size_kb=$(( size / 1024 ))
+
+  if copy_to_clipboard "$prompt"; then
+    printf "\n"
+    line
+    printf "\n"
+    printf "  ${G}${B}Prompt copied to clipboard${R} (%s KB)\n" "$size_kb"
+    printf "  Paste into ChatGPT, Claude, or any AI assistant for help.\n\n"
+  else
+    printf "\n"
+    line
+    printf "\n"
+    printf "  ${B}Copy the prompt below and paste into ChatGPT, Claude, or any AI assistant.${R}\n"
+    printf "\n"
+    printf "  ━━━ COPY START ━━━\n\n"
+    printf '%s\n' "$prompt"
+    printf "\n  ━━━ COPY END ━━━\n\n"
+  fi
+}
 
 prompt() {
   local varname="$1" message="$2" default="${3:-}"
@@ -426,7 +514,7 @@ prepare_server() {
 # =============================================================================
 
 cmd_setup() {
-  local server_ip="" domain="" email="" sni="" user="root" name="" yes=false
+  local server_ip="" domain="" email="" sni="" user="root" name="" yes=false xhttp=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -435,12 +523,14 @@ cmd_setup() {
       --sni)     sni="$2"; shift 2 ;;
       --user)    user="$2"; shift 2 ;;
       --name)    name="$2"; shift 2 ;;
+      --xhttp)   xhttp=true; shift ;;
       --yes|-y)  yes=true; shift ;;
       --help|-h) printf "\n  ${B}meridian setup${R} — Deploy proxy server\n\n"
                  printf "  Usage: meridian setup [IP] [flags]\n\n"
                  printf "  Flags:\n"
                  printf "    --domain DOMAIN   Add CDN fallback via Cloudflare\n"
                  printf "    --sni HOST        Reality camouflage target (default: www.microsoft.com)\n"
+                 printf "    --xhttp           Add XHTTP transport (enhanced stealth)\n"
                  printf "    --name NAME       Name the first client (default: 'default')\n"
                  printf "    --user USER       SSH user (default: root)\n"
                  printf "    --yes, -y         Skip confirmation prompts\n\n"
@@ -516,15 +606,38 @@ cmd_setup() {
   SERVER_IP="$server_ip"
   prepare_server true
 
+  # Suggest scanned SNI if available and no --sni was given
+  if [[ -z "$sni" ]]; then
+    local scanned_sni=""
+    local creds_check="$CREDS_BASE/$SERVER_IP"
+    if [[ -f "$creds_check/proxy.yml" ]]; then
+      scanned_sni=$(grep '^scanned_sni:' "$creds_check/proxy.yml" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
+    fi
+    if [[ -n "$scanned_sni" ]]; then
+      info "Detected optimal SNI from scan: $scanned_sni"
+      if [[ "$yes" == true ]]; then
+        sni="$scanned_sni"
+      else
+        local use_scanned=""
+        prompt use_scanned "Use $scanned_sni as SNI target? (Y/n)"
+        if [[ "$use_scanned" != "n" && "$use_scanned" != "N" ]]; then
+          sni="$scanned_sni"
+        fi
+      fi
+    fi
+  fi
+
   local play_args=()
   [[ -n "$domain" ]] && play_args+=(-e "domain=$domain")
   [[ -n "$email" ]]  && play_args+=(-e "email=$email")
   [[ -n "$sni" ]]    && play_args+=(-e "reality_sni=$sni")
   [[ -n "$name" ]]   && play_args+=(-e "first_client_name=$name")
+  [[ "$xhttp" == true ]] && play_args+=(-e "xhttp_enabled=true")
 
   printf "\n"
   info "Configuring server at $SERVER_IP..."
   [[ -n "$domain" ]] && info "Domain: $domain"
+  [[ "$xhttp" == true ]] && info "XHTTP: enabled (enhanced stealth)"
   printf "\n"
 
   run_playbook playbook.yml ${play_args[@]+"${play_args[@]}"}
@@ -724,13 +837,14 @@ cmd_server() {
 }
 
 cmd_check() {
-  local server_ip="" domain="" sni=""
+  local server_ip="" domain="" sni="" ai_mode=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --domain)  domain="$2"; shift 2 ;;
       --sni)     sni="$2"; shift 2 ;;
       --user)    ANSIBLE_USER="$2"; shift 2 ;;
+      --ai)      ai_mode=true; shift ;;
       -*)        fail "Unknown flag: $1" ;;
       *)         server_ip="$1"; shift ;;
     esac
@@ -764,6 +878,38 @@ cmd_check() {
   else
     warn "$sni_host is NOT reachable from server"
     issues=$((issues + 1))
+  fi
+
+  # ASN mismatch check (best-effort, non-blocking)
+  info "Checking SNI target ASN match..."
+  local server_org sni_ip sni_org
+  server_org=$(run_on_server "curl -s --max-time 5 https://ipinfo.io/org 2>/dev/null" || true)
+  sni_ip=$(run_on_server "dig +short $sni_host @8.8.8.8 2>/dev/null | grep -E '^[0-9]+\.' | head -1" || true)
+  if [[ -n "$server_org" && -n "$sni_ip" && "$sni_ip" =~ ^[0-9]+\. ]]; then
+    sni_org=$(run_on_server "curl -s --max-time 5 https://ipinfo.io/$sni_ip/org 2>/dev/null" || true)
+    if [[ -n "$sni_org" ]]; then
+      # Extract AS number for comparison
+      local server_asn sni_asn
+      server_asn=$(echo "$server_org" | awk '{print $1}')
+      sni_asn=$(echo "$sni_org" | awk '{print $1}')
+      if [[ "$server_asn" == "$sni_asn" ]]; then
+        ok "SNI target is on the same ASN ($server_asn)"
+      else
+        # Check for known-bad SNI targets (proprietary ASNs or domains)
+        if [[ "$sni_org" == *"Apple"* || "$sni_host" == *"icloud.com"* || "$sni_host" == *"apple.com"* ]]; then
+          warn "SNI target ($sni_host) is risky — Apple infrastructure, detectable ASN mismatch"
+          printf "       %s\n" "Use a global CDN domain: www.microsoft.com, www.twitch.tv, github.com"
+          issues=$((issues + 1))
+        else
+          info "SNI on different ASN (server: $server_org, SNI: $sni_org)"
+          printf "       %s\n" "Fine for global CDN domains. For best stealth, run: meridian scan"
+        fi
+      fi
+    else
+      ok "ASN check skipped (could not resolve SNI org)"
+    fi
+  else
+    ok "ASN check skipped (ipinfo.io unavailable)"
   fi
 
   info "Checking port 443 availability..."
@@ -845,16 +991,168 @@ cmd_check() {
     printf "  ${D}Or use: %s${R}\n\n" "$ping_url"
   else
     printf "  ${Y}${B}$issues issue(s) found.${R} Review the warnings above.\n\n"
+    if [[ "$ai_mode" != true ]]; then
+      printf "  ${D}Get AI help: meridian check $SERVER_IP --ai${R}\n\n"
+    fi
+  fi
+
+  if [[ "$ai_mode" == true ]]; then
+    local check_output="Pre-flight Check for $SERVER_IP"
+    check_output="$check_output\nSNI target ($sni_host): $(if [[ "$sni_check" == *"CONNECTED"* || "$sni_check" == *"OK"* || "$sni_check" == *"Certificate"* ]]; then echo "reachable"; else echo "NOT reachable"; fi)"
+    check_output="$check_output\nPort 443: $(if [[ -z "$port_check" ]]; then echo "available"; else echo "in use by ${port_user:-unknown}"; fi)"
+    check_output="$check_output\nPort 443 external: $(if timeout 3 bash -c "echo >/dev/tcp/$SERVER_IP/443" 2>/dev/null; then echo "reachable"; else echo "not reachable"; fi)"
+    [[ -n "$domain" ]] && check_output="$check_output\nDomain DNS ($domain): ${dns_result:-no result}"
+    [[ -n "$os_info" ]] && check_output="$check_output\nServer OS: $os_info"
+    [[ -n "$disk_avail" ]] && check_output="$check_output\nDisk space: ${disk_avail}G available"
+    check_output="$check_output\nIssues found: $issues"
+    build_ai_prompt "check" "$(printf '%b' "$check_output")"
+  fi
+}
+
+cmd_scan() {
+  local server_ip=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --user)  ANSIBLE_USER="$2"; shift 2 ;;
+      -*)      fail "Unknown flag: $1" ;;
+      *)       server_ip="$1"; shift ;;
+    esac
+  done
+
+  if [[ -n "$server_ip" ]]; then
+    SERVER_IP="$server_ip"
+  else
+    resolve_server || fail "Server IP required. Usage: meridian scan IP"
+  fi
+
+  if [[ "$LOCAL_MODE" != true ]]; then
+    detect_local_mode && LOCAL_MODE=true
+  fi
+  check_ssh
+
+  printf "\n"
+  printf "  ${B}SNI Scanner${R}\n"
+  printf "  ${D}Finding optimal Reality SNI targets near your server...${R}\n"
+  printf "\n"
+
+  # Detect server architecture
+  local arch
+  arch=$(run_on_server "uname -m" || true)
+  case "$arch" in
+    x86_64)  arch="64" ;;
+    aarch64) warn "RealiTLScanner has no arm64 build. You can set SNI manually with --sni."; return 0 ;;
+    *)       fail "Unsupported architecture: $arch" ;;
+  esac
+
+  # Download RealiTLScanner to server
+  local scanner_url="https://github.com/XTLS/RealiTLScanner/releases/latest/download/RealiTLScanner-linux-${arch}"
+  info "Downloading RealiTLScanner..."
+  run_on_server "curl -sSfL --max-time 30 -o /tmp/realitlscanner '$scanner_url' </dev/null && chmod +x /tmp/realitlscanner" || \
+    fail "Failed to download RealiTLScanner. Check network connectivity."
+
+  # Get server's subnet CIDR for scanning
+  local server_cidr
+  server_cidr=$(run_on_server "ip addr show | grep 'inet ' | grep -v '127.0.0\|172.17\|10.0\|192.168' | head -1 | awk '{print \$2}'" || true)
+  [[ -z "$server_cidr" ]] && server_cidr="${SERVER_IP}/24"
+
+  # Run scan on the server's subnet
+  info "Scanning $server_cidr for TLS targets (this takes 30-60 seconds)..."
+  run_on_server "cd /tmp && timeout 90 ./realitlscanner -addr '$server_cidr' -out /tmp/meridian-scan.csv -thread 4 -timeout 5 >/dev/null 2>&1" || true
+
+  # Clean up binary, read CSV, then clean CSV
+  run_on_server "rm -f /tmp/realitlscanner" 2>/dev/null || true
+  local csv_output
+  csv_output=$(run_on_server "cat /tmp/meridian-scan.csv 2>/dev/null" || true)
+  run_on_server "rm -f /tmp/meridian-scan.csv" 2>/dev/null || true
+
+  if [[ -z "$csv_output" || "$csv_output" == "IP,ORIGIN,CERT_DOMAIN,CERT_ISSUER,GEO_CODE" ]]; then
+    warn "Scan produced no results. The server may have limited network visibility."
+    printf "\n  ${D}You can manually set SNI with: meridian setup $SERVER_IP --sni DOMAIN${R}\n\n"
+    return 0
+  fi
+
+  # Parse CSV: extract cert_domain (column 3), skip header, deduplicate, filter bad targets
+  local domains=()
+  while IFS=',' read -r ip origin cert_domain cert_issuer geo; do
+    [[ "$ip" == "IP" ]] && continue  # skip header
+    [[ -z "$cert_domain" ]] && continue
+    # Skip wildcard certs (less useful as SNI targets)
+    [[ "$cert_domain" == \** ]] && continue
+    # Filter out known-bad targets
+    case "$cert_domain" in
+      *apple.com|*icloud.com) continue ;;
+    esac
+    # Skip the server's own domain
+    [[ "$cert_domain" == *"$SERVER_IP"* ]] && continue
+    # Deduplicate
+    local dup=false
+    for d in "${domains[@]:-}"; do
+      [[ "$d" == "$cert_domain" ]] && { dup=true; break; }
+    done
+    [[ "$dup" == true ]] && continue
+    domains+=("$cert_domain")
+  done <<< "$csv_output"
+
+  if [[ ${#domains[@]} -eq 0 ]]; then
+    warn "No suitable SNI targets found."
+    printf "\n  ${D}You can manually set SNI with: meridian setup $SERVER_IP --sni DOMAIN${R}\n\n"
+    return 0
+  fi
+
+  printf "\n"
+  line
+  printf "\n"
+  printf "  ${B}Found %d SNI targets:${R}\n\n" "${#domains[@]}"
+
+  local i=1
+  for domain in "${domains[@]}"; do
+    printf "    ${C}%d${R}) %s\n" "$i" "$domain"
+    i=$((i + 1))
+  done
+
+  printf "\n"
+  local choice
+  prompt choice "Select a target (1-${#domains[@]}) or press Enter to skip"
+
+  if [[ -n "$choice" && "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 && "$choice" -le ${#domains[@]} ]]; then
+    local selected="${domains[$((choice - 1))]}"
+
+    # Save to credentials
+    local creds_dir
+    creds_dir=$(server_creds)
+    mkdir -p "$creds_dir"
+
+    if [[ -f "$creds_dir/proxy.yml" ]]; then
+      # Update existing credentials
+      if grep -q '^scanned_sni:' "$creds_dir/proxy.yml" 2>/dev/null; then
+        sed -i.bak "s/^scanned_sni:.*/scanned_sni: \"$selected\"/" "$creds_dir/proxy.yml"
+        rm -f "$creds_dir/proxy.yml.bak"
+      else
+        printf 'scanned_sni: "%s"\n' "$selected" >> "$creds_dir/proxy.yml"
+      fi
+    else
+      printf 'scanned_sni: "%s"\n' "$selected" > "$creds_dir/proxy.yml"
+    fi
+
+    printf "\n"
+    ok "Saved: $selected"
+    printf "  ${D}Use it: meridian setup $SERVER_IP --sni $selected${R}\n"
+    printf "  ${D}Or it will be suggested automatically during setup.${R}\n\n"
+  else
+    info "Skipped. You can set SNI manually with --sni flag."
+    printf "\n"
   fi
 }
 
 cmd_diagnostics() {
-  local server_ip="" sni=""
+  local server_ip="" sni="" ai_mode=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --sni)   sni="$2"; shift 2 ;;
       --user)  ANSIBLE_USER="$2"; shift 2 ;;
+      --ai)    ai_mode=true; shift ;;
       -*)      fail "Unknown flag: $1" ;;
       *)       server_ip="$1"; shift ;;
     esac
@@ -912,17 +1210,25 @@ cmd_diagnostics() {
   line
   printf "\n"
   printf "  ${B}Diagnostics collected.${R}\n\n"
-  printf "  1. Review the output below for any private info you want to remove\n"
-  printf "  2. Copy the markdown block into a new issue:\n"
-  printf "     ${C}https://github.com/uburuntu/meridian/issues/new${R}\n"
-  printf "\n"
-  line
-  printf "\n"
-  printf '%b' "$diag"
-  printf "\n"
-  line
-  printf "\n"
-  printf "  ${D}Secrets (UUIDs, passwords, keys) are auto-redacted.${R}\n\n"
+
+  if [[ "$ai_mode" == true ]]; then
+    local diag_plain
+    diag_plain=$(printf '%b' "$diag")
+    build_ai_prompt "diagnostics" "$diag_plain"
+  else
+    printf "  1. Review the output below for any private info you want to remove\n"
+    printf "  2. Copy the markdown block into a new issue:\n"
+    printf "     ${C}https://github.com/uburuntu/meridian/issues/new${R}\n"
+    printf "\n"
+    line
+    printf "\n"
+    printf '%b' "$diag"
+    printf "\n"
+    line
+    printf "\n"
+    printf "  ${D}Secrets (UUIDs, passwords, keys) are auto-redacted.${R}\n\n"
+    printf "  ${D}Or get AI help: meridian diagnostics --ai${R}\n\n"
+  fi
 }
 
 cmd_uninstall() {
@@ -1125,6 +1431,7 @@ cmd_help() {
   printf "    ${C}client${R} add|list|remove     Manage client access keys\n"
   printf "    ${C}server${R} add|list|remove     Manage known servers\n"
   printf "    ${C}check${R} [IP]                 Pre-flight server validation\n"
+  printf "    ${C}scan${R} [IP]                  Find optimal SNI targets on server's network\n"
   printf "    ${C}ping${R} [IP]                  Test proxy reachability from this device\n"
   printf "    ${C}diagnostics${R} [IP]           Collect info for bug reports\n"
   printf "    ${C}uninstall${R} [IP]             Remove proxy from server\n"
@@ -1139,6 +1446,14 @@ cmd_help() {
   printf "    meridian setup                   ${D}# interactive wizard${R}\n"
   printf "    meridian setup 1.2.3.4           ${D}# deploy to server${R}\n"
   printf "    meridian client add alice         ${D}# share access${R}\n"
+  printf "\n"
+  printf "  ${B}Troubleshooting:${R}\n\n"
+  printf "    ${C}ping${R} [IP]              ${D}Is my server reachable from here?${R}\n"
+  printf "    ${C}check${R} [IP]             ${D}Is this server ready for Meridian? (pre-deploy)${R}\n"
+  printf "    ${C}scan${R} [IP]              ${D}Find optimal SNI targets on server's network${R}\n"
+  printf "    ${C}diagnostics${R} [IP]       ${D}Collect debug info (post-deploy)${R}\n"
+  printf "\n"
+  printf "    Add ${C}--ai${R} to check or diagnostics to get an AI-ready help prompt.\n"
   printf "\n"
   printf "  ${D}https://github.com/uburuntu/meridian${R}\n\n"
 }
@@ -1180,6 +1495,7 @@ main() {
     client)       cmd_client "$@" ;;
     server)       cmd_server "$@" ;;
     check)        cmd_check "$@" ;;
+    scan)         cmd_scan "$@" ;;
     ping)         cmd_ping "$@" ;;
     diagnostics)  cmd_diagnostics "$@" ;;
     uninstall)    cmd_uninstall "$@" ;;
