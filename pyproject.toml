@@ -20,7 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "typer[all]>=0.9",
+    "typer[all]>=0.12",
     "pyyaml>=6.0",
     "packaging>=23.0",
 ]

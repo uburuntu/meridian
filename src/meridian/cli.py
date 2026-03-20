@@ -29,7 +29,7 @@ def main_callback(
 ) -> None:
     """Meridian — Censorship-resistant proxy server management."""
     if version:
-        typer.echo(f"meridian {__version__}")
+        print(f"meridian {__version__}")
         raise typer.Exit()
 
     if ctx.invoked_subcommand is None:
@@ -238,4 +238,4 @@ def self_update_cmd() -> None:
 @app.command("version")
 def version_cmd() -> None:
     """Show meridian version."""
-    typer.echo(f"meridian {__version__}")
+    print(f"meridian {__version__}")
