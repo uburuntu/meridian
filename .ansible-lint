@@ -1,4 +1,7 @@
 ---
+exclude_paths:
+  - src/  # Bundled copy of playbooks — lint the root copies instead
+
 skip_list:
   - yaml[line-length]
   - yaml[truthy]
