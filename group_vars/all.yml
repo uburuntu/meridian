@@ -33,7 +33,8 @@ threexui_version: "2.8.11"
 # -----------------------------------------------------------------------------
 # The website that Reality impersonates. When censors probe the server,
 # they see a legitimate TLS certificate from this site.
-# Good choices: www.microsoft.com, www.apple.com, dl.google.com, www.yahoo.com
+# Good choices: www.microsoft.com, www.twitch.tv, dl.google.com, github.com
+# Avoid: apple.com, icloud.com (Apple-owned ASN — mismatch is instantly detectable)
 # Use RealiTLScanner to find optimal targets near your server's datacenter.
 reality_sni: "www.microsoft.com"
 reality_dest: "{{ reality_sni }}:443"
@@ -87,6 +88,14 @@ bbr_enabled: true
 # This is the key to idempotency.
 credentials_dir: "./credentials"
 credentials_file: "{{ credentials_dir }}/{{ inventory_hostname }}.yml"
+
+# -----------------------------------------------------------------------------
+# XHTTP Transport (opt-in for enhanced post-handshake stealth)
+# -----------------------------------------------------------------------------
+# When enabled, creates a second VLESS+Reality+XHTTP inbound alongside TCP.
+# XHTTP makes traffic statistically indistinguishable from normal browsing.
+# Requires compatible client apps (v2rayNG 1.9+, Hiddify).
+xhttp_enabled: false
 
 # -----------------------------------------------------------------------------
 # Chain Mode (set automatically by playbook-chain.yml)

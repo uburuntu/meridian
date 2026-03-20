@@ -131,11 +131,28 @@ Add --ai to check or diagnostics for an AI-ready prompt.
 3. Try WSS/CDN link (domain mode) — routes through Cloudflare, may have better routing
 4. Enable BBR (Meridian enables it by default): verify with `sysctl net.ipv4.tcp_congestion_control`
 
+## SNI Target Selection
+
+The SNI target is the domain that Reality impersonates. Choosing the wrong one can make the proxy detectable.
+
+**Good SNI targets** (global CDN, shared hosting infrastructure):
+- `www.microsoft.com` (default) — Azure CDN, global presence
+- `www.twitch.tv` — Fastly CDN, global
+- `dl.google.com` — Google CDN, global
+- `github.com` — Fastly CDN, global
+
+**Bad SNI targets** (proprietary ASN, instant detection):
+- `apple.com`, `icloud.com` — Apple controls its own ASN ranges. If your VPS is on Hetzner/OVH/DigitalOcean and claims to be Apple, the ASN mismatch is immediately visible to censors.
+- Small/niche websites — ASN inconsistencies are flagged instantly.
+
+**Best practice:** Run `meridian scan` to find optimal SNI targets from the same network/datacenter as your server. This uses RealiTLScanner to discover nearby domains with valid TLS certificates.
+
 ## Interpreting `meridian check` Output
 
 | Check | What It Tests | If It Fails |
 |-------|--------------|-------------|
 | SNI target reachability | Can the server reach the camouflage site (e.g., microsoft.com)? | Server's outbound is restricted. Try a different SNI target with `--sni` |
+| SNI ASN match | Does the SNI target share a CDN/ASN with the server? | Use a global CDN domain (microsoft.com, twitch.tv, github.com). Avoid apple.com (Apple-owned ASN, instant detection) |
 | Port 443 availability | Is port 443 free or used by Meridian? | Another service is on 443. Stop it or use a clean server |
 | Port 443 external reachability | Can the outside world reach port 443? | Cloud firewall blocks it. Open port 443/TCP inbound |
 | Domain DNS | Does the domain resolve to server IP? | Update DNS A record |

@@ -221,6 +221,7 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml
 - Use `ansible_facts['distribution']` not `ansible_distribution` (deprecated in 2.24)
 - Docker role removes conflicting `docker.io` / `containerd` / `runc` packages only when `docker-ce` is not already installed AND no containers are running
 - `reality_dest` is derived from `reality_sni` (`{{ reality_sni }}:443`) — don't hardcode separately
+- **SNI target selection**: Never recommend apple.com or icloud.com (Apple-owned ASN — mismatch with VPS hosting is instantly detectable). Good choices: www.microsoft.com, www.twitch.tv, dl.google.com, github.com (global CDN, shared infrastructure). Best: run `meridian scan` for same-network targets.
 - **Always use context7 MCP to check up-to-date docs** before writing Ansible tasks, Docker configs, or Caddy configs — stale patterns cause real deployment failures
 - **curl|bash stdin trap**: in `install.sh` and `setup.sh` (compat shim), any command that reads stdin MUST have `</dev/null` — the `meridian` CLI runs directly so this isn't needed there, but `</dev/null` on SSH commands is still good practice
 - **Ansible debug vs shell for terminal output**: use `shell` with `printf`/`cat` for output containing ANSI codes (QR codes); `debug msg:` JSON-escapes them

@@ -54,6 +54,10 @@
     cmd: |
       printf '\n'
       printf '%s\n' '{{ reality_qr_terminal.stdout | replace("'", "'\\''") }}'
+      {% if xhttp_enabled | default(false) | bool %}
+      printf '\n'
+      printf '%s\n' '{{ xhttp_qr_terminal.stdout | replace("'", "'\\''") }}'
+      {% endif %}
       {% if domain_mode | bool %}
       printf '\n'
       printf '%s\n' '{{ wss_qr_terminal.stdout | replace("'", "'\\''") }}'
@@ -78,6 +82,11 @@
       {% else %}
       Primary (Reality, port 443):
       {{ vless_reality_url }}
+      {% endif %}
+      {% if xhttp_enabled | default(false) | bool %}
+
+      XHTTP (enhanced stealth, port 443):
+      {{ vless_xhttp_url }}
       {% endif %}
       {% if domain_mode | bool %}
 

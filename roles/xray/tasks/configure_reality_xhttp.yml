@@ -1,10 +1,12 @@
 ---
-# Create the VLESS+Reality+XHTTP inbound — relay connection endpoint.
-# Only used in exit mode (chain). The relay node connects to this inbound
-# using XHTTP transport with Reality for stealth.
+# Create the VLESS+Reality+XHTTP inbound.
 #
-# XHTTP mimics standard HTTP traffic, making relay→exit connections
-# harder to detect than raw TCP.
+# Used in two modes:
+# - Exit mode (chain): relay node connects here. Uses xhttp_uuid, email xhttp-relay-user.
+# - Standalone (--xhttp): end users connect directly. Uses reality_uuid, same identity as TCP Reality.
+#
+# XHTTP mimics standard HTTP traffic, making connections statistically
+# indistinguishable from normal browsing (post-handshake behavioral stealth).
 
 - name: Check if VLESS-Reality-XHTTP inbound already exists
   ansible.builtin.uri:
@@ -30,6 +32,13 @@
   ansible.builtin.set_fact:
     xhttp_inbound_port: "{{ (domain_mode | bool) | ternary(haproxy_reality_backend_port, 443) }}"
 
+# In exit mode: use dedicated xhttp_uuid for relay connections
+# In standalone mode: use reality_uuid so users have one identity for both transports
+- name: Set XHTTP client identity
+  ansible.builtin.set_fact:
+    xhttp_client_uuid: "{{ xhttp_uuid if (exit_mode | default(false) | bool) else reality_uuid }}"
+    xhttp_client_email: "{{ 'xhttp-relay-user' if (exit_mode | default(false) | bool) else 'xhttp-' + (first_client_name | default('default')) }}"
+
 - name: Create VLESS+Reality+XHTTP inbound
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/add"
@@ -48,11 +57,11 @@
       settings: >-
         {
           "clients": [{
-            "id": "{{ xhttp_uuid }}",
+            "id": "{{ xhttp_client_uuid }}",
             "flow": "",
-            "email": "xhttp-relay-user",
-            "limitIp": 0,
-            "totalGB": 0,
+            "email": "{{ xhttp_client_email }}",
+            "limitIp": {{ client_limit_ip | default(2) }},
+            "totalGB": {{ client_total_bytes | default(0) }},
             "expiryTime": 0,
             "enable": true,
             "tgId": "",

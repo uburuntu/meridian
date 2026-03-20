@@ -62,13 +62,15 @@ User → Relay:443 (VLESS+TCP, plain) → Exit:443 (VLESS+Reality+XHTTP) → Int
 meridian setup [IP] [flags]     Deploy proxy server
   --domain DOMAIN               Enable domain mode with CDN fallback
   --sni HOST                    Reality SNI target (default: www.microsoft.com)
+  --xhttp                       Add XHTTP transport (enhanced behavioral stealth)
   --name NAME                   Server display name
   --user USER                   SSH user (default: root)
   --yes                         Skip confirmation prompts
 
 meridian client add|list|remove NAME    Manage client access keys
 meridian server add|list|remove         Manage known servers
-meridian check [IP] [--ai]              Pre-flight server validation
+meridian check [IP] [--ai]              Pre-flight server validation + ASN check
+meridian scan [IP]                      Find optimal SNI targets on server's network
 meridian ping [IP]                      Test proxy reachability from client device
 meridian diagnostics [IP] [--ai]        Collect system info for debugging
 meridian uninstall [IP]                 Remove proxy from server
