@@ -11,7 +11,7 @@
 # =============================================================================
 set -euo pipefail
 
-MERIDIAN_VERSION="1.1.0"
+MERIDIAN_VERSION="1.2.0"
 
 # --- Directories & paths ---
 MERIDIAN_HOME="${MERIDIAN_HOME:-$HOME/.meridian}"
@@ -1031,6 +1031,24 @@ cmd_check() {
     issues=$((issues + 1))
   fi
 
+  # Clock drift check (Reality requires <30s between client and server)
+  info "Checking clock sync..."
+  local server_epoch client_epoch drift
+  server_epoch=$(run_on_server "date +%s" || true)
+  client_epoch=$(date +%s)
+  if [[ -n "$server_epoch" && "$server_epoch" =~ ^[0-9]+$ ]]; then
+    drift=$(( server_epoch - client_epoch ))
+    [[ $drift -lt 0 ]] && drift=$(( -drift ))
+    if [[ $drift -gt 30 ]]; then
+      warn "Clock drift: ${drift}s between client and server (Reality needs <30s)"
+      printf "       %s\n" "Fix: ssh root@$SERVER_IP 'timedatectl set-ntp true'"
+      printf "       %s\n" "Also check your device's date/time — enable automatic time."
+      issues=$((issues + 1))
+    else
+      ok "Clock sync OK (${drift}s drift)"
+    fi
+  fi
+
   printf "\n"
   line
   printf "\n"
@@ -1390,6 +1408,31 @@ cmd_ping() {
   printf "  ${B}Ping${R}\n"
   printf "  ${D}Testing proxy reachability from this device${R}\n"
   printf "\n"
+
+  # 0. Clock check (Reality requires client clock accurate within 30s)
+  info "Checking device clock..."
+  checks=$((checks + 1))
+  local ref_date client_epoch ref_epoch clock_drift
+  ref_date=$(curl -sI --max-time 5 "https://meridian.msu.rocks/version" 2>/dev/null | grep -i '^date:' | sed 's/^[Dd]ate: //' | tr -d '\r')
+  client_epoch=$(date +%s)
+  if [[ -n "$ref_date" ]]; then
+    ref_epoch=$(date -d "$ref_date" +%s 2>/dev/null || date -j -f "%a, %d %b %Y %H:%M:%S %Z" "$ref_date" +%s 2>/dev/null || echo "")
+    if [[ -n "$ref_epoch" && "$ref_epoch" =~ ^[0-9]+$ ]]; then
+      clock_drift=$(( client_epoch - ref_epoch ))
+      [[ $clock_drift -lt 0 ]] && clock_drift=$(( -clock_drift ))
+      if [[ $clock_drift -gt 30 ]]; then
+        warn "Device clock is off by ${clock_drift}s (Reality needs <30s)"
+        printf "       %s\n" "Enable automatic date/time in your device settings."
+        issues=$((issues + 1))
+      else
+        ok "Device clock OK"
+      fi
+    else
+      ok "Clock check skipped (date parsing unavailable)"
+    fi
+  else
+    ok "Clock check skipped (offline)"
+  fi
 
   # 1. TCP connect to port 443
   info "Connecting to $SERVER_IP:443..."
