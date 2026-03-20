@@ -106,6 +106,7 @@
         - "443"
         - "80"
         - "8444"
+        - "{{ xhttp_port }}"
       failed_when: false
 
     - name: Show uninstall summary
