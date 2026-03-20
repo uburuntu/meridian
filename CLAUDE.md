@@ -375,14 +375,12 @@ After completing a feature or fix, **always bump the version as part of the comm
 
 CI validates that `VERSION` and `MERIDIAN_VERSION` match on every push.
 
-## Backlog (from user research)
+## Backlog
 
-Features identified from community feedback (5500-message Telegram VPN chat analysis):
-
-- **Proactive IP block notification**: cron-based `meridian ping` → Telegram/webhook alert when server becomes unreachable. High value for users who don't check proactively.
-- **Self-steal mode**: Reality masquerades as your own domain (eliminates all IP/ASN/cert mismatches). Architectural change: Reality fallback replaces HAProxy SNI routing. Good hygiene but not a silver bullet (behavioral analysis affects both self-steal and external SNI equally per 2026 research).
-- **Zero-to-VPN onboarding page**: Guided wizard on meridian.msu.rocks for non-technical users (VPS selection → SSH keys → `meridian setup`). Content work, not code.
-- **Password-protected connection page**: PIN/password on the domain-mode connection info page for family sharing without exposing links publicly.
+- **Proactive IP block notification**: scheduled reachability check → alert (Telegram/webhook) when server becomes unreachable
+- **Self-steal mode**: Reality masquerades as your own domain (Reality fallback replaces HAProxy SNI routing). Good hygiene but not a silver bullet — behavioral analysis affects both self-steal and external SNI equally
+- **Zero-to-VPN onboarding page**: guided wizard on meridian.msu.rocks for non-technical users (VPS selection → SSH keys → `meridian setup`)
+- **Password-protected connection page**: PIN/password on the domain-mode connection info page for family sharing
 
 ## Known issues / tech debt
 
