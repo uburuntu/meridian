@@ -11,7 +11,7 @@
 # =============================================================================
 set -euo pipefail
 
-MERIDIAN_VERSION="1.2.1"
+MERIDIAN_VERSION="1.2.2"
 
 # --- Directories & paths ---
 MERIDIAN_HOME="${MERIDIAN_HOME:-$HOME/.meridian}"
@@ -303,7 +303,7 @@ check_for_update() {
       local now age
       now=$(date +%s)
       age=$(( now - last_check ))
-      [[ $age -lt 86400 ]] && return 0
+      [[ $age -lt 60 ]] && return 0
     fi
   fi
 
