@@ -112,7 +112,11 @@
 - name: Verify XHTTP Reality inbound was created successfully
   ansible.builtin.assert:
     that: xhttp_create_result.json.success | default(false)
-    fail_msg: "Failed to create XHTTP Reality inbound: {{ xhttp_create_result.json.msg | default('unknown error') }}"
+    fail_msg: >-
+      Failed to create XHTTP Reality inbound: {{ xhttp_create_result.json.msg | default('unknown error') }}.
+      This usually means a previous install left a corrupted database.
+      Fix: run 'meridian uninstall {{ server_public_ip }}' then retry setup.
+      If the problem persists, open an issue: https://github.com/uburuntu/meridian/issues
   when: not (xhttp_inbound_exists | bool)
 
 - name: Show XHTTP Reality inbound status

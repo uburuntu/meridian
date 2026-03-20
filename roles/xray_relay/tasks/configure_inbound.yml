@@ -71,7 +71,11 @@
 - name: Verify relay inbound was created successfully
   ansible.builtin.assert:
     that: relay_inbound_result.json.success | default(false)
-    fail_msg: "Failed to create relay inbound: {{ relay_inbound_result.json.msg | default('unknown error') }}"
+    fail_msg: >-
+      Failed to create relay inbound: {{ relay_inbound_result.json.msg | default('unknown error') }}.
+      This usually means a previous install left a corrupted database.
+      Fix: run 'meridian uninstall {{ server_public_ip }}' then retry setup.
+      If the problem persists, open an issue: https://github.com/uburuntu/meridian/issues
   when: not (relay_inbound_exists | bool)
 
 - name: Show relay inbound status
