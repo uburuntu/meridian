@@ -26,6 +26,7 @@ TARBALL_URL="https://github.com/uburuntu/meridian/archive/refs/tags/v${MERIDIAN_
 TARBALL_FALLBACK_URL="https://github.com/uburuntu/meridian/archive/refs/heads/main.tar.gz"
 VERSION_URL="https://meridian.msu.rocks/version"
 CLI_URL="https://meridian.msu.rocks/meridian"
+CHECKSUMS_URL="https://meridian.msu.rocks/SHA256SUMS"
 AI_DOCS_URL="https://meridian.msu.rocks/ai/reference.md"
 
 # --- State (set during execution) ---
@@ -283,6 +284,21 @@ do_self_update() {
     return 1
 
   [[ "$new_cli" == *"MERIDIAN_VERSION"* ]] || return 1
+
+  # Verify SHA256 checksum if available
+  local checksums
+  checksums=$(curl -sSf "$CHECKSUMS_URL" </dev/null 2>/dev/null) || true
+  if [[ -n "$checksums" ]]; then
+    local expected_hash actual_hash
+    expected_hash=$(echo "$checksums" | grep '  meridian$' | awk '{print $1}')
+    if [[ -n "$expected_hash" ]]; then
+      actual_hash=$(printf '%s\n' "$new_cli" | { sha256sum 2>/dev/null || shasum -a 256; } | awk '{print $1}')
+      if [[ "$actual_hash" != "$expected_hash" ]]; then
+        warn "Update checksum mismatch — skipping (expected: ${expected_hash:0:12}…, got: ${actual_hash:0:12}…)"
+        return 1
+      fi
+    fi
+  fi
 
   printf '%s\n' "$new_cli" > "$self_path"
   chmod +x "$self_path"
