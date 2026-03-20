@@ -549,9 +549,14 @@ install_cli_on_server() {
   self_path=$(command -v meridian 2>/dev/null || echo "")
   if [[ -n "$self_path" && -f "$self_path" ]]; then
     info "Installing meridian CLI on server..."
-    scp -o BatchMode=yes "$self_path" "${ANSIBLE_USER}@${SERVER_IP}:/usr/local/bin/meridian" </dev/null 2>/dev/null && \
-      ok "CLI installed on server" || \
+    if scp -o BatchMode=yes "$self_path" "${ANSIBLE_USER}@${SERVER_IP}:/usr/local/bin/meridian" </dev/null 2>/dev/null; then
+      ok "CLI installed on server"
+    elif scp -o BatchMode=yes "$self_path" "${ANSIBLE_USER}@${SERVER_IP}:/tmp/meridian-cli" </dev/null 2>/dev/null && \
+         ssh -o BatchMode=yes "${ANSIBLE_USER}@${SERVER_IP}" "sudo mv /tmp/meridian-cli /usr/local/bin/meridian && sudo chmod +x /usr/local/bin/meridian" </dev/null 2>/dev/null; then
+      ok "CLI installed on server"
+    else
       warn "Could not install CLI on server (non-critical)"
+    fi
   fi
 }
 
