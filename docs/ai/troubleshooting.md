@@ -133,7 +133,7 @@ Add --ai to check or diagnostics for an AI-ready prompt.
 
 ## SNI Target Selection
 
-The SNI target is the domain that Reality impersonates. Choosing the wrong one can make the proxy detectable.
+The SNI target is the domain that Reality impersonates. Choosing the wrong one can increase detection risk, though current evidence (IMC 2022, net4people, 2026 research) shows censors rely more on behavioral analysis than IP→domain validation.
 
 **Good SNI targets** (global CDN, shared hosting infrastructure):
 - `www.microsoft.com` (default) — Azure CDN, global presence
@@ -141,11 +141,16 @@ The SNI target is the domain that Reality impersonates. Choosing the wrong one c
 - `dl.google.com` — Google CDN, global
 - `github.com` — Fastly CDN, global
 
-**Bad SNI targets** (proprietary ASN, instant detection):
-- `apple.com`, `icloud.com` — Apple controls its own ASN ranges. If your VPS is on Hetzner/OVH/DigitalOcean and claims to be Apple, the ASN mismatch is immediately visible to censors.
-- Small/niche websites — ASN inconsistencies are flagged instantly.
+**Bad SNI targets** (proprietary ASN):
+- `apple.com`, `icloud.com` — Apple controls its own ASN ranges. IP/ASN mismatch is a known research-identified detection vector.
+- Small/niche single-IP websites — unusual for a VPS IP to serve them.
 
-**Best practice:** Run `meridian scan` to find optimal SNI targets from the same network/datacenter as your server. This uses RealiTLScanner to discover nearby domains with valid TLS certificates.
+**Options for SNI selection:**
+1. **Global CDN domain** (default) — safe, widely used, no ASN mismatch with major CDN providers
+2. **Same-network domain** via `meridian scan` — finds domains on your subnet for ASN consistency
+3. **Self-steal** (your own domain) — run a real website, use Reality to masquerade as yourself. Eliminates all IP/ASN/cert mismatches. Requires domain mode (`--domain`). Meridian's domain mode partially supports this — future versions may add full self-steal.
+
+**What actually matters more than SNI choice:** The real detection threat in 2026 is post-handshake behavioral analysis (traffic patterns, packet timing, session duration). XHTTP transport (`--xhttp`) directly addresses this by making tunnel traffic look like normal HTTP browsing. SNI choice is secondary.
 
 ## Interpreting `meridian check` Output
 

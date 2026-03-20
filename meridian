@@ -1189,7 +1189,8 @@ cmd_scan() {
     printf "\n"
     ok "Saved: $selected"
     printf "  ${D}Use it: meridian setup $SERVER_IP --sni $selected${R}\n"
-    printf "  ${D}Or it will be suggested automatically during setup.${R}\n\n"
+    printf "  ${D}Or it will be suggested automatically during setup.${R}\n"
+    printf "  ${D}Tip: with --domain, your own domain works as SNI too (self-steal).${R}\n\n"
   else
     info "Skipped. You can set SNI manually with --sni flag."
     printf "\n"
