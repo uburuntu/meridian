@@ -22,15 +22,14 @@
     method: POST
     headers:
       Cookie: "{{ session_cookie }}"
-      Content-Type: "application/x-www-form-urlencoded"
-    body_format: form-urlencoded
+    body_format: json
     body:
       remark: "VLESS-Relay-User"
-      enable: "true"
-      port: "{{ relay_inbound_port | default(443) }}"
+      enable: true
+      port: "{{ relay_inbound_port | default(443) | int }}"
       protocol: "vless"
-      expiryTime: "0"
-      total: "0"
+      expiryTime: 0
+      total: 0
       settings: >-
         {
           "clients": [{

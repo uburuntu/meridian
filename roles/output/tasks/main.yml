@@ -46,6 +46,15 @@
   changed_when: false
   when: exit_mode | default(false) | bool
 
+- name: Verify XHTTP port is listening
+  ansible.builtin.command:
+    cmd: "ss -tlnp sport = :{{ xhttp_inbound_port }}"
+  register: port_xhttp_check
+  changed_when: false
+  when:
+    - xhttp_enabled | default(false) | bool
+    - not (exit_mode | default(false) | bool)
+
 # -- Print output directly to terminal (bypasses Ansible's JSON-escaping) --
 # Using shell echo instead of debug so ANSI QR codes render properly.
 
@@ -74,6 +83,9 @@
       {% if exit_mode | default(false) | bool %}
       Port {{ reality_direct_port | default(8444) }}: {{ 'OK' if port_direct_check.stdout | length > 50 else 'NOT LISTENING' }}
       {% endif %}
+      {% if xhttp_enabled | default(false) | bool and not (exit_mode | default(false) | bool) %}
+      Port {{ xhttp_inbound_port }} (XHTTP): {{ 'OK' if port_xhttp_check.stdout | length > 50 else 'NOT LISTENING — run: docker logs 3x-ui' }}
+      {% endif %}
 
       --- Connection URLs ---
       {% if exit_mode | default(false) | bool %}
@@ -85,7 +97,7 @@
       {% endif %}
       {% if xhttp_enabled | default(false) | bool %}
 
-      XHTTP (enhanced stealth, port 443):
+      XHTTP (enhanced stealth, port {{ xhttp_inbound_port }}):
       {{ vless_xhttp_url }}
       {% endif %}
       {% if domain_mode | bool %}

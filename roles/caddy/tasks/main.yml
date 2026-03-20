@@ -119,7 +119,7 @@
 - name: Build XHTTP URL for server-hosted page
   ansible.builtin.set_fact:
     vless_xhttp_url: >-
-      vless://{{ reality_uuid }}@{{ server_public_ip }}:443?encryption=none&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=xhttp&mode={{ xhttp_mode | default('packet-up') }}&path=%2F#VLESS-XHTTP
+      vless://{{ reality_uuid }}@{{ server_public_ip }}:{{ xhttp_inbound_port }}?encryption=none&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=xhttp&mode={{ xhttp_mode | default('packet-up') }}&path=%2F#VLESS-XHTTP
   when: xhttp_enabled | default(false) | bool
 
 - name: Generate XHTTP QR code as base64 PNG

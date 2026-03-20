@@ -60,10 +60,9 @@
     method: POST
     headers:
       Cookie: "{{ session_cookie }}"
-      Content-Type: "application/x-www-form-urlencoded"
-    body_format: form-urlencoded
+    body_format: json
     body:
-      id: "{{ reality_inbound_id }}"
+      id: "{{ reality_inbound_id | int }}"
       settings: >-
         {
           "clients": [{
@@ -96,10 +95,9 @@
     method: POST
     headers:
       Cookie: "{{ session_cookie }}"
-      Content-Type: "application/x-www-form-urlencoded"
-    body_format: form-urlencoded
+    body_format: json
     body:
-      id: "{{ wss_inbound_id }}"
+      id: "{{ wss_inbound_id | int }}"
       settings: >-
         {
           "clients": [{
@@ -134,10 +132,9 @@
     method: POST
     headers:
       Cookie: "{{ session_cookie }}"
-      Content-Type: "application/x-www-form-urlencoded"
-    body_format: form-urlencoded
+    body_format: json
     body:
-      id: "{{ xhttp_inbound_id }}"
+      id: "{{ xhttp_inbound_id | int }}"
       settings: >-
         {
           "clients": [{

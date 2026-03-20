@@ -76,6 +76,7 @@
 - name: Extract XHTTP inbound details
   ansible.builtin.set_fact:
     xhttp_inbound_id: "{{ xhttp_inbound.id }}"
+    xhttp_inbound_port: "{{ xhttp_inbound.port }}"
     xhttp_clients: "{{ (xhttp_inbound.settings | from_json).clients }}"
   when: xhttp_inbound is not none
 

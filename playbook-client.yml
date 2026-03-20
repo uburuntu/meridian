@@ -51,6 +51,7 @@
       ansible.builtin.set_fact:
         domain_mode: "{{ saved_creds.domain | default('') | length > 0 }}"
         domain: "{{ saved_creds.domain | default('') }}"
+        xhttp_enabled: "{{ saved_creds.xhttp_enabled | default(false) }}"
 
     - name: Check qrencode dependency (for add action)
       ansible.builtin.include_tasks: roles/shared/tasks/check_qrencode.yml

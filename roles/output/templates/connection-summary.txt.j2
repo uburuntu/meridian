@@ -18,7 +18,7 @@ Password: {{ panel_password }}
 {{ vless_reality_url }}
 
 {% if xhttp_enabled | default(false) | bool %}
---- XHTTP: VLESS + Reality + XHTTP (enhanced stealth, port 443) ---
+--- XHTTP: VLESS + Reality + XHTTP (enhanced stealth, port {{ xhttp_inbound_port }}) ---
 {{ vless_xhttp_url }}
 
 {% endif %}

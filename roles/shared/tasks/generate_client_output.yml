@@ -18,7 +18,7 @@
 - name: "Build Reality+XHTTP VLESS URL for {{ client_name }}"
   ansible.builtin.set_fact:
     vless_xhttp_url: >-
-      vless://{{ client_reality_uuid }}@{{ server_public_ip }}:443?encryption=none&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=xhttp&mode={{ xhttp_mode | default('packet-up') }}&path=%2F#{{ client_name }}-XHTTP
+      vless://{{ client_reality_uuid }}@{{ server_public_ip }}:{{ xhttp_inbound_port }}?encryption=none&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=xhttp&mode={{ xhttp_mode | default('packet-up') }}&path=%2F#{{ client_name }}-XHTTP
   when: xhttp_enabled | default(false) | bool
 
 - name: Set empty XHTTP URL when disabled

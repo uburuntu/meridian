@@ -11,7 +11,7 @@
 # =============================================================================
 set -euo pipefail
 
-MERIDIAN_VERSION="1.2.0"
+MERIDIAN_VERSION="1.2.1"
 
 # --- Directories & paths ---
 MERIDIAN_HOME="${MERIDIAN_HOME:-$HOME/.meridian}"

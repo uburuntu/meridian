@@ -112,9 +112,11 @@ MOCK_VARS = {
     "reality_short_id": "abcd1234",
     "xhttp_uuid": "test-xhttp-uuid",
     "xhttp_enabled": True,
-    "vless_xhttp_url": "vless://test-uuid@1.2.3.4:443?security=reality&type=xhttp#Test-XHTTP",
+    "xhttp_inbound_port": 34567,
+    "vless_xhttp_url": "vless://test-uuid@1.2.3.4:34567?security=reality&type=xhttp#Test-XHTTP",
     "xhttp_qr_terminal": MockResult(stdout="QR_CODE_HERE"),
     "xhttp_qr_b64_local": MockResult(),
+    "port_xhttp_check": MockResult(stdout="LISTEN 0 4096 *:34567"),
     "client_name": "default",
     "first_client_name": "default",
 }
