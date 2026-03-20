@@ -69,6 +69,16 @@
     wss_clients: "{{ (wss_inbound.settings | from_json).clients }}"
   when: domain_mode | bool and wss_inbound is not none
 
+- name: Find XHTTP inbound
+  ansible.builtin.set_fact:
+    xhttp_inbound: "{{ inbounds_list.json.obj | default([]) | selectattr('remark', 'equalto', 'VLESS-Reality-XHTTP') | list | first | default(None) }}"
+
+- name: Extract XHTTP inbound details
+  ansible.builtin.set_fact:
+    xhttp_inbound_id: "{{ xhttp_inbound.id }}"
+    xhttp_clients: "{{ (xhttp_inbound.settings | from_json).clients }}"
+  when: xhttp_inbound is not none
+
 # -- Dispatch to action --
 - name: Add client
   ansible.builtin.include_tasks: add_client.yml

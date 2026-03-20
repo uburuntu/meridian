@@ -63,6 +63,29 @@
     fail_msg: "Failed to remove client from WSS inbound: {{ wss_del_result.json.msg | default('unknown error') }}"
   when: domain_mode | bool and (wss_client_match | default([]) | length > 0)
 
+# -- Delete from XHTTP inbound (if exists, by UUID) --
+- name: Find XHTTP client by email
+  ansible.builtin.set_fact:
+    xhttp_client_match: "{{ xhttp_clients | default([]) | selectattr('email', 'equalto', 'xhttp-' + client_name) | list }}"
+  when: xhttp_inbound_id is defined
+
+- name: Remove client from XHTTP inbound
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/{{ xhttp_inbound_id }}/delClient/{{ xhttp_client_match[0].id }}"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: xhttp_del_result
+  no_log: true
+  when: xhttp_inbound_id is defined and (xhttp_client_match | default([]) | length > 0)
+
+- name: Verify XHTTP client was removed
+  ansible.builtin.assert:
+    that: xhttp_del_result.json.success | default(false)
+    fail_msg: "Failed to remove client from XHTTP inbound: {{ xhttp_del_result.json.msg | default('unknown error') }}"
+  when: xhttp_inbound_id is defined and (xhttp_client_match | default([]) | length > 0)
+
 # -- Update local clients tracking file --
 - name: Load existing clients file
   ansible.builtin.include_vars:
@@ -110,5 +133,6 @@
     msg: |
       Client '{{ client_name }}' has been removed.
       - Removed from Reality inbound
+      {{ '- Removed from XHTTP inbound' if (xhttp_client_match | default([]) | length > 0) else '' }}
       {{ '- Removed from WSS inbound' if (wss_client_match | default([]) | length > 0) else '' }}
       - Deleted local connection files

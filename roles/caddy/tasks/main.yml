@@ -116,6 +116,19 @@
   register: reality_qr_b64
   changed_when: false
 
+- name: Build XHTTP URL for server-hosted page
+  ansible.builtin.set_fact:
+    vless_xhttp_url: >-
+      vless://{{ reality_uuid }}@{{ server_public_ip }}:443?encryption=none&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=xhttp&mode={{ xhttp_mode | default('packet-up') }}&path=%2F#VLESS-XHTTP
+  when: xhttp_enabled | default(false) | bool
+
+- name: Generate XHTTP QR code as base64 PNG
+  ansible.builtin.shell:
+    cmd: printf '%s' '{{ vless_xhttp_url }}' | qrencode -t PNG -o - -s 6 | base64 -w0
+  register: xhttp_qr_b64
+  changed_when: false
+  when: xhttp_enabled | default(false) | bool
+
 - name: Generate WSS QR code as base64 PNG
   ansible.builtin.shell:
     cmd: printf '%s' '{{ vless_wss_url }}' | qrencode -t PNG -o - -s 6 | base64 -w0

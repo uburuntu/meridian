@@ -606,6 +606,27 @@ cmd_setup() {
   SERVER_IP="$server_ip"
   prepare_server true
 
+  # Suggest scanned SNI if available and no --sni was given
+  if [[ -z "$sni" ]]; then
+    local scanned_sni=""
+    local creds_check="$CREDS_BASE/$SERVER_IP"
+    if [[ -f "$creds_check/proxy.yml" ]]; then
+      scanned_sni=$(grep '^scanned_sni:' "$creds_check/proxy.yml" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
+    fi
+    if [[ -n "$scanned_sni" ]]; then
+      info "Detected optimal SNI from scan: $scanned_sni"
+      if [[ "$yes" == true ]]; then
+        sni="$scanned_sni"
+      else
+        local use_scanned=""
+        prompt use_scanned "Use $scanned_sni as SNI target? (Y/n)"
+        if [[ "$use_scanned" != "n" && "$use_scanned" != "N" ]]; then
+          sni="$scanned_sni"
+        fi
+      fi
+    fi
+  fi
+
   local play_args=()
   [[ -n "$domain" ]] && play_args+=(-e "domain=$domain")
   [[ -n "$email" ]]  && play_args+=(-e "email=$email")
@@ -880,8 +901,8 @@ cmd_check() {
           printf "       %s\n" "Use a global CDN domain: www.microsoft.com, www.twitch.tv, github.com"
           issues=$((issues + 1))
         else
-          ok "SNI target is on a different ASN (server: $server_org, SNI: $sni_org)"
-          printf "       %s\n" "This is fine for global CDN domains. Run 'meridian scan' for same-network targets."
+          info "SNI on different ASN (server: $server_org, SNI: $sni_org)"
+          printf "       %s\n" "Fine for global CDN domains. For best stealth, run: meridian scan"
         fi
       fi
     else
@@ -1037,15 +1058,13 @@ cmd_scan() {
 
   # Run scan on the server's subnet
   info "Scanning $server_cidr for TLS targets (this takes 30-60 seconds)..."
-  run_on_server "cd /tmp && rm -f out.csv && timeout 90 ./realitlscanner -addr '$server_cidr' -thread 4 -timeout 5 >/dev/null 2>&1" || true
+  run_on_server "cd /tmp && timeout 90 ./realitlscanner -addr '$server_cidr' -out /tmp/meridian-scan.csv -thread 4 -timeout 5 >/dev/null 2>&1" || true
 
-  # Clean up binary (keep out.csv for parsing)
+  # Clean up binary, read CSV, then clean CSV
   run_on_server "rm -f /tmp/realitlscanner" 2>/dev/null || true
-
-  # Read CSV results
   local csv_output
-  csv_output=$(run_on_server "cat /tmp/out.csv 2>/dev/null" || true)
-  run_on_server "rm -f /tmp/out.csv" 2>/dev/null || true
+  csv_output=$(run_on_server "cat /tmp/meridian-scan.csv 2>/dev/null" || true)
+  run_on_server "rm -f /tmp/meridian-scan.csv" 2>/dev/null || true
 
   if [[ -z "$csv_output" || "$csv_output" == "IP,ORIGIN,CERT_DOMAIN,CERT_ISSUER,GEO_CODE" ]]; then
     warn "Scan produced no results. The server may have limited network visibility."

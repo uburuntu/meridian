@@ -145,6 +145,17 @@ body{
   <div class="url" onclick="cp(this)" data-url="{{ vless_reality_url }}">{{ vless_reality_url }}<span class="url-hint"><span data-t="copy.hint">tap to copy</span></span></div>
 </div>
 
+{% if xhttp_enabled | default(false) | bool %}
+<!-- XHTTP -->
+<div class="card card-blue">
+  <div class="card-label"><i></i> XHTTP</div>
+  <p class="card-desc">Enhanced stealth via XHTTP transport. Harder to detect under traffic analysis.</p>
+  <a href="{{ vless_xhttp_url }}" class="open-btn" data-t="open">Open in App</a>
+  <div class="qr"><img src="data:image/png;base64,{{ xhttp_qr_b64_local.stdout }}" alt="QR" loading="lazy"></div>
+  <div class="url" onclick="cp(this)" data-url="{{ vless_xhttp_url }}">{{ vless_xhttp_url }}<span class="url-hint"><span data-t="copy.hint">tap to copy</span></span></div>
+</div>
+{% endif %}
+
 {% if domain_mode | bool %}
 <!-- Backup -->
 <div class="card card-amber">

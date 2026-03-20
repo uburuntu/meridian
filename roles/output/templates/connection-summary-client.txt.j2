@@ -7,6 +7,11 @@
 --- Primary: VLESS + Reality (port 443) ---
 {{ vless_reality_url }}
 
+{% if xhttp_enabled | default(false) | bool %}
+--- XHTTP: VLESS + Reality + XHTTP (enhanced stealth) ---
+{{ vless_xhttp_url }}
+
+{% endif %}
 {% if domain_mode | bool %}
 --- Fallback: VLESS + WSS + CDN ---
 {{ vless_wss_url }}

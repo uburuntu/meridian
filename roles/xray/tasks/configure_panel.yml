@@ -128,7 +128,7 @@
           reality_sni: "{{ reality_sni }}"
           wss_uuid: "{{ wss_uuid }}"
           xhttp_uuid: "{{ xhttp_uuid | default('') }}"
-          xhttp_enabled: {{ xhttp_enabled | default(false) | bool }}
+          xhttp_enabled: {{ xhttp_enabled | default(false) | bool | ternary('true', 'false') }}
           exit_ip: "{{ server_public_ip }}"
           domain: "{{ domain | default('') }}"
         dest: "{{ credentials_file }}"

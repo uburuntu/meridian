@@ -17,6 +17,11 @@ Password: {{ panel_password }}
 --- Primary: VLESS + Reality (port 443) ---
 {{ vless_reality_url }}
 
+{% if xhttp_enabled | default(false) | bool %}
+--- XHTTP: VLESS + Reality + XHTTP (enhanced stealth, port 443) ---
+{{ vless_xhttp_url }}
+
+{% endif %}
 {% if domain_mode | bool %}
 --- Fallback: VLESS + WSS + CDN ---
 {{ vless_wss_url }}
