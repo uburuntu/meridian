@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -9,7 +10,12 @@ from meridian.console import err_console, fail, info, ok
 
 
 class ServerConnection:
-    """Manage SSH connections to a remote server."""
+    """Manage SSH connections to a remote server.
+
+    Non-root remote users: Ansible handles privilege escalation via ansible_become.
+    Non-root local users: CLI detects and suggests `sudo meridian`.
+    Passwordless sudo is required (standard on AWS/GCP/Azure/DO).
+    """
 
     def __init__(self, ip: str, user: str = "root", local_mode: bool = False) -> None:
         self.ip = ip
@@ -67,33 +73,48 @@ class ServerConnection:
             fail("ssh command not found. Please install OpenSSH client.")
 
     def detect_local_mode(self) -> bool:
-        """Check if we're running on the target server itself."""
+        """Check if we're running on the target server itself.
+
+        Local mode requires root access to /etc/meridian/. If we detect we're
+        on the server but not root, we suggest `sudo meridian` instead.
+        """
         from meridian.config import SERVER_CREDS_DIR
 
-        if (SERVER_CREDS_DIR / "proxy.yml").exists():
+        # Check if /etc/meridian/proxy.yml is readable (root only)
+        proxy = SERVER_CREDS_DIR / "proxy.yml"
+        try:
+            if proxy.is_file() and proxy.stat().st_size > 0:
+                self.local_mode = True
+                return True
+        except (PermissionError, OSError):
+            # We can see the directory exists but can't read — non-root on server
+            if _is_on_server(self.ip):
+                self_bin = shutil.which("meridian") or "~/.local/bin/meridian"
+                err_console.print(
+                    "\n  [warn]![/warn] Running on the server as non-root. Meridian needs root to access credentials."
+                )
+                err_console.print(f"  [dim]Run with sudo:  sudo -E {self_bin} setup {self.ip}[/dim]")
+                err_console.print(f"  [dim]Or from laptop:  meridian setup {self.ip} --user {self.user}[/dim]\n")
+                fail("Root access required on the server itself")
+            return False
+
+        # Check if our public IP matches the target (root without prior deploy)
+        if _is_on_server(self.ip):
             self.local_mode = True
             return True
 
-        # Compare local IP with server IP
-        try:
-            result = subprocess.run(
-                ["curl", "-4", "-s", "--max-time", "3", "https://ifconfig.me"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                stdin=subprocess.DEVNULL,
-            )
-            if result.returncode == 0 and result.stdout.strip() == self.ip:
-                self.local_mode = True
-                return True
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
         return False
 
     def fetch_credentials(self, local_creds_dir: Path) -> bool:
-        """Fetch credentials from server's /etc/meridian/ via SSH."""
+        """Fetch credentials from server's /etc/meridian/ via SCP.
+
+        In local mode (root), copies directly from /etc/meridian/.
+        In remote mode, uses SCP.
+        """
         if self.local_mode:
-            return False
+            return self._copy_local_credentials(local_creds_dir)
+
+        local_creds_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         try:
             result = subprocess.run(
                 [
@@ -128,4 +149,43 @@ class ServerConnection:
                 return True
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
+        return False
+
+    def _copy_local_credentials(self, local_creds_dir: Path) -> bool:
+        """Copy credentials from /etc/meridian/ in local mode (root)."""
+        from meridian.config import SERVER_CREDS_DIR
+
+        src = SERVER_CREDS_DIR / "proxy.yml"
+        dst = local_creds_dir / "proxy.yml"
+
+        if dst == src:
+            return True
+
+        try:
+            if src.is_file():
+                local_creds_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+                shutil.copy2(str(src), str(dst))
+                dst.chmod(0o600)
+                clients_src = SERVER_CREDS_DIR / "proxy-clients.yml"
+                if clients_src.is_file():
+                    shutil.copy2(str(clients_src), str(local_creds_dir / "proxy-clients.yml"))
+                    (local_creds_dir / "proxy-clients.yml").chmod(0o600)
+                return True
+        except (PermissionError, OSError):
+            pass
+        return False
+
+
+def _is_on_server(ip: str) -> bool:
+    """Check if our public IP matches the target server's IP."""
+    try:
+        result = subprocess.run(
+            ["curl", "-4", "-s", "--max-time", "3", "https://ifconfig.me"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            stdin=subprocess.DEVNULL,
+        )
+        return result.returncode == 0 and result.stdout.strip() == ip
+    except (subprocess.TimeoutExpired, FileNotFoundError):
         return False

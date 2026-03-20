@@ -29,12 +29,19 @@ class ResolvedServer:
 
 
 def _detect_local_mode_from_creds() -> str | None:
-    """Check if /etc/meridian/proxy.yml exists and extract exit_ip."""
+    """Check if /etc/meridian/proxy.yml is readable and extract exit_ip.
+
+    Only succeeds for root. Non-root users can't read /etc/meridian/
+    and will use the remote SSH path instead.
+    """
     proxy = SERVER_CREDS_DIR / "proxy.yml"
-    if not proxy.exists():
+    try:
+        if not proxy.is_file():
+            return None
+        creds = ServerCredentials.load(proxy)
+        return creds.exit_ip or None
+    except (PermissionError, OSError):
         return None
-    creds = ServerCredentials.load(proxy)
-    return creds.exit_ip or None
 
 
 def resolve_server(
@@ -45,19 +52,7 @@ def resolve_server(
 ) -> ResolvedServer:
     """Resolve which server to target.
 
-    Priority: explicit IP > --server flag > local mode > single registered > fail.
-
-    Args:
-        registry: The server registry to search.
-        requested_server: Value of --server flag (IP or name).
-        explicit_ip: Positional IP argument from the command.
-        user: SSH user (default root).
-
-    Returns:
-        ResolvedServer with all fields populated.
-
-    Raises:
-        typer.Exit: via fail() if resolution is impossible.
+    Priority: explicit IP > --server flag > local mode (root) > single registered > fail.
     """
     ip = ""
     local_mode = False
@@ -77,7 +72,7 @@ def resolve_server(
         else:
             fail(f"Server '{requested_server}' not found. Run: meridian server list")
 
-    # 3. Running on the server itself — /etc/meridian/ exists
+    # 3. Running on the server itself as root — /etc/meridian/ readable
     else:
         local_ip = _detect_local_mode_from_creds()
         if local_ip:
@@ -102,7 +97,6 @@ def resolve_server(
             fail("Specify a server with --server")
 
         else:
-            # 0 servers — caller should handle this
             fail("No servers configured. Run: meridian setup")
 
     # Determine creds_dir
@@ -123,7 +117,11 @@ def resolve_server(
 
 
 def ensure_server_connection(resolved: ResolvedServer) -> None:
-    """Detect local mode if not already set, then verify SSH connectivity."""
+    """Detect local mode if not already set, then verify SSH connectivity.
+
+    Local mode only activates for root (who can read /etc/meridian/).
+    Non-root on server gets a helpful error suggesting `sudo meridian`.
+    """
     if not resolved.local_mode:
         if resolved.conn.detect_local_mode():
             resolved.local_mode = True
@@ -134,7 +132,10 @@ def ensure_server_connection(resolved: ResolvedServer) -> None:
 def fetch_credentials(resolved: ResolvedServer) -> bool:
     """Fetch credentials from server if not available locally."""
     proxy_file = resolved.creds_dir / "proxy.yml"
-    if proxy_file.exists():
-        return True
+    try:
+        if proxy_file.is_file():
+            return True
+    except (PermissionError, OSError):
+        pass
     resolved.creds_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     return resolved.conn.fetch_credentials(resolved.creds_dir)

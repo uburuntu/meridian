@@ -8,8 +8,31 @@ import subprocess
 from importlib.resources import files as pkg_files
 from pathlib import Path
 
-from meridian.config import MERIDIAN_HOME
+from meridian.config import MERIDIAN_HOME, is_macos
 from meridian.console import fail, info, ok, warn
+
+
+def _extend_path_for_pip_user() -> None:
+    """Add pip --user bin directories to PATH so newly installed tools are found."""
+    import glob
+    import sys
+
+    dirs_to_add = [
+        os.path.expanduser("~/.local/bin"),  # Linux
+    ]
+    if is_macos():
+        # macOS pip3 --user installs to ~/Library/Python/X.Y/bin
+        py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+        dirs_to_add.append(os.path.expanduser(f"~/Library/Python/{py_ver}/bin"))
+        # Also check glob pattern for other versions
+        for d in glob.glob(os.path.expanduser("~/Library/Python/*/bin")):
+            dirs_to_add.append(d)
+
+    current_path = os.environ.get("PATH", "")
+    for d in dirs_to_add:
+        if os.path.isdir(d) and d not in current_path:
+            os.environ["PATH"] = d + os.pathsep + current_path
+            current_path = os.environ["PATH"]
 
 
 def get_playbooks_dir() -> Path:
@@ -49,6 +72,11 @@ def ensure_ansible() -> None:
     if shutil.which("ansible-playbook"):
         return
 
+    # Maybe it's installed but not on PATH (pip --user)
+    _extend_path_for_pip_user()
+    if shutil.which("ansible-playbook"):
+        return
+
     info("Installing Ansible...")
 
     # Try pipx first
@@ -72,6 +100,7 @@ def ensure_ansible() -> None:
             stdin=subprocess.DEVNULL,
         )
         if result.returncode == 0:
+            _extend_path_for_pip_user()
             ok("Ansible installed via pip3")
             return
 
@@ -83,6 +112,7 @@ def ensure_ansible() -> None:
             stdin=subprocess.DEVNULL,
         )
         if result.returncode == 0:
+            _extend_path_for_pip_user()
             ok("Ansible installed via pip3")
             return
 
@@ -120,7 +150,7 @@ def ensure_collections(playbooks_dir: Path) -> None:
 
     for attempt in range(1, 4):
         result = subprocess.run(
-            ["ansible-galaxy", "collection", "install", "-r", str(req_file), "--quiet"],
+            ["ansible-galaxy", "collection", "install", "-r", str(req_file)],
             capture_output=True,
             text=True,
         )
@@ -129,7 +159,7 @@ def ensure_collections(playbooks_dir: Path) -> None:
         if attempt < 3:
             warn(f"Collection install attempt {attempt}/3 failed, retrying...")
 
-    # Final attempt without --quiet for error visibility
+    # Final attempt — show output for debugging
     subprocess.run(
         ["ansible-galaxy", "collection", "install", "-r", str(req_file)],
     )
@@ -162,6 +192,9 @@ def run_playbook(
 
     env = os.environ.copy()
     env["ANSIBLE_CONFIG"] = str(playbooks_dir / "ansible.cfg")
+    # Work around /dev/shm errors on macOS (no shared memory support)
+    if is_macos():
+        env["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
 
     result = subprocess.run(cmd, cwd=str(playbooks_dir), env=env)
     return result.returncode
