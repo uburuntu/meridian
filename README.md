@@ -103,4 +103,12 @@ Full documentation, interactive command builder, and setup guides:
 
 Not connecting? Run `meridian ping` to check if the server is reachable, or use the [web-based ping tool](https://meridian.msu.rocks/ping).
 
-Something else not working? Run `meridian diagnostics` and [open an issue](https://github.com/uburuntu/meridian/issues).
+Something else not working? Get instant AI-powered help:
+
+```bash
+meridian diagnostics --ai        # copies an AI-ready prompt to clipboard
+```
+
+Paste the prompt into ChatGPT, Claude, or any AI assistant for personalized troubleshooting.
+
+Or [open an issue](https://github.com/uburuntu/meridian/issues) with `meridian diagnostics` output.

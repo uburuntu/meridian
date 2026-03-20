@@ -231,6 +231,8 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml
 - **GitHub raw CDN caching**: raw.githubusercontent.com caches for ~60-120s; can't bust with query params or headers, just wait. Serving from meridian.msu.rocks avoids this.
 - **HAProxy health checks**: do NOT use `check` on TLS backends (Caddy, Xray) — TCP probes fail on TLS-only ports, causing "backend has no server available" errors. These are local systemd services, not load-balanced pools.
 - **docs/ sync**: `docs/meridian`, `docs/install.sh`, `docs/setup.sh`, `docs/version` are synced by CD workflow. Manual edits to docs/ copies will be overwritten.
+- **AI docs**: Source files in `docs/ai/` (`context.md`, `architecture.md`, `troubleshooting.md`). CD workflow concatenates them into `docs/ai/reference.md` — the single file the CLI fetches. Edit the source files, not `reference.md`.
+- **`--ai` flag**: `meridian check --ai` and `meridian diagnostics --ai` bundle AI docs + command output into a clipboard-ready prompt for ChatGPT/Claude. Docs are cached at `~/.meridian/cache/ai-reference.md`, invalidated on version change.
 - **VERSION consistency**: `VERSION` file and `MERIDIAN_VERSION` in `meridian` script must match — CI validates this.
 - **Ecosystem cross-promotion**: Always upsell/reference related Meridian tools where contextually appropriate. When adding error messages, output, templates, issue templates, or docs — promote the relevant tool for that context. Current tools to cross-promote:
   - `meridian ping` / `meridian.msu.rocks/ping` — for connection issues, reachability testing

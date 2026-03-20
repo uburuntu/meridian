@@ -25,6 +25,7 @@ SERVER_CREDS_DIR="/etc/meridian"
 TARBALL_URL="https://github.com/uburuntu/meridian/archive/refs/heads/main.tar.gz"
 VERSION_URL="https://meridian.msu.rocks/version"
 CLI_URL="https://meridian.msu.rocks/meridian"
+AI_DOCS_URL="https://meridian.msu.rocks/ai/reference.md"
 
 # --- State (set during execution) ---
 SERVER_IP=""
@@ -39,8 +40,95 @@ G='\033[32m' Y='\033[33m' C='\033[36m' RED='\033[31m'
 info()  { printf "  ${C}→${R} %s\n" "$*"; }
 ok()    { printf "  ${G}✓${R} %s\n" "$*"; }
 warn()  { printf "  ${Y}!${R} %s\n" "$*"; }
-fail()  { printf "\n  ${RED}✗ %s${R}\n" "$*" >&2; printf "  ${D}Not connecting? Run: meridian ping | Other issues? Run: meridian diagnostics${R}\n  ${D}Report: https://github.com/uburuntu/meridian/issues${R}\n\n" >&2; exit 1; }
+fail()  { printf "\n  ${RED}✗ %s${R}\n" "$*" >&2; printf "  ${D}Not connecting? Run: meridian ping | Other issues? Run: meridian diagnostics --ai${R}\n  ${D}Report: https://github.com/uburuntu/meridian/issues${R}\n\n" >&2; exit 1; }
 line()  { printf "  ${D}─────────────────────────────────────────${R}\n"; }
+
+# --- AI prompt helpers ---
+
+fetch_ai_docs() {
+  local cache="$CACHE_DIR/ai-reference.md"
+  local cache_ver="$CACHE_DIR/ai-reference.version"
+
+  if [[ -f "$cache" && -f "$cache_ver" ]] && [[ "$(cat "$cache_ver")" == "$MERIDIAN_VERSION" ]]; then
+    cat "$cache"
+    return 0
+  fi
+
+  local docs
+  docs=$(curl -sSf --max-time 10 "$AI_DOCS_URL" </dev/null 2>/dev/null) || {
+    # Fallback to cache even if version mismatches
+    [[ -f "$cache" ]] && { cat "$cache"; return 0; }
+    return 1
+  }
+
+  mkdir -p "$CACHE_DIR"
+  printf '%s\n' "$docs" > "$cache"
+  printf '%s' "$MERIDIAN_VERSION" > "$cache_ver"
+  cat "$cache"
+}
+
+copy_to_clipboard() {
+  local text="$1"
+  if command -v pbcopy &>/dev/null; then
+    printf '%s' "$text" | pbcopy
+    return 0
+  elif command -v xclip &>/dev/null; then
+    printf '%s' "$text" | xclip -selection clipboard 2>/dev/null
+    return 0
+  elif command -v xsel &>/dev/null; then
+    printf '%s' "$text" | xsel --clipboard 2>/dev/null
+    return 0
+  fi
+  return 1
+}
+
+build_ai_prompt() {
+  local command_name="$1" output="$2"
+  local docs
+  docs=$(fetch_ai_docs) || docs="(AI reference docs unavailable. Meridian is a CLI tool that deploys VLESS+Reality proxy servers. See https://github.com/uburuntu/meridian)"
+
+  local size
+  local prompt
+  prompt="$(cat <<EOF
+You are helping troubleshoot a Meridian VPN proxy server deployment.
+Meridian is an open-source CLI tool that deploys censorship-resistant VLESS+Reality proxy servers.
+The user ran \`meridian $command_name\` and needs help interpreting the results and fixing any issues.
+
+## Meridian Reference Documentation
+
+$docs
+
+## $command_name Output
+
+\`\`\`
+$output
+\`\`\`
+
+Analyze the output above. Identify any issues and provide specific, actionable steps to fix them.
+If you need more information, tell the user what commands to run on their server.
+EOF
+  )"
+
+  size=$(printf '%s' "$prompt" | wc -c | tr -d ' ')
+  local size_kb=$(( size / 1024 ))
+
+  if copy_to_clipboard "$prompt"; then
+    printf "\n"
+    line
+    printf "\n"
+    printf "  ${G}${B}Prompt copied to clipboard${R} (%s KB)\n" "$size_kb"
+    printf "  Paste into ChatGPT, Claude, or any AI assistant for help.\n\n"
+  else
+    printf "\n"
+    line
+    printf "\n"
+    printf "  ${B}Copy the prompt below and paste into ChatGPT, Claude, or any AI assistant.${R}\n"
+    printf "\n"
+    printf "  ━━━ COPY START ━━━\n\n"
+    printf '%s\n' "$prompt"
+    printf "\n  ━━━ COPY END ━━━\n\n"
+  fi
+}
 
 prompt() {
   local varname="$1" message="$2" default="${3:-}"
@@ -724,13 +812,14 @@ cmd_server() {
 }
 
 cmd_check() {
-  local server_ip="" domain="" sni=""
+  local server_ip="" domain="" sni="" ai_mode=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --domain)  domain="$2"; shift 2 ;;
       --sni)     sni="$2"; shift 2 ;;
       --user)    ANSIBLE_USER="$2"; shift 2 ;;
+      --ai)      ai_mode=true; shift ;;
       -*)        fail "Unknown flag: $1" ;;
       *)         server_ip="$1"; shift ;;
     esac
@@ -845,16 +934,32 @@ cmd_check() {
     printf "  ${D}Or use: %s${R}\n\n" "$ping_url"
   else
     printf "  ${Y}${B}$issues issue(s) found.${R} Review the warnings above.\n\n"
+    if [[ "$ai_mode" != true ]]; then
+      printf "  ${D}Get AI help: meridian check $SERVER_IP --ai${R}\n\n"
+    fi
+  fi
+
+  if [[ "$ai_mode" == true ]]; then
+    local check_output="Pre-flight Check for $SERVER_IP"
+    check_output="$check_output\nSNI target ($sni_host): $(if [[ "$sni_check" == *"CONNECTED"* || "$sni_check" == *"OK"* || "$sni_check" == *"Certificate"* ]]; then echo "reachable"; else echo "NOT reachable"; fi)"
+    check_output="$check_output\nPort 443: $(if [[ -z "$port_check" ]]; then echo "available"; else echo "in use by ${port_user:-unknown}"; fi)"
+    check_output="$check_output\nPort 443 external: $(if timeout 3 bash -c "echo >/dev/tcp/$SERVER_IP/443" 2>/dev/null; then echo "reachable"; else echo "not reachable"; fi)"
+    [[ -n "$domain" ]] && check_output="$check_output\nDomain DNS ($domain): ${dns_result:-no result}"
+    [[ -n "$os_info" ]] && check_output="$check_output\nServer OS: $os_info"
+    [[ -n "$disk_avail" ]] && check_output="$check_output\nDisk space: ${disk_avail}G available"
+    check_output="$check_output\nIssues found: $issues"
+    build_ai_prompt "check" "$(printf '%b' "$check_output")"
   fi
 }
 
 cmd_diagnostics() {
-  local server_ip="" sni=""
+  local server_ip="" sni="" ai_mode=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --sni)   sni="$2"; shift 2 ;;
       --user)  ANSIBLE_USER="$2"; shift 2 ;;
+      --ai)    ai_mode=true; shift ;;
       -*)      fail "Unknown flag: $1" ;;
       *)       server_ip="$1"; shift ;;
     esac
@@ -912,17 +1017,25 @@ cmd_diagnostics() {
   line
   printf "\n"
   printf "  ${B}Diagnostics collected.${R}\n\n"
-  printf "  1. Review the output below for any private info you want to remove\n"
-  printf "  2. Copy the markdown block into a new issue:\n"
-  printf "     ${C}https://github.com/uburuntu/meridian/issues/new${R}\n"
-  printf "\n"
-  line
-  printf "\n"
-  printf '%b' "$diag"
-  printf "\n"
-  line
-  printf "\n"
-  printf "  ${D}Secrets (UUIDs, passwords, keys) are auto-redacted.${R}\n\n"
+
+  if [[ "$ai_mode" == true ]]; then
+    local diag_plain
+    diag_plain=$(printf '%b' "$diag")
+    build_ai_prompt "diagnostics" "$diag_plain"
+  else
+    printf "  1. Review the output below for any private info you want to remove\n"
+    printf "  2. Copy the markdown block into a new issue:\n"
+    printf "     ${C}https://github.com/uburuntu/meridian/issues/new${R}\n"
+    printf "\n"
+    line
+    printf "\n"
+    printf '%b' "$diag"
+    printf "\n"
+    line
+    printf "\n"
+    printf "  ${D}Secrets (UUIDs, passwords, keys) are auto-redacted.${R}\n\n"
+    printf "  ${D}Or get AI help: meridian diagnostics --ai${R}\n\n"
+  fi
 }
 
 cmd_uninstall() {
@@ -1139,6 +1252,13 @@ cmd_help() {
   printf "    meridian setup                   ${D}# interactive wizard${R}\n"
   printf "    meridian setup 1.2.3.4           ${D}# deploy to server${R}\n"
   printf "    meridian client add alice         ${D}# share access${R}\n"
+  printf "\n"
+  printf "  ${B}Troubleshooting:${R}\n\n"
+  printf "    ${C}ping${R} [IP]              ${D}Is my server reachable from here?${R}\n"
+  printf "    ${C}check${R} [IP]             ${D}Is this server ready for Meridian? (pre-deploy)${R}\n"
+  printf "    ${C}diagnostics${R} [IP]       ${D}Collect debug info (post-deploy)${R}\n"
+  printf "\n"
+  printf "    Add ${C}--ai${R} to check or diagnostics to get an AI-ready help prompt.\n"
   printf "\n"
   printf "  ${D}https://github.com/uburuntu/meridian${R}\n\n"
 }
