@@ -344,7 +344,7 @@ ensure_deps() {
 
   if ! command -v ansible-playbook &>/dev/null; then
     info "Installing Ansible..."
-    install_ansible || fail "Failed to install Ansible. Install manually: pip3 install ansible"
+    install_ansible || fail "Failed to install Ansible. Install manually: pip3 install ansible (or: sudo apt install ansible)"
     for p in "$HOME/.local/bin" "$HOME/Library/Python"/*/bin; do
       [[ -d "$p" ]] && [[ ":$PATH:" != *":$p:"* ]] && export PATH="$p:$PATH"
     done
@@ -374,6 +374,7 @@ install_ansible() {
   fi
   if [[ "$OS" == "linux" ]]; then
     if sudo apt-get install -y -qq ansible >/dev/null 2>&1; then return 0; fi
+    if sudo apt install -y -qq ansible >/dev/null 2>&1; then return 0; fi
   fi
   return 1
 }
