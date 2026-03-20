@@ -1413,7 +1413,7 @@ cmd_ping() {
   info "Checking device clock..."
   checks=$((checks + 1))
   local ref_date client_epoch ref_epoch clock_drift
-  ref_date=$(curl -sI --max-time 5 "https://meridian.msu.rocks/version" 2>/dev/null | grep -i '^date:' | sed 's/^[Dd]ate: //' | tr -d '\r')
+  ref_date=$(curl -sI --max-time 5 "https://www.google.com/" 2>/dev/null | grep -i '^date:' | sed 's/^[Dd]ate: //' | tr -d '\r')
   client_epoch=$(date +%s)
   if [[ -n "$ref_date" ]]; then
     ref_epoch=$(date -d "$ref_date" +%s 2>/dev/null || date -j -f "%a, %d %b %Y %H:%M:%S %Z" "$ref_date" +%s 2>/dev/null || echo "")
