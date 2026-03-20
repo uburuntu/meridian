@@ -1,0 +1,159 @@
+---
+# Configure the relay's outbound chain to the exit node and routing rules.
+# This updates the Xray template configuration via the 3x-ui settings API.
+#
+# Outbound: VLESS+Reality+XHTTP to exit node
+# Routing:  Russian sites → DIRECT, everything else → exit chain
+
+# Get the inbound tag from the created inbound (needed for routing rules)
+- name: Get inbound list to find the relay inbound tag
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/list"
+    method: GET
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: relay_inbounds_for_tag
+
+- name: Extract relay inbound tag
+  ansible.builtin.set_fact:
+    relay_inbound_tag: "{{ (relay_inbounds_for_tag.json.obj | default([]) | selectattr('remark', 'equalto', 'VLESS-Relay-User') | list | first).tag | default('inbound-' + (relay_inbound_port | default(443) | string)) }}"
+
+# Build the Xray template with custom outbound and routing
+- name: Build Xray template configuration with exit chain
+  ansible.builtin.set_fact:
+    xray_template_config:
+      log:
+        loglevel: "warning"
+      api:
+        tag: "api"
+        services:
+          - "HandlerService"
+          - "LoggerService"
+          - "StatsService"
+      inbounds:
+        - tag: "api"
+          listen: "127.0.0.1"
+          port: 62789
+          protocol: "dokodemo-door"
+          settings:
+            address: "127.0.0.1"
+      outbounds:
+        # Default direct outbound (for Russian traffic)
+        - tag: "direct"
+          protocol: "freedom"
+          settings: {}
+        # Blocked traffic
+        - tag: "blocked"
+          protocol: "blackhole"
+          settings: {}
+        # Chain to exit node via VLESS+Reality+XHTTP
+        - tag: "chain-to-exit"
+          protocol: "vless"
+          settings:
+            vnext:
+              - address: "{{ exit_ip }}"
+                port: 443
+                users:
+                  - id: "{{ exit_xhttp_uuid }}"
+                    encryption: "none"
+                    flow: ""
+          streamSettings:
+            network: "xhttp"
+            security: "reality"
+            realitySettings:
+              fingerprint: "{{ utls_fingerprint }}"
+              serverName: "{{ exit_reality_sni }}"
+              publicKey: "{{ exit_public_key }}"
+              shortId: "{{ exit_short_id }}"
+            xhttpSettings:
+              mode: "{{ xhttp_mode | default('packet-up') }}"
+              path: "{{ xhttp_path | default('/') }}"
+      routing:
+        domainStrategy: "IPIfNonMatch"
+        rules:
+          # API traffic stays internal
+          - type: "field"
+            inboundTag:
+              - "api"
+            outboundTag: "api"
+          # Russian domains go direct (no need to route through exit)
+          - type: "field"
+            domain:
+              - "geosite:category-ru"
+            outboundTag: "direct"
+          # Russian IPs go direct
+          - type: "field"
+            ip:
+              - "geoip:ru"
+              - "geoip:private"
+            outboundTag: "direct"
+          # Everything else goes through the exit chain
+          - type: "field"
+            inboundTag:
+              - "{{ relay_inbound_tag }}"
+            outboundTag: "chain-to-exit"
+      stats: {}
+      policy:
+        levels:
+          "0":
+            statsUserUplink: true
+            statsUserDownlink: true
+        system:
+          statsInboundUplink: true
+          statsInboundDownlink: true
+          statsOutboundUplink: true
+          statsOutboundDownlink: true
+
+# Check if outbound is already configured by looking at current template
+- name: Get current panel settings
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/setting/all"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: current_settings
+
+- name: Check if chain outbound already configured
+  ansible.builtin.set_fact:
+    chain_outbound_exists: "{{ 'chain-to-exit' in (current_settings.json.obj.xrayTemplateConfig | default('')) }}"
+
+# Update the Xray template configuration
+- name: Update Xray template with exit chain configuration
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/setting/update"
+    method: POST
+    body_format: json
+    headers:
+      Cookie: "{{ session_cookie }}"
+    body:
+      xrayTemplateConfig: "{{ xray_template_config | to_json }}"
+    status_code: [200]
+    return_content: true
+  register: template_update_result
+  when: not (chain_outbound_exists | bool)
+
+- name: Restart Xray to apply template changes
+  ansible.builtin.command:
+    cmd: docker restart 3x-ui
+  when: not (chain_outbound_exists | bool)
+  changed_when: true
+
+- name: Wait for 3x-ui to come back up after restart
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/"
+    method: GET
+    status_code: [200, 302, 301]
+  register: panel_restart_health
+  until: panel_restart_health is succeeded
+  retries: 30
+  delay: 2
+  when: not (chain_outbound_exists | bool)
+
+- name: Show outbound chain status
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'Exit chain outbound configured: ' + exit_ip + ':443 via XHTTP+Reality'
+      if not (chain_outbound_exists | bool)
+      else 'Exit chain outbound already configured — skipping' }}

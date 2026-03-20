@@ -1,0 +1,59 @@
+# Meridian Proxy Configuration
+# Managed by Ansible — this file is overwritten on each run.
+# Your own Caddy config in /etc/caddy/Caddyfile is NOT touched.
+#
+# Architecture: HAProxy (port 443) → Caddy (port {{ caddy_internal_port }})
+# HAProxy terminates nothing — just routes by SNI. Caddy handles TLS.
+
+{{ domain }}:{{ caddy_internal_port }} {
+{% if email | default('') | length > 0 %}
+    tls {{ email }}
+{% endif %}
+
+    # --- VLESS+WSS Fallback (Cloudflare CDN path) ---
+    handle /{{ ws_path }} {
+        reverse_proxy 127.0.0.1:{{ wss_internal_port }} {
+            transport http {
+                read_timeout 360s
+            }
+        }
+    }
+
+    # --- 3x-ui Panel (management interface on secret path) ---
+    handle /{{ panel_web_base_path }}/* {
+        reverse_proxy 127.0.0.1:{{ panel_internal_port }}
+    }
+
+    # --- Connection Info Page (QR codes and setup instructions) ---
+    handle /{{ info_page_path }} {
+        rewrite * /index.html
+        root * /var/www/private
+        file_server
+        header Cache-Control "no-store"
+    }
+
+    # --- Per-client stats (fetched by connection info page JS) ---
+    handle /{{ info_page_path }}/stats/* {
+        uri strip_prefix /{{ info_page_path }}
+        root * /var/www/private
+        file_server
+        header Cache-Control "no-store, max-age=0"
+        header Access-Control-Allow-Origin *
+    }
+
+    header -Server
+    header X-Content-Type-Options "nosniff"
+    header X-Frame-Options "DENY"
+    header Referrer-Policy "no-referrer"
+
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 10mb
+            roll_keep 3
+        }
+    }
+}
+
+http://{{ domain }} {
+    redir https://{{ domain }}{uri} permanent
+}

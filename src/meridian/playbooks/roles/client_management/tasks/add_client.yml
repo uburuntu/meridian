@@ -1,0 +1,250 @@
+---
+# Add a new client to existing inbound(s).
+# Generates a UUID, adds the client via the panel API, then generates output files.
+
+# -- Validate input --
+- name: Validate client name is provided
+  ansible.builtin.assert:
+    that:
+      - client_name is defined
+      - client_name | length > 0
+    fail_msg: "client_name is required. Usage: meridian client add NAME"
+
+- name: Validate client name format
+  ansible.builtin.assert:
+    that: client_name is regex('^[a-zA-Z0-9][a-zA-Z0-9_-]*$')
+    fail_msg: "Client name '{{ client_name }}' is invalid. Use letters, numbers, hyphens, and underscores."
+
+# -- Check for duplicates --
+- name: Check if client already exists
+  ansible.builtin.set_fact:
+    client_exists: "{{ reality_clients | selectattr('email', 'equalto', 'reality-' + client_name) | list | length > 0 }}"
+
+- name: Fail if client already exists
+  ansible.builtin.fail:
+    msg: "Client '{{ client_name }}' already exists. Use: meridian client list"
+  when: client_exists | bool
+
+# -- Generate UUIDs --
+- name: Generate Reality UUID for new client
+  ansible.builtin.command:
+    cmd: "{{ xray_cmd }} uuid"
+  register: new_reality_uuid_output
+  changed_when: false
+
+- name: Set new Reality UUID
+  ansible.builtin.set_fact:
+    client_reality_uuid: "{{ new_reality_uuid_output.stdout | trim }}"
+
+- name: Generate WSS UUID for new client (domain mode)
+  ansible.builtin.command:
+    cmd: "{{ xray_cmd }} uuid"
+  register: new_wss_uuid_output
+  changed_when: false
+  when: domain_mode | bool
+
+- name: Set new WSS UUID
+  ansible.builtin.set_fact:
+    client_wss_uuid: "{{ new_wss_uuid_output.stdout | trim }}"
+  when: domain_mode | bool
+
+- name: Set empty WSS UUID (no-domain mode)
+  ansible.builtin.set_fact:
+    client_wss_uuid: ""
+  when: not (domain_mode | bool)
+
+# -- Add client to Reality inbound --
+- name: Add client to Reality inbound
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/addClient"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+    body_format: json
+    body:
+      id: "{{ reality_inbound_id | int }}"
+      settings: >-
+        {
+          "clients": [{
+            "id": "{{ client_reality_uuid }}",
+            "flow": "xtls-rprx-vision",
+            "email": "reality-{{ client_name }}",
+            "limitIp": {{ client_limit_ip }},
+            "totalGB": {{ (client_total_bytes / 1073741824) | int }},
+            "expiryTime": 0,
+            "enable": true,
+            "tgId": "",
+            "subId": "",
+            "reset": 0
+          }]
+        }
+    status_code: [200]
+    return_content: true
+  register: reality_add_result
+  no_log: true
+
+- name: Verify Reality client was added
+  ansible.builtin.assert:
+    that: reality_add_result.json.success | default(false)
+    fail_msg: "Failed to add client to Reality inbound: {{ reality_add_result.json.msg | default('unknown error') }}"
+
+# -- Add client to WSS inbound (domain mode) --
+- name: Add client to WSS inbound
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/addClient"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+    body_format: json
+    body:
+      id: "{{ wss_inbound_id | int }}"
+      settings: >-
+        {
+          "clients": [{
+            "id": "{{ client_wss_uuid }}",
+            "flow": "",
+            "email": "wss-{{ client_name }}",
+            "limitIp": {{ client_limit_ip }},
+            "totalGB": {{ (client_total_bytes / 1073741824) | int }},
+            "expiryTime": 0,
+            "enable": true,
+            "tgId": "",
+            "subId": "",
+            "reset": 0
+          }]
+        }
+    status_code: [200]
+    return_content: true
+  register: wss_add_result
+  no_log: true
+  when: domain_mode | bool and wss_inbound_id is defined
+
+- name: Verify WSS client was added
+  ansible.builtin.assert:
+    that: wss_add_result.json.success | default(false)
+    fail_msg: "Failed to add client to WSS inbound: {{ wss_add_result.json.msg | default('unknown error') }}"
+  when: domain_mode | bool and wss_inbound_id is defined
+
+# -- Add client to XHTTP inbound (if exists) --
+- name: Add client to XHTTP inbound
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/addClient"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+    body_format: json
+    body:
+      id: "{{ xhttp_inbound_id | int }}"
+      settings: >-
+        {
+          "clients": [{
+            "id": "{{ client_reality_uuid }}",
+            "flow": "",
+            "email": "xhttp-{{ client_name }}",
+            "limitIp": {{ client_limit_ip }},
+            "totalGB": {{ (client_total_bytes / 1073741824) | int }},
+            "expiryTime": 0,
+            "enable": true,
+            "tgId": "",
+            "subId": "",
+            "reset": 0
+          }]
+        }
+    status_code: [200]
+    return_content: true
+  register: xhttp_add_result
+  no_log: true
+  when: xhttp_inbound_id is defined
+
+- name: Verify XHTTP client was added
+  ansible.builtin.assert:
+    that: xhttp_add_result.json.success | default(false)
+    fail_msg: "Failed to add client to XHTTP inbound: {{ xhttp_add_result.json.msg | default('unknown error') }}"
+  when: xhttp_inbound_id is defined
+
+# -- Update local clients tracking file --
+- name: Load existing clients file
+  ansible.builtin.include_vars:
+    file: "{{ credentials_dir }}/{{ inventory_hostname }}-clients.yml"
+    name: clients_data
+  delegate_to: localhost
+  become: false
+  failed_when: false
+
+- name: Initialize clients list if not found
+  ansible.builtin.set_fact:
+    clients_data:
+      clients: []
+  when: clients_data is not defined or clients_data.clients is not defined or clients_data.clients is none
+
+- name: Save updated clients file
+  ansible.builtin.copy:
+    content: |
+      ---
+      clients:
+      {% for c in clients_data.clients %}
+        - name: "{{ c.name }}"
+          added: "{{ c.added }}"
+          reality_uuid: "{{ c.reality_uuid }}"
+          wss_uuid: "{{ c.wss_uuid | default('') }}"
+      {% endfor %}
+        - name: "{{ client_name }}"
+          added: "{{ ansible_date_time.iso8601 }}"
+          reality_uuid: "{{ client_reality_uuid }}"
+          wss_uuid: "{{ client_wss_uuid }}"
+    dest: "{{ credentials_dir }}/{{ inventory_hostname }}-clients.yml"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+# -- Generate output (URLs, QR codes, HTML) using shared include --
+- name: Generate client output files
+  ansible.builtin.include_tasks: ../../shared/tasks/generate_client_output.yml
+
+# -- Display terminal output --
+- name: Display new client connection info
+  ansible.builtin.shell:
+    cmd: |
+      printf '\n'
+      printf '%s\n' '{{ reality_qr_terminal.stdout | replace("'", "'\\''") }}'
+      {% if xhttp_inbound_id is defined %}
+      printf '\n'
+      printf '%s\n' '{{ xhttp_qr_terminal.stdout | replace("'", "'\\''") }}'
+      {% endif %}
+      {% if domain_mode | bool %}
+      printf '\n'
+      printf '%s\n' '{{ wss_qr_terminal.stdout | replace("'", "'\\''") }}'
+      {% endif %}
+      printf '\n'
+      cat <<'SUMMARY'
+
+      ======================================================================
+                      CLIENT "{{ client_name }}" ADDED
+      ======================================================================
+
+      --- Connection URLs ---
+      Primary (Reality):
+      {{ vless_reality_url }}
+      {% if xhttp_inbound_id is defined %}
+
+      XHTTP (enhanced stealth):
+      {{ vless_xhttp_url }}
+      {% endif %}
+      {% if domain_mode | bool %}
+
+      CDN fallback (WSS):
+      {{ vless_wss_url }}
+      {% endif %}
+
+      --- Files Saved ---
+      HTML page: {{ credentials_dir }}/{{ inventory_hostname }}-{{ client_name }}-connection-info.html
+      Text file: {{ credentials_dir }}/{{ inventory_hostname }}-{{ client_name }}-connection-info.txt
+
+      Send the HTML file to {{ client_name }} — they open it, scan the QR code, and connect.
+
+      ======================================================================
+      SUMMARY
+  delegate_to: localhost
+  become: false
+  changed_when: false

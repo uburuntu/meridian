@@ -1,0 +1,42 @@
+---
+# List all clients with their status and protocols.
+# Writes the table to a temp file for the CLI to display cleanly.
+
+- name: Build WSS client email list
+  ansible.builtin.set_fact:
+    wss_client_emails: "{{ wss_clients | default([]) | map(attribute='email') | list }}"
+
+- name: Build XHTTP client email list
+  ansible.builtin.set_fact:
+    xhttp_client_emails: "{{ xhttp_clients | default([]) | map(attribute='email') | list }}"
+
+- name: Write client list to temp file
+  ansible.builtin.copy:
+    content: |
+
+      ======================================================================
+                            PROXY CLIENTS
+      ======================================================================
+
+        Name              Status     Protocols
+        ─────────────────────────────────────────────────────
+      {% for client in reality_clients %}
+      {% set name = client.email | regex_replace('^reality-', '') %}
+      {% set status = 'active' if client.enable else 'disabled' %}
+      {% set has_wss = 'wss-' + name in wss_client_emails %}
+      {% set has_xhttp = 'xhttp-' + name in xhttp_client_emails %}
+      {% set protos = [] %}
+      {% if true %}{% set _ = protos.append('Reality') %}{% endif %}
+      {% if has_xhttp %}{% set _ = protos.append('XHTTP') %}{% endif %}
+      {% if has_wss %}{% set _ = protos.append('WSS') %}{% endif %}
+        {{ '%-17s %-10s %s' | format(name, status, protos | join(' + ')) }}
+      {% endfor %}
+
+        ─────────────────────────────────────────────────────
+        Total: {{ reality_clients | length }} client{{ 's' if reality_clients | length != 1 else '' }}
+
+      ======================================================================
+    dest: /tmp/.meridian-client-list
+    mode: "0600"
+  delegate_to: localhost
+  become: false

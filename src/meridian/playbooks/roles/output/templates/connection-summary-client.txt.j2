@@ -1,0 +1,33 @@
+===============================================================================
+  Connection Info — {{ client_name }}
+  Server: {{ server_public_ip }}
+  Generated: {{ ansible_date_time.iso8601 }}
+===============================================================================
+
+--- Primary: VLESS + Reality (port 443) ---
+{{ vless_reality_url }}
+
+{% if xhttp_enabled | default(false) | bool %}
+--- XHTTP: VLESS + Reality + XHTTP (enhanced stealth) ---
+{{ vless_xhttp_url }}
+
+{% endif %}
+{% if domain_mode | bool %}
+--- Fallback: VLESS + WSS + CDN ---
+{{ vless_wss_url }}
+
+{% endif %}
+--- Recommended Client Apps ---
+iOS:      v2RayTun (App Store) or Hiddify
+Android:  v2rayNG (Play Store) or Hiddify
+Windows:  v2rayN (github.com/2dust/v2rayN/releases)
+macOS:    Hiddify (github.com/hiddify/hiddify-app/releases)
+Linux:    Hiddify or Nekoray
+
+--- Important ---
+1. TIME SYNC: Device clock must be accurate within 30 seconds.
+   Enable "Set Automatically" in your device's date/time settings.
+
+2. Open this file in a browser or scan the QR code in the HTML version.
+
+===============================================================================

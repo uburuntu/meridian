@@ -1,0 +1,21 @@
+# 3x-ui Panel - Xray Management Interface
+# Managed by Ansible. Manual edits will be overwritten on next run.
+services:
+  3x-ui:
+    image: ghcr.io/mhsanaei/3x-ui:{{ threexui_version | default('2.6.0') }}
+    container_name: 3x-ui
+    restart: unless-stopped
+    # Host networking required so Xray can bind to specific ports (443, etc.)
+    network_mode: host
+    volumes:
+      - ./db/:/etc/x-ui/
+      - ./cert/:/root/cert/
+    environment:
+      XRAY_VMESS_AEAD_FORCED: "true"
+      XUI_ENABLE_FAIL2BAN: "true"
+    tty: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

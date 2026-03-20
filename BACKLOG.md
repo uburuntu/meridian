@@ -1,7 +1,7 @@
 # Backlog
 
 **Last updated:** 2026-03-20
-**Version:** 1.2.5
+**Version:** 2.0.0
 
 ---
 
@@ -12,6 +12,7 @@
 - [x] Make shellcheck blocking in CI (was `|| true`, no-op)
 - [x] Fix auto-update downgrade when running dev version (semver direction check)
 - [x] Fix `eval` injection vector in `prompt()` function
+- [x] **Rewrite CLI in Python** — migrated 1,727-line bash script to modular Python package (typer + rich + PyYAML)
 
 ## P1 — High (done)
 
@@ -24,40 +25,40 @@
 - [x] Suggest `meridian uninstall` + retry on inbound creation failures
 - [x] Add `apt` fallback for Ansible installation (WSL compat)
 - [x] Retry Ansible collection install up to 3 times (flaky networks)
+- [x] Validate VERSION format in CI — `^\d+\.\d+\.\d+$`
+- [x] Extract YAML parsing into structured credentials — `ServerCredentials` dataclass replaces 10+ `grep|awk|tr` instances
+- [x] Standardize flag parsing — typer decorators replace 8 duplicate `while/case` blocks
 
 ## P1 — High (open)
 
 - [ ] Pin ansible-lint via `gh_action_ref: "v25.5.0"` — `@main` is upstream-recommended but a breaking change could randomly fail CI
 - [ ] Add `ansible.cfg` validation to CI — verify `jinja2_native = True` exists (critical for `body_format: json` integer typing)
-- [ ] Validate VERSION format in CI — ensure `^\d+\.\d+\.\d+$` (malformed version breaks release + auto-update)
-- [ ] Add checksum verification to `install.sh` — same SHA256 check as auto-update, for fresh installs via `curl | bash`
-- [ ] Add Docker integration test for 3x-ui API — spin up 3x-ui in CI, run login/create-inbound/list/verify JSON round-trip (would have caught the form-urlencoded corruption bug)
+- [ ] Add Docker integration test for 3x-ui API — spin up 3x-ui in CI, run login/create-inbound/list/verify JSON round-trip
+- [ ] Configure PyPI trusted publisher — required for automated PyPI publishing from GitHub Actions
+- [ ] Register `meridian-vpn` on PyPI — publish initial package to reserve name
 
 ## P2 — Medium (open)
 
-- [ ] Extract `yaml_get()` helper in meridian CLI — 10+ instances of `grep '^field:' | awk '{print $2}' | tr -d '"'` for YAML parsing; fragile, breaks on spaces/special chars
-- [ ] Standardize `parse_flags()` across commands — 8 duplicate `while/case` flag-parsing blocks; extract shared `--user`, `--server`, `--yes` handling
 - [ ] Add deployed playbook version to diagnostics — write VERSION to `/etc/meridian/version` during deploy, read in `meridian diagnostics` to catch version mismatch
 - [ ] Consolidate 3 connection-info HTML templates into one — biggest drift risk; use `{% if domain_mode %}` / `{% if relay_mode %}` conditionals instead of 3 copies
 - [ ] Add "broke after update" issue template — capture old version, new version, timing, auto-update vs manual
 - [ ] Improve dry-run CI job — remove `|| echo` suppression, use `--tags` for local-compatible tasks, add domain mode and chain mode dry-runs
-- [ ] Add credential schema validation test — render credential template with mocks, verify the resulting YAML can be parsed by CLI's grep/awk commands
+- [ ] Add playbook sync automation — script or Makefile to copy root playbooks into `src/meridian/playbooks/` and verify in CI
+- [ ] Add mypy type checking to CI — strict mode on `src/meridian/`
 
 ## P3 — Low (open)
 
 - [ ] Add VERSION semver validation in release workflow (not just CI)
-- [ ] Replace `MockUndefined` in template tests with stricter undefined handling — currently silently renders undefined vars as empty string
+- [ ] Replace `MockUndefined` in template tests with stricter undefined handling
 - [ ] Add HTML validation for rendered connection-info templates
-- [ ] Add docs/ drift detection in CI — verify `docs/` copies match source files (currently only CD sync keeps them aligned)
-- [ ] Add lightweight opt-in telemetry — anonymous ping on setup success (version, OS, mode) for usage analytics
+- [ ] Add docs/ drift detection in CI — verify `docs/` copies match source files
+- [ ] Add lightweight opt-in telemetry — anonymous ping on setup success (version, OS, mode)
 
 ## Future — Architecture (open)
 
-- [ ] Rewrite CLI in Python when script exceeds ~2500 lines — current 1709 lines is at the ceiling for bash maintainability; Python unlocks pytest, argparse, proper JSON/YAML handling
-- [ ] If staying in bash: do NOT split into source'd modules (breaks single-file curl|bash distribution)
-- [ ] Consider Python zipapp for single-file distribution if rewriting
 - [ ] Proactive IP block notification — scheduled reachability check with Telegram/webhook alerts
 - [ ] Self-steal mode — Reality masquerades as your own domain
 - [ ] Zero-to-VPN onboarding wizard on meridian.msu.rocks
 - [ ] Password-protected connection info page for family sharing
-- [ ] No key/credential rotation mechanism — currently: uninstall then reinstall
+- [ ] Key/credential rotation without full uninstall/reinstall
+- [ ] Shell completion support — typer has built-in completion generation

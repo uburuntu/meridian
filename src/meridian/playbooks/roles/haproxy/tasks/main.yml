@@ -1,0 +1,25 @@
+---
+# HAProxy SNI Router (domain mode only)
+# Sits on port 443 and inspects the TLS ClientHello SNI field WITHOUT
+# terminating TLS. Routes Reality-targeted SNIs to Xray, everything else to Caddy.
+# This lets Reality stay on port 443 for maximum stealth while Caddy serves
+# the domain with valid TLS on an internal port.
+
+- name: Install HAProxy
+  ansible.builtin.apt:
+    name: haproxy
+    state: present
+
+- name: Deploy HAProxy configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    mode: "0644"
+    validate: "haproxy -c -f %s"
+  notify: Reload HAProxy
+
+- name: Ensure HAProxy is started and enabled
+  ansible.builtin.service:
+    name: haproxy
+    state: started
+    enabled: true

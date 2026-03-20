@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Fetch per-client traffic stats from 3x-ui and write per-client JSON files.
+
+Each client gets a stats file named by their Reality UUID — the same UUID
+that appears in their VLESS connection URL. Only someone with the URL can
+find their stats file. Runs via cron every 5 minutes.
+"""
+import json, urllib.request, http.cookiejar, os, time, sys
+
+CREDS = '/etc/meridian/proxy.yml'
+STATS_DIR = '/var/www/private/stats'
+
+def parse_creds():
+    creds = {}
+    with open(CREDS) as f:
+        for line in f:
+            line = line.strip()
+            if ':' in line and not line.startswith('#'):
+                key, val = line.split(':', 1)
+                creds[key.strip()] = val.strip().strip('"')
+    return creds
+
+def main():
+    creds = parse_creds()
+    wbp = creds.get('panel_web_base_path', '')
+    base = f"http://127.0.0.1:{{ panel_internal_port }}/{wbp}"
+
+    # Login
+    cj = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+    login_data = f"username={creds['panel_username']}&password={creds['panel_password']}".encode()
+    try:
+        opener.open(urllib.request.Request(f"{base}/login", data=login_data, method='POST'))
+    except Exception:
+        sys.exit(1)
+
+    # Get inbound list
+    try:
+        resp = opener.open(f"{base}/panel/api/inbounds/list")
+        inbounds = json.load(resp)
+    except Exception:
+        sys.exit(1)
+
+    if not inbounds.get('success'):
+        sys.exit(1)
+
+    # Map client names to their UUIDs and emails across inbounds
+    clients = {}
+    for inbound in inbounds.get('obj', []):
+        settings = json.loads(inbound['settings'])
+        for client in settings.get('clients', []):
+            email = client['email']
+            uuid = client['id']
+            if email.startswith('reality-'):
+                name = email[8:]
+                clients.setdefault(name, {})['reality_uuid'] = uuid
+                clients[name].setdefault('emails', []).append(email)
+            elif email.startswith('wss-'):
+                name = email[4:]
+                clients.setdefault(name, {})
+                clients[name].setdefault('emails', []).append(email)
+
+    # Fetch per-client traffic and write stats files
+    os.makedirs(STATS_DIR, exist_ok=True)
+
+    active_uuids = set()
+    for name, info in clients.items():
+        uuid = info.get('reality_uuid')
+        if not uuid:
+            continue
+        active_uuids.add(uuid)
+
+        total_up = 0
+        total_down = 0
+        last_online = 0
+
+        for email in info.get('emails', []):
+            try:
+                resp = opener.open(f"{base}/panel/api/inbounds/getClientTraffics/{email}")
+                data = json.load(resp)
+                if data.get('success') and data.get('obj'):
+                    obj = data['obj']
+                    total_up += obj.get('up', 0)
+                    total_down += obj.get('down', 0)
+                    lo = obj.get('lastOnline', 0)
+                    if lo > last_online:
+                        last_online = lo
+            except Exception:
+                pass
+
+        stats = {
+            'up': total_up,
+            'down': total_down,
+            'total': total_up + total_down,
+            'lastOnline': last_online,
+            'updated': int(time.time() * 1000)
+        }
+        path = os.path.join(STATS_DIR, f"{uuid}.json")
+        with open(path, 'w') as f:
+            json.dump(stats, f)
+        os.chmod(path, 0o644)
+
+    # Clean up stats files for deleted clients
+    for fname in os.listdir(STATS_DIR):
+        if fname.endswith('.json'):
+            uid = fname[:-5]
+            if uid not in active_uuids:
+                os.remove(os.path.join(STATS_DIR, fname))
+
+if __name__ == '__main__':
+    main()

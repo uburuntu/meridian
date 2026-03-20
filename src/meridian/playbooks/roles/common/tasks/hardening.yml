@@ -1,0 +1,19 @@
+---
+# SSH hardening: disable password authentication
+# Only runs when ssh_disable_password is true (default)
+
+- name: Disable SSH password authentication
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+    validate: 'sshd -t -f %s'
+  notify: Restart sshd
+
+- name: Disable SSH challenge-response authentication
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?ChallengeResponseAuthentication|^#?KbdInteractiveAuthentication'
+    line: 'KbdInteractiveAuthentication no'
+    validate: 'sshd -t -f %s'
+  notify: Restart sshd

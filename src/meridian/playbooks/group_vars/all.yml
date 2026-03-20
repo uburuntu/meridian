@@ -1,0 +1,116 @@
+# =============================================================================
+# Global Variables
+# =============================================================================
+# These are the default values for all servers. Override per-host in inventory.yml
+# or on the command line with -e (e.g., -e domain=example.com).
+#
+# Most users only need to set ansible_host and optionally domain in inventory.yml.
+# Everything else has sensible defaults.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Domain & Email (leave empty for no-domain / Reality-only mode)
+# -----------------------------------------------------------------------------
+# When domain is set, the playbook enables:
+#   - HAProxy SNI router on port 443
+#   - Caddy reverse proxy with automatic Let's Encrypt TLS
+#   - VLESS+WSS fallback through Cloudflare CDN
+#   - CDN fallback + connection info page
+domain: ""
+
+# Optional: email for Let's Encrypt notifications. Caddy works without it.
+email: ""
+
+# -----------------------------------------------------------------------------
+# 3x-ui Version
+# -----------------------------------------------------------------------------
+# Pin to a tested version to avoid API breakage from upstream changes.
+# Update to latest: check https://github.com/MHSanaei/3x-ui/releases
+threexui_version: "2.8.11"
+
+# -----------------------------------------------------------------------------
+# Reality Protocol Settings
+# -----------------------------------------------------------------------------
+# The website that Reality impersonates. When censors probe the server,
+# they see a legitimate TLS certificate from this site.
+# Good choices: www.microsoft.com, www.twitch.tv, dl.google.com, github.com
+# Avoid: apple.com, icloud.com (Apple-owned ASN — mismatch is instantly detectable)
+# Use RealiTLScanner to find optimal targets near your server's datacenter.
+reality_sni: "www.microsoft.com"
+reality_dest: "{{ reality_sni }}:443"
+
+# TLS client fingerprint to impersonate (chrome is the safest default)
+utls_fingerprint: "chrome"
+
+# -----------------------------------------------------------------------------
+# Port Configuration
+# -----------------------------------------------------------------------------
+# In no-domain mode: Reality listens directly on 443.
+# In domain mode: HAProxy owns 443 and routes by SNI.
+#   - Reality traffic → 10443 (internal)
+#   - Domain traffic  → 8443 (Caddy, internal)
+haproxy_reality_backend_port: 10443
+caddy_internal_port: 8443
+
+# 3x-ui panel internal port (always localhost-only in domain mode)
+panel_internal_port: 2053
+
+# Random panel port for no-domain mode (direct HTTP access)
+# Uses a deterministic seed so re-runs produce the same port.
+panel_external_port: "{{ range(10000, 60000) | random(seed=inventory_hostname + 'panel') }}"
+
+# Internal port for VLESS+WSS listener (domain mode only, localhost-only)
+wss_internal_port: "{{ range(20000, 50000) | random(seed=inventory_hostname + 'wss') }}"
+
+# -----------------------------------------------------------------------------
+# Client Limits
+# -----------------------------------------------------------------------------
+# Maximum simultaneous connections from different IPs (per client)
+client_limit_ip: 2
+
+# Traffic limit in bytes (0 = unlimited)
+client_total_bytes: 0
+
+# -----------------------------------------------------------------------------
+# Server Hardening
+# -----------------------------------------------------------------------------
+# Disable SSH password authentication (recommended, ensure you have key access)
+ssh_disable_password: true
+
+# Enable TCP BBR congestion control (improves throughput)
+bbr_enabled: true
+
+# -----------------------------------------------------------------------------
+# Credentials Persistence
+# -----------------------------------------------------------------------------
+# Generated credentials (panel login, Reality keys, UUIDs) are saved locally
+# to this file. On re-runs, saved credentials are loaded instead of regenerated.
+# This is the key to idempotency.
+credentials_dir: "./credentials"
+credentials_file: "{{ credentials_dir }}/{{ inventory_hostname }}.yml"
+
+# -----------------------------------------------------------------------------
+# XHTTP Transport (opt-in for enhanced post-handshake stealth)
+# -----------------------------------------------------------------------------
+# Creates a second VLESS+Reality+XHTTP inbound alongside TCP Reality.
+# XHTTP makes post-handshake traffic indistinguishable from normal browsing,
+# defeating behavioral analysis (TSPU Layer 4). All recommended client apps
+# support XHTTP (v2rayNG 1.9+, v2RayTun 3.12+, Hiddify 2.0+, Shadowrocket 2.2+).
+# Users always get both TCP Reality (primary) and XHTTP (stealth) connection links.
+# Disable with: -e xhttp_enabled=false
+xhttp_enabled: true
+
+# XHTTP inbound port (standalone mode only — exit mode always uses 443).
+# Uses a deterministic random port so re-runs produce the same value.
+xhttp_port: "{{ range(10000, 60000) | random(seed=inventory_hostname + 'xhttp') }}"
+
+# -----------------------------------------------------------------------------
+# Chain Mode (set automatically by playbook-chain.yml)
+# -----------------------------------------------------------------------------
+# When true, this server acts as an exit node in a relay chain.
+# Do not set manually — playbook-chain.yml sets this automatically.
+exit_mode: false
+
+# Public IP of the server (auto-detected if not set).
+# Override with: -e server_public_ip=1.2.3.4
+server_public_ip: ""

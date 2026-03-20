@@ -1,0 +1,130 @@
+---
+# =============================================================================
+# Uninstall Meridian
+# =============================================================================
+# Removes the proxy server components. Does NOT remove Docker itself or
+# system packages — those may be used by other applications.
+#
+# Usage:
+#   ansible-playbook playbook-uninstall.yml
+#   Or via CLI: meridian uninstall
+#
+# What gets removed:
+#   - 3x-ui container and image
+#   - /opt/3x-ui directory (panel database, configs)
+#   - HAProxy configuration (if installed)
+#   - Caddy configuration and web files (if installed)
+#   - UFW rules added by the playbook
+#
+# What is NOT removed:
+#   - Docker engine (may be used by other containers)
+#   - System packages (qrencode, curl, etc.)
+#   - SSH hardening settings
+#   - Local credentials files (in ./credentials/)
+# =============================================================================
+
+- name: Uninstall Meridian proxy server
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Stop and remove 3x-ui container
+      ansible.builtin.command:
+        cmd: docker compose down --rmi all
+        chdir: /opt/3x-ui
+      failed_when: false
+      changed_when: true
+
+    - name: Remove 3x-ui data directory
+      ansible.builtin.file:
+        path: /opt/3x-ui
+        state: absent
+
+    - name: Stop and disable HAProxy
+      ansible.builtin.service:
+        name: haproxy
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Remove HAProxy configuration
+      ansible.builtin.file:
+        path: /etc/haproxy/haproxy.cfg
+        state: absent
+      failed_when: false
+
+    - name: Stop and disable Caddy
+      ansible.builtin.service:
+        name: caddy
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Remove Meridian Caddy config and web files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/caddy/conf.d/meridian.caddy
+        - /var/www/private
+      failed_when: false
+
+    - name: Remove maintenance cron jobs
+      ansible.builtin.cron:
+        name: "{{ item }}"
+        state: absent
+        user: root
+      loop:
+        - meridian-db-vacuum
+        - meridian-docker-log-cleanup
+        - meridian-stats-update
+      failed_when: false
+
+    - name: Remove server credentials
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/meridian
+        - /root/meridian
+      failed_when: false
+
+    - name: Remove meridian CLI from server
+      ansible.builtin.file:
+        path: /usr/local/bin/meridian
+        state: absent
+      failed_when: false
+
+    - name: Remove UFW rules added by playbook
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+        delete: true
+      loop:
+        - "443"
+        - "80"
+        - "8444"
+        - "{{ xhttp_port }}"
+      failed_when: false
+
+    - name: Show uninstall summary
+      ansible.builtin.debug:
+        msg: |
+          Meridian has been removed from this server.
+
+          Removed:
+            - 3x-ui container and data
+            - HAProxy config (if present)
+            - Caddy Meridian config and web files (if present)
+            - Firewall rules for ports 443, 80, 8444
+            - Saved credentials (/etc/meridian/ and meridian CLI on server)
+
+          NOT removed (may be used by other apps):
+            - Docker engine
+            - System packages
+            - SSH settings
+
+          To fully clean up Docker:
+            docker system prune -af

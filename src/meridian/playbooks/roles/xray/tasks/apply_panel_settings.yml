@@ -1,0 +1,129 @@
+---
+# Shared task: apply panel settings and credentials to a fresh 3x-ui instance.
+# Used by both xray and xray_relay roles.
+#
+# Required variables:
+#   - panel_internal_port
+#   - panel_web_base_path
+#   - panel_username, panel_password (new credentials)
+#
+# Provides:
+#   - session_cookie (for subsequent API calls)
+
+- name: Login to 3x-ui with default credentials
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/login"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: admin
+      password: admin
+    status_code: [200]
+    return_content: true
+  register: default_login
+  no_log: true
+
+- name: Extract session cookie from login response
+  ansible.builtin.set_fact:
+    session_cookie: "{{ default_login.cookies_string }}"
+  no_log: true
+
+- name: Update panel settings and web base path
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/panel/setting/update"
+    method: POST
+    body_format: json
+    headers:
+      Cookie: "{{ session_cookie }}"
+    body:
+      webListen: "127.0.0.1"
+      webDomain: ""
+      webPort: "{{ panel_internal_port }}"
+      webCertFile: ""
+      webKeyFile: ""
+      webBasePath: "/{{ panel_web_base_path }}/"
+      sessionMaxAge: 60
+      expireDiff: 0
+      trafficDiff: 0
+      remarkModel: "-full"
+      tgBotEnable: false
+      tgBotToken: ""
+      tgBotChatId: ""
+      tgRunTime: "@daily"
+      tgBotBackup: false
+      tgBotLoginNotify: true
+      tgCpu: 80
+      subEnable: false
+      subListen: ""
+      subPort: 2096
+      subPath: "/sub/"
+      subDomain: ""
+      subCertFile: ""
+      subKeyFile: ""
+      subUpdates: 12
+      subEncrypt: true
+      subShowInfo: false
+      subURI: ""
+      subJsonPath: "/json/"
+      subJsonURI: ""
+      subJsonFragment: ""
+      subJsonMux: ""
+      subJsonRules: ""
+      datepicker: "gregorian"
+      pageSize: 50
+      loginSecurity: true
+    status_code: [200]
+    return_content: true
+  no_log: true
+
+- name: Update admin username and password
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/panel/setting/updateUser"
+    method: POST
+    body_format: json
+    headers:
+      Cookie: "{{ session_cookie }}"
+    body:
+      oldUsername: "admin"
+      oldPassword: "admin"
+      newUsername: "{{ panel_username }}"
+      newPassword: "{{ panel_password }}"
+    status_code: [200]
+    return_content: true
+  no_log: true
+
+- name: Restart 3x-ui to apply new settings
+  ansible.builtin.command: docker restart 3x-ui
+  changed_when: true
+
+- name: Wait for panel to come back up
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/"
+    method: GET
+    status_code: [200]
+  register: panel_restart_wait
+  until: panel_restart_wait is succeeded
+  retries: 30
+  delay: 2
+
+- name: Login with new credentials
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/login"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ panel_username }}"
+      password: "{{ panel_password }}"
+    status_code: [200]
+    return_content: true
+  register: new_login
+  no_log: true
+
+- name: Update session cookie
+  ansible.builtin.set_fact:
+    session_cookie: "{{ new_login.cookies_string }}"
+  no_log: true
+
+- name: Mark panel as configured
+  ansible.builtin.set_fact:
+    panel_configured: true

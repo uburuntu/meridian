@@ -1,0 +1,87 @@
+---
+# =============================================================================
+# Censorship-Resistant Proxy Server Setup
+# =============================================================================
+# Deploys VLESS+Reality (primary) and optionally VLESS+WSS+CDN (fallback)
+# on a Debian/Ubuntu VPS.
+#
+# Usage:
+#   Minimal (Reality only):  ansible-playbook playbook.yml
+#   Full (with CDN fallback): ansible-playbook playbook.yml -e domain=example.com
+#
+# Re-running is safe — all tasks are idempotent.
+# =============================================================================
+
+- name: Deploy censorship-resistant proxy server
+  hosts: all
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    # -- Input validation --
+    - name: Fail if server IP is still the placeholder
+      ansible.builtin.fail:
+        msg: >-
+          You haven't configured your server IP yet.
+          Edit inventory.yml and replace YOUR_SERVER_IP with your actual VPS IP address.
+      when: ansible_host == 'YOUR_SERVER_IP'
+
+    - name: Resolve server public IP
+      ansible.builtin.include_tasks: roles/shared/tasks/resolve_ip.yml
+
+    - name: Check qrencode dependency
+      ansible.builtin.include_tasks: roles/shared/tasks/check_qrencode.yml
+
+    # -- Compute derived variables --
+    - name: Set mode flags and derived ports
+      ansible.builtin.set_fact:
+        domain_mode: "{{ domain | default('') | length > 0 }}"
+        reality_port: >-
+          {{ (exit_mode | default(false) | bool) | ternary(
+               reality_direct_port | default(8444),
+               (domain | default('') | length > 0) | ternary(haproxy_reality_backend_port, 443)
+             ) }}
+
+    - name: Load saved credentials
+      ansible.builtin.include_tasks: roles/shared/tasks/load_credentials.yml
+
+    - name: Apply saved credentials as facts
+      ansible.builtin.set_fact:
+        panel_username: "{{ saved_creds.panel_username }}"
+        panel_password: "{{ saved_creds.panel_password }}"
+        panel_web_base_path: "{{ saved_creds.panel_web_base_path }}"
+        info_page_path: "{{ saved_creds.info_page_path }}"
+        ws_path: "{{ saved_creds.ws_path }}"
+        reality_uuid: "{{ saved_creds.reality_uuid }}"
+        reality_private_key: "{{ saved_creds.reality_private_key }}"
+        reality_public_key: "{{ saved_creds.reality_public_key }}"
+        reality_short_id: "{{ saved_creds.reality_short_id }}"
+        wss_uuid: "{{ saved_creds.wss_uuid | default('') }}"
+        panel_configured: "{{ saved_creds.panel_configured | default(false) }}"
+      when: creds_file_stat.stat.exists
+
+  roles:
+    - role: common
+    - role: docker
+    - role: xray
+    - role: haproxy
+      when: domain_mode | bool
+    - role: caddy
+      when: domain_mode | bool
+    - role: output
+
+  post_tasks:
+    - name: Create server credentials directory
+      ansible.builtin.file:
+        path: /etc/meridian
+        state: directory
+        mode: "0700"
+
+    - name: Sync credentials to server
+      ansible.builtin.copy:
+        src: "{{ credentials_dir }}/"
+        dest: /etc/meridian/
+        mode: "0600"
+        directory_mode: "0700"
+      no_log: true
+      when: credentials_dir != '/etc/meridian'

@@ -1,6 +1,6 @@
 # Credentials contain all secrets — NEVER commit these
 credentials/
-meridian/
+/meridian/
 vpn-credentials/
 
 # Ansible
@@ -10,6 +10,8 @@ vpn-credentials/
 *.pyc
 __pycache__/
 *.egg-info/
+dist/
+build/
 venv/
 .venv/
 

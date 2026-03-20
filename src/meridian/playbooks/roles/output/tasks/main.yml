@@ -1,0 +1,170 @@
+---
+# Final output: display connection info, QR codes, and save files locally.
+# This role always runs (both domain and no-domain mode).
+
+# -- Generate client output (URLs, QR codes, HTML, text) --
+- name: Set client variables for output generation
+  ansible.builtin.set_fact:
+    client_reality_uuid: "{{ reality_uuid }}"
+    client_wss_uuid: "{{ wss_uuid | default('') }}"
+    client_name: "{{ first_client_name | default('default') }}"
+
+- name: Generate client output files
+  ansible.builtin.include_tasks: ../../shared/tasks/generate_client_output.yml
+
+# -- Save admin connection summary (includes panel credentials) --
+- name: Save admin connection summary to local file
+  ansible.builtin.template:
+    src: connection-summary.txt.j2
+    dest: "{{ credentials_dir }}/{{ inventory_hostname }}-connection-info.txt"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+
+# -- Exit mode direct fallback URL --
+- name: Build direct Reality fallback URL (exit mode)
+  ansible.builtin.set_fact:
+    vless_direct_url: >-
+      vless://{{ reality_uuid }}@{{ server_public_ip }}:{{ reality_direct_port | default(8444) }}?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Direct-Fallback
+  when: exit_mode | default(false) | bool
+
+# -- Flush handlers so HAProxy/Caddy are running before port check --
+- name: Flush handlers before port verification
+  ansible.builtin.meta: flush_handlers
+
+# -- Verify the proxy is actually listening --
+- name: Verify port 443 is listening
+  ansible.builtin.command:
+    cmd: ss -tlnp sport = :443
+  register: port_443_check
+  changed_when: false
+
+- name: Verify Reality port is listening (exit mode fallback)
+  ansible.builtin.command:
+    cmd: "ss -tlnp sport = :{{ reality_direct_port | default(8444) }}"
+  register: port_direct_check
+  changed_when: false
+  when: exit_mode | default(false) | bool
+
+- name: Verify XHTTP port is listening
+  ansible.builtin.command:
+    cmd: "ss -tlnp sport = :{{ xhttp_inbound_port }}"
+  register: port_xhttp_check
+  changed_when: false
+  when:
+    - xhttp_enabled | default(false) | bool
+    - not (exit_mode | default(false) | bool)
+
+# -- Print output directly to terminal (bypasses Ansible's JSON-escaping) --
+# Using shell echo instead of debug so ANSI QR codes render properly.
+
+- name: Display QR codes and connection summary
+  ansible.builtin.shell:
+    cmd: |
+      printf '\n'
+      printf '%s\n' '{{ reality_qr_terminal.stdout | replace("'", "'\\''") }}'
+      {% if xhttp_enabled | default(false) | bool %}
+      printf '\n'
+      printf '%s\n' '{{ xhttp_qr_terminal.stdout | replace("'", "'\\''") }}'
+      {% endif %}
+      {% if domain_mode | bool %}
+      printf '\n'
+      printf '%s\n' '{{ wss_qr_terminal.stdout | replace("'", "'\\''") }}'
+      {% endif %}
+      printf '\n'
+      cat <<'SUMMARY'
+
+      ======================================================================
+                        CONNECTION SETUP COMPLETE
+      ======================================================================
+
+      --- Verification ---
+      Port 443: {{ 'OK' if '*:443' in port_443_check.stdout or '0.0.0.0:443' in port_443_check.stdout or ':::443' in port_443_check.stdout else 'NOT LISTENING — run: docker logs 3x-ui' }}
+      {% if exit_mode | default(false) | bool %}
+      Port {{ reality_direct_port | default(8444) }}: {{ 'OK' if port_direct_check.stdout | length > 50 else 'NOT LISTENING' }}
+      {% endif %}
+      {% if xhttp_enabled | default(false) | bool and not (exit_mode | default(false) | bool) %}
+      Port {{ xhttp_inbound_port }} (XHTTP): {{ 'OK' if port_xhttp_check.stdout | length > 50 else 'NOT LISTENING — run: docker logs 3x-ui' }}
+      {% endif %}
+
+      --- Connection URLs ---
+      {% if exit_mode | default(false) | bool %}
+      Direct fallback (port {{ reality_direct_port | default(8444) }}):
+      {{ vless_direct_url }}
+      {% else %}
+      Primary (Reality, port 443):
+      {{ vless_reality_url }}
+      {% endif %}
+      {% if xhttp_enabled | default(false) | bool %}
+
+      XHTTP (enhanced stealth, port {{ xhttp_inbound_port }}):
+      {{ vless_xhttp_url }}
+      {% endif %}
+      {% if domain_mode | bool %}
+
+      CDN fallback (WSS via {{ domain }}):
+      {{ vless_wss_url }}
+      {% endif %}
+      {% if domain_mode | bool %}
+
+      --- Connection Info Page ---
+      https://{{ domain }}/{{ info_page_path }}
+      (Share this link — has QR codes, copy buttons, setup instructions)
+      {% endif %}
+
+      --- Files Saved ---
+      HTML page: {{ credentials_dir }}/{{ inventory_hostname }}-{{ first_client_name | default('default') }}-connection-info.html
+      Text file: {{ credentials_dir }}/{{ inventory_hostname }}-connection-info.txt
+      Credentials: {{ credentials_file }}
+      {% if domain_mode | bool %}
+
+      --- Cloudflare Setup (for CDN fallback) ---
+      Now switch the DNS record to Proxied (orange cloud), then:
+      1. SSL/TLS → Full (Strict)
+      2. Network → Enable WebSockets
+      3. SSL/TLS → Edge Certificates → disable "Always Use HTTPS"
+         (or add Page Rule: /.well-known/acme-challenge/* → disable HTTPS)
+      The TLS certificate renews automatically every 90 days.
+      Renewals work through Cloudflare as long as HTTP port 80 is not
+      redirected to HTTPS by Cloudflare before reaching the server.
+      {% endif %}
+
+      --- 3x-ui Panel ---
+      {% if domain_mode | bool %}
+      URL:      https://{{ domain }}/{{ panel_web_base_path }}/
+      {% else %}
+      Access via SSH tunnel (panel is localhost-only):
+        ssh -L {{ panel_internal_port }}:127.0.0.1:{{ panel_internal_port }} root@{{ server_public_ip }}
+        Then open: http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/
+      {% endif %}
+      Username: {{ panel_username }}
+      Password: {{ panel_password }}
+
+      --- Share Access ---
+      Add a friend:   meridian client add NAME
+      List clients:   meridian client list
+      Remove client:  meridian client remove NAME
+
+      --- Not connecting? ---
+      Test from your phone/laptop:  meridian ping
+      Or use the web tool:          https://meridian.msu.rocks/ping?ip={{ server_public_ip }}{% if domain | default('') %}&domain={{ domain }}{% endif %}
+
+      --- Feedback ---
+      Something not working? Run: meridian diagnostics
+      Then open an issue: https://github.com/uburuntu/meridian/issues
+
+      ======================================================================
+      {% if exit_mode | default(false) | bool %}
+
+      --- Exit Node Credentials (for Relay Configuration) ---
+      These values are automatically passed to the relay node.
+      XHTTP UUID:    {{ xhttp_uuid }}
+      Public Key:    {{ reality_public_key }}
+      Short ID:      {{ reality_short_id }}
+      Reality SNI:   {{ reality_sni }}
+      Server IP:     {{ server_public_ip }}
+      {% endif %}
+      SUMMARY
+  delegate_to: localhost
+  become: false
+  changed_when: false

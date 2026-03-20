@@ -1,0 +1,170 @@
+---
+# Caddy Web Server (domain mode only)
+# Handles TLS termination, WebSocket proxy for VLESS+WSS,
+# 3x-ui panel proxy, and the connection info page.
+# Receives traffic from HAProxy on the internal port.
+#
+# Config strategy: Meridian writes its config to /etc/caddy/conf.d/meridian.caddy
+# and ensures the main Caddyfile imports /etc/caddy/conf.d/*. This way the user's
+# own Caddyfile is never overwritten — they can add their own site blocks freely.
+
+# -- Pre-flight: check that the domain resolves to this server --
+- name: Resolve domain DNS to check it points to this server
+  ansible.builtin.command:
+    cmd: "dig +short {{ domain }} @8.8.8.8"
+  register: domain_dns_check
+  changed_when: false
+  failed_when: false
+
+- name: Fail if domain does not resolve to this server
+  ansible.builtin.fail:
+    msg: |
+      {{ domain }} does not resolve to this server's IP ({{ server_public_ip }}).
+      DNS returned: {{ domain_dns_check.stdout | default('(empty)') }}
+
+      Caddy needs the domain to point DIRECTLY to this server for TLS certificates.
+
+      Fix: In Cloudflare, set the A record to "DNS only" (grey cloud), then re-run.
+      After the playbook succeeds, switch to "Proxied" (orange cloud).
+
+      To skip this check: add -e skip_dns_check=true
+  when:
+    - not (skip_dns_check | default(false) | bool)
+    - domain_dns_check.stdout | default('') | trim != server_public_ip
+    - domain_dns_check.stdout | default('') | trim != ''
+
+- name: Install Caddy prerequisites
+  ansible.builtin.apt:
+    name:
+      - debian-keyring
+      - debian-archive-keyring
+      - apt-transport-https
+      - curl
+      - dnsutils
+    state: present
+
+- name: Add Caddy GPG key
+  ansible.builtin.get_url:
+    url: https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+    dest: /etc/apt/keyrings/caddy-stable.asc
+    mode: "0644"
+
+- name: Add Caddy apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/caddy-stable.asc]
+      https://dl.cloudsmith.io/public/caddy/stable/deb/debian
+      any-version main
+    filename: caddy-stable
+    state: present
+
+- name: Install Caddy
+  ansible.builtin.apt:
+    name: caddy
+    state: present
+    update_cache: true
+
+- name: Create web and config directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+    owner: caddy
+    group: caddy
+  loop:
+    - /var/www/private
+    - /var/log/caddy
+    - /etc/caddy/conf.d
+
+- name: Deploy Meridian Caddy config
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/conf.d/meridian.caddy
+    mode: "0644"
+  notify: Reload Caddy
+
+- name: Ensure main Caddyfile imports conf.d
+  ansible.builtin.lineinfile:
+    path: /etc/caddy/Caddyfile
+    line: "import /etc/caddy/conf.d/*.caddy"
+    create: true
+    mode: "0644"
+  notify: Reload Caddy
+
+- name: Ensure Caddy is started and enabled
+  ansible.builtin.service:
+    name: caddy
+    state: started
+    enabled: true
+
+# --- Connection info page (served at secret path) ---
+- name: Install qrencode on server
+  ansible.builtin.apt:
+    name: qrencode
+    state: present
+
+- name: Build connection URLs for server-hosted page
+  ansible.builtin.set_fact:
+    vless_reality_url: >-
+      vless://{{ reality_uuid }}@{{ server_public_ip }}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Reality
+    vless_wss_url: >-
+      vless://{{ wss_uuid }}@{{ domain }}:443?encryption=none&security=tls&sni={{ domain }}&type=ws&host={{ domain }}&path=%2F{{ ws_path }}#VLESS-WSS-CDN
+
+- name: Generate Reality QR code as base64 PNG
+  ansible.builtin.shell:
+    cmd: printf '%s' '{{ vless_reality_url }}' | qrencode -t PNG -o - -s 6 | base64 -w0
+  register: reality_qr_b64
+  changed_when: false
+
+- name: Build XHTTP URL for server-hosted page
+  ansible.builtin.set_fact:
+    vless_xhttp_url: >-
+      vless://{{ reality_uuid }}@{{ server_public_ip }}:{{ xhttp_inbound_port }}?encryption=none&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=xhttp&mode={{ xhttp_mode | default('packet-up') }}&path=%2F#VLESS-XHTTP
+  when: xhttp_enabled | default(false) | bool
+
+- name: Generate XHTTP QR code as base64 PNG
+  ansible.builtin.shell:
+    cmd: printf '%s' '{{ vless_xhttp_url }}' | qrencode -t PNG -o - -s 6 | base64 -w0
+  register: xhttp_qr_b64
+  changed_when: false
+  when: xhttp_enabled | default(false) | bool
+
+- name: Generate WSS QR code as base64 PNG
+  ansible.builtin.shell:
+    cmd: printf '%s' '{{ vless_wss_url }}' | qrencode -t PNG -o - -s 6 | base64 -w0
+  register: wss_qr_b64
+  changed_when: false
+
+- name: Deploy stats update script
+  ansible.builtin.template:
+    src: update-stats.py.j2
+    dest: /etc/meridian/update-stats.py
+    mode: "0700"
+
+- name: Create stats directory
+  ansible.builtin.file:
+    path: /var/www/private/stats
+    state: directory
+    mode: "0755"
+    owner: caddy
+    group: caddy
+
+- name: Run stats update once
+  ansible.builtin.command:
+    cmd: python3 /etc/meridian/update-stats.py
+  changed_when: true
+
+- name: Add stats update cron job (every 5 minutes)
+  ansible.builtin.cron:
+    name: meridian-stats-update
+    job: "python3 /etc/meridian/update-stats.py"
+    minute: "*/5"
+    user: root
+
+- name: Deploy connection info page
+  ansible.builtin.template:
+    src: connection-info.html.j2
+    dest: /var/www/private/index.html
+    mode: "0644"
+    owner: caddy
+    group: caddy

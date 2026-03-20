@@ -19,6 +19,44 @@ jobs:
         with:
           requirements_file: requirements.yml
 
+  python-test:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package with dev dependencies
+        run: pip install ".[dev]"
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+  python-lint:
+    name: Python Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Ruff check
+        run: ruff check src/ tests/
+
+      - name: Ruff format check
+        run: ruff format --check src/ tests/
+
   validate:
     name: Validate
     runs-on: ubuntu-latest
@@ -55,20 +93,13 @@ jobs:
 
       - name: Check script syntax
         run: |
-          bash -n meridian
           bash -n install.sh
           bash -n setup.sh
 
       - name: Shellcheck
         run: |
-          shellcheck -e SC2086,SC2029,SC2087,SC2155 -S warning meridian
           shellcheck -e SC2086,SC2029,SC2087,SC2155 -S warning install.sh
           shellcheck -e SC2086,SC2029,SC2087,SC2155 -S warning setup.sh
-
-      - name: Verify --help and version
-        run: |
-          bash meridian help
-          bash meridian version
 
       - name: Verify no form-urlencoded on inbound/client APIs
         run: |
@@ -120,14 +151,14 @@ jobs:
               sys.exit(1)
           "
 
-      - name: Verify VERSION file matches script
+      - name: Verify VERSION file format
         run: |
-          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
-          SCRIPT_VERSION=$(grep '^MERIDIAN_VERSION=' meridian | head -1 | cut -d'"' -f2)
-          if [ "$FILE_VERSION" != "$SCRIPT_VERSION" ]; then
-            echo "VERSION file ($FILE_VERSION) does not match meridian script ($SCRIPT_VERSION)"
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "VERSION file must be semver (X.Y.Z), got: $VERSION"
             exit 1
           fi
+          echo "OK: VERSION=$VERSION"
 
   dry-run:
     name: Dry Run

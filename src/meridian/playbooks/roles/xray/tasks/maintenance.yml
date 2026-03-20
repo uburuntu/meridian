@@ -1,0 +1,20 @@
+---
+# Maintenance tasks: prevent unbounded growth of 3x-ui database and logs.
+
+- name: Add weekly database vacuum cron job
+  ansible.builtin.cron:
+    name: "meridian-db-vacuum"
+    job: "docker exec 3x-ui sqlite3 /etc/x-ui/x-ui.db 'DELETE FROM client_traffics WHERE created_at < datetime(\"now\", \"-30 days\"); VACUUM;' 2>/dev/null || true"
+    weekday: "0"
+    hour: "4"
+    minute: "0"
+    user: root
+
+- name: Add weekly Docker log cleanup cron job
+  ansible.builtin.cron:
+    name: "meridian-docker-log-cleanup"
+    job: "truncate -s 0 $(docker inspect --format='{{ '{{' }}.LogPath{{ '}}' }}' 3x-ui 2>/dev/null) 2>/dev/null || true"
+    weekday: "0"
+    hour: "4"
+    minute: "5"
+    user: root

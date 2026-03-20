@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "meridian-vpn"
+dynamic = ["version"]
+description = "Censorship-resistant VLESS+Reality proxy server management"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "uburuntu" }]
+keywords = ["vpn", "proxy", "vless", "reality", "xray"]
+classifiers = [
+    "Environment :: Console",
+    "Topic :: Internet :: Proxy Servers",
+    "Topic :: System :: Networking",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "typer[all]>=0.9",
+    "pyyaml>=6.0",
+    "packaging>=23.0",
+]
+
+[project.scripts]
+meridian = "meridian.cli:app"
+
+[project.urls]
+Homepage = "https://meridian.msu.rocks"
+Repository = "https://github.com/uburuntu/meridian"
+Issues = "https://github.com/uburuntu/meridian/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.4", "mypy>=1.0"]
+
+[tool.hatch.version]
+path = "VERSION"
+pattern = "(?P<version>.+)"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/meridian"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/.github", "/docs"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.10"

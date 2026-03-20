@@ -1,0 +1,94 @@
+---
+# Client management: add, list, or remove proxy clients.
+# Dispatches to the appropriate action after logging into the panel API.
+
+- name: Validate client_action
+  ansible.builtin.assert:
+    that: client_action in ['add', 'list', 'remove']
+    fail_msg: "Invalid client_action '{{ client_action }}'. Must be: add, list, or remove."
+
+# -- Login to panel API --
+- name: Login to 3x-ui panel
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/login"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ panel_username }}"
+      password: "{{ panel_password }}"
+    status_code: [200]
+    return_content: true
+  register: api_login
+  no_log: true
+
+- name: Set session cookie
+  ansible.builtin.set_fact:
+    session_cookie: "{{ api_login.cookies_string }}"
+  no_log: true
+
+# -- Discover Xray binary (needed for UUID generation) --
+- name: Discover Xray binary path inside container
+  ansible.builtin.command:
+    cmd: docker exec 3x-ui sh -c 'ls /app/bin/xray-linux-* 2>/dev/null || which xray 2>/dev/null || echo NOT_FOUND'
+  register: xray_binary_discovery
+  changed_when: false
+  when: client_action == 'add'
+
+- name: Set Xray binary path
+  ansible.builtin.set_fact:
+    xray_cmd: "docker exec 3x-ui {{ xray_binary_discovery.stdout_lines[0] }}"
+  when: client_action == 'add'
+
+# -- List all inbounds (used by all actions) --
+- name: List all inbounds
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/list"
+    method: GET
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: inbounds_list
+
+- name: Find Reality inbound
+  ansible.builtin.set_fact:
+    reality_inbound: "{{ inbounds_list.json.obj | default([]) | selectattr('remark', 'equalto', 'VLESS-Reality') | list | first }}"
+
+- name: Extract Reality inbound clients
+  ansible.builtin.set_fact:
+    reality_inbound_id: "{{ reality_inbound.id }}"
+    reality_clients: "{{ (reality_inbound.settings | from_json).clients }}"
+
+- name: Find WSS inbound (domain mode)
+  ansible.builtin.set_fact:
+    wss_inbound: "{{ inbounds_list.json.obj | default([]) | selectattr('remark', 'equalto', 'VLESS-WSS') | list | first | default(None) }}"
+  when: domain_mode | bool
+
+- name: Extract WSS inbound details (domain mode)
+  ansible.builtin.set_fact:
+    wss_inbound_id: "{{ wss_inbound.id }}"
+    wss_clients: "{{ (wss_inbound.settings | from_json).clients }}"
+  when: domain_mode | bool and wss_inbound is not none
+
+- name: Find XHTTP inbound
+  ansible.builtin.set_fact:
+    xhttp_inbound: "{{ inbounds_list.json.obj | default([]) | selectattr('remark', 'equalto', 'VLESS-Reality-XHTTP') | list | first | default(None) }}"
+
+- name: Extract XHTTP inbound details
+  ansible.builtin.set_fact:
+    xhttp_inbound_id: "{{ xhttp_inbound.id }}"
+    xhttp_inbound_port: "{{ xhttp_inbound.port }}"
+    xhttp_clients: "{{ (xhttp_inbound.settings | from_json).clients }}"
+  when: xhttp_inbound is not none
+
+# -- Dispatch to action --
+- name: Add client
+  ansible.builtin.include_tasks: add_client.yml
+  when: client_action == 'add'
+
+- name: List clients
+  ansible.builtin.include_tasks: list_clients.yml
+  when: client_action == 'list'
+
+- name: Remove client
+  ansible.builtin.include_tasks: remove_client.yml
+  when: client_action == 'remove'

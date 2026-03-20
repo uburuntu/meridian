@@ -1,0 +1,30 @@
+---
+# Shared pre-task: resolve server public IP.
+# Used by playbook.yml and playbook-chain.yml.
+
+- name: Use ansible_host as public IP (normal SSH runs)
+  ansible.builtin.set_fact:
+    server_public_ip: "{{ ansible_host }}"
+  when:
+    - server_public_ip | default('') | length == 0
+    - ansible_host not in ['127.0.0.1', 'localhost']
+
+- name: Auto-detect public IP (local connection fallback)
+  ansible.builtin.command:
+    cmd: curl -s --max-time 5 https://ifconfig.me
+  register: detected_ip
+  changed_when: false
+  failed_when: false
+  when: server_public_ip | default('') | length == 0
+
+- name: Set auto-detected public IP
+  ansible.builtin.set_fact:
+    server_public_ip: "{{ detected_ip.stdout | trim }}"
+  when:
+    - server_public_ip | default('') | length == 0
+    - detected_ip.stdout | default('') | trim | length > 0
+
+- name: Fail if public IP could not be determined
+  ansible.builtin.fail:
+    msg: "Could not determine public IP. Pass it explicitly: -e server_public_ip=1.2.3.4"
+  when: server_public_ip | default('') | length == 0

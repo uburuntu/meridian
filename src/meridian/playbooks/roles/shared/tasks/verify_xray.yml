@@ -1,0 +1,31 @@
+---
+# Verify that Xray core is running inside the 3x-ui container.
+# If xray crashed (e.g. due to corrupted inbound config), the panel
+# stays up but no traffic flows — catch this early.
+
+- name: Check if Xray is running inside 3x-ui container
+  ansible.builtin.command:
+    cmd: docker exec 3x-ui pgrep -f xray
+  register: xray_process_check
+  changed_when: false
+  failed_when: false
+
+- name: Collect container logs on Xray failure
+  ansible.builtin.command:
+    cmd: docker logs 3x-ui --tail 30
+  register: xray_failure_logs
+  changed_when: false
+  when: xray_process_check.rc != 0
+
+- name: Fail if Xray is not running
+  ansible.builtin.fail:
+    msg: |
+      Xray core is not running inside the 3x-ui container.
+      This usually means the inbound configuration is invalid or the database is corrupted.
+
+      Container logs:
+      {{ xray_failure_logs.stdout | default('') }}
+
+      Fix: run 'meridian uninstall {{ server_public_ip }}' then retry setup.
+      If the problem persists, open an issue: https://github.com/uburuntu/meridian/issues
+  when: xray_process_check.rc != 0

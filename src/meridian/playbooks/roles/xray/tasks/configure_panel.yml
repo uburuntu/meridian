@@ -1,0 +1,177 @@
+---
+# Configure the 3x-ui panel: change default credentials, generate cryptographic keys.
+# Skipped entirely on re-runs when credentials are already saved locally.
+#
+# SAFETY: Credentials are saved to the local file BEFORE the panel password is
+# changed. This prevents lockout if the playbook fails mid-credential-change.
+
+- name: Skip panel configuration if already done
+  when: not (panel_configured | default(false) | bool)
+  block:
+    # -- Generate random secrets --
+    - name: Generate panel credentials and secret paths
+      ansible.builtin.set_fact:
+        panel_username: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=12') }}"
+        panel_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=24') }}"
+        panel_web_base_path: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=24') }}"
+        info_page_path: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=24') }}"
+        ws_path: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=16') }}"
+      no_log: true
+
+    # -- Discover Xray binary path (architecture-independent) --
+    - name: Discover Xray binary path inside container
+      ansible.builtin.command:
+        cmd: docker exec 3x-ui sh -c 'ls /app/bin/xray-linux-* 2>/dev/null || which xray 2>/dev/null || echo NOT_FOUND'
+      register: xray_binary_discovery
+      changed_when: false
+
+    - name: Set Xray binary path
+      ansible.builtin.set_fact:
+        xray_cmd: "docker exec 3x-ui {{ xray_binary_discovery.stdout_lines[0] }}"
+
+    - name: Fail if Xray binary not found in container
+      ansible.builtin.fail:
+        msg: "Xray binary not found in 3x-ui container. Try: docker exec 3x-ui find / -name 'xray*' -type f"
+      when: "'NOT_FOUND' in xray_binary_discovery.stdout"
+
+    # -- Generate cryptographic keys (before any API calls) --
+    - name: Generate x25519 keypair for Reality
+      ansible.builtin.command:
+        cmd: "{{ xray_cmd }} x25519"
+      register: x25519_output
+      changed_when: false
+      no_log: true
+
+    # x25519 output format varies by Xray version:
+    #   Old: "Private key: xxx\nPublic key: xxx"
+    #   New: "PrivateKey: xxx\nPassword: xxx" (Password = public key)
+    - name: Parse Reality private and public keys
+      ansible.builtin.set_fact:
+        reality_private_key: "{{ x25519_output.stdout | regex_search('(?:Private key|PrivateKey):\\s*(.+)', '\\1') | first }}"
+        reality_public_key: "{{ x25519_output.stdout | regex_search('(?:Public key|Password):\\s*(.+)', '\\1') | first }}"
+      no_log: true
+
+    - name: Verify Reality keys were parsed
+      ansible.builtin.assert:
+        that:
+          - reality_private_key | length > 20
+          - reality_public_key | length > 20
+        fail_msg: "Failed to parse x25519 output. The Xray version may have changed the output format."
+
+    - name: Generate UUID for Reality client
+      ansible.builtin.command:
+        cmd: "{{ xray_cmd }} uuid"
+      register: uuid_output
+      changed_when: false
+      no_log: true
+
+    - name: Set Reality UUID
+      ansible.builtin.set_fact:
+        reality_uuid: "{{ uuid_output.stdout | trim }}"
+      no_log: true
+
+    - name: Generate UUID for WSS client
+      ansible.builtin.command:
+        cmd: "{{ xray_cmd }} uuid"
+      register: wss_uuid_output
+      changed_when: false
+      no_log: true
+
+    - name: Set WSS UUID
+      ansible.builtin.set_fact:
+        wss_uuid: "{{ wss_uuid_output.stdout | trim }}"
+      no_log: true
+
+    - name: Generate short ID for Reality
+      ansible.builtin.set_fact:
+        reality_short_id: "{{ lookup('password', '/dev/null chars=hexdigits length=8') | lower }}"
+      no_log: true
+
+    - name: Generate UUID for XHTTP relay connections (exit mode only)
+      ansible.builtin.command:
+        cmd: "{{ xray_cmd }} uuid"
+      register: xhttp_uuid_output
+      changed_when: false
+      no_log: true
+      when: exit_mode | default(false) | bool
+
+    - name: Set XHTTP UUID
+      ansible.builtin.set_fact:
+        xhttp_uuid: "{{ xhttp_uuid_output.stdout | trim }}"
+      no_log: true
+      when: exit_mode | default(false) | bool
+
+    - name: Set empty XHTTP UUID for non-exit mode
+      ansible.builtin.set_fact:
+        xhttp_uuid: ""
+      when: not (exit_mode | default(false) | bool)
+
+    # -- SAVE CREDENTIALS FIRST (before changing the panel password) --
+    # This prevents lockout if the playbook fails during password change.
+    - name: Save credentials to local file
+      ansible.builtin.copy:
+        content: |
+          ---
+          # Auto-generated credentials for {{ inventory_hostname }}
+          # Created: {{ ansible_date_time.iso8601 }}
+          # DO NOT share this file. It contains all secrets for your proxy server.
+          panel_configured: true
+          panel_username: "{{ panel_username }}"
+          panel_password: "{{ panel_password }}"
+          panel_web_base_path: "{{ panel_web_base_path }}"
+          info_page_path: "{{ info_page_path }}"
+          ws_path: "{{ ws_path }}"
+          reality_uuid: "{{ reality_uuid }}"
+          reality_private_key: "{{ reality_private_key }}"
+          reality_public_key: "{{ reality_public_key }}"
+          reality_short_id: "{{ reality_short_id }}"
+          reality_sni: "{{ reality_sni }}"
+          wss_uuid: "{{ wss_uuid }}"
+          xhttp_uuid: "{{ xhttp_uuid | default('') }}"
+          xhttp_enabled: {{ xhttp_enabled | default(false) | bool | ternary('true', 'false') }}
+          exit_ip: "{{ server_public_ip }}"
+          domain: "{{ domain | default('') }}"
+        dest: "{{ credentials_file }}"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    # -- Track the first client alongside all future clients --
+    - name: Save initial client to clients tracking file
+      ansible.builtin.copy:
+        content: |
+          ---
+          clients:
+            - name: "{{ first_client_name | default('default') }}"
+              added: "{{ ansible_date_time.iso8601 }}"
+              reality_uuid: "{{ reality_uuid }}"
+              wss_uuid: "{{ wss_uuid | default('') }}"
+        dest: "{{ credentials_dir }}/{{ inventory_hostname }}-clients.yml"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    # -- Apply settings and change credentials (shared with xray_relay) --
+    - name: Apply panel settings and credentials
+      ansible.builtin.include_tasks: apply_panel_settings.yml
+
+# Ensure we have a valid session cookie for subsequent API calls
+- name: Login to panel (for inbound configuration)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/login"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ panel_username }}"
+      password: "{{ panel_password }}"
+    status_code: [200]
+    return_content: true
+  register: api_login
+  no_log: true
+
+- name: Set session cookie for API calls
+  ansible.builtin.set_fact:
+    session_cookie: "{{ api_login.cookies_string }}"
+  no_log: true

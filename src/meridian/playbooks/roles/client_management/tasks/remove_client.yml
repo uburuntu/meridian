@@ -1,0 +1,138 @@
+---
+# Remove a client from existing inbound(s) and clean up local files.
+# Note: 3x-ui delClient API requires the client UUID, not the email.
+
+# -- Validate input --
+- name: Validate client name is provided
+  ansible.builtin.assert:
+    that:
+      - client_name is defined
+      - client_name | length > 0
+    fail_msg: "client_name is required. Usage: meridian client remove NAME"
+
+# -- Find client UUID from Reality inbound --
+- name: Find Reality client by email
+  ansible.builtin.set_fact:
+    reality_client_match: "{{ reality_clients | selectattr('email', 'equalto', 'reality-' + client_name) | list }}"
+
+- name: Fail if client does not exist
+  ansible.builtin.fail:
+    msg: "Client '{{ client_name }}' not found. Use: meridian client list"
+  when: reality_client_match | length == 0
+
+- name: Extract Reality client UUID
+  ansible.builtin.set_fact:
+    reality_client_uuid: "{{ reality_client_match[0].id }}"
+
+# -- Delete from Reality inbound (by UUID) --
+- name: Remove client from Reality inbound
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/{{ reality_inbound_id }}/delClient/{{ reality_client_uuid }}"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: reality_del_result
+  no_log: true
+
+- name: Verify Reality client was removed
+  ansible.builtin.assert:
+    that: reality_del_result.json.success | default(false)
+    fail_msg: "Failed to remove client from Reality inbound: {{ reality_del_result.json.msg | default('unknown error') }}"
+
+# -- Delete from WSS inbound (domain mode, by UUID) --
+- name: Find WSS client by email
+  ansible.builtin.set_fact:
+    wss_client_match: "{{ wss_clients | default([]) | selectattr('email', 'equalto', 'wss-' + client_name) | list }}"
+  when: domain_mode | bool
+
+- name: Remove client from WSS inbound
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/{{ wss_inbound_id }}/delClient/{{ wss_client_match[0].id }}"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: wss_del_result
+  no_log: true
+  when: domain_mode | bool and (wss_client_match | default([]) | length > 0)
+
+- name: Verify WSS client was removed
+  ansible.builtin.assert:
+    that: wss_del_result.json.success | default(false)
+    fail_msg: "Failed to remove client from WSS inbound: {{ wss_del_result.json.msg | default('unknown error') }}"
+  when: domain_mode | bool and (wss_client_match | default([]) | length > 0)
+
+# -- Delete from XHTTP inbound (if exists, by UUID) --
+- name: Find XHTTP client by email
+  ansible.builtin.set_fact:
+    xhttp_client_match: "{{ xhttp_clients | default([]) | selectattr('email', 'equalto', 'xhttp-' + client_name) | list }}"
+  when: xhttp_inbound_id is defined
+
+- name: Remove client from XHTTP inbound
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/{{ xhttp_inbound_id }}/delClient/{{ xhttp_client_match[0].id }}"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: xhttp_del_result
+  no_log: true
+  when: xhttp_inbound_id is defined and (xhttp_client_match | default([]) | length > 0)
+
+- name: Verify XHTTP client was removed
+  ansible.builtin.assert:
+    that: xhttp_del_result.json.success | default(false)
+    fail_msg: "Failed to remove client from XHTTP inbound: {{ xhttp_del_result.json.msg | default('unknown error') }}"
+  when: xhttp_inbound_id is defined and (xhttp_client_match | default([]) | length > 0)
+
+# -- Update local clients tracking file --
+- name: Load existing clients file
+  ansible.builtin.include_vars:
+    file: "{{ credentials_dir }}/{{ inventory_hostname }}-clients.yml"
+    name: clients_data
+  delegate_to: localhost
+  become: false
+  failed_when: false
+
+- name: Save updated clients file (without removed client)
+  ansible.builtin.copy:
+    content: |
+      ---
+      clients:
+      {% for c in (clients_data.clients | default([])) if c.name != client_name %}
+        - name: "{{ c.name }}"
+          added: "{{ c.added }}"
+          reality_uuid: "{{ c.reality_uuid }}"
+          wss_uuid: "{{ c.wss_uuid | default('') }}"
+      {% endfor %}
+    dest: "{{ credentials_dir }}/{{ inventory_hostname }}-clients.yml"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  when: clients_data is defined and clients_data.clients is defined
+
+# -- Delete local output files --
+- name: Remove client HTML file
+  ansible.builtin.file:
+    path: "{{ credentials_dir }}/{{ inventory_hostname }}-{{ client_name }}-connection-info.html"
+    state: absent
+  delegate_to: localhost
+  become: false
+
+- name: Remove client text file
+  ansible.builtin.file:
+    path: "{{ credentials_dir }}/{{ inventory_hostname }}-{{ client_name }}-connection-info.txt"
+    state: absent
+  delegate_to: localhost
+  become: false
+
+# -- Confirmation --
+- name: Display removal confirmation
+  ansible.builtin.debug:
+    msg: |
+      Client '{{ client_name }}' has been removed.
+      - Removed from Reality inbound
+      {{ '- Removed from XHTTP inbound' if (xhttp_client_match | default([]) | length > 0) else '' }}
+      {{ '- Removed from WSS inbound' if (wss_client_match | default([]) | length > 0) else '' }}
+      - Deleted local connection files

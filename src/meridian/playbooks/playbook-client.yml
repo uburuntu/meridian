@@ -1,0 +1,71 @@
+---
+# =============================================================================
+# Client Management — Add, list, or remove proxy clients
+# =============================================================================
+# Manages clients on an already-deployed server. Lightweight: no system setup,
+# no Docker, no HAProxy/Caddy — just panel API calls and local file generation.
+#
+# Usage:
+#   Add:    ansible-playbook playbook-client.yml -e client_action=add -e client_name=alice
+#   List:   ansible-playbook playbook-client.yml -e client_action=list
+#   Remove: ansible-playbook playbook-client.yml -e client_action=remove -e client_name=alice
+#
+# Requires a previous successful run of playbook.yml (credentials must exist).
+# =============================================================================
+
+- name: Manage proxy clients
+  hosts: all
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Resolve server public IP
+      ansible.builtin.include_tasks: roles/shared/tasks/resolve_ip.yml
+
+    - name: Load saved credentials
+      ansible.builtin.include_tasks: roles/shared/tasks/load_credentials.yml
+
+    - name: Verify server has been set up
+      ansible.builtin.assert:
+        that: creds_file_stat.stat.exists
+        fail_msg: >-
+          No credentials found at {{ credentials_file }}.
+          Run meridian setup first to deploy the server before managing clients.
+
+    - name: Apply saved credentials as facts
+      ansible.builtin.set_fact:
+        panel_username: "{{ saved_creds.panel_username }}"
+        panel_password: "{{ saved_creds.panel_password }}"
+        panel_web_base_path: "{{ saved_creds.panel_web_base_path }}"
+        info_page_path: "{{ saved_creds.info_page_path | default('') }}"
+        ws_path: "{{ saved_creds.ws_path | default('') }}"
+        reality_uuid: "{{ saved_creds.reality_uuid }}"
+        reality_private_key: "{{ saved_creds.reality_private_key }}"
+        reality_public_key: "{{ saved_creds.reality_public_key }}"
+        reality_short_id: "{{ saved_creds.reality_short_id }}"
+        wss_uuid: "{{ saved_creds.wss_uuid | default('') }}"
+        reality_sni: "{{ saved_creds.reality_sni | default('www.microsoft.com') }}"
+        panel_configured: "{{ saved_creds.panel_configured | default(false) }}"
+
+    - name: Set mode flags
+      ansible.builtin.set_fact:
+        domain_mode: "{{ saved_creds.domain | default('') | length > 0 }}"
+        domain: "{{ saved_creds.domain | default('') }}"
+        xhttp_enabled: "{{ saved_creds.xhttp_enabled | default(false) }}"
+
+    - name: Check qrencode dependency (for add action)
+      ansible.builtin.include_tasks: roles/shared/tasks/check_qrencode.yml
+      when: client_action == 'add'
+
+  roles:
+    - role: client_management
+
+  post_tasks:
+    - name: Sync credentials to server
+      ansible.builtin.copy:
+        src: "{{ credentials_dir }}/"
+        dest: /etc/meridian/
+        mode: "0600"
+        directory_mode: "0700"
+      no_log: true
+      when: credentials_dir != '/etc/meridian'

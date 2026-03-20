@@ -1,9 +1,11 @@
 """Render all Jinja2 templates with mock variables to catch undefined vars and syntax errors."""
+
 import glob
 import os
-import sys
-from jinja2 import Environment, FileSystemLoader, Undefined
 import re
+import sys
+
+from jinja2 import Environment, FileSystemLoader, Undefined
 
 
 # Permissive undefined that doesn't crash on missing vars or filters
@@ -124,10 +126,7 @@ MOCK_VARS = {
 }
 
 # Auto-discover all Jinja2 templates in roles/
-TEMPLATES = [
-    (os.path.dirname(f), os.path.basename(f))
-    for f in sorted(glob.glob("roles/*/templates/*.j2"))
-]
+TEMPLATES = [(os.path.dirname(f), os.path.basename(f)) for f in sorted(glob.glob("roles/*/templates/*.j2"))]
 if not TEMPLATES:
     print("FAIL: No templates found — run from repo root")
     sys.exit(1)

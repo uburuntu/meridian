@@ -25,45 +25,67 @@ Ansible automation for deploying censorship-resistant VLESS+Reality proxy server
 ## Project structure
 
 ```
-playbook.yml              Standalone mode
-playbook-chain.yml         Chain mode (exit first, then relay)
-playbook-client.yml        Client management (add/list/remove)
-playbook-uninstall.yml     Clean removal of proxy components + credentials
-inventory.yml.example      Standalone inventory template
-inventory-chain.yml.example Chain inventory template
-group_vars/all.yml         Shared defaults (version pin, ports, limits)
-group_vars/exit.yml        Exit node defaults (chain)
-group_vars/relay.yml       Relay node defaults (chain)
-meridian                   CLI script (installed to ~/.local/bin/meridian)
-install.sh                 Lightweight CLI installer (curl install.sh | bash)
+pyproject.toml             Python package config (hatchling build, PyPI as meridian-vpn)
+VERSION                    Version source of truth (read by hatchling + importlib.metadata)
+src/meridian/              Python CLI package
+  __init__.py              Version from importlib.metadata
+  __main__.py              python -m meridian support
+  cli.py                   Typer app, subcommand registration, global --server flag
+  config.py                Paths, URLs, constants
+  console.py               Rich terminal output: info/ok/warn/fail/prompt/confirm
+  credentials.py           ServerCredentials dataclass, YAML load/save
+  servers.py               ServerRegistry: list/find/add/remove
+  ssh.py                   ServerConnection: run, check_ssh, detect_local_mode
+  ansible.py               Playbook execution, Ansible bootstrap, inventory generation
+  update.py                Auto-update via PyPI (semver: auto-patch, prompt minor/major)
+  ai.py                    AI prompt building, clipboard, doc fetching
+  commands/                One module per subcommand
+    resolve.py             Server resolution logic (shared by most commands)
+    setup.py               Interactive wizard + playbook execution
+    client.py              client add/list/remove (list=direct API, add/remove=ansible)
+    server.py              server add/list/remove
+    check.py               Pre-flight validation (SNI, ports, DNS, OS, disk, clock)
+    scan.py                RealiTLScanner download + execution + SNI selection
+    ping.py                Reachability test (TCP, TLS, clock drift)
+    diagnostics.py         System info collection + redaction
+    uninstall.py           Playbook execution + credential cleanup
+  playbooks/               Bundled Ansible playbooks (package_data)
+    playbook.yml           Standalone mode
+    playbook-chain.yml     Chain mode
+    playbook-client.yml    Client management
+    playbook-uninstall.yml Clean removal
+    ansible.cfg            Ansible configuration
+    requirements.yml       Galaxy collections
+    group_vars/            Shared defaults
+    roles/                 All Ansible roles
+playbook.yml               Standalone mode (repo root copy, used by CI)
+playbook-chain.yml         Chain mode
+playbook-client.yml        Client management
+playbook-uninstall.yml     Clean removal
+group_vars/                Shared defaults (repo root copy)
+roles/                     All Ansible roles (repo root copy)
+install.sh                 CLI installer (bootstraps uv, installs from PyPI, migrates old bash CLI)
 setup.sh                   Compat shim → installs CLI + forwards args
-VERSION                    Version source of truth (matched in meridian script)
+tests/
+  test_cli.py              CliRunner smoke tests
+  test_credentials.py      Credential dataclass tests
+  test_servers.py          Server registry tests
+  test_ansible.py          Inventory generation + playbook bundling tests
+  test_update.py           Version comparison + update throttle tests
+  render_templates.py      Jinja2 template rendering test (with Ansible filter mocks)
+  conftest.py              Shared fixtures
 docs/index.html            Website hosted on meridian.msu.rocks (GitHub Pages)
-docs/meridian              CLI served from website (CD sync)
 docs/install.sh            Installer served from website (CD sync)
 docs/setup.sh              Compat shim served from website (CD sync)
 docs/version               Version file served from website (CD sync)
 docs/ping.html             Web-based ping tool (server reachability test)
 docs/CNAME                 Custom domain for GitHub Pages
-roles/shared/tasks/       Shared task files (resolve_ip, check_qrencode, load_credentials)
-tests/render_templates.py  CI template rendering test (with Ansible filter mocks)
-.github/workflows/ci.yml   CI pipeline (lint, syntax, templates, shell, dry-run)
-.github/workflows/cd.yml   CD pipeline (sync CLI files → docs/)
+.github/workflows/ci.yml   CI: ansible-lint, pytest, ruff, shellcheck, dry-run
+.github/workflows/cd.yml   CD: sync install.sh/setup.sh/version → docs/
+.github/workflows/release.yml  Release: git tag + GitHub Release + PyPI publish
 .ansible-lint              Ansible lint configuration
 SECURITY.md                Vulnerability reporting policy
 CONTRIBUTING.md            Development setup and PR guidelines
-roles/
-  common/                  OS packages, SSH hardening, UFW, BBR
-  docker/                  Docker CE installation (idempotent)
-  xray/                    3x-ui deploy + VLESS inbound config via API
-  xray_relay/              Relay node: user inbound + exit outbound + routing
-                           (reuses xray/templates/docker-compose.yml.j2)
-  haproxy/                 TCP SNI router (domain mode)
-  caddy/                   Auto-TLS + WSS proxy + panel proxy + connection info page (domain mode)
-  output/                  Terminal display + local file generation + port verification
-                           (generate_client_output.yml is shared with client_management)
-  output_relay/            Relay-specific output
-  client_management/       Add/list/remove proxy clients via panel API
 ```
 
 ## Implicit dependencies & cross-file relationships
@@ -71,23 +93,27 @@ roles/
 These are easy to break by editing one file without updating the others:
 
 ### CLI architecture
-- `meridian` CLI installed to `~/.local/bin/meridian` via `install.sh`
-- Data directory: `~/.meridian/` (playbooks, credentials, cache)
-- Playbooks cached in `~/.meridian/playbooks/` with `.version` marker — re-downloaded when CLI version changes
+- `meridian` CLI is a Python package (`meridian-vpn` on PyPI), installed via `uv tool install` or `pipx install`
+- Built with typer (CLI framework) + rich (terminal output) + PyYAML (credential management)
+- Data directory: `~/.meridian/` (credentials, cache, servers, inventory)
+- Playbooks bundled inside the Python package (`src/meridian/playbooks/`), accessed via `importlib.resources`
 - Credentials cached locally in `~/.meridian/credentials/<IP>/` (per-server subdirectories)
 - Server as source of truth: credentials stored at `/etc/meridian/` on the server (synced by playbook post_tasks)
 - Server index: `~/.meridian/servers` (line-oriented: `host user name`, no spaces in names)
-- Auto-update check on each run (throttled to 1x/24h), fetches `meridian.msu.rocks/version`
-- `VERSION` file at repo root is the single source of truth — must match `MERIDIAN_VERSION` in `meridian` script
+- Auto-update checks PyPI JSON API (throttled to 1x/60s); auto-patches via `uv tool upgrade` / `pipx upgrade`
+- `VERSION` file at repo root is the single source of truth — read by hatchling at build time, by `importlib.metadata` at runtime
 - `setup.sh` is a compat shim that installs the CLI and forwards args
+- Ansible is NOT a Python dependency — installed lazily via `ensure_ansible()` (pipx → pip3 → apt cascade)
 
 ### meridian CLI ↔ playbooks
-- CLI passes `-e server_public_ip=$SERVER_IP -e credentials_dir=$HOME/.meridian/credentials/$SERVER_IP` to ansible-playbook
+- CLI passes `-e server_public_ip=... -e credentials_dir=...` to ansible-playbook via `ansible.run_playbook()`
 - All output templates use `{{ server_public_ip }}` instead of `{{ ansible_host }}` for user-facing URLs
-- CLI writes `inventory.yml` inside `~/.meridian/playbooks/` with the user-provided IP/user
+- CLI writes `inventory.yml` to `~/.meridian/inventory.yml` (not inside package dir — may be read-only)
+- CLI sets `ANSIBLE_CONFIG` env var pointing to bundled `ansible.cfg`, runs with `cwd=playbooks_dir`
 - CLI adds `ansible_connection: local` when running on the target server itself
 - CLI adds `ansible_become: true` for non-root users
 - Playbook post_tasks sync `credentials_dir` to `/etc/meridian/` on the server (unless already local)
+- Playbooks exist in two places: repo root (for CI/development) and `src/meridian/playbooks/` (bundled in package)
 
 ### meridian subcommands
 - `meridian setup [IP] [--domain --sni --xhttp --name --user --yes]` — deploy server
@@ -98,12 +124,13 @@ These are easy to break by editing one file without updating the others:
 - `meridian ping [IP]` — test proxy reachability from client device (no SSH needed)
 - `meridian diagnostics [IP] [--ai]` — collect system info for bug reports
 - `meridian uninstall [IP]` — remove proxy via `playbook-uninstall.yml`
-- `meridian self-update` — update CLI + clear playbook cache
+- `meridian self-update` — update CLI via `uv tool upgrade` / `pipx upgrade`
 - `meridian version` — show version
 
 ### docs/index.html ↔ meridian CLI
 - Website command builder has tabbed interface generating `meridian` subcommands
-- CLI files served from `meridian.msu.rocks/` — synced by CD workflow: `meridian`, `install.sh`, `setup.sh`, `version`
+- Install files served from `meridian.msu.rocks/` — synced by CD workflow: `install.sh`, `setup.sh`, `version`
+- CLI itself distributed via PyPI (`meridian-vpn`), not served from website
 - Website references the same app download links as the HTML templates in roles
 - `docs/ping.html` — standalone web ping tool, uses `fetch()` timing to test server reachability from browser. Supports URL params (`?ip=...&domain=...&name=...`) for shareable pre-filled links. Stores server history in localStorage.
 
@@ -187,15 +214,22 @@ These are easy to break by editing one file without updating the others:
 ## Build and test
 
 ```bash
-# Install dependencies
-pip install ansible
-ansible-galaxy collection install -r requirements.yml
+# Install CLI in editable mode with dev dependencies
+pip install -e ".[dev]"
 
-# Validate YAML syntax
-python3 -c "import yaml, glob; [yaml.safe_load(open(f)) for f in glob.glob('**/*.yml', recursive=True)]"
+# Run Python tests
+pytest tests/ -v
+
+# Run linter
+ruff check src/ tests/
+ruff format --check src/ tests/
 
 # Run template rendering test
-pip install jinja2 && python3 tests/render_templates.py
+python3 tests/render_templates.py
+
+# Install Ansible for playbook validation
+pip install ansible
+ansible-galaxy collection install -r requirements.yml
 
 # Run standalone
 ansible-playbook playbook.yml
@@ -230,14 +264,14 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml
 - **Ansible debug vs shell for terminal output**: use `shell` with `printf`/`cat` for output containing ANSI codes (QR codes); `debug msg:` JSON-escapes them
 - **pip3 install on modern Debian/Ubuntu**: must handle PEP 668 "externally managed environment" — try pipx, then `--user`, then `--break-system-packages`, then apt
 - **pip user bin PATH**: after pip3 install --user, add `~/.local/bin` (Linux) and `~/Library/Python/*/bin` (macOS) to PATH
-- **meridian interactive prompts**: use `read -r VAR < /dev/tty` for robustness; detect public IPv4 with `curl -4` to avoid IPv6; suggest domain from saved credentials
-- **info() function**: uses `printf "%s"` which prints arguments literally — do NOT embed escape codes like `${B}` in arguments passed to `info()`
+- **meridian interactive prompts**: `console.prompt()` reads from `/dev/tty` for pipe safety; detect public IPv4 with `curl -4` to avoid IPv6; suggest domain from saved credentials
+- **console output functions**: `info()`, `ok()`, `warn()`, `fail()` use Rich markup — pass plain text, not ANSI codes. `fail()` raises `typer.Exit(1)` and is testable with CliRunner.
 - **GitHub raw CDN caching**: raw.githubusercontent.com caches for ~60-120s; can't bust with query params or headers, just wait. Serving from meridian.msu.rocks avoids this.
 - **HAProxy health checks**: do NOT use `check` on TLS backends (Caddy, Xray) — TCP probes fail on TLS-only ports, causing "backend has no server available" errors. These are local systemd services, not load-balanced pools.
-- **docs/ sync**: `docs/meridian`, `docs/install.sh`, `docs/setup.sh`, `docs/version` are synced by CD workflow. Manual edits to docs/ copies will be overwritten.
+- **docs/ sync**: `docs/install.sh`, `docs/setup.sh`, `docs/version` are synced by CD workflow. Manual edits to docs/ copies will be overwritten. CLI is no longer synced to docs/ (distributed via PyPI).
 - **AI docs**: Source files in `docs/ai/` (`context.md`, `architecture.md`, `troubleshooting.md`). CD workflow concatenates them into `docs/ai/reference.md` — the single file the CLI fetches. Edit the source files, not `reference.md`.
 - **`--ai` flag**: `meridian check --ai` and `meridian diagnostics --ai` bundle AI docs + command output into a clipboard-ready prompt for ChatGPT/Claude. Docs are cached at `~/.meridian/cache/ai-reference.md`, invalidated on version change.
-- **VERSION consistency**: `VERSION` file and `MERIDIAN_VERSION` in `meridian` script must match — CI validates this.
+- **VERSION consistency**: `VERSION` file is the single source of truth. Hatchling reads it at build time; Python code uses `importlib.metadata.version("meridian-vpn")` at runtime. CI validates VERSION format (`^\d+\.\d+\.\d+$`).
 - **Ecosystem cross-promotion**: Always upsell/reference related Meridian tools where contextually appropriate. When adding error messages, output, templates, issue templates, or docs — promote the relevant tool for that context. Current tools to cross-promote:
   - `meridian ping` / `meridian.msu.rocks/ping` — for connection issues, reachability testing
   - `meridian check` — for pre-deployment server validation
@@ -247,12 +281,13 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml
   - The pattern: error/failure messages → suggest ping first (network issue?), then diagnostics (server issue?), then GitHub issues (bug?)
   - **Context-sensitive upsells**: don't blindly suggest every tool — only suggest the tool that helps for the specific failure mode. Example: if ping shows port 443 is blocked, suggesting `meridian diagnostics` doesn't help (it's a firewall issue). But if ping passes and VPN still fails, diagnostics is the right next step.
   - **Pre-fill URLs with known data**: when server IP and domain are available in context (templates, CLI output), always generate pre-filled `meridian.msu.rocks/ping?ip=...&domain=...` URLs so users land on a ready-to-run test.
-- **CLI binary location**: `meridian` can exist in both `/usr/local/bin/` and `~/.local/bin/`. `which meridian` determines which runs. Auto-update writes to `command -v meridian`. When testing locally via `scp`, always check `which meridian` first — updating the wrong file means your changes never execute.
-- **Auto-update re-exec**: after auto-update replaces the CLI on disk, the running process still has the old `MERIDIAN_VERSION` in memory. The CLI must `exec "$0" "$@"` after auto-update so the new version's `MERIDIAN_VERSION` is used for playbook downloads. Without this, playbooks for the OLD version are downloaded.
-- **Auto-update integrity**: CLI verifies SHA256 checksum of downloaded script against `meridian.msu.rocks/SHA256SUMS` before writing to disk. Checksums generated by CD workflow. If checksum file unavailable, update proceeds (graceful degradation).
-- **Auto-update direction**: only updates when remote version is strictly newer (semver comparison). Running a local dev build with a higher version than published will NOT trigger a downgrade.
+- **CLI installation**: installed via `uv tool install meridian-vpn` (preferred) or `pipx install meridian-vpn`. Entry point is `meridian`. Location depends on the tool (typically `~/.local/bin/`).
+- **Auto-update**: checks PyPI JSON API for latest version. Auto-upgrades patches via `uv tool upgrade` / `pipx upgrade`, prompts for minor/major. Uses `os.execvp()` to re-exec after auto-patch.
+- **Auto-update direction**: only updates when remote version is strictly newer (`packaging.version.Version` comparison). Running a local dev build with a higher version will NOT trigger a downgrade.
 - **`jinja2_native = True` in ansible.cfg**: required for `body_format: json` to send native integer types (e.g., `port`). Safe with mixed text+expression templates (`settings: >-` blocks) because Jinja2 NativeEnvironment only returns native types for single-expression templates. Do NOT remove without an alternative solution for integer typing.
-- **`client list` bypasses Ansible**: uses direct curl + python3 for instant results instead of running a full playbook. `client add` and `client remove` still use Ansible playbooks because they modify state and benefit from idempotency.
+- **`client list` bypasses Ansible**: uses direct curl + native Python JSON parsing for instant results instead of running a full playbook. `client add` and `client remove` still use Ansible playbooks because they modify state and benefit from idempotency.
+- **Playbook bundling**: playbooks exist in two places — repo root (for CI/dev) and `src/meridian/playbooks/` (bundled in package). When editing playbooks, update both copies. A sync script or CI check should enforce this.
+- **Credential management**: `ServerCredentials` dataclass in `credentials.py` replaces all `grep|awk|tr` YAML parsing. Handles special characters, preserves unknown fields, type-safe access.
 - **When the user says "remember"**: save the instruction to this CLAUDE.md file so it persists across sessions. Don't use auto-memory — CLAUDE.md is the canonical place for project conventions.
 
 ## Documentation surfaces & update checklist
@@ -263,18 +298,20 @@ When adding or changing a feature, update ALL relevant surfaces. The source of t
 
 | Information | Source of Truth | Propagated To |
 |---|---|---|
-| **CLI commands & flags** | ★ `meridian` script (`cmd_help()`, flag parsing) | README.md commands table, docs/index.html builder, docs/ai/context.md CLI section, CLAUDE.md subcommands |
+| **CLI commands & flags** | ★ `src/meridian/cli.py` (typer commands) | README.md commands table, docs/index.html builder, docs/ai/context.md CLI section, CLAUDE.md subcommands |
 | **Architecture & modes** | ★ `CLAUDE.md` architecture section | docs/ai/architecture.md, docs/ai/context.md, README.md "How it works" |
 | **SNI recommendations** | ★ `group_vars/all.yml` comments | docs/ai/troubleshooting.md SNI section, roles/output/templates/connection-summary.txt.j2 |
 | **Troubleshooting guidance** | ★ `docs/ai/troubleshooting.md` | docs/index.html troubleshooting section, connection_issue.yml template |
 | **App download links** | ★ `docs/index.html` apps section | 3x connection-info.html.j2 templates, README.md client apps table |
-| **Version** | ★ `VERSION` file | `meridian` script MERIDIAN_VERSION (must match), docs/version (CD sync) |
+| **Version** | ★ `VERSION` file | `importlib.metadata` at runtime (hatchling reads VERSION at build), docs/version (CD sync) |
 | **Error/failure guidance** | ★ `meridian` script `fail()` function | docs/ai/troubleshooting.md decision tree |
 
 ### Surface update checklist
 
 When adding a **new subcommand**:
-- [ ] `meridian` — implement cmd_X(), add to dispatch table, add to cmd_help()
+- [ ] `src/meridian/commands/newcmd.py` — implement `run()` function
+- [ ] `src/meridian/cli.py` — add typer command + import
+- [ ] `tests/test_cli.py` — add help smoke test
 - [ ] `README.md` — add to commands table
 - [ ] `docs/index.html` — add tab to command builder (if user-facing)
 - [ ] `docs/ai/context.md` — add to CLI Commands section
@@ -282,7 +319,8 @@ When adding a **new subcommand**:
 - [ ] Regenerate `docs/ai/reference.md` (cat context + architecture + troubleshooting)
 
 When adding a **new flag to setup**:
-- [ ] `meridian` — add to cmd_setup() flag parsing + --help text
+- [ ] `src/meridian/commands/setup.py` — add parameter + logic
+- [ ] `src/meridian/cli.py` — add `typer.Option` to setup_cmd
 - [ ] `docs/index.html` — add checkbox/input to setup command builder
 - [ ] `docs/ai/context.md` — add to setup flags list
 - [ ] `CLAUDE.md` — update subcommands line
@@ -336,16 +374,18 @@ All previously tracked inconsistencies have been resolved:
 
 ### CI (`.github/workflows/ci.yml`) — runs on push and PR
 - **Lint**: `ansible/ansible-lint@main` — catches FQCN, YAML style, deprecated patterns
+- **Python Test**: `pytest` on Python 3.10 + 3.12 — credentials, servers, CLI, ansible, update logic
+- **Python Lint**: `ruff check` + `ruff format --check` — style, imports, formatting
 - **Validate**: syntax check all playbooks + auto-discovered template rendering test with Ansible filter mocks
-- **Shell**: `bash -n` syntax check + **blocking** shellcheck (SC2086,SC2029,SC2087,SC2155 excluded) + `--help` flag test + VERSION consistency + `body_format` policy check (prevents form-urlencoded on inbound/client APIs) + connection-info app link sync check
+- **Shell**: `bash -n` + shellcheck on `install.sh` and `setup.sh` + VERSION format validation + `body_format` policy check + connection-info app link sync check
 - **Dry run**: `ansible-playbook --check` with local connection (validates task structure)
 - Skipped lint rules: `var-naming[no-role-prefix]` (would require renaming 90+ variables), `command-instead-of-module` (curl/dig used intentionally)
 
 ### CD (`.github/workflows/cd.yml`) — triggers after CI succeeds (workflow_run)
-- Syncs `meridian` → `docs/meridian`, `install.sh` → `docs/install.sh`, `setup.sh` → `docs/setup.sh`, `VERSION` → `docs/version`
-- Generates `SHA256SUMS` checksum file for integrity verification
+- Syncs `install.sh` → `docs/install.sh`, `setup.sh` → `docs/setup.sh`, `VERSION` → `docs/version`
+- Generates `SHA256SUMS` checksum file for install scripts
 - Auto-commits with `[skip ci]`
-- Ensures `meridian.msu.rocks/` always serves the latest CLI, installer, and version
+- Ensures `meridian.msu.rocks/` always serves the latest installer and version
 
 ## Versioning & releases
 
@@ -360,13 +400,11 @@ All previously tracked inconsistencies have been resolved:
 ### How to release
 
 1. Update `VERSION` file with the new version
-2. Update `MERIDIAN_VERSION` in `meridian` script (line 14) to match
-3. Commit both together — include the feature commits in the same push or push after them
-4. Push to main → three workflows trigger:
-   - **CI**: validates VERSION matches MERIDIAN_VERSION
-   - **CD**: syncs CLI files to GitHub Pages (`meridian.msu.rocks/version`)
-   - **Release**: creates git tag `vX.Y.Z` + GitHub Release with auto-generated notes from commit history
-5. Playbooks are fetched from the release tag tarball (`archive/refs/tags/vX.Y.Z.tar.gz`), with fallback to `main` for unreleased versions during development
+2. Commit and push to main → three workflows trigger in chain:
+   - **CI**: validates VERSION format, runs pytest + ruff + ansible-lint
+   - **CD**: syncs install files to GitHub Pages (`meridian.msu.rocks/version`)
+   - **Release**: creates git tag `vX.Y.Z` + GitHub Release + publishes to PyPI
+3. Users on auto-patch get the update on next CLI run; others see "Update available" prompt
 
 ### When to bump (guidance for Claude)
 
@@ -375,16 +413,16 @@ After completing a feature or fix, **always bump the version as part of the comm
 - Added a new command, flag, or transport? → Bump Y (minor): `1.1.0` → `1.2.0`
 - Changed defaults or broke backward compat? → Bump X (major): `1.2.0` → `2.0.0`
 
-**Do NOT skip version bumps.** Every meaningful change to the CLI or playbooks should get a version bump so users on auto-patch get fixes and users on manual update see the prompt. If multiple features are in one session, one version bump at the end is fine.
+**Do NOT skip version bumps.** Every meaningful change to the CLI or playbooks should get a version bump (just edit the `VERSION` file) so users on auto-patch get fixes and users on manual update see the prompt. If multiple features are in one session, one version bump at the end is fine.
 
 ### Release artifacts
 
-- **CLI binary**: `meridian.msu.rocks/meridian` (CD sync from repo root)
+- **PyPI package**: `meridian-vpn` on PyPI (published by release workflow)
 - **Version file**: `meridian.msu.rocks/version` (CD sync from VERSION)
-- **Playbook tarball**: `github.com/.../archive/refs/tags/vX.Y.Z.tar.gz` (from release tag)
+- **Installer**: `meridian.msu.rocks/install.sh` (CD sync)
 - **GitHub Release**: auto-created by `.github/workflows/release.yml` when VERSION changes
 
-CI validates that `VERSION` and `MERIDIAN_VERSION` match on every push.
+CI validates VERSION format (`^\d+\.\d+\.\d+$`) on every push.
 
 ## Backlog & tech debt
 

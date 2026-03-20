@@ -1,0 +1,52 @@
+# HAProxy SNI Router
+# Managed by Ansible. Manual edits will be overwritten on next run.
+#
+# Purpose: Route TLS traffic on port 443 based on SNI (Server Name Indication)
+# without terminating TLS. This is a pure TCP proxy that peeks at the
+# ClientHello to determine where to send each connection.
+#
+# Flow:
+#   Client with SNI={{ reality_sni }} → Xray Reality (127.0.0.1:{{ haproxy_reality_backend_port }})
+#   Client with any other SNI         → Caddy HTTPS  (127.0.0.1:{{ caddy_internal_port }})
+
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+    maxconn 4096
+
+defaults
+    mode tcp
+    log global
+    option tcplog
+    option dontlognull
+    timeout connect 5s
+    timeout client  300s
+    timeout server  300s
+    retries 3
+
+# --- Port 443: SNI-based TLS routing ---
+frontend tls_router
+    bind *:443
+    # Wait up to 5s to inspect the TLS ClientHello for SNI
+    tcp-request inspect-delay 5s
+    tcp-request content accept if { req_ssl_hello_type 1 }
+
+    # Route connections with Reality SNI to Xray
+    use_backend xray_reality if { req_ssl_sni -i {{ reality_sni }} }
+
+    # Everything else (user's domain, unknown SNI) goes to Caddy
+    default_backend caddy_https
+
+# --- Backend: Xray Reality ---
+backend xray_reality
+    server xray 127.0.0.1:{{ haproxy_reality_backend_port }}
+
+# --- Backend: Caddy HTTPS ---
+backend caddy_https
+    server caddy 127.0.0.1:{{ caddy_internal_port }}

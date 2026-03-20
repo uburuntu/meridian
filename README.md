@@ -22,6 +22,13 @@
 curl -sSf https://meridian.msu.rocks/install.sh | bash
 ```
 
+Or install directly from PyPI:
+
+```bash
+uv tool install meridian-vpn    # recommended
+pipx install meridian-vpn       # alternative
+```
+
 ## Quick start
 
 ```bash

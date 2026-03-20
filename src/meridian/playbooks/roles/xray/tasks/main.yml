@@ -1,0 +1,25 @@
+---
+# Deploy 3x-ui panel and configure Xray inbounds via API
+
+- name: Deploy 3x-ui container
+  ansible.builtin.import_tasks: deploy.yml
+
+- name: Configure panel credentials and generate keys
+  ansible.builtin.import_tasks: configure_panel.yml
+
+- name: Create VLESS+Reality inbound (TCP, direct user access)
+  ansible.builtin.import_tasks: configure_reality.yml
+
+- name: Create VLESS+Reality+XHTTP inbound
+  ansible.builtin.include_tasks: configure_reality_xhttp.yml
+  when: (exit_mode | default(false) | bool) or (xhttp_enabled | default(false) | bool)
+
+- name: Create VLESS+WSS inbound (CDN fallback)
+  ansible.builtin.include_tasks: configure_wss.yml
+  when: domain_mode | bool
+
+- name: Verify Xray core is running
+  ansible.builtin.include_tasks: ../../shared/tasks/verify_xray.yml
+
+- name: Set up maintenance cron jobs
+  ansible.builtin.import_tasks: maintenance.yml

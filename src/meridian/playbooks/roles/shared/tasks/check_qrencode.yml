@@ -1,0 +1,18 @@
+---
+# Shared pre-task: verify qrencode is installed locally.
+# Used by playbook.yml and playbook-chain.yml.
+
+- name: Check that qrencode is installed locally
+  ansible.builtin.command: qrencode --version
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  failed_when: false
+  register: local_qrencode_check
+
+- name: Fail if qrencode is not installed locally
+  ansible.builtin.fail:
+    msg: >-
+      qrencode is not installed on your local machine. It is needed to generate QR codes.
+      Install it with: brew install qrencode (macOS) or apt install qrencode (Linux)
+  when: local_qrencode_check.rc != 0
