@@ -314,11 +314,13 @@ When changing **troubleshooting/error guidance**:
 
 ### Current inconsistencies to fix (tracked)
 
-- `docs/index.html` command builder missing: `scan`, `ping` tabs, `--xhttp` checkbox, `--ai` flag
-- `.github/ISSUE_TEMPLATE/bug_report.yml:49` — label says "(--rage output)" but flag doesn't exist; should say "(diagnostics output)"
-- `CONTRIBUTING.md:7` — references `--rage` flag; should say `meridian diagnostics`
-- `SECURITY.md:15` — references `--rage` diagnostics; should say `meridian diagnostics`
-- `README.md` — missing `meridian scan` and `--xhttp` flag
+All previously tracked inconsistencies have been resolved:
+- ~~`docs/index.html` command builder~~ — added `scan` tab, `--xhttp` checkbox, `--ai` mention, SNI guidance
+- ~~`bug_report.yml` --rage~~ → fixed to "diagnostics output"
+- ~~`CONTRIBUTING.md` --rage~~ → fixed to `meridian diagnostics`
+- ~~`SECURITY.md` --rage~~ → fixed to `meridian diagnostics`
+- ~~`README.md` missing scan/xhttp~~ → added to commands table
+- i18n translations extracted to `docs/i18n.js` (index.html reduced from 805 to ~620 lines)
 
 ## CI/CD pipelines
 
