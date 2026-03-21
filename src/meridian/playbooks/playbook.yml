@@ -57,6 +57,33 @@
         panel_configured: "{{ saved_creds.panel_configured | default(false) }}"
       when: creds_file_stat.stat.exists
 
+    # -- DNS pre-flight (domain mode only) --
+    - name: Resolve domain DNS to check it points to this server
+      ansible.builtin.command:
+        cmd: "dig +short {{ domain }} @8.8.8.8"
+      register: domain_dns_check
+      changed_when: false
+      failed_when: false
+      when: domain_mode | default(false) | bool
+
+    - name: Fail if domain does not resolve to this server
+      ansible.builtin.fail:
+        msg: |
+          {{ domain }} does not resolve to this server's IP ({{ server_public_ip }}).
+          DNS returned: {{ domain_dns_check.stdout | default('(empty)') }}
+
+          Caddy needs the domain to point DIRECTLY to this server for TLS certificates.
+
+          Fix: In Cloudflare, set the A record to "DNS only" (grey cloud), then re-run.
+          After the playbook succeeds, switch to "Proxied" (orange cloud).
+
+          To skip this check: add -e skip_dns_check=true
+      when:
+        - domain_mode | default(false) | bool
+        - not (skip_dns_check | default(false) | bool)
+        - domain_dns_check.stdout | default('') | trim != server_public_ip
+        - domain_dns_check.stdout | default('') | trim != ''
+
   roles:
     - role: common
     - role: docker

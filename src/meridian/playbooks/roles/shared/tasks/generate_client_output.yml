@@ -40,7 +40,7 @@
 # -- Generate QR codes for terminal --
 - name: "Generate Reality QR code for terminal ({{ client_name }})"
   ansible.builtin.command:
-    cmd: "qrencode -t ANSIUTF8 '{{ vless_reality_url }}'"
+    cmd: "qrencode -t ANSIUTF8 {{ vless_reality_url | quote }}"
   register: reality_qr_terminal
   changed_when: false
   delegate_to: localhost
@@ -48,7 +48,7 @@
 
 - name: "Generate XHTTP QR code for terminal ({{ client_name }})"
   ansible.builtin.command:
-    cmd: "qrencode -t ANSIUTF8 '{{ vless_xhttp_url }}'"
+    cmd: "qrencode -t ANSIUTF8 {{ vless_xhttp_url | quote }}"
   register: xhttp_qr_terminal
   changed_when: false
   delegate_to: localhost
@@ -57,7 +57,7 @@
 
 - name: "Generate WSS QR code for terminal ({{ client_name }})"
   ansible.builtin.command:
-    cmd: "qrencode -t ANSIUTF8 '{{ vless_wss_url }}'"
+    cmd: "qrencode -t ANSIUTF8 {{ vless_wss_url | quote }}"
   register: wss_qr_terminal
   changed_when: false
   delegate_to: localhost
@@ -67,7 +67,7 @@
 # -- Generate QR codes as base64 PNGs for HTML --
 - name: "Generate Reality QR code as base64 PNG ({{ client_name }})"
   ansible.builtin.shell:
-    cmd: "printf '%s' '{{ vless_reality_url }}' | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'"
+    cmd: "printf '%s' {{ vless_reality_url | quote }} | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'"
   register: reality_qr_b64_local
   changed_when: false
   delegate_to: localhost
@@ -75,7 +75,7 @@
 
 - name: "Generate XHTTP QR code as base64 PNG ({{ client_name }})"
   ansible.builtin.shell:
-    cmd: "printf '%s' '{{ vless_xhttp_url }}' | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'"
+    cmd: "printf '%s' {{ vless_xhttp_url | quote }} | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'"
   register: xhttp_qr_b64_local
   changed_when: false
   delegate_to: localhost
@@ -84,7 +84,7 @@
 
 - name: "Generate WSS QR code as base64 PNG ({{ client_name }})"
   ansible.builtin.shell:
-    cmd: "printf '%s' '{{ vless_wss_url }}' | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'"
+    cmd: "printf '%s' {{ vless_wss_url | quote }} | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'"
   register: wss_qr_b64_local
   changed_when: false
   delegate_to: localhost

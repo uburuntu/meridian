@@ -55,7 +55,7 @@
             "flow": "",
             "email": "{{ xhttp_client_email }}",
             "limitIp": {{ client_limit_ip | default(2) }},
-            "totalGB": {{ client_total_bytes | default(0) }},
+            "totalGB": {{ (client_total_bytes / 1073741824) | int }},
             "expiryTime": 0,
             "enable": true,
             "tgId": "",
