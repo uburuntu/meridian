@@ -12,7 +12,7 @@ We aim to respond within 48 hours and will credit reporters in the fix.
 
 ## Security Design
 
-- **Credentials**: stored locally with `0600` permissions, never logged (`no_log: true`), auto-redacted in `meridian diagnostics` output
+- **Credentials**: stored locally with `0600` permissions, secrets are never passed through shell command strings without `shlex.quote()` and are redacted from `meridian diagnostics` output
 - **Panel access**: bound to `127.0.0.1` (SSH tunnel required in no-domain mode)
 - **SSH**: password authentication disabled by default
 - **Firewall**: UFW configured with deny-all-incoming, only ports 22 + 443 (+ 80 for ACME)

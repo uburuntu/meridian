@@ -22,7 +22,7 @@ body:
       label: Area
       options:
         - CLI (meridian)
-        - Ansible playbook / roles
+        - Provisioning engine
         - Connection info page
         - Website (meridian.msu.rocks)
         - Documentation

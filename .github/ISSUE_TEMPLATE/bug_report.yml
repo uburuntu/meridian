@@ -35,8 +35,8 @@ body:
     attributes:
       label: When does it fail?
       options:
-        - During meridian setup (before Ansible runs)
-        - During Ansible playbook execution
+        - During SSH connection
+        - During server provisioning
         - After setup — connection doesn't work
         - After setup — connection stopped working
         - Other
@@ -54,7 +54,7 @@ body:
   - type: textarea
     attributes:
       label: Error output
-      description: Paste the exact error message or Ansible task failure.
+      description: Paste the exact error message or provisioning step failure.
       render: text
     validations:
       required: false

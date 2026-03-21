@@ -17,31 +17,26 @@ git clone https://github.com/uburuntu/meridian.git && cd meridian
 # Install the CLI in editable mode with all dev dependencies (uses uv sync --extra dev)
 make install
 
-# Run full CI locally (lint + format + test + ansible-lint + syntax-check + templates)
+# Run full CI locally (lint + format + test + templates)
 make ci
 
 # Or run individual checks:
 make test              # Run Python tests (pytest)
 make lint              # Run ruff linter
 make format-check      # Check formatting
-make ansible-lint      # Run ansible-lint on playbooks
 make templates         # Validate Jinja2 template rendering
-
-# Install Ansible collections (if needed for manual playbook runs)
-pip install ansible
-ansible-galaxy collection install -r src/meridian/playbooks/requirements.yml
 ```
 
 ## Project Structure
 
-The CLI is a Python package (`src/meridian/`) distributed via PyPI as `meridian-vpn`. Ansible playbooks are bundled inside the package as `src/meridian/playbooks/`.
+The CLI is a Python package (`src/meridian/`) distributed via PyPI as `meridian-vpn`. Server provisioning is handled by the pure-Python provisioner in `src/meridian/provision/`.
 
 Key modules:
 - `cli.py` — Typer app, subcommand registration
 - `commands/` — One module per subcommand (setup, client, check, etc.)
 - `credentials.py` — `ServerCredentials` dataclass for YAML credential management
 - `servers.py` — `ServerRegistry` for the known servers index
-- `ansible.py` — Playbook execution via subprocess
+- `provision/` — Provisioner engine: idempotent steps with structured tracing and error output
 
 ## Pull Requests
 
@@ -55,20 +50,19 @@ Key modules:
 
 See [CLAUDE.md](CLAUDE.md) for detailed architecture, implicit dependencies, and conventions. Key points:
 
-- **All Ansible tasks use FQCNs** (`ansible.builtin.uri`, not `uri`)
-- **Secrets use `no_log: true`** — never expose credentials in output
-- **Two connection-info templates must stay in sync** (output/caddy)
+- **Shell values use `shlex.quote()`** — never interpolate unsanitized values into shell commands
+- **Connection-info templates must stay in sync** (CSS/JS/app links)
 - **Caddy config** goes in `/etc/caddy/conf.d/meridian.caddy`, not the main Caddyfile
+- **Provisioner steps** return `StepResult` (ok/changed/skipped/failed) for structured tracing
 
 
 ## Testing
 
 There's no way to fully test without a real server. The CI pipeline validates:
-- Python tests (`pytest`) — credentials, servers, CLI, ansible, update logic
+- Python tests (`pytest`) — credentials, servers, CLI, protocols, update logic
 - Python lint (`ruff`) — style and import checks
-- Ansible lint and syntax
+- Type checking (`mypy`) — static type analysis
 - Jinja2 template rendering with mock variables
 - Shell script syntax (`install.sh`, `setup.sh`)
-- Ansible dry-run (`--check`) with local connection
 
 For deployment testing, use a cheap VPS and run the full uninstall → install cycle.

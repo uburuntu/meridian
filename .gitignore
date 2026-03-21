@@ -3,9 +3,6 @@ credentials/
 /meridian/
 vpn-credentials/
 
-# Ansible
-*.retry
-
 # Python
 *.pyc
 __pycache__/

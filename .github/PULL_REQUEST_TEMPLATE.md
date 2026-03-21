@@ -25,7 +25,7 @@
 - [ ] Tested with existing credential files (backward compat)
 - [ ] Updated `ServerCredentials` dataclass if needed
 
-### If modifying Ansible roles:
-- [ ] Used FQCNs (e.g., `ansible.builtin.uri`)
-- [ ] Added `no_log: true` for secret-handling tasks
-- [ ] Tested idempotent re-runs
+### If modifying provisioner steps:
+- [ ] Step returns proper StepResult (ok/changed/skipped/failed)
+- [ ] ProvisionContext fields typed if used by other steps
+- [ ] Shell values use shlex.quote()
