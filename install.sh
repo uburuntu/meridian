@@ -102,26 +102,47 @@ fi
 # =============================================================================
 # Ensure PATH includes tool bin directories
 # =============================================================================
+# On Debian/Ubuntu, .bashrc has an interactivity guard near the top:
+#   case $- in *i*) ;; *) return;; esac
+# Anything appended AFTER this guard is unreachable for non-interactive shells
+# (e.g. `ssh host 'meridian ...'`). We prepend our PATH export so it runs
+# before the guard, making tools available in all shell contexts.
 ensure_path() {
   local dir="$1"
-  if [[ ":$PATH:" != *":$dir:"* ]] && [[ -d "$dir" ]]; then
-    SHELL_NAME=$(basename "${SHELL:-/bin/bash}")
-    PROFILE=""
-    case "$SHELL_NAME" in
-      zsh)  PROFILE="$HOME/.zshrc" ;;
-      bash)
-        if [[ -f "$HOME/.bashrc" ]]; then
-          PROFILE="$HOME/.bashrc"
-        elif [[ -f "$HOME/.bash_profile" ]]; then
-          PROFILE="$HOME/.bash_profile"
-        fi ;;
-    esac
+  [[ -d "$dir" ]] || return 0
 
-    if [[ -n "$PROFILE" ]] && ! grep -qF "$dir" "$PROFILE" 2>/dev/null; then
-      printf '\n# Meridian CLI\nexport PATH="%s:$PATH"\n' "$dir" >> "$PROFILE"
-      ok "Added $dir to PATH in $PROFILE"
-      PATH_ADDED=1
+  SHELL_NAME=$(basename "${SHELL:-/bin/bash}")
+  PROFILE=""
+  case "$SHELL_NAME" in
+    zsh)  PROFILE="$HOME/.zshrc" ;;
+    bash)
+      if [[ -f "$HOME/.bashrc" ]]; then
+        PROFILE="$HOME/.bashrc"
+      elif [[ -f "$HOME/.bash_profile" ]]; then
+        PROFILE="$HOME/.bash_profile"
+      fi ;;
+  esac
+
+  MARKER="# Meridian CLI"
+  EXPORT_LINE="export PATH=\"$dir:\$PATH\""
+
+  if [[ -n "$PROFILE" ]] && ! grep -qF "$MARKER" "$PROFILE" 2>/dev/null; then
+    if [[ "$SHELL_NAME" == "bash" ]] && grep -q 'case \$- in' "$PROFILE" 2>/dev/null; then
+      # Prepend before interactivity guard so non-interactive SSH works
+      TMPFILE=$(mktemp)
+      printf '%s\n%s\n\n' "$MARKER" "$EXPORT_LINE" > "$TMPFILE"
+      cat "$PROFILE" >> "$TMPFILE"
+      mv "$TMPFILE" "$PROFILE"
+    else
+      # No guard (zsh, bash_profile, etc.) — append is fine
+      printf '\n%s\n%s\n' "$MARKER" "$EXPORT_LINE" >> "$PROFILE"
     fi
+    ok "Added $dir to PATH in $PROFILE"
+    PATH_ADDED=1
+  fi
+
+  # Ensure current session has the path too
+  if [[ ":$PATH:" != *":$dir:"* ]]; then
     export PATH="$dir:$PATH"
   fi
 }
