@@ -1,11 +1,57 @@
 name: Release
 
+# Triggers after CI succeeds on main.
+# 1. Deploys GitHub Pages (every push)
+# 2. Creates GitHub Release + publishes to PyPI (only when VERSION changes)
+#
+# NOTE: GitHub Pages must be configured to deploy from "GitHub Actions" source
+# (Settings → Pages → Source → GitHub Actions)
+
 on:
   workflow_run:
-    workflows: [CD]
+    workflows: [CI]
     types: [completed]
 
 jobs:
+  deploy-pages:
+    name: Deploy GitHub Pages
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build site
+        run: |
+          mkdir -p _site
+          # Copy docs source files
+          cp -r docs/* _site/
+          # Copy CLI files from root
+          cp install.sh _site/install.sh
+          cp setup.sh _site/setup.sh
+          cp VERSION _site/version
+          # Generate checksums
+          cd _site
+          sha256sum install.sh setup.sh > SHA256SUMS
+          cd ..
+          # Bundle AI docs
+          if [ -d _site/ai ]; then
+            cat docs/ai/context.md docs/ai/architecture.md docs/ai/troubleshooting.md > _site/ai/reference.md
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
@@ -64,7 +110,7 @@ jobs:
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ]; then
-            NOTES=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --no-merges | grep -v '\[skip ci\]')
+            NOTES=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --no-merges)
           else
             NOTES=$(git log --pretty=format:"- %s" --no-merges -20)
           fi
@@ -94,7 +140,7 @@ jobs:
           gh release create "$TAG" \
             --title "$TITLE" \
             --notes-file /tmp/release-notes.md \
-            $( [ "$TYPE" = "patch" ] && echo "--latest" || echo "--latest" )
+            --latest
 
           echo "created=true" >> "$GITHUB_OUTPUT"
 
