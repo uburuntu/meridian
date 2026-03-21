@@ -17,13 +17,13 @@ Meridian exists to make censorship-resistant VPN accessible to everyone. The cor
 
 ## Project overview
 
-Python CLI for deploying censorship-resistant proxy servers. Currently supports VLESS+Reality (standalone) with optional domain mode for CDN fallback (VLESS+WSS, VLESS+XHTTP). Server provisioning currently uses Ansible but is being migrated to a pure-Python provisioner (see BACKLOG.md).
+Python CLI for deploying censorship-resistant proxy servers. Currently supports VLESS+Reality (standalone) with optional domain mode for CDN fallback (VLESS+WSS, VLESS+XHTTP). Server provisioning uses a pure-Python provisioner (`src/meridian/provision/`).
 
 ## Strategic direction
 
-- **Moving off Ansible.** Client management already bypasses Ansible (pure Python via PanelClient). Deployment is next. The dual-language maintenance tax (every concept in both Python + Ansible YAML) is the #1 drag on velocity. See BACKLOG.md for the phased migration plan.
 - **Keeping 3x-ui.** It's powerful, actively maintained, and the web UI keeps power users on Meridian. The coupling is contained in `PanelClient` — we strengthen that boundary, not replace it.
-- **Foundation first.** Before migrating Ansible roles, we build the provisioning primitives: idempotent steps with structured tracing, actionable error output, and AI-ready diagnostics.
+- **Output stack modernization.** Connection output is being refactored into focused modules: `urls.py` (URL building + QR), `render.py` (HTML/text files), `display.py` (terminal output). The legacy `output.py` facade remains during migration.
+- **Protocol-agnostic architecture.** The provisioner's step pipeline and protocol registry are designed to make adding new transports straightforward — add an `InboundType`, create a `Protocol` subclass, add a provisioner step.
 
 ## Architecture
 
@@ -36,12 +36,12 @@ Python CLI for deploying censorship-resistant proxy servers. Currently supports 
 - 3x-ui panel is managed entirely via its REST API (no manual web UI steps).
 - Caddy handles TLS automatically — email is optional, not required.
 - Caddy config uses import pattern: Meridian writes to `/etc/caddy/conf.d/meridian.caddy`, main Caddyfile just has `import /etc/caddy/conf.d/*.caddy`. User's own Caddyfile is never overwritten.
-- Credentials are persisted locally in `~/meridian/<host>.yml` for idempotent re-runs. Credentials are saved BEFORE changing the panel password to prevent lockout on failure.
+- Credentials are persisted locally in `~/.meridian/credentials/<IP>/proxy.yml` for idempotent re-runs. Credentials are saved BEFORE changing the panel password to prevent lockout on failure.
 - Uninstall deletes credentials from both server and local machine to prevent stale state on reinstall.
 - Docker installation is skipped if Docker is already running with containers.
 - In no-domain mode, the panel binds to localhost only (SSH tunnel required).
-- 3x-ui Docker image is pinned to a tested version (`threexui_version` in group_vars) to prevent API breakage.
-- All tasks handling secrets use `no_log: true` to keep credentials out of terminal output.
+- 3x-ui Docker image is pinned to a tested version (`ProvisionContext.threexui_version` in `provision/steps.py`) to prevent API breakage.
+- Secrets are handled via `shlex.quote()` and never logged to terminal.
 
 ## Project structure
 
@@ -57,31 +57,38 @@ src/meridian/              Python CLI package
   credentials.py           ServerCredentials dataclass, YAML load/save
   protocols.py             Protocol ABC + InboundType registry + concrete implementations (Reality, XHTTP, WSS)
   panel.py                 PanelClient: 3x-ui REST API wrapper via SSH (login, inbounds, clients, keys)
-  output.py                Connection output: VLESS URL building, QR codes, HTML/text generation
+  output.py                Legacy facade (migrating to urls.py, render.py, display.py)
+  models.py                Data models (Inbound, ProtocolURL)
+  urls.py                  VLESS URL building and QR generation
+  render.py                HTML/text file rendering
+  display.py               Terminal output for connection info
   servers.py               ServerRegistry: list/find/add/remove
   ssh.py                   ServerConnection: run, check_ssh, detect_local_mode, tcp_connect
-  ansible.py               Playbook execution, Ansible bootstrap, inventory generation
   update.py                Auto-update via PyPI (semver: auto-patch, prompt minor/major)
   ai.py                    AI prompt building, clipboard, bundled docs
+  provision/               Pure-Python provisioner package
+    __init__.py             build_setup_steps() pipeline assembly
+    steps.py                ProvisionContext, Provisioner, Step, StepResult
+    common.py               OS-level setup: packages, hardening, sysctl, firewall
+    docker.py               Docker installation + 3x-ui container deployment
+    panel.py                Panel configuration + login
+    xray.py                 Inbound creation (Reality, XHTTP, WSS) + verification
+    services.py             HAProxy + Caddy installation (domain mode)
+    uninstall.py            Server cleanup + credential removal
+  templates/               Package data
+    connection-info.html.j2  Unified connection info page (all modes, i18n)
   data/                    Package data files
     ai-reference.md        Bundled AI reference docs (generated by make ai-docs)
   commands/                One module per subcommand
     resolve.py             Server resolution logic (shared by most commands)
-    setup.py               Interactive wizard + playbook execution
-    client.py              client add/list/remove (all use PanelClient directly, no Ansible)
+    setup.py               Interactive wizard + provisioner execution
+    client.py              client add/list/remove (via PanelClient)
     server.py              server add/list/remove
     check.py               Pre-flight validation (SNI, ports, DNS, OS, disk, clock)
     scan.py                RealiTLScanner download + execution + SNI selection
     ping.py                Reachability test (TCP, TLS, clock drift)
     diagnostics.py         System info collection + redaction
-    uninstall.py           Playbook execution + credential cleanup
-  playbooks/               Bundled Ansible playbooks (package_data)
-    playbook.yml           Standalone mode
-    playbook-uninstall.yml Clean removal
-    ansible.cfg            Ansible configuration
-    requirements.yml       Galaxy collections
-    group_vars/            Shared defaults
-    roles/                 All Ansible roles
+    uninstall.py           Provisioner execution + credential cleanup
 Makefile                  Dev workflow: install, test, lint, ci, build, publish
 docker-compose.test.yml   3x-ui container for integration tests
 uv.lock                   Locked dependencies (committed)
@@ -91,25 +98,25 @@ tests/
   test_cli.py              CliRunner smoke tests
   test_credentials.py      Credential dataclass tests
   test_servers.py          Server registry tests
-  test_ansible.py          Inventory generation + playbook bundling tests
   test_update.py           Version comparison + update throttle tests
   test_protocols.py        Protocol ABC + InboundType registry tests
   test_panel.py            PanelClient tests with mocked SSH
   test_output.py           VLESS URL building and output generation tests
+  test_client.py           Client add/list/remove tests
   test_resolve.py          Server resolution logic tests (all 5 paths)
   test_console.py          Console confirm/fail/prompt tests
   test_setup.py            Setup wizard tests (IP detection, validation)
   test_ssh.py              SSH connection and tcp_connect tests
   test_integration_3xui.py 3x-ui Docker API round-trip (requires container)
-  render_templates.py      Jinja2 template rendering test (with Ansible filter mocks)
+  test_render_templates.py Jinja2 template rendering tests
+  render_templates.py      Jinja2 template rendering validation (CI)
   conftest.py              Shared fixtures
 docs/architecture.md       Mermaid architecture diagrams (CLI flow, modes, credentials, CI/CD)
 docs/index.html            Website hosted on meridian.msu.rocks (GitHub Pages)
 docs/ping.html             Web-based ping tool (server reachability test)
 docs/CNAME                 Custom domain for GitHub Pages
-.github/workflows/ci.yml   CI: ansible-lint, pytest, ruff, mypy, shellcheck, dry-run
+.github/workflows/ci.yml   CI: pytest, ruff, mypy, shellcheck, template validation
 .github/workflows/release.yml  Release: deploy Pages, git tag, GitHub Release, PyPI publish
-inventory.yml.example      Standalone inventory template
 SECURITY.md                Vulnerability reporting policy
 CONTRIBUTING.md            Development setup and PR guidelines
 ```
@@ -121,35 +128,31 @@ These are easy to break by editing one file without updating the others:
 ### CLI architecture
 - `meridian` CLI is a Python package (`meridian-vpn` on PyPI), installed via `uv tool install` or `pipx install`
 - Built with typer (CLI framework) + rich (terminal output) + PyYAML (credential management)
-- Data directory: `~/.meridian/` (credentials, cache, servers, inventory)
-- Playbooks bundled inside the Python package (`src/meridian/playbooks/`), accessed via `importlib.resources`
+- Data directory: `~/.meridian/` (credentials, cache, servers)
 - Credentials cached locally in `~/.meridian/credentials/<IP>/` (per-server subdirectories)
-- Server as source of truth: credentials stored at `/etc/meridian/` on the server (synced by playbook post_tasks)
+- Server as source of truth: credentials stored at `/etc/meridian/` on the server (synced by provisioner)
 - Server index: `~/.meridian/servers` (line-oriented: `host user name`, no spaces in names)
 - Auto-update checks PyPI JSON API (throttled to 1x/60s); auto-patches via `uv tool upgrade` / `pipx upgrade`
 - `VERSION` file at repo root is the single source of truth — read by hatchling at build time, by `importlib.metadata` at runtime
 - `setup.sh` is a compat shim that installs the CLI and forwards args
-- Ansible is NOT a Python dependency — installed lazily via `ensure_ansible()` (pipx → pip3 → apt cascade)
 
-### meridian CLI ↔ playbooks
-- CLI passes `-e server_public_ip=... -e credentials_dir=...` to ansible-playbook via `ansible.run_playbook()`
-- All output templates use `{{ server_public_ip }}` instead of `{{ ansible_host }}` for user-facing URLs
-- CLI writes `inventory.yml` to `~/.meridian/inventory.yml` (not inside package dir — may be read-only)
-- CLI sets `ANSIBLE_CONFIG` env var pointing to bundled `ansible.cfg`, runs with `cwd=playbooks_dir`
-- CLI adds `ansible_connection: local` when running on the target server itself
-- CLI adds `ansible_become: true` for non-root users
-- Playbook post_tasks sync `credentials_dir` to `/etc/meridian/` on the server (unless already local)
-- Playbooks exist only in `src/meridian/playbooks/` (single copy, bundled in package)
+### meridian CLI ↔ provisioner
+- CLI creates `ProvisionContext` with user inputs and `ServerConnection` for SSH
+- `build_setup_steps()` assembles the step pipeline
+- `Provisioner.run()` executes steps sequentially, returns `list[StepResult]`
+- Each step: `run(conn: ServerConnection, ctx: ProvisionContext) -> StepResult`
+- Steps communicate via `ProvisionContext` typed fields + dict-like access
+- Step pipeline: common → docker → panel → xray inbounds → services (HAProxy/Caddy/connection page)
 
 ### meridian subcommands
 - `meridian setup [IP] [--domain --email --sni --xhttp --name --user --yes]` — deploy server
-- `meridian client add|list|remove NAME [--server]` — manage clients via PanelClient (direct API, no Ansible)
+- `meridian client add|list|remove NAME [--server]` — manage clients via PanelClient
 - `meridian server add|list|remove` — manage known servers
 - `meridian check [IP] [--ai --server]` — pre-flight validation (SNI, ports, DNS, OS, disk, ASN)
 - `meridian scan [IP] [--server]` — find optimal SNI targets via RealiTLScanner on server
 - `meridian ping [IP] [--server]` — test proxy reachability from client device (no SSH needed)
 - `meridian diagnostics [IP] [--ai --server]` — collect system info for bug reports
-- `meridian uninstall [IP] [--server --yes]` — remove proxy via `playbook-uninstall.yml`
+- `meridian uninstall [IP] [--server --yes]` — remove proxy from server
 - `meridian self-update` — update CLI via `uv tool upgrade` / `pipx upgrade`
 - `meridian version` — show version
 - Most commands accept `--server NAME` to target a specific named server from the registry.
@@ -158,11 +161,11 @@ These are easy to break by editing one file without updating the others:
 - Website command builder has tabbed interface generating `meridian` subcommands
 - Install files served from `meridian.msu.rocks/` — synced by CD workflow: `install.sh`, `setup.sh`, `version`
 - CLI itself distributed via PyPI (`meridian-vpn`), not served from website
-- Website references the same app download links as the HTML templates in roles
+- Website references the same app download links as `src/meridian/templates/connection-info.html.j2`
 - `docs/ping.html` — standalone web ping tool, uses `fetch()` timing to test server reachability from browser. Supports URL params (`?ip=...&domain=...&name=...`) for shareable pre-filled links. Stores server history in localStorage.
 
 ### Connection info HTML template
-- `roles/shared/templates/connection-info.html.j2` — unified template for all modes
+- `src/meridian/templates/connection-info.html.j2` — unified template for all modes
 - Uses `is_server_hosted` variable to toggle between server-hosted (Caddy) and local-saved output
 - Uses `domain_mode` to toggle WSS backup card, `xhttp_enabled` for XHTTP card
 - Server-hosted pages get usage stats JS; local pages don't
@@ -177,79 +180,59 @@ These are easy to break by editing one file without updating the others:
 - `None` means "not set" (distinct from empty string `""`)
 - Server is source of truth: `/etc/meridian/proxy.yml` on the server
 - Local cache: `~/.meridian/credentials/<IP>/proxy.yml` per server
-- `meridian` CLI passes `credentials_dir=$HOME/.meridian/credentials/$SERVER_IP` (remote) or `/etc/meridian` (local mode)
-- `roles/xray/tasks/configure_panel.yml` saves to `{{ credentials_file }}` which is `{{ credentials_dir }}/{{ inventory_hostname }}.yml`
 - Clients are tracked inside the main `proxy.yml` under the `clients` list (no separate file)
-- `playbook.yml` post_tasks sync `credentials_dir` to `/etc/meridian/` on the server
 - Domain is saved to credentials file (`server.domain`) for detection on re-runs
 - CLI reads saved credentials to find the server IP (`server.ip`) for client/uninstall/diagnostics commands
 - CLI fetches credentials from `/etc/meridian/` via SSH when not found locally (handles cross-machine runs)
 - `meridian server add IP` fetches credentials from server, caches locally
-- Ansible `include_vars` loads v2 into `saved_creds`, then pre_tasks extract flat vars (`panel_username`, `reality_uuid`, etc.) for task consumption — templates and API calls use flat vars, not nested
 - `ServerCredentials` dataclass provides typed access: `creds.panel.username`, `creds.server.sni`, `creds.reality.uuid`, etc.
-- `xhttp_enabled` is NOT stored in credentials — it's a runtime flag from `group_vars/all.yml` (default `true`); XHTTP presence is detected dynamically from the panel API inbound list
+- XHTTP presence is detected dynamically from the panel API inbound list
 
 ### Client management flow
-- `meridian client add|list|remove` uses `PanelClient` (Python) for all API calls — no Ansible playbooks
+- `meridian client add|list|remove` uses `PanelClient` (Python) for all API calls
 - Client names map to 3x-ui `email` fields: `reality-{name}`, `wss-{name}`, `xhttp-{name}` (e.g., `reality-alice`, `wss-alice`, `xhttp-alice`)
-- The first client created during install uses `reality-{{ first_client_name | default('default') }}` — same naming convention
+- The first client created during setup uses `reality-default` — same naming convention
 - Clients are tracked in the main `proxy.yml` under the `clients` list with UUIDs and timestamps
 - 3x-ui API: `addClient` adds to existing inbound (id in form body), `delClient/{uuid}` removes by client UUID (NOT email — email silently succeeds but doesn't delete)
 - `meridian client add`/`meridian client remove` resolve server IP from saved credentials or `--server` flag
-- VLESS URLs, QR codes, HTML/text output generated by `output.py` (Python, no Ansible)
+- VLESS URLs, QR codes, HTML/text output generated by `urls.py`, `render.py`, `display.py`
 
 ### Protocol/inbound type registry
-- Python: `src/meridian/protocols.py` — `Protocol` ABC with concrete `RealityProtocol`, `XHTTPProtocol`, `WSSProtocol`
+- `src/meridian/protocols.py` — `Protocol` ABC with concrete `RealityProtocol`, `XHTTPProtocol`, `WSSProtocol`
 - Each protocol defines: `build_url()`, `client_settings()`, `find_inbound()`, `requires_domain`, `shares_uuid_with`
-- `INBOUND_TYPES` dict maps key to `InboundType(remark, email_prefix, flow)` — referenced by protocol classes
+- `INBOUND_TYPES` dict maps key to `InboundType(remark, email_prefix, flow)` — sole source of truth for inbound types
 - `PROTOCOLS` ordered list — Reality first (primary), then XHTTP, then WSS
 - `available_protocols(inbounds, domain)` filters to what's active on this server
-- Ansible: `inbound_types` list in `group_vars/all.yml` — same values, used by `client_management` role loops
-- These MUST stay in sync — same remark strings, email prefixes, and flow values
-- Adding a new protocol: add `InboundType`, create `Protocol` subclass, append to `PROTOCOLS`
+- Adding a new protocol: add `InboundType`, create `Protocol` subclass, append to `PROTOCOLS`, add provisioner step in `provision/xray.py`
 
 ### Caddy config pattern
 - Meridian writes to `/etc/caddy/conf.d/meridian.caddy` (not the main Caddyfile)
-- Main Caddyfile gets a single `import /etc/caddy/conf.d/*.caddy` line added via `lineinfile`
+- Main Caddyfile gets a single `import /etc/caddy/conf.d/*.caddy` line added
 - Uninstall removes only `/etc/caddy/conf.d/meridian.caddy`, not the user's Caddyfile
 - `meridian setup` interactive wizard checks saved credentials for domain suggestion
 
-### Port 443 pre-check allowlist
-- `roles/xray/tasks/deploy.yml` checks port 443 and allows `3x-ui`, `xray`, `haproxy`, `caddy` — if a new service is added to the stack, add it here too
-
 ### Panel health check URL
 - After first run, the panel root `/` returns 404 (webBasePath is set) — health check accepts 404 as "responsive"
-- Post-restart health checks in `configure_panel.yml` use `/{{ panel_web_base_path }}/` (guaranteed set at that point)
 - The panel needs a `docker restart` after changing `webBasePath` (setting doesn't apply live)
 
 ### Xray binary path
 - Binary is at `/app/bin/xray-linux-*` inside the 3x-ui container (architecture-dependent)
-- Discovered dynamically via `ls` glob — stored in `xray_cmd` fact
-- Used in `roles/xray/tasks/configure_panel.yml`
+- Discovered dynamically via `ls` glob
 - x25519 output format: `PrivateKey:` and `Password:` (not `Private key:` / `Public key:` in newer Xray versions)
 - Parsing uses regex with both old and new format patterns; assertion verifies keys were parsed
-
-### Handler flush timing
-- `roles/output/tasks/main.yml` calls `meta: flush_handlers` before the port verification check
-- Without this, HAProxy/Caddy handlers haven't fired yet and port 443 shows as not listening
-
-### Terminal output rendering
-- QR codes and connection summary use `ansible.builtin.shell` with `printf`/`cat` instead of `debug msg:` — this is required because Ansible's debug module JSON-escapes ANSI codes, making QR codes unreadable
-- The `ansible.cfg` must NOT have `result_format = yaml` for the same reason
 
 ### Feedback loop
 - `fail()` in meridian CLI suggests `meridian diagnostics` and links to GitHub issues
 - Success output mentions feedback URL
-- Ansible connection summary includes feedback section
 - Website has troubleshooting with `meridian check` and `meridian diagnostics` commands
 - README has troubleshooting section
 
 ## Key API patterns
 
 - 3x-ui login: `POST /login` (form-urlencoded) returns session cookie. Login MUST use form-urlencoded (not JSON).
-- Add inbound: `POST /panel/api/inbounds/add` (JSON body with `body_format: json`). The `settings`, `streamSettings`, `sniffing` fields must be JSON **strings** (not nested objects). The Go struct uses `string` type for these fields. With `body_format: json` + `jinja2_native = True`, the `>-` YAML blocks containing mixed text+Jinja2 expressions remain strings (Jinja2 NativeEnvironment only returns native types for single-expression templates like `{{ x }}`, not mixed content).
+- All other API calls use JSON bodies.
+- Add inbound: `POST /panel/api/inbounds/add`. The `settings`, `streamSettings`, `sniffing` fields must be JSON **strings** (not nested objects). The Go struct uses `string` type for these fields.
 - List inbounds: `GET /panel/api/inbounds/list` (check by remark before creating)
-- **CRITICAL: Do NOT use `body_format: form-urlencoded` for inbound/client API calls.** Ansible's uri module silently corrupts inline JSON values in form-urlencoded bodies — the API returns `success: true` but stores only the first key name instead of the full JSON object. This was a production bug. Always use `body_format: json` for inbound operations.
 - 3x-ui rejects duplicate ports — two inbounds cannot share the same port. XHTTP needs its own dedicated port separate from Reality TCP.
 - Update settings: `POST /panel/setting/update` (JSON body)
 - Update credentials: `POST /panel/setting/updateUser` (JSON body)
@@ -263,48 +246,30 @@ These are easy to break by editing one file without updating the others:
 # Install CLI in editable mode with dev dependencies (uses uv sync --extra dev)
 make install
 
-# Run full CI locally (lint + format + test + ansible-lint + syntax-check + templates)
+# Run full CI locally (lint + format + test + templates)
 make ci
 
 # Individual targets:
 make test              # pytest
 make lint              # ruff check
 make format-check      # ruff format --check
-make ansible-lint      # ansible-lint (runs inside src/meridian/playbooks/)
-make ansible-check     # syntax-check all playbooks
+make typecheck         # mypy
 make templates         # Jinja2 template rendering test
 
-# Install Ansible collections (for playbook validation)
-pip install ansible
-ansible-galaxy collection install -r src/meridian/playbooks/requirements.yml
-
-# Run standalone playbook directly (from playbooks dir)
-cd src/meridian/playbooks && ansible-playbook playbook.yml
-
-# The playbook verifies ports are listening at the end.
 # To fully test, import the VLESS URL into v2rayNG and check connectivity.
 ```
 
 
 ## Conventions
 
-- All tasks use FQCNs (e.g., `ansible.builtin.uri`, not `uri`)
-- API responses are validated with `ansible.builtin.assert` checking `.json.success`
-- Tasks handling secrets use `no_log: true`
-- Conditional roles use `include_tasks` (not `import_tasks`) with `when`
-- Port variables use deterministic random seeds (`inventory_hostname + suffix`) for idempotency
 - QR codes generated with `qrencode` — must be installed on the local machine
-- Cross-platform: `base64 | tr -d '\n'` instead of `base64 -w0` (macOS compat on localhost tasks; remote tasks can use `-w0` since remote is always Linux)
+- Cross-platform: `base64 | tr -d '\n'` instead of `base64 -w0` (macOS compat)
 - XHTTP transport doesn't support `xtls-rprx-vision` flow (must be empty string)
-- Docker compose errors include `rescue` blocks with container logs and common fix suggestions
-- DNS resolution check for domain mode fails hard (override with `-e skip_dns_check=true`)
-- Use `ansible_facts['distribution']` not `ansible_distribution` (deprecated in 2.24)
+- `reality_dest` is derived from `reality_sni` (`{sni}:443`) — don't hardcode separately
 - Docker role removes conflicting `docker.io` / `containerd` / `runc` packages only when `docker-ce` is not already installed AND no containers are running
-- `reality_dest` is derived from `reality_sni` (`{{ reality_sni }}:443`) — don't hardcode separately
 - **SNI target selection**: Never recommend apple.com or icloud.com (Apple-owned ASN — mismatch with VPS hosting is instantly detectable). Good choices: www.microsoft.com, www.twitch.tv, dl.google.com, github.com (global CDN, shared infrastructure). Best: run `meridian scan` for same-network targets.
-- **Always use context7 MCP to check up-to-date docs** before writing or modifying code that depends on external tools/libraries (Ansible, Docker, Caddy, GitHub Actions, shellcheck, etc.) — stale patterns and outdated common knowledge cause real deployment failures. Don't rely on training data for API syntax, CLI flags, or workflow configuration — verify against current docs first.
+- **Always use context7 MCP to check up-to-date docs** before writing or modifying code that depends on external tools/libraries (Docker, Caddy, GitHub Actions, shellcheck, etc.) — stale patterns and outdated common knowledge cause real deployment failures. Don't rely on training data for API syntax, CLI flags, or workflow configuration — verify against current docs first.
 - **curl|bash stdin trap**: in `install.sh` and `setup.sh` (compat shim), any command that reads stdin MUST have `</dev/null` — the `meridian` CLI runs directly so this isn't needed there, but `</dev/null` on SSH commands is still good practice
-- **Ansible debug vs shell for terminal output**: use `shell` with `printf`/`cat` for output containing ANSI codes (QR codes); `debug msg:` JSON-escapes them
 - **pip3 install on modern Debian/Ubuntu**: must handle PEP 668 "externally managed environment" — try pipx, then `--user`, then `--break-system-packages`, then apt
 - **pip user bin PATH**: after pip3 install --user, add `~/.local/bin` (Linux) and `~/Library/Python/*/bin` (macOS) to PATH
 - **meridian interactive prompts**: `console.prompt()` reads from `/dev/tty` for pipe safety; detect public IPv4 with `curl -4` to avoid IPv6; suggest domain from saved credentials
@@ -327,10 +292,8 @@ cd src/meridian/playbooks && ansible-playbook playbook.yml
 - **CLI installation**: installed via `uv tool install meridian-vpn` (preferred) or `pipx install meridian-vpn`. Entry point is `meridian`. Location depends on the tool (typically `~/.local/bin/`).
 - **Auto-update**: checks PyPI JSON API for latest version. Auto-upgrades patches via `uv tool upgrade` / `pipx upgrade`, prompts for minor/major. Uses `os.execvp()` to re-exec after auto-patch.
 - **Auto-update direction**: only updates when remote version is strictly newer (`packaging.version.Version` comparison). Running a local dev build with a higher version will NOT trigger a downgrade.
-- **`jinja2_native = True` in ansible.cfg**: required for `body_format: json` to send native integer types (e.g., `port`). Safe with mixed text+expression templates (`settings: >-` blocks) because Jinja2 NativeEnvironment only returns native types for single-expression templates. Do NOT remove without an alternative solution for integer typing.
-- **`client add/remove/list` use PanelClient directly**: All client operations go through `PanelClient` (Python class wrapping 3x-ui REST API via SSH curl). No Ansible playbooks involved. This gives instant results vs. 15-20s playbook startup.
+- **`client add/remove/list` use PanelClient directly**: All client operations go through `PanelClient` (Python class wrapping 3x-ui REST API via SSH curl). This gives instant results.
 - **PanelClient API patterns**: Login uses form-urlencoded (URL-encoded). Inbound/client operations use JSON. The `settings` field is a JSON STRING inside the JSON body (3x-ui Go struct quirk). Remove client by UUID (not email — email silently fails).
-- **Playbook bundling**: playbooks exist only in `src/meridian/playbooks/` (bundled in package via `package_data`). No root-level copies — CI and `make` targets run from the `src/meridian/playbooks/` directory.
 - **Credential management**: `ServerCredentials` dataclass in `credentials.py` uses v2 nested format: `panel`, `server`, `protocols` (dict of protocol dataclasses), `clients` (list). V1 flat format is auto-migrated on load. Access via `creds.panel.username`, `creds.server.sni`, `creds.reality.uuid`, etc. `None` = "not set" (distinct from `""`). Handles special characters, preserves unknown fields, type-safe access.
 - **When the user says "remember"**: save the instruction to this CLAUDE.md file so it persists across sessions. Don't use auto-memory — CLAUDE.md is the canonical place for project conventions.
 - **Non-root on-server execution**: When a non-root user runs meridian on the server itself, `detect_local_mode()` sets `local_mode=True` + `needs_sudo=True`. Commands run via `sudo -n bash -c '...'`, credentials are copied via `sudo -n cat`. The `ResolvedServer.creds_dir` stays in `~/.meridian/credentials/<IP>/` (not `/etc/meridian/` which is root-only). This avoids the old hard-fail that forced users to type `sudo meridian` for every command.
@@ -354,9 +317,9 @@ When adding or changing a feature, update ALL relevant surfaces. The source of t
 |---|---|---|
 | **CLI commands & flags** | ★ `src/meridian/cli.py` (typer commands) | README.md commands table, docs/index.html builder, docs/ai/context.md CLI section, CLAUDE.md subcommands |
 | **Architecture & modes** | ★ `CLAUDE.md` architecture section | docs/ai/architecture.md, docs/ai/context.md, README.md "How it works" |
-| **SNI recommendations** | ★ `group_vars/all.yml` comments | docs/ai/troubleshooting.md SNI section, roles/output/templates/connection-summary.txt.j2 |
+| **SNI recommendations** | ★ `CLAUDE.md` conventions section | docs/ai/troubleshooting.md SNI section |
 | **Troubleshooting guidance** | ★ `docs/ai/troubleshooting.md` | docs/index.html troubleshooting section, connection_issue.yml template |
-| **App download links** | ★ `docs/index.html` apps section | shared/templates/connection-info.html.j2, docs/demo.html, README.md client apps table |
+| **App download links** | ★ `docs/index.html` apps section | `src/meridian/templates/connection-info.html.j2`, docs/demo.html, README.md client apps table |
 | **Version** | ★ `VERSION` file | `importlib.metadata` at runtime (hatchling reads VERSION at build), `version` in Pages deploy artifact |
 | **Error/failure guidance** | ★ `src/meridian/console.py` `fail()` function | docs/ai/troubleshooting.md decision tree |
 
@@ -378,33 +341,24 @@ When adding a **new flag to setup**:
 - [ ] `docs/index.html` — add checkbox/input to setup command builder
 - [ ] `docs/ai/context.md` — add to setup flags list
 - [ ] `CLAUDE.md` — update subcommands line
-- [ ] `group_vars/all.yml` — add default variable with comment
 - [ ] Regenerate AI docs (`make ai-docs`)
 
-When adding a **new inbound/transport type** (all `roles/` paths are relative to `src/meridian/playbooks/`):
-- [ ] `src/meridian/protocols.py` — add entry to `INBOUND_TYPES`
-- [ ] `group_vars/all.yml` — add entry to `inbound_types` (must match Python)
-- [ ] `roles/xray/tasks/` — create/update inbound task
-- [ ] `roles/xray/tasks/main.yml` — add include gate
-- [ ] `roles/shared/tasks/generate_client_output.yml` — VLESS URL + QR codes
-- [ ] `roles/shared/templates/connection-info.html.j2` — unified HTML page (both local and server-hosted)
-- [ ] `roles/output/tasks/main.yml` — terminal output (QR + URL display)
-- [ ] `roles/output/templates/connection-summary.txt.j2` — admin summary
-- [ ] `roles/output/templates/connection-summary-client.txt.j2` — client summary
-- [ ] `roles/caddy/tasks/main.yml` — build URL + generate QR on server
-- [ ] `roles/client_management/tasks/main.yml` — discover inbound
-- [ ] `roles/client_management/tasks/add_client.yml` — add client to inbound + terminal output
-- [ ] `roles/client_management/tasks/remove_client.yml` — remove client from inbound
-- [ ] `roles/xray/tasks/configure_panel.yml` — save setting to credentials
-- [ ] `tests/render_templates.py` — add mock variables (templates are auto-discovered)
+When adding a **new inbound/transport type**:
+- [ ] `src/meridian/protocols.py` — add `InboundType` entry + `Protocol` subclass + append to `PROTOCOLS`
+- [ ] `src/meridian/provision/xray.py` — add inbound creation step
+- [ ] `src/meridian/provision/__init__.py` — add step to pipeline
+- [ ] `src/meridian/urls.py` — add URL building logic
+- [ ] `src/meridian/render.py` — update HTML/text rendering
+- [ ] `src/meridian/display.py` — update terminal output
+- [ ] `src/meridian/templates/connection-info.html.j2` — add card for new transport
 - [ ] `tests/test_protocols.py` — add test for new type
+- [ ] `tests/render_templates.py` — add mock variables (templates are auto-discovered)
 - [ ] `docs/ai/context.md` — update port table and architecture
 - [ ] `docs/ai/architecture.md` — update topology diagrams
 - [ ] Regenerate AI docs (`make ai-docs`)
 
-When changing **SNI recommendations** (all paths relative to `src/meridian/playbooks/`):
-- [ ] `group_vars/all.yml` — update "Good choices" / "Avoid" comments
-- [ ] `roles/output/templates/connection-summary.txt.j2` — update alternatives line
+When changing **SNI recommendations**:
+- [ ] `CLAUDE.md` — update conventions section
 - [ ] `docs/ai/troubleshooting.md` — update SNI Target Selection section
 - [ ] Regenerate AI docs (`make ai-docs`)
 
@@ -429,14 +383,12 @@ All previously tracked inconsistencies have been resolved:
 **Pipeline chain:** push → CI → Release+Deploy (on CI success)
 
 ### CI (`.github/workflows/ci.yml`) — runs on push and PR
-- **Lint**: `ansible/ansible-lint@main` — catches FQCN, YAML style, deprecated patterns
-- **Python Test**: `pytest` on Python 3.10 + 3.12 — credentials, servers, CLI, ansible, update logic
+- **Python Test**: `pytest` on Python 3.10 + 3.12 — credentials, servers, CLI, update logic, protocols, panel, output
 - **Python Lint**: `ruff check` + `ruff format --check` — style, imports, formatting
 - **Type Check**: `mypy` — static type analysis with `types-PyYAML` stubs
-- **Validate**: syntax check all playbooks + auto-discovered template rendering test with Ansible filter mocks
-- **Shell**: `bash -n` + shellcheck on `install.sh` and `setup.sh` + VERSION format validation + `body_format` policy check + connection-info app link sync check
-- **Dry run**: `ansible-playbook --check` with local connection (validates task structure)
-- Skipped lint rules: `var-naming[no-role-prefix]` (would require renaming 90+ variables), `command-instead-of-module` (curl/dig used intentionally)
+- **Validate**: template rendering test + connection-info app link sync check + VERSION format validation
+- **Shell**: `bash -n` + shellcheck on `install.sh` and `setup.sh`
+- **Integration**: 3x-ui Docker container API round-trip tests
 
 ### Release (`.github/workflows/release.yml`) — triggers after CI succeeds (workflow_run)
 - **Deploy Pages**: builds `_site/` from `docs/` + root install scripts, deploys via `actions/deploy-pages` artifact (no git commits)
@@ -458,7 +410,7 @@ All previously tracked inconsistencies have been resolved:
 
 1. Update `VERSION` file with the new version
 2. Commit and push to main → two workflows trigger in chain:
-   - **CI**: validates VERSION format, runs pytest + ruff + mypy + ansible-lint
+   - **CI**: validates VERSION format, runs pytest + ruff + mypy
    - **Release**: deploys Pages, creates git tag `vX.Y.Z` + GitHub Release + publishes to PyPI
 3. Users on auto-patch get the update on next CLI run; others see "Update available" prompt
 
@@ -469,7 +421,7 @@ After completing a feature or fix, **always bump the version as part of the comm
 - Added a new command, flag, or transport? → Bump Y (minor): `1.1.0` → `1.2.0`
 - Changed defaults or broke backward compat? → Bump X (major): `1.2.0` → `2.0.0`
 
-**Do NOT skip version bumps.** Every meaningful change to the CLI or playbooks should get a version bump (just edit the `VERSION` file) so users on auto-patch get fixes and users on manual update see the prompt. If multiple features are in one session, one version bump at the end is fine.
+**Do NOT skip version bumps.** Every meaningful change to the CLI or provisioner should get a version bump (just edit the `VERSION` file) so users on auto-patch get fixes and users on manual update see the prompt. If multiple features are in one session, one version bump at the end is fine.
 
 ### Release artifacts
 
