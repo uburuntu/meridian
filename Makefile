@@ -42,7 +42,6 @@ ansible-lint: ## Run ansible-lint on playbooks
 ansible-check: ## Syntax check all playbooks
 	cd $(PLAYBOOKS) && uv run ansible-playbook playbook.yml --syntax-check
 	cd $(PLAYBOOKS) && uv run ansible-playbook playbook-client.yml --syntax-check
-	cd $(PLAYBOOKS) && uv run ansible-playbook -i inventory-chain.yml.example playbook-chain.yml --syntax-check
 	cd $(PLAYBOOKS) && uv run ansible-playbook playbook-uninstall.yml --syntax-check
 
 templates: ## Validate Jinja2 template rendering

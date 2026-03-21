@@ -3,9 +3,6 @@
 # Reality makes the server impersonate a real website (e.g., microsoft.com).
 # Active probes see a legitimate TLS certificate; the proxy is invisible.
 #
-# In exit mode (chain): this inbound moves to reality_direct_port (8444) as a
-# fallback for direct connections. The primary port 443 is used by XHTTP.
-#
 # Handles mode switching: if an inbound exists on the wrong port (e.g., switching
 # from no-domain to domain mode), it is deleted and recreated on the correct port.
 

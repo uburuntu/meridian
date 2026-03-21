@@ -89,8 +89,6 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 
 **Domain mode** — HAProxy routes by SNI: Reality traffic goes to Xray, everything else to Caddy (auto-TLS). Adds VLESS+WSS through Cloudflare CDN as a fallback.
 
-**Chain mode** — Two servers: a relay on a whitelisted IP (e.g., Russia) forwards to an exit node abroad via VLESS+Reality+XHTTP.
-
 ## Client apps
 
 After setup, connect with any of these apps:

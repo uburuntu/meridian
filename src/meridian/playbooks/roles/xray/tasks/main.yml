@@ -12,7 +12,7 @@
 
 - name: Create VLESS+Reality+XHTTP inbound
   ansible.builtin.include_tasks: configure_reality_xhttp.yml
-  when: (exit_mode | default(false) | bool) or (xhttp_enabled | default(false) | bool)
+  when: xhttp_enabled | default(false) | bool
 
 - name: Create VLESS+WSS inbound (CDN fallback)
   ansible.builtin.include_tasks: configure_wss.yml

@@ -340,19 +340,6 @@ details .inner p{margin-bottom:12px}
       <p><strong>VLESS+WSS inbound</strong> provides a CDN fallback path. Traffic flows through Cloudflare's CDN to your domain via WebSocket, making the connection work even if your server's IP is blocked — Cloudflare's IP ranges are too widely used to block.</p>
     </div>
   </details>
-
-  <details>
-    <summary data-i18n="arch.chain">Chain mode (IP whitelist bypass)</summary>
-    <div class="inner" data-i18n="arch.chain.body">
-      <p>For countries that whitelist allowed IP ranges (blocking all foreign IPs by default). Two servers work together:</p>
-      <p><strong>Relay node</strong> (on a whitelisted domestic IP) accepts VLESS+TCP from the user and forwards everything to the exit node via VLESS+Reality+XHTTP — a multiplexed transport that looks like normal web traffic.</p>
-      <p><strong>Exit node</strong> (abroad) decrypts and forwards traffic to the internet. It also keeps a direct Reality+TCP fallback on port 8444.</p>
-      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>git clone https://github.com/uburuntu/meridian.git && cd meridian
-cp inventory-chain.yml.example inventory-chain.yml
-<span class="cm"># Edit inventory-chain.yml with both server IPs</span>
-ansible-playbook -i inventory-chain.yml playbook-chain.yml</div>
-    </div>
-  </details>
 </div>
 </section>
 

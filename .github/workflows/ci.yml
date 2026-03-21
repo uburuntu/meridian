@@ -80,7 +80,6 @@ jobs:
           cd $PLAYBOOKS_DIR
           ansible-playbook playbook.yml --syntax-check
           ansible-playbook playbook-client.yml --syntax-check
-          ansible-playbook -i inventory-chain.yml.example playbook-chain.yml --syntax-check
           ansible-playbook playbook-uninstall.yml --syntax-check
 
       - name: Validate templates render

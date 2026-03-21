@@ -21,13 +21,6 @@
   delegate_to: localhost
   become: false
 
-# -- Exit mode direct fallback URL --
-- name: Build direct Reality fallback URL (exit mode)
-  ansible.builtin.set_fact:
-    vless_direct_url: >-
-      vless://{{ reality_uuid }}@{{ server_public_ip }}:{{ reality_direct_port | default(8444) }}?encryption=none&flow=xtls-rprx-vision&security=reality&sni={{ reality_sni }}&fp={{ utls_fingerprint }}&pbk={{ reality_public_key }}&sid={{ reality_short_id }}&type=tcp&headerType=none#VLESS-Direct-Fallback
-  when: exit_mode | default(false) | bool
-
 # -- Flush handlers so HAProxy/Caddy are running before port check --
 - name: Flush handlers before port verification
   ansible.builtin.meta: flush_handlers
@@ -39,21 +32,12 @@
   register: port_443_check
   changed_when: false
 
-- name: Verify Reality port is listening (exit mode fallback)
-  ansible.builtin.command:
-    cmd: "ss -tlnp sport = :{{ reality_direct_port | default(8444) }}"
-  register: port_direct_check
-  changed_when: false
-  when: exit_mode | default(false) | bool
-
 - name: Verify XHTTP port is listening
   ansible.builtin.command:
     cmd: "ss -tlnp sport = :{{ xhttp_inbound_port }}"
   register: port_xhttp_check
   changed_when: false
-  when:
-    - xhttp_enabled | default(false) | bool
-    - not (exit_mode | default(false) | bool)
+  when: xhttp_enabled | default(false) | bool
 
 # -- Print output directly to terminal (bypasses Ansible's JSON-escaping) --
 # Using shell echo instead of debug so ANSI QR codes render properly.
@@ -80,21 +64,13 @@
 
       --- Verification ---
       Port 443: {{ 'OK' if '*:443' in port_443_check.stdout or '0.0.0.0:443' in port_443_check.stdout or ':::443' in port_443_check.stdout else 'NOT LISTENING — run: docker logs 3x-ui' }}
-      {% if exit_mode | default(false) | bool %}
-      Port {{ reality_direct_port | default(8444) }}: {{ 'OK' if port_direct_check.stdout | length > 50 else 'NOT LISTENING' }}
-      {% endif %}
-      {% if xhttp_enabled | default(false) | bool and not (exit_mode | default(false) | bool) %}
+      {% if xhttp_enabled | default(false) | bool %}
       Port {{ xhttp_inbound_port }} (XHTTP): {{ 'OK' if port_xhttp_check.stdout | length > 50 else 'NOT LISTENING — run: docker logs 3x-ui' }}
       {% endif %}
 
       --- Connection URLs ---
-      {% if exit_mode | default(false) | bool %}
-      Direct fallback (port {{ reality_direct_port | default(8444) }}):
-      {{ vless_direct_url }}
-      {% else %}
       Primary (Reality, port 443):
       {{ vless_reality_url }}
-      {% endif %}
       {% if xhttp_enabled | default(false) | bool %}
 
       XHTTP (enhanced stealth, port {{ xhttp_inbound_port }}):
@@ -154,16 +130,6 @@
       Then open an issue: https://github.com/uburuntu/meridian/issues
 
       ======================================================================
-      {% if exit_mode | default(false) | bool %}
-
-      --- Exit Node Credentials (for Relay Configuration) ---
-      These values are automatically passed to the relay node.
-      XHTTP UUID:    {{ xhttp_uuid }}
-      Public Key:    {{ reality_public_key }}
-      Short ID:      {{ reality_short_id }}
-      Reality SNI:   {{ reality_sni }}
-      Server IP:     {{ server_public_ip }}
-      {% endif %}
       SUMMARY
   delegate_to: localhost
   become: false

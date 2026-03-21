@@ -1,7 +1,6 @@
 ---
 exclude_paths:
   - requirements.yml
-  - inventory-chain.yml.example
 
 skip_list:
   - yaml[line-length]

@@ -37,10 +37,7 @@
       ansible.builtin.set_fact:
         domain_mode: "{{ domain | default('') | length > 0 }}"
         reality_port: >-
-          {{ (exit_mode | default(false) | bool) | ternary(
-               reality_direct_port | default(8444),
-               (domain | default('') | length > 0) | ternary(haproxy_reality_backend_port, 443)
-             ) }}
+          {{ (domain | default('') | length > 0) | ternary(haproxy_reality_backend_port, 443) }}
 
     - name: Load saved credentials
       ansible.builtin.include_tasks: roles/shared/tasks/load_credentials.yml

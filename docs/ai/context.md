@@ -44,18 +44,6 @@ User → Server:443 (HAProxy)
 - VLESS+WSS routed through Cloudflare CDN as IP-blocking fallback
 - Connection info page hosted on the server at `https://domain/connection`
 
-### Chain Mode
-
-Two servers for IP whitelist bypass (e.g., Russia → Germany):
-
-```
-User → Relay:443 (VLESS+TCP, plain) → Exit:443 (VLESS+Reality+XHTTP) → Internet
-```
-
-- Relay is on a whitelisted IP (domestic)
-- Exit is abroad and provides actual internet access
-- Exit also has a direct Reality port (8444) as a fallback
-
 ## CLI Commands
 
 ```
@@ -108,8 +96,6 @@ Global flag: `--server NAME` targets a specific named server.
 | 10443 | Xray (Reality, internal) | Domain |
 | 8443 | Caddy (TLS, internal) | Domain |
 | 2053 | 3x-ui panel (localhost) | All modes |
-| 443 | Relay inbound (VLESS+TCP) | Chain |
-| 8444 | Exit direct Reality fallback | Chain |
 
 ## Client Apps
 

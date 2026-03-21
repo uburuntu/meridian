@@ -39,7 +39,6 @@ body:
         - Primary (Reality)
         - Backup (WSS/CDN)
         - Both fail
-        - Relay chain
     validations:
       required: true
 

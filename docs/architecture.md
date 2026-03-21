@@ -82,26 +82,6 @@ flowchart TD
     end
 ```
 
-## Chain Mode
-
-```mermaid
-flowchart LR
-    User([User]) --> |"VLESS+TCP\n(plain, no TLS)"| Relay
-
-    subgraph Relay["Relay Node (Whitelisted IP)"]
-        RelayXray["Xray\n:443 VLESS+TCP"]
-    end
-
-    Relay --> |"VLESS+Reality+XHTTP\n(looks like HTTPS)"| Exit
-
-    subgraph Exit["Exit Node"]
-        ExitXray["Xray\n:443 Reality+XHTTP"]
-        ExitDirect["Xray\n:8444 Reality Direct"]
-    end
-
-    User -.-> |"Direct fallback"| ExitDirect
-```
-
 ## Credential Lifecycle
 
 ```mermaid

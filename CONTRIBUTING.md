@@ -57,7 +57,7 @@ See [CLAUDE.md](CLAUDE.md) for detailed architecture, implicit dependencies, and
 
 - **All Ansible tasks use FQCNs** (`ansible.builtin.uri`, not `uri`)
 - **Secrets use `no_log: true`** — never expose credentials in output
-- **Three connection-info templates must stay in sync** (output/caddy/output_relay)
+- **Two connection-info templates must stay in sync** (output/caddy)
 - **Caddy config** goes in `/etc/caddy/conf.d/meridian.caddy`, not the main Caddyfile
 
 

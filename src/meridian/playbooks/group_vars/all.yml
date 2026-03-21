@@ -100,16 +100,9 @@ credentials_file: "{{ credentials_dir }}/{{ inventory_hostname }}.yml"
 # Disable with: -e xhttp_enabled=false
 xhttp_enabled: true
 
-# XHTTP inbound port (standalone mode only — exit mode always uses 443).
+# XHTTP inbound port — dedicated port for XHTTP transport.
 # Uses a deterministic random port so re-runs produce the same value.
 xhttp_port: "{{ range(10000, 60000) | random(seed=inventory_hostname + 'xhttp') }}"
-
-# -----------------------------------------------------------------------------
-# Chain Mode (set automatically by playbook-chain.yml)
-# -----------------------------------------------------------------------------
-# When true, this server acts as an exit node in a relay chain.
-# Do not set manually — playbook-chain.yml sets this automatically.
-exit_mode: false
 
 # Public IP of the server (auto-detected if not set).
 # Override with: -e server_public_ip=1.2.3.4

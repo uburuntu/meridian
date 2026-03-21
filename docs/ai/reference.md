@@ -44,18 +44,6 @@ User → Server:443 (HAProxy)
 - VLESS+WSS routed through Cloudflare CDN as IP-blocking fallback
 - Connection info page hosted on the server at `https://domain/connection`
 
-### Chain Mode
-
-Two servers for IP whitelist bypass (e.g., Russia → Germany):
-
-```
-User → Relay:443 (VLESS+TCP, plain) → Exit:443 (VLESS+Reality+XHTTP) → Internet
-```
-
-- Relay is on a whitelisted IP (domestic)
-- Exit is abroad and provides actual internet access
-- Exit also has a direct Reality port (8444) as a fallback
-
 ## CLI Commands
 
 ```
@@ -108,8 +96,6 @@ Global flag: `--server NAME` targets a specific named server.
 | 10443 | Xray (Reality, internal) | Domain |
 | 8443 | Caddy (TLS, internal) | Domain |
 | 2053 | 3x-ui panel (localhost) | All modes |
-| 443 | Relay inbound (VLESS+TCP) | Chain |
-| 8444 | Exit direct Reality fallback | Chain |
 
 ## Client Apps
 
@@ -188,25 +174,6 @@ Internet
 ```
 
 Key: HAProxy does NOT terminate TLS. It reads the SNI hostname from the TLS Client Hello and forwards the raw TCP stream to the appropriate backend. This allows both Reality (which needs raw TLS) and Caddy (which terminates TLS) to coexist on port 443.
-
-### Chain Mode
-
-```
-┌─────────────────┐         ┌─────────────────────┐
-│ Relay (Russia)  │         │ Exit (Germany)       │
-│ Whitelisted IP  │         │                      │
-│                 │  VLESS   │                      │
-│ Port 443        │ Reality  │ Port 443             │
-│ VLESS+TCP ──────┼─XHTTP──→│ Xray (Reality+XHTTP) │
-│ (plain, no TLS) │         │                      │
-│                 │         │ Port 8444            │
-└─────────────────┘         │ Xray (Reality direct) │
-                            └─────────────────────┘
-```
-
-- User → Relay: plain VLESS+TCP (domestic traffic, no encryption needed)
-- Relay → Exit: VLESS+Reality+XHTTP (looks like normal HTTPS to censors on the international link)
-- Exit port 8444: direct Reality fallback when relay is not needed
 
 ## How Reality Protocol Works
 
