@@ -34,9 +34,10 @@ def warn(msg: str) -> None:
     err_console.print(f"  [warn]![/warn] {msg}")
 
 
-def fail(msg: str) -> NoReturn:
+def fail(msg: str, *, hint: str = "") -> NoReturn:
     err_console.print(f"\n  [error]\u2717 {msg}[/error]")
-    err_console.print("  [dim]Not connecting? Run: meridian ping | Other issues? Run: meridian diagnostics --ai[/dim]")
+    if hint:
+        err_console.print(f"  [dim]{hint}[/dim]")
     err_console.print("  [dim]Report: https://github.com/uburuntu/meridian/issues[/dim]\n")
     raise typer.Exit(code=1)
 

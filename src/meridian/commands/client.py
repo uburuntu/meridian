@@ -45,7 +45,10 @@ def run_add(
         user=resolved.user,
     )
     if rc != 0:
-        fail(f"Failed to add client '{name}'")
+        fail(
+            f"Failed to add client '{name}'",
+            hint="Make sure the server is set up first: meridian setup",
+        )
 
     # Show result
     html_files = list(resolved.creds_dir.glob(f"*-{name}-connection-info.html"))
@@ -71,11 +74,11 @@ def run_list(
 
     proxy_file = resolved.creds_dir / "proxy.yml"
     if not proxy_file.exists():
-        fail("No credentials found. Run: meridian setup")
+        fail("No credentials found", hint="Deploy the server first: meridian setup")
 
     creds = ServerCredentials.load(proxy_file)
     if not creds.has_credentials:
-        fail("No panel credentials found. Run: meridian setup")
+        fail("No panel credentials found", hint="Deploy the server first: meridian setup")
 
     panel_port = 2053
     panel_user = creds.panel_username
@@ -137,7 +140,10 @@ def run_remove(
         user=resolved.user,
     )
     if rc != 0:
-        fail(f"Failed to remove client '{name}'")
+        fail(
+            f"Failed to remove client '{name}'",
+            hint="Check client name with: meridian client list",
+        )
 
 
 def _display_client_list(raw_json: str) -> None:

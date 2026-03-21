@@ -41,7 +41,10 @@ def run(
             if is_ipv4(requested_server):
                 server_ip = requested_server
             else:
-                fail(f"Server '{requested_server}' not found. Run: meridian server list")
+                fail(
+                    f"Server '{requested_server}' not found",
+                    hint="See registered servers: meridian server list",
+                )
         else:
             server_ip = entry.host
             if user == "root" and entry.user:
@@ -108,7 +111,7 @@ def run(
 
     # Validate IP
     if not is_ipv4(server_ip):
-        fail(f"Invalid IP address: {server_ip}")
+        fail(f"Invalid IP address: {server_ip}", hint="Enter a valid IPv4 address (e.g. meridian setup 123.45.67.89)")
 
     # Resolve and prepare
     resolved = resolve_server(
@@ -169,7 +172,10 @@ def run(
         user=resolved.user,
     )
     if rc != 0:
-        fail("Setup playbook failed")
+        fail(
+            "Setup playbook failed",
+            hint="Check server IP and SSH access. Run: meridian check " + resolved.ip,
+        )
 
     # Register server
     registry.add(ServerEntry(host=resolved.ip, user=resolved.user))
