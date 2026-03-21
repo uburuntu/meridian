@@ -17,12 +17,9 @@ from meridian.config import SERVERS_FILE
 from meridian.console import err_console, fail, info, ok, warn
 from meridian.credentials import ClientEntry, ServerCredentials
 from meridian.models import Inbound
-from meridian.output import (
-    build_vless_urls,
-    print_terminal_output,
-    save_connection_html,
-    save_connection_text,
-)
+from meridian.display import print_terminal_output
+from meridian.render import save_connection_html, save_connection_text
+from meridian.urls import build_protocol_urls
 from meridian.panel import PanelClient, PanelError
 from meridian.protocols import PROTOCOLS, Protocol, get_protocol
 from meridian.servers import ServerRegistry
@@ -220,7 +217,7 @@ def run_add(
                 xhttp_port = xhttp_ib.port
 
         # Generate output files
-        urls = build_vless_urls(
+        protocol_urls = build_protocol_urls(
             name=name,
             reality_uuid=reality_uuid,
             wss_uuid=wss_uuid,
@@ -231,12 +228,12 @@ def run_add(
         server_ip = creds.server.ip or resolved.ip
         file_prefix = f"{resolved.ip}-{name}"
         save_connection_text(
-            urls,
+            protocol_urls,
             resolved.creds_dir / f"{file_prefix}-connection-info.txt",
             server_ip,
         )
         save_connection_html(
-            urls,
+            protocol_urls,
             resolved.creds_dir / f"{file_prefix}-connection-info.html",
             server_ip,
             domain=domain,
@@ -246,7 +243,7 @@ def run_add(
         _sync_credentials_to_server(resolved)
 
         # Print terminal output
-        print_terminal_output(urls, resolved.creds_dir, server_ip)
+        print_terminal_output(protocol_urls, resolved.creds_dir, server_ip)
 
         err_console.print(f"  [dim]Test reachability: meridian ping {resolved.ip}[/dim]")
         err_console.print("  [dim]View all clients:  meridian client list[/dim]\n")

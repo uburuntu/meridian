@@ -254,42 +254,42 @@ class TestQRCodeGeneration:
 
     def test_generate_qr_terminal_success(self) -> None:
         mock_result = type("Result", (), {"returncode": 0, "stdout": "QR_OUTPUT"})()
-        with patch("meridian.output.subprocess.run", return_value=mock_result):
+        with patch("meridian.urls.subprocess.run", return_value=mock_result):
             result = generate_qr_terminal("vless://test")
         assert result == "QR_OUTPUT"
 
     def test_generate_qr_terminal_failure(self) -> None:
         mock_result = type("Result", (), {"returncode": 1, "stdout": ""})()
-        with patch("meridian.output.subprocess.run", return_value=mock_result):
+        with patch("meridian.urls.subprocess.run", return_value=mock_result):
             result = generate_qr_terminal("vless://test")
         assert result == ""
 
     def test_generate_qr_terminal_not_installed(self) -> None:
-        with patch("meridian.output.subprocess.run", side_effect=FileNotFoundError):
+        with patch("meridian.urls.subprocess.run", side_effect=FileNotFoundError):
             result = generate_qr_terminal("vless://test")
         assert result == ""
 
     def test_generate_qr_terminal_timeout(self) -> None:
         import subprocess
 
-        with patch("meridian.output.subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="qrencode", timeout=5)):
+        with patch("meridian.urls.subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="qrencode", timeout=5)):
             result = generate_qr_terminal("vless://test")
         assert result == ""
 
     def test_generate_qr_base64_success(self) -> None:
         mock_result = type("Result", (), {"returncode": 0, "stdout": "iVBORw0KGgo="})()
-        with patch("meridian.output.subprocess.run", return_value=mock_result):
+        with patch("meridian.urls.subprocess.run", return_value=mock_result):
             result = generate_qr_base64("vless://test")
         assert result == "iVBORw0KGgo="
 
     def test_generate_qr_base64_failure(self) -> None:
         mock_result = type("Result", (), {"returncode": 1, "stdout": ""})()
-        with patch("meridian.output.subprocess.run", return_value=mock_result):
+        with patch("meridian.urls.subprocess.run", return_value=mock_result):
             result = generate_qr_base64("vless://test")
         assert result == ""
 
     def test_generate_qr_base64_not_installed(self) -> None:
-        with patch("meridian.output.subprocess.run", side_effect=FileNotFoundError):
+        with patch("meridian.urls.subprocess.run", side_effect=FileNotFoundError):
             result = generate_qr_base64("vless://test")
         assert result == ""
 
@@ -305,7 +305,7 @@ class TestSaveConnectionHtml:
             wss="",
         )
         dest = tmp_path / "alice.html"
-        with patch("meridian.output.generate_qr_base64", return_value=""):
+        with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
         assert dest.exists()
 
@@ -318,7 +318,7 @@ class TestSaveConnectionHtml:
             wss="",
         )
         dest = tmp_path / "bob.html"
-        with patch("meridian.output.generate_qr_base64", return_value=""):
+        with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
         content = dest.read_text()
         # The client name appears in the VLESS URL embedded in the HTML
@@ -332,7 +332,7 @@ class TestSaveConnectionHtml:
             wss="",
         )
         dest = tmp_path / "test.html"
-        with patch("meridian.output.generate_qr_base64", return_value=""):
+        with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
         content = dest.read_text()
         assert "unique-reality-url" in content
@@ -340,7 +340,7 @@ class TestSaveConnectionHtml:
     def test_html_file_permissions(self, tmp_path: Path) -> None:
         urls = ClientURLs(name="test", reality="vless://x", xhttp="", wss="")
         dest = tmp_path / "test.html"
-        with patch("meridian.output.generate_qr_base64", return_value=""):
+        with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
         assert oct(dest.stat().st_mode)[-3:] == "600"
 
@@ -353,7 +353,7 @@ class TestSaveConnectionHtml:
             wss="",
         )
         dest = tmp_path / "alice.html"
-        with patch("meridian.output.generate_qr_base64", return_value=""):
+        with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
         content = dest.read_text()
         assert "<!DOCTYPE html>" in content or "<html" in content
@@ -368,7 +368,7 @@ class TestSaveConnectionHtml:
             wss="",
         )
         dest = tmp_path / "alice.html"
-        with patch("meridian.output.generate_qr_base64", return_value=""):
+        with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
         content = dest.read_text()
         assert "meridian.msu.rocks/ping" in content
