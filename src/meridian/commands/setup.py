@@ -25,11 +25,27 @@ def run(
     name: str = "",
     user: str = "root",
     yes: bool = False,
+    requested_server: str = "",
 ) -> None:
     """Deploy a VLESS+Reality proxy server."""
     registry = ServerRegistry(SERVERS_FILE)
     server_ip = ip
     ansible_user = user
+
+    # --server flag: resolve from registry
+    if requested_server:
+        if server_ip:
+            fail("Cannot use both positional IP and --server flag")
+        entry = registry.find(requested_server)
+        if not entry:
+            if is_ipv4(requested_server):
+                server_ip = requested_server
+            else:
+                fail(f"Server '{requested_server}' not found. Run: meridian server list")
+        else:
+            server_ip = entry.host
+            if user == "root" and entry.user:
+                ansible_user = entry.user
 
     # Interactive wizard if no IP given
     if not server_ip:

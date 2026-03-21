@@ -63,11 +63,12 @@ def setup_cmd(
     name: str = typer.Option("", "--name", help="Name the first client"),
     user: str = typer.Option("root", "--user", "-u", help="SSH user"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip prompts"),
+    server: str = typer.Option("", "--server", help="Target server (name or IP) for re-runs"),
 ) -> None:
     """Deploy proxy server."""
     from meridian.commands.setup import run
 
-    run(ip, domain, email, sni, xhttp, name, user, yes)
+    run(ip, domain, email, sni, xhttp, name, user, yes, server)
 
 
 # =============================================================================
