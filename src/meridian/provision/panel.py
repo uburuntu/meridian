@@ -87,6 +87,11 @@ class ConfigurePanel:
         # Check if already configured
         creds = ctx.get("credentials")
         if creds is not None and ctx.get("panel_configured"):
+            # Update hosted_page flag even on re-runs (may have changed)
+            if creds.server.hosted_page != ctx.hosted_page:
+                creds.server.hosted_page = ctx.hosted_page
+                creds.save(self.creds_path)
+                ctx["credentials"] = creds
             return StepResult(
                 name=self.name,
                 status="skipped",

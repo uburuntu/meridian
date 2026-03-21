@@ -494,9 +494,15 @@ class InstallCaddy:
 
     @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
+        # Resolve runtime values from context (populated by ConfigurePanel)
+        panel_web_base_path = self.panel_web_base_path or ctx.get("web_base_path", "")
+        info_page_path = self.info_page_path or ctx.get("info_page_path", "")
+        panel_internal_port = self.panel_internal_port or ctx.panel_port
+        server_ip = self.server_ip or ctx.ip
+
         # -- DNS pre-check (domain mode only) --
         if not self.ip_mode and not self.skip_dns_check:
-            dns_result = _check_domain_dns(conn, self.domain, self.server_ip)
+            dns_result = _check_domain_dns(conn, self.domain, server_ip)
             if dns_result is not None:
                 return StepResult(name=self.name, status="failed", detail=dns_result)
 
@@ -567,22 +573,22 @@ class InstallCaddy:
         # -- Deploy Meridian Caddy config --
         if self.ip_mode:
             caddy_config = _render_caddy_ip_config(
-                server_ip=self.server_ip,
+                server_ip=server_ip,
                 caddy_internal_port=self.caddy_internal_port,
-                panel_web_base_path=self.panel_web_base_path,
-                panel_internal_port=self.panel_internal_port,
-                info_page_path=self.info_page_path,
+                panel_web_base_path=panel_web_base_path,
+                panel_internal_port=panel_internal_port,
+                info_page_path=info_page_path,
                 email=self.email,
             )
         else:
             caddy_config = _render_caddy_config(
                 domain=self.domain,
                 caddy_internal_port=self.caddy_internal_port,
-                ws_path=self.ws_path,
+                ws_path=self.ws_path or ctx.get("ws_path", ""),
                 wss_internal_port=self.wss_internal_port,
-                panel_web_base_path=self.panel_web_base_path,
-                panel_internal_port=self.panel_internal_port,
-                info_page_path=self.info_page_path,
+                panel_web_base_path=panel_web_base_path,
+                panel_internal_port=panel_internal_port,
+                info_page_path=info_page_path,
                 email=self.email,
             )
         q_config = shlex.quote(caddy_config)
@@ -605,6 +611,19 @@ class InstallCaddy:
             timeout=10,
         )
 
+        # -- IP mode: add default_sni to main Caddyfile --
+        # TLS clients don't send SNI for IP addresses (RFC 6066), so Caddy
+        # needs default_sni to match incoming connections to the IP site block.
+        if self.ip_mode:
+            q_sni = shlex.quote(server_ip)
+            # Write global options block with default_sni at top of Caddyfile
+            # (idempotent: check for existing default_sni first)
+            conn.run(
+                f"grep -q 'default_sni' /etc/caddy/Caddyfile 2>/dev/null || "
+                f"sed -i '1i\\{{\\n\\tdefault_sni {q_sni}\\n}}' /etc/caddy/Caddyfile",
+                timeout=10,
+            )
+
         # -- Start/enable/reload Caddy --
         conn.run("systemctl enable caddy", timeout=10)
         result = conn.run("systemctl reload-or-restart caddy", timeout=15)
@@ -615,7 +634,7 @@ class InstallCaddy:
                 detail=f"Failed to start Caddy: {result.stderr.strip()}",
             )
 
-        host = self.server_ip if self.ip_mode else self.domain
+        host = server_ip if self.ip_mode else self.domain
         return StepResult(
             name=self.name,
             status="changed",
