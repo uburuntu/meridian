@@ -1,204 +1,84 @@
-# Meridian — Architecture Diagrams
+# Architecture
 
-## CLI Command Flow
+Meridian is a CLI tool that deploys censorship-resistant VLESS+Reality proxy servers. It connects to a VPS via SSH, runs Ansible playbooks to configure Docker/Xray/HAProxy/Caddy, and manages clients through the 3x-ui panel API. Designed for semi-technical users who share VPN access with less technical people.
 
-```mermaid
-flowchart LR
-    User([User]) --> CLI[meridian CLI]
-    CLI --> |"setup / client / uninstall"| Ansible[Ansible Playbook]
-    CLI --> |"check / scan / diagnostics"| SSH[SSH Commands]
-    CLI --> |"client list"| API[Direct API Call]
-    CLI --> |"ping"| Local[Local TCP/TLS]
+## Component overview
 
-    Ansible --> |ansible_connection: local| Server
-    Ansible --> |SSH + become| Server
-    SSH --> Server[Target Server]
-    API --> |"curl via SSH"| Server
+```
+User's laptop                     VPS Server (Debian/Ubuntu)
+┌──────────────────┐              ┌─────────────────────────┐
+│ meridian CLI     │──── SSH ────>│ Docker: 3x-ui + Xray    │
+│ (Python/Typer)   │              │                         │
+│                  │── API ──────>│ HAProxy :443 (SNI route) │
+│ Ansible playbooks│              │ Caddy (auto-TLS)        │
+│ (bundled in pkg) │              │                         │
+│                  │              │ Credentials:            │
+│ ~/.meridian/     │<── sync ────│ /etc/meridian/           │
+│  credentials/    │              └─────────────────────────┘
+│  servers         │
+└──────────────────┘
 ```
 
-## Privilege Escalation
+## Key files to read first
 
-```mermaid
-flowchart TD
-    Start([meridian command]) --> Where{Running where?}
+| File | Purpose |
+|------|---------|
+| `src/meridian/cli.py` | Entry point, all subcommands registered here |
+| `src/meridian/commands/setup.py` | Interactive wizard + playbook execution |
+| `src/meridian/credentials.py` | `ServerCredentials` dataclass (YAML load/save) |
+| `src/meridian/ssh.py` | SSH connection, local mode detection, `tcp_connect` |
+| `src/meridian/ansible.py` | Playbook runner, inventory generation, Ansible bootstrap |
+| `src/meridian/playbooks/playbook.yml` | Main deployment playbook |
+| `src/meridian/playbooks/roles/xray/tasks/configure_panel.yml` | 3x-ui API interactions |
+| `src/meridian/playbooks/group_vars/all.yml` | Default variables (SNI, ports, versions) |
+| `src/meridian/playbooks/roles/output/templates/connection-info.html.j2` | Client-facing HTML page |
+| `tests/test_cli.py` | CLI smoke tests (good for understanding available commands) |
 
-    Where --> |Laptop| Remote[SSH to server]
-    Where --> |Server as root| LocalRoot[Local mode]
-    Where --> |Server as non-root| LocalSudo[Local mode + sudo]
+## What happens during `meridian setup`
 
-    Remote --> UserCheck{User = root?}
-    UserCheck --> |Yes| Direct[Direct execution]
-    UserCheck --> |No| Become[ansible_become: true]
+1. CLI resolves server IP (argument, saved server, or interactive prompt)
+2. CLI checks SSH connectivity, detects if running on the server itself
+3. Interactive wizard prompts for domain, SNI, XHTTP (unless `--yes`)
+4. CLI bootstraps Ansible if not installed (pipx -> pip3 -> apt cascade)
+5. CLI generates `~/.meridian/inventory.yml` and runs `playbook.yml`
+6. Playbook installs Docker, deploys 3x-ui container, generates x25519 keys
+7. Playbook configures VLESS+Reality inbound via 3x-ui REST API
+8. If domain: adds HAProxy (SNI routing), Caddy (TLS), VLESS+WSS (CDN fallback)
+9. Hardens server: UFW firewall, SSH key-only, BBR congestion control
+10. Outputs QR codes + saves HTML connection page with client links
+11. Syncs credentials to `/etc/meridian/` on the server (source of truth)
 
-    LocalRoot --> DirectLocal[bash -c command]
-    LocalSudo --> SudoLocal[sudo bash -c command]
+## Credential lifecycle
 
-    Direct --> Tasks[Ansible tasks]
-    Become --> Tasks
-    DirectLocal --> Tasks
-    SudoLocal --> Tasks
+- **Server** (`/etc/meridian/proxy.yml`) is the source of truth
+- **Local** (`~/.meridian/credentials/<IP>/proxy.yml`) is a cache
+- Playbook post_tasks sync local -> server after every run
+- CLI fetches from server via SSH when local cache is missing
+- `meridian server add IP` pulls credentials from server to local cache
+- `meridian uninstall` deletes both server and local copies
+
+## Critical gotchas
+
+These are the top things that will break if you are not careful:
+
+1. **`body_format: json` for API calls.** The 3x-ui inbound/client API MUST use `body_format: json`, not `form-urlencoded`. Ansible's uri module silently corrupts inline JSON in form-urlencoded bodies. The API returns `success: true` but stores garbage.
+
+2. **`jinja2_native = True` in ansible.cfg.** Required so `body_format: json` sends native integers (e.g., port numbers). Removing it breaks API calls with type errors. Safe with mixed text+expression templates because Jinja2 NativeEnvironment only returns native types for single-expression templates.
+
+3. **Handler flush before port checks.** `roles/output/tasks/main.yml` calls `meta: flush_handlers` before verifying ports. Without this, HAProxy/Caddy restart handlers have not fired yet and port 443 appears down.
+
+4. **Connection info template sync.** There are multiple `connection-info.html.j2` templates (output role, caddy role). CSS, JS, and app download links must stay identical across all copies.
+
+5. **Client email naming convention.** Clients map to 3x-ui emails as `reality-{name}`, `wss-{name}`, `xhttp-{name}`. The first client uses `reality-default`. Deleting clients requires the UUID, not the email (email-based deletion silently succeeds without actually deleting).
+
+## Testing
+
+```bash
+make ci            # Full local CI: lint + format + test + ansible-lint + syntax-check + templates
+make test          # pytest only (credentials, servers, CLI, ansible, update logic)
+make lint          # ruff check + ruff format --check
+make ansible-lint  # Ansible linting
+make templates     # Jinja2 template rendering with mock variables
 ```
 
-## Standalone Mode — No Domain
-
-```mermaid
-flowchart TD
-    Internet([Internet]) --> |":443"| Xray443["Xray: VLESS+Reality+TCP\n(xtls-rprx-vision)"]
-    Internet --> |":XHTTP_PORT"| XrayXH["Xray: VLESS+Reality+XHTTP\n(random port, seeded)"]
-
-    subgraph Docker["Docker: 3x-ui"]
-        Xray443
-        XrayXH
-        Panel["3x-ui Panel\n:2053 (localhost only)"]
-    end
-
-    SSHTunnel([SSH Tunnel]) -.-> Panel
-```
-
-## Standalone Mode — Domain
-
-```mermaid
-flowchart TD
-    Internet([Internet]) --> |":443"| HAProxy
-
-    subgraph Server
-        HAProxy["HAProxy\n(SNI Router, no TLS termination)"]
-
-        HAProxy --> |"SNI = reality_sni"| Xray["Xray: VLESS+Reality\n:10443"]
-        HAProxy --> |"SNI = domain"| Caddy["Caddy: Auto-TLS\n:8443"]
-
-        Caddy --> |"/ws-path"| XrayWSS["Xray: VLESS+WSS\n(internal port)"]
-        Caddy --> |"/panel-path"| Panel["3x-ui Panel\n:2053"]
-        Caddy --> |"/info-path"| InfoPage["Connection Info Page"]
-
-        Internet2([Internet]) --> |":XHTTP_PORT"| XrayXH["Xray: VLESS+Reality+XHTTP\n(random port)"]
-
-        subgraph Docker["Docker: 3x-ui"]
-            Xray
-            XrayXH
-            XrayWSS
-            Panel
-        end
-    end
-```
-
-## Chain Mode
-
-```mermaid
-flowchart LR
-    User([User]) --> |"VLESS+TCP\n(plain, no TLS)"| Relay
-
-    subgraph Relay["Relay Node (Whitelisted IP)"]
-        RelayXray["Xray\n:443 VLESS+TCP"]
-    end
-
-    Relay --> |"VLESS+Reality+XHTTP\n(looks like HTTPS)"| Exit
-
-    subgraph Exit["Exit Node"]
-        ExitXray["Xray\n:443 Reality+XHTTP"]
-        ExitDirect["Xray\n:8444 Reality Direct"]
-    end
-
-    User -.-> |"Direct fallback"| ExitDirect
-```
-
-## Credential Lifecycle
-
-```mermaid
-sequenceDiagram
-    participant CLI as meridian CLI
-    participant Local as ~/.meridian/credentials/
-    participant Server as /etc/meridian/
-    participant Panel as 3x-ui API
-
-    Note over CLI: First install
-    CLI->>CLI: Generate credentials (keys, UUID, password)
-    CLI->>Local: Save proxy.yml (BEFORE applying)
-    CLI->>Panel: POST /login (default creds)
-    CLI->>Panel: POST /panel/setting/updateUser
-    CLI->>Panel: POST /panel/api/inbounds/add
-    CLI->>Server: Sync credentials (post_tasks)
-
-    Note over CLI: Re-run (idempotent)
-    CLI->>Local: Load saved credentials
-    CLI->>Panel: POST /login (saved creds)
-    CLI->>Panel: GET /panel/api/inbounds/list
-    Note over CLI: Inbound exists → skip
-
-    Note over CLI: Cross-machine
-    CLI->>Server: SCP /etc/meridian/proxy.yml
-    Server->>Local: Copy to local cache
-
-    Note over CLI: Uninstall
-    CLI->>Panel: Remove inbounds
-    CLI->>Server: Delete /etc/meridian/
-    CLI->>Local: Delete credentials/
-```
-
-## Client Management
-
-```mermaid
-flowchart TD
-    Add["meridian client add alice"] --> Login[POST /login]
-    Login --> List[GET /panel/api/inbounds/list]
-    List --> FindReality[Find VLESS-Reality inbound]
-    FindReality --> GenUUID[Generate UUID]
-    GenUUID --> AddReality["POST /panel/api/inbounds/addClient\n(reality-alice)"]
-    AddReality --> AddXHTTP["POST /panel/api/inbounds/addClient\n(xhttp-alice)"]
-    AddXHTTP --> |"domain mode"| AddWSS["POST /panel/api/inbounds/addClient\n(wss-alice)"]
-    AddXHTTP --> Output[Generate QR + HTML + TXT]
-    AddWSS --> Output
-
-    Remove["meridian client remove alice"] --> Login2[POST /login]
-    Login2 --> List2[GET /panel/api/inbounds/list]
-    List2 --> FindUUID["Find UUID by email\n(NOT by email — use UUID)"]
-    FindUUID --> DelReality["POST /panel/api/inbounds/{id}/delClient/{uuid}"]
-    DelReality --> DelXHTTP["POST /panel/api/inbounds/{id}/delClient/{uuid}"]
-```
-
-## Install & PATH Resolution
-
-```mermaid
-flowchart TD
-    Install["curl | bash (install.sh)"] --> Strategy{Install strategy}
-    Strategy --> |"preferred"| UV["uv tool install\n→ ~/.local/bin/meridian"]
-    Strategy --> |"fallback"| Pipx["pipx install\n→ ~/.local/bin/meridian"]
-    Strategy --> |"last resort"| Pip["pip3 --user\n→ ~/.local/bin/meridian"]
-
-    UV --> PATH["Prepend PATH to .bashrc\n(before interactivity guard)"]
-    Pipx --> PATH
-    Pip --> PATH
-
-    PATH --> Symlink{"sudo -n available?"}
-    Symlink --> |Yes| Link["ln -sf → /usr/local/bin/meridian"]
-    Symlink --> |No| Skip["Skip (laptop, no sudo)"]
-
-    Link --> Works1["sudo meridian ✓"]
-    Link --> Works2["ssh host 'meridian ...' ✓"]
-    PATH --> Works3["Interactive shell ✓"]
-```
-
-## CI/CD Pipeline
-
-```mermaid
-flowchart LR
-    Push([git push]) --> CI[CI Workflow]
-
-    subgraph CI[CI]
-        Lint[ansible-lint]
-        PyTest[pytest\nPython 3.10 + 3.12]
-        Ruff[ruff check\n+ format]
-        Validate[Syntax check\n+ templates]
-        Shell[shellcheck\n+ policy checks]
-        Integration[Docker: 3x-ui\nAPI round-trip]
-        DryRun[ansible --check]
-    end
-
-    CI --> |on success| CD[CD Workflow]
-    CD --> |sync| Pages["GitHub Pages\nmeridian.msu.rocks"]
-
-    CD --> |on success| Release[Release Workflow]
-    Release --> Tag["Git tag vX.Y.Z"]
-    Release --> GHRelease["GitHub Release"]
-    Release --> PyPI["Publish to PyPI"]
-```
+CI cannot test actual deployments. For that, use a real VPS and run the full uninstall -> install cycle. Integration tests (`test_integration_3xui.py`) require a running 3x-ui Docker container and are auto-skipped when the container is not available.
