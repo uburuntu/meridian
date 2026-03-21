@@ -341,18 +341,6 @@ details .inner p{margin-bottom:12px}
     </div>
   </details>
 
-  <details>
-    <summary data-i18n="arch.chain">Chain mode (IP whitelist bypass)</summary>
-    <div class="inner" data-i18n="arch.chain.body">
-      <p>For countries that whitelist allowed IP ranges (blocking all foreign IPs by default). Two servers work together:</p>
-      <p><strong>Relay node</strong> (on a whitelisted domestic IP) accepts VLESS+TCP from the user and forwards everything to the exit node via VLESS+Reality+XHTTP — a multiplexed transport that looks like normal web traffic.</p>
-      <p><strong>Exit node</strong> (abroad) decrypts and forwards traffic to the internet. It also keeps a direct Reality+TCP fallback on port 8444.</p>
-      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>git clone https://github.com/uburuntu/meridian.git && cd meridian
-cp inventory-chain.yml.example inventory-chain.yml
-<span class="cm"># Edit inventory-chain.yml with both server IPs</span>
-ansible-playbook -i inventory-chain.yml playbook-chain.yml</div>
-    </div>
-  </details>
 </div>
 </section>
 
@@ -398,18 +386,6 @@ ansible-playbook -i inventory-chain.yml playbook-chain.yml</div>
       <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>ssh root@YOUR_SERVER
 cd /opt/3x-ui && docker compose pull && docker compose up -d</div>
       <p>Or re-run <code>meridian setup</code> — it's safe to repeat. Manage clients with <code>meridian client add|list|remove</code>.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>Manual Ansible setup <span></span></summary>
-    <div class="inner">
-      <p>For full control over inventory and variables:</p>
-      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>git clone https://github.com/uburuntu/meridian.git && cd meridian
-pip3 install ansible
-ansible-galaxy collection install -r requirements.yml
-<span class="cm"># Edit inventory.yml with your server IP</span>
-ansible-playbook playbook.yml</div>
     </div>
   </details>
 
