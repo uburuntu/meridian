@@ -42,7 +42,7 @@ def run(
             warn("RealiTLScanner has no arm64 build. You can set SNI manually with --sni.")
             return
         case _:
-            fail(f"Unsupported architecture: {raw_arch}")
+            fail(f"Unsupported architecture: {raw_arch}", hint_type="system")
 
     # Download RealiTLScanner to server
     scanner_url = f"https://github.com/XTLS/RealiTLScanner/releases/latest/download/RealiTLScanner-linux-{arch}"
@@ -53,7 +53,7 @@ def run(
         timeout=40,
     )
     if dl_result.returncode != 0:
-        fail("Failed to download RealiTLScanner. Check network connectivity.")
+        fail("Failed to download RealiTLScanner. Check network connectivity.", hint_type="system")
 
     # Get server's subnet CIDR for scanning
     cidr_result = resolved.conn.run(

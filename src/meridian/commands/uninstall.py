@@ -33,7 +33,7 @@ def run(
         except SystemExit:
             server_ip = prompt("Server IP to uninstall from")
             if not server_ip:
-                fail("Server IP is required for uninstall")
+                fail("Server IP is required for uninstall", hint_type="user")
             resolved = resolve_server(registry, explicit_ip=server_ip, user=user)
     else:
         resolved = resolve_server(registry, requested_server=requested_server, explicit_ip=ip, user=user)
@@ -70,7 +70,7 @@ def run(
         user=resolved.user,
     )
     if rc != 0:
-        fail("Uninstall playbook failed")
+        fail("Uninstall playbook failed", hint_type="system")
 
     # Remove from server registry
     registry.remove(resolved.ip)

@@ -139,7 +139,7 @@ def ensure_ansible() -> None:
             ok("Ansible installed via apt")
             return
 
-    fail("Could not install Ansible. Please install it manually: pip3 install ansible")
+    fail("Could not install Ansible. Please install it manually: pip3 install ansible", hint_type="system")
 
 
 def ensure_collections(playbooks_dir: Path) -> None:

@@ -8,6 +8,15 @@ from pathlib import Path
 
 from meridian.console import err_console, fail, info, ok, warn
 
+SSH_OPTS: list[str] = [
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=5",
+    "-o",
+    "StrictHostKeyChecking=accept-new",
+]
+
 
 class ServerConnection:
     """Manage SSH connections to a remote server.
@@ -25,14 +34,7 @@ class ServerConnection:
 
     @property
     def _ssh_opts(self) -> list[str]:
-        return [
-            "-o",
-            "BatchMode=yes",
-            "-o",
-            "ConnectTimeout=5",
-            "-o",
-            "StrictHostKeyChecking=accept-new",
-        ]
+        return SSH_OPTS
 
     def run(self, command: str, timeout: int = 30, check: bool = False) -> subprocess.CompletedProcess[str]:
         """Run a command on the remote server via SSH."""
@@ -70,12 +72,12 @@ class ServerConnection:
                 err_console.print(f"  [dim]1. Copy your SSH key:  ssh-copy-id {self.user}@{self.ip}[/dim]")
                 err_console.print(f"  [dim]2. Test manually:      ssh {self.user}@{self.ip}[/dim]")
                 err_console.print("  [dim]3. Different user:     meridian setup IP --user ubuntu[/dim]")
-                fail(f"SSH connection failed to {self.user}@{self.ip}")
+                fail(f"SSH connection failed to {self.user}@{self.ip}", hint_type="system")
             ok("SSH connection successful")
         except subprocess.TimeoutExpired:
-            fail(f"SSH connection timed out (10s) to {self.user}@{self.ip}")
+            fail(f"SSH connection timed out (10s) to {self.user}@{self.ip}", hint_type="system")
         except FileNotFoundError:
-            fail("ssh command not found. Please install OpenSSH client.")
+            fail("ssh command not found. Please install OpenSSH client.", hint_type="system")
 
     def detect_local_mode(self) -> bool:
         """Check if we're running on the target server itself.

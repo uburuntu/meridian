@@ -205,3 +205,9 @@ class PanelClient:
     def cleanup(self) -> None:
         """Remove the cookie file."""
         self.conn.run(f"rm -f {self._cookie_path}", timeout=5)
+
+    def __enter__(self) -> PanelClient:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.cleanup()
