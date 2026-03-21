@@ -103,8 +103,10 @@
 
 - name: "Save client connection info HTML ({{ client_name }})"
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/roles/output/templates/connection-info.html.j2"
+    src: "{{ playbook_dir }}/roles/shared/templates/connection-info.html.j2"
     dest: "{{ credentials_dir }}/{{ inventory_hostname }}-{{ client_name }}-connection-info.html"
     mode: "0600"
   delegate_to: localhost
   become: false
+  vars:
+    is_server_hosted: false

@@ -163,8 +163,11 @@
 
 - name: Deploy connection info page
   ansible.builtin.template:
-    src: connection-info.html.j2
+    src: "{{ playbook_dir }}/roles/shared/templates/connection-info.html.j2"
     dest: /var/www/private/index.html
     mode: "0644"
     owner: caddy
     group: caddy
+  vars:
+    is_server_hosted: true
+    domain_mode: true

@@ -120,9 +120,11 @@ MOCK_VARS = {
     "vless_xhttp_url": "vless://test-uuid@1.2.3.4:34567?security=reality&type=xhttp#Test-XHTTP",
     "xhttp_qr_terminal": MockResult(stdout="QR_CODE_HERE"),
     "xhttp_qr_b64_local": MockResult(),
+    "xhttp_qr_b64": MockResult(),
     "port_xhttp_check": MockResult(stdout="LISTEN 0 4096 *:34567"),
     "client_name": "default",
     "first_client_name": "default",
+    "is_server_hosted": True,
 }
 
 # Auto-discover all Jinja2 templates in roles/

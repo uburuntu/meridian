@@ -124,31 +124,23 @@ jobs:
           print('OK: No form-urlencoded on inbound/client API calls')
           "
 
-      - name: Verify connection-info app links are in sync
+      - name: Verify connection-info app links match demo.html
         run: |
           python3 -c "
           import re, sys
-          base = '${{ env.PLAYBOOKS_DIR }}/roles'
-          files = [
-              f'{base}/caddy/templates/connection-info.html.j2',
-              f'{base}/output/templates/connection-info.html.j2',
-          ]
+          template = 'src/meridian/playbooks/roles/shared/templates/connection-info.html.j2'
+          demo = 'docs/demo.html'
           def extract_links(path):
               content = open(path).read()
               return sorted(set(re.findall(r'https://(?:play\.google\.com|apps\.apple\.com|github\.com/\S+/releases)[^\s\"<]*', content)))
-          baseline = extract_links(files[0])
-          ok = True
-          for f in files[1:]:
-              links = extract_links(f)
-              if links != baseline:
-                  print(f'MISMATCH: {f}')
-                  print(f'  Expected: {baseline}')
-                  print(f'  Got:      {links}')
-                  ok = False
-          if ok:
-              print(f'OK: App download links match across {len(files)} templates')
-          else:
+          baseline = extract_links(template)
+          demo_links = extract_links(demo)
+          if demo_links != baseline:
+              print(f'MISMATCH: {demo}')
+              print(f'  Template: {baseline}')
+              print(f'  Demo:     {demo_links}')
               sys.exit(1)
+          print(f'OK: App download links match between template and demo.html')
           "
 
       - name: Verify VERSION file format
