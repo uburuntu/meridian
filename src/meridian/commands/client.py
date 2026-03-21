@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 
 from meridian.ansible import ensure_ansible, ensure_collections, get_playbooks_dir, run_playbook
 from meridian.commands.resolve import (
@@ -82,11 +83,19 @@ def run_list(
     panel_path = creds.panel_web_base_path
 
     # Build the curl commands for login + list
+    q_user = shlex.quote(panel_user)
+    q_pass = shlex.quote(panel_pass)
+    q_path = shlex.quote(panel_path)
+    q_port = shlex.quote(str(panel_port))
+    cookie = "$HOME/.meridian/.cookie"
     login_cmd = (
-        f"curl -s -c /tmp/.mc -d 'username={panel_user}&password={panel_pass}' "
-        f"'http://127.0.0.1:{panel_port}/{panel_path}/login' > /dev/null && "
-        f"curl -s -b /tmp/.mc 'http://127.0.0.1:{panel_port}/{panel_path}/panel/api/inbounds/list'; "
-        f"rm -f /tmp/.mc"
+        f"mkdir -p $HOME/.meridian && "
+        f"curl -s -c {cookie}"
+        f" -d username={q_user}'&'password={q_pass}"
+        f" http://127.0.0.1:{q_port}/{q_path}/login > /dev/null && "
+        f"curl -s -b {cookie}"
+        f" http://127.0.0.1:{q_port}/{q_path}/panel/api/inbounds/list; "
+        f"rm -f {cookie}"
     )
 
     result = resolved.conn.run(login_cmd, timeout=15)

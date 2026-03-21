@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shlex
+
 from meridian.commands.resolve import (
     ensure_server_connection,
     fetch_credentials,
@@ -44,9 +46,10 @@ def run(
 
     # Download RealiTLScanner to server
     scanner_url = f"https://github.com/XTLS/RealiTLScanner/releases/latest/download/RealiTLScanner-linux-{arch}"
+    q_url = shlex.quote(scanner_url)
     info("Downloading RealiTLScanner...")
     dl_result = resolved.conn.run(
-        f"curl -sSfL --max-time 30 -o /tmp/realitlscanner '{scanner_url}' </dev/null && chmod +x /tmp/realitlscanner",
+        f"curl -sSfL --max-time 30 -o /tmp/realitlscanner {q_url} </dev/null && chmod +x /tmp/realitlscanner",
         timeout=40,
     )
     if dl_result.returncode != 0:
@@ -62,9 +65,10 @@ def run(
         server_cidr = f"{resolved.ip}/24"
 
     # Run scan
+    q_cidr = shlex.quote(server_cidr)
     info(f"Scanning {server_cidr} for TLS targets (this takes 30-60 seconds)...")
     resolved.conn.run(
-        f"cd /tmp && timeout 90 ./realitlscanner -addr '{server_cidr}'"
+        f"cd /tmp && timeout 90 ./realitlscanner -addr {q_cidr}"
         " -out /tmp/meridian-scan.csv -thread 4 -timeout 5 >/dev/null 2>&1",
         timeout=100,
     )

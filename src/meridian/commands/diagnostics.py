@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import platform
 import re
+import shlex
 import shutil
 
 from meridian.commands.resolve import (
@@ -124,9 +125,10 @@ def run(
 
     # --- SNI Target ---
     sni_host = sni or "www.microsoft.com"
+    q_sni = shlex.quote(sni_host)
     sni_check = (
         resolved.conn.run(
-            f"echo | openssl s_client -connect {sni_host}:443 -servername {sni_host} 2>/dev/null "
+            f"echo | openssl s_client -connect {q_sni}:443 -servername {q_sni} 2>/dev/null "
             f"| grep -E 'subject=|issuer=|CONNECTED'",
             timeout=10,
         ).stdout.strip()
@@ -140,8 +142,9 @@ def run(
     if proxy_file.exists():
         creds = ServerCredentials.load(proxy_file)
         if creds.domain:
+            q_domain = shlex.quote(creds.domain)
             dns_result = (
-                resolved.conn.run(f"dig +short {creds.domain} @8.8.8.8 2>/dev/null", timeout=10).stdout.strip()
+                resolved.conn.run(f"dig +short {q_domain} @8.8.8.8 2>/dev/null", timeout=10).stdout.strip()
                 or "dig not available"
             )
             sections.append((f"Domain DNS ({creds.domain})", dns_result))

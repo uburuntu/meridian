@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 import time
 
@@ -37,20 +38,20 @@ def run(
 
     issues = 0
     sni_host = sni or "www.microsoft.com"
+    q_sni = shlex.quote(sni_host)
     results: dict[str, str] = {}
 
     # --- SNI reachability ---
     info(f"Checking SNI target ({sni_host}) reachability from server...")
     sni_result = resolved.conn.run(
-        f"timeout 5 bash -c 'echo | openssl s_client -connect {sni_host}:443 "
-        f"-servername {sni_host} 2>/dev/null | head -1'",
+        f"timeout 5 bash -c 'echo | openssl s_client -connect {q_sni}:443 -servername {q_sni} 2>/dev/null | head -1'",
         timeout=10,
     )
     sni_check = sni_result.stdout.strip()
     if not sni_check:
         # Fallback: TCP connect
         sni_result2 = resolved.conn.run(
-            f"timeout 3 bash -c 'echo >/dev/tcp/{sni_host}/443' 2>&1 && echo OK",
+            f"timeout 3 bash -c 'echo >/dev/tcp/{q_sni}/443' 2>&1 && echo OK",
             timeout=8,
         )
         sni_check = sni_result2.stdout.strip()
@@ -70,7 +71,7 @@ def run(
     server_org = server_org_result.stdout.strip()
 
     sni_ip_result = resolved.conn.run(
-        f"dig +short {sni_host} @8.8.8.8 2>/dev/null | grep -E '^[0-9]+\\.' | head -1",
+        f"dig +short {q_sni} @8.8.8.8 2>/dev/null | grep -E '^[0-9]+\\.' | head -1",
         timeout=10,
     )
     sni_ip = sni_ip_result.stdout.strip()
@@ -144,8 +145,9 @@ def run(
     # --- Domain DNS ---
     dns_result = ""
     if domain:
+        q_domain = shlex.quote(domain)
         info(f"Checking domain DNS ({domain})...")
-        dns_r = resolved.conn.run(f"dig +short {domain} @8.8.8.8 2>/dev/null", timeout=10)
+        dns_r = resolved.conn.run(f"dig +short {q_domain} @8.8.8.8 2>/dev/null", timeout=10)
         dns_result = dns_r.stdout.strip()
         if resolved.ip in dns_result:
             ok(f"{domain} resolves to {resolved.ip}")
@@ -235,8 +237,9 @@ def run(
 def _tcp_connect(host: str, port: int, timeout: int = 5) -> bool:
     """Test TCP connectivity to host:port using bash /dev/tcp."""
     try:
+        q_host = shlex.quote(host)
         result = subprocess.run(
-            ["bash", "-c", f"echo >/dev/tcp/{host}/{port}"],
+            ["bash", "-c", f"echo >/dev/tcp/{q_host}/{port}"],
             capture_output=True,
             text=True,
             timeout=timeout,

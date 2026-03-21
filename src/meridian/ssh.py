@@ -38,7 +38,7 @@ class ServerConnection:
         """Run a command on the remote server via SSH."""
         if self.local_mode:
             if self.needs_sudo:
-                cmd = ["sudo", "bash", "-c", command]
+                cmd = ["sudo", "-n", "bash", "-c", command]
             else:
                 cmd = ["bash", "-c", command]
             return subprocess.run(
