@@ -102,26 +102,47 @@ fi
 # =============================================================================
 # Ensure PATH includes tool bin directories
 # =============================================================================
+# On Debian/Ubuntu, .bashrc has an interactivity guard near the top:
+#   case $- in *i*) ;; *) return;; esac
+# Anything appended AFTER this guard is unreachable for non-interactive shells
+# (e.g. `ssh host 'meridian ...'`). We prepend our PATH export so it runs
+# before the guard, making tools available in all shell contexts.
 ensure_path() {
   local dir="$1"
-  if [[ ":$PATH:" != *":$dir:"* ]] && [[ -d "$dir" ]]; then
-    SHELL_NAME=$(basename "${SHELL:-/bin/bash}")
-    PROFILE=""
-    case "$SHELL_NAME" in
-      zsh)  PROFILE="$HOME/.zshrc" ;;
-      bash)
-        if [[ -f "$HOME/.bashrc" ]]; then
-          PROFILE="$HOME/.bashrc"
-        elif [[ -f "$HOME/.bash_profile" ]]; then
-          PROFILE="$HOME/.bash_profile"
-        fi ;;
-    esac
+  [[ -d "$dir" ]] || return 0
 
-    if [[ -n "$PROFILE" ]] && ! grep -qF "$dir" "$PROFILE" 2>/dev/null; then
-      printf '\n# Meridian CLI\nexport PATH="%s:$PATH"\n' "$dir" >> "$PROFILE"
-      ok "Added $dir to PATH in $PROFILE"
-      PATH_ADDED=1
+  SHELL_NAME=$(basename "${SHELL:-/bin/bash}")
+  PROFILE=""
+  case "$SHELL_NAME" in
+    zsh)  PROFILE="$HOME/.zshrc" ;;
+    bash)
+      if [[ -f "$HOME/.bashrc" ]]; then
+        PROFILE="$HOME/.bashrc"
+      elif [[ -f "$HOME/.bash_profile" ]]; then
+        PROFILE="$HOME/.bash_profile"
+      fi ;;
+  esac
+
+  MARKER="# Meridian CLI"
+  EXPORT_LINE="export PATH=\"$dir:\$PATH\""
+
+  if [[ -n "$PROFILE" ]] && ! grep -qF "$MARKER" "$PROFILE" 2>/dev/null; then
+    if [[ "$SHELL_NAME" == "bash" ]] && grep -q 'case \$- in' "$PROFILE" 2>/dev/null; then
+      # Prepend before interactivity guard so non-interactive SSH works
+      TMPFILE=$(mktemp)
+      printf '%s\n%s\n\n' "$MARKER" "$EXPORT_LINE" > "$TMPFILE"
+      cat "$PROFILE" >> "$TMPFILE"
+      mv "$TMPFILE" "$PROFILE"
+    else
+      # No guard (zsh, bash_profile, etc.) — append is fine
+      printf '\n%s\n%s\n' "$MARKER" "$EXPORT_LINE" >> "$PROFILE"
     fi
+    ok "Added $dir to PATH in $PROFILE"
+    PATH_ADDED=1
+  fi
+
+  # Ensure current session has the path too
+  if [[ ":$PATH:" != *":$dir:"* ]]; then
     export PATH="$dir:$PATH"
   fi
 }
@@ -158,11 +179,18 @@ if [[ "$PATH_ADDED" == "1" ]]; then
   PROFILE_NAME=$(basename "${PROFILE:-shell config}")
   printf "  ${D}To start using meridian, run:${R}\n\n"
   printf "     ${C}source ~/${PROFILE_NAME}${R}\n\n"
-  printf "  ${D}Then:${R}\n"
-else
-  printf "  Get started:\n"
+  printf "  ${D}Then:${R}\n\n"
 fi
-printf "     ${C}meridian setup${R}              ${D}# interactive wizard${R}\n"
-printf "     ${C}meridian setup 1.2.3.4${R}      ${D}# deploy to server${R}\n"
-printf "     ${C}meridian help${R}               ${D}# all commands${R}\n"
+printf "  ${B}Quick start:${R}\n"
+printf "     ${C}meridian setup${R}              ${D}# deploy proxy (interactive wizard)${R}\n"
+printf "     ${C}meridian setup 1.2.3.4${R}      ${D}# deploy to specific server${R}\n\n"
+printf "  ${B}Before deploying:${R}\n"
+printf "     ${C}meridian check 1.2.3.4${R}      ${D}# validate server (ports, OS, DNS)${R}\n"
+printf "     ${C}meridian scan 1.2.3.4${R}       ${D}# find best SNI target nearby${R}\n\n"
+printf "  ${B}After deploying:${R}\n"
+printf "     ${C}meridian ping 1.2.3.4${R}       ${D}# test connection from your device${R}\n"
+printf "     ${C}meridian client add alice${R}    ${D}# share access with others${R}\n"
+printf "     ${C}meridian client list${R}         ${D}# view all clients${R}\n\n"
+printf "  ${D}All commands: meridian --help${R}\n"
+printf "  ${D}Docs: https://meridian.msu.rocks${R}\n"
 printf "\n"

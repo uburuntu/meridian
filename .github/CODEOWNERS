@@ -1,0 +1,16 @@
+# Default — all PRs require review
+* @uburuntu
+
+# High-risk files — extra scrutiny
+# Connection info templates (must stay in sync)
+src/meridian/playbooks/roles/*/templates/connection-info* @uburuntu
+
+# Credential handling (security-sensitive)
+src/meridian/credentials.py @uburuntu
+src/meridian/ssh.py @uburuntu
+
+# Panel API interactions
+src/meridian/playbooks/roles/xray/tasks/configure_panel.yml @uburuntu
+
+# CI/CD pipelines
+.github/workflows/ @uburuntu
