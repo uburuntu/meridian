@@ -1,9 +1,7 @@
 ---
 # Create the VLESS+Reality+XHTTP inbound.
 #
-# Used in two modes:
-# - Exit mode (chain): relay node connects here. Uses xhttp_uuid, email xhttp-relay-user.
-# - Standalone (--xhttp): end users connect directly. Uses reality_uuid, same identity as TCP Reality.
+# End users connect directly. Uses reality_uuid, same identity as TCP Reality.
 #
 # XHTTP mimics standard HTTP traffic, making connections statistically
 # indistinguishable from normal browsing (post-handshake behavioral stealth).
@@ -25,19 +23,16 @@
   ansible.builtin.set_fact:
     xhttp_inbound_exists: "{{ xhttp_inbound_match | length > 0 }}"
 
-# Compute which port XHTTP should use:
-# - Exit mode (chain): port 443 (Reality TCP is on 8444, no conflict)
-# - Standalone: dedicated xhttp_port (Reality TCP already owns 443)
+# XHTTP uses a dedicated port — Reality TCP already owns 443
 - name: Compute XHTTP inbound port
   ansible.builtin.set_fact:
-    xhttp_inbound_port: "{{ (exit_mode | default(false) | bool) | ternary(443, xhttp_port) }}"
+    xhttp_inbound_port: "{{ xhttp_port }}"
 
-# In exit mode: use dedicated xhttp_uuid for relay connections
-# In standalone mode: use reality_uuid so users have one identity for both transports
+# Use reality_uuid so users have one identity for both transports
 - name: Set XHTTP client identity
   ansible.builtin.set_fact:
-    xhttp_client_uuid: "{{ xhttp_uuid if (exit_mode | default(false) | bool) else reality_uuid }}"
-    xhttp_client_email: "{{ 'xhttp-relay-user' if (exit_mode | default(false) | bool) else 'xhttp-' + (first_client_name | default('default')) }}"
+    xhttp_client_uuid: "{{ reality_uuid }}"
+    xhttp_client_email: "xhttp-{{ first_client_name | default('default') }}"
 
 - name: Create VLESS+Reality+XHTTP inbound
   ansible.builtin.uri:

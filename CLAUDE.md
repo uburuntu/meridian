@@ -2,12 +2,12 @@
 
 ## Project overview
 
-Ansible automation for deploying censorship-resistant VLESS+Reality proxy servers. Supports standalone single-server mode and a two-server relay chain for IP whitelist bypass.
+Ansible automation for deploying censorship-resistant VLESS+Reality proxy servers. Supports standalone single-server mode with optional domain mode for CDN fallback.
 
 ## Architecture
 
 - **Standalone mode** (`playbook.yml`): Single server with VLESS+Reality. Optional domain mode adds HAProxy (SNI routing), Caddy (TLS), and VLESS+WSS (CDN fallback via Cloudflare).
-- **Chain mode** (`playbook-chain.yml`): Exit node (Germany) + Relay node (Russia on whitelisted IP). User connects to relay via plain VLESS+TCP; relay forwards to exit via VLESS+Reality+XHTTP.
+- Chain/relay mode (two-server relay for IP whitelist bypass) was extracted in v2.1. The protocol abstraction layer is designed to support relay chains when censors introduce whitelists. See tasks/VISION.md for the future architecture.
 
 ### Key design decisions
 
@@ -51,7 +51,6 @@ src/meridian/              Python CLI package
     uninstall.py           Playbook execution + credential cleanup
   playbooks/               Bundled Ansible playbooks (package_data)
     playbook.yml           Standalone mode
-    playbook-chain.yml     Chain mode
     playbook-client.yml    Client management
     playbook-uninstall.yml Clean removal
     ansible.cfg            Ansible configuration
@@ -82,7 +81,7 @@ docs/CNAME                 Custom domain for GitHub Pages
 .github/workflows/ci.yml   CI: ansible-lint, pytest, ruff, shellcheck, dry-run
 .github/workflows/cd.yml   CD: sync install.sh/setup.sh/version → docs/
 .github/workflows/release.yml  Release: git tag + GitHub Release + PyPI publish
-inventory.yml.example      Standalone inventory template (orphaned — CI uses src/meridian/playbooks/)
+inventory.yml.example      Standalone inventory template
 SECURITY.md                Vulnerability reporting policy
 CONTRIBUTING.md            Development setup and PR guidelines
 ```
@@ -151,7 +150,6 @@ These are easy to break by editing one file without updating the others:
 - `roles/xray/tasks/configure_panel.yml` saves to `{{ credentials_file }}` which is `{{ credentials_dir }}/{{ inventory_hostname }}.yml`
 - `roles/xray/tasks/configure_panel.yml` also creates `{{ credentials_dir }}/{{ inventory_hostname }}-clients.yml` with the first client
 - `playbook.yml` and `playbook-client.yml` post_tasks sync `credentials_dir` to `/etc/meridian/` on the server
-- `playbook-chain.yml` relay play loads EXIT node credentials from `{{ credentials_dir }}/{{ exit_node }}.yml`
 - Domain is saved to credentials file for detection on re-runs
 - CLI reads saved credentials to find the server IP (for client/uninstall/diagnostics commands)
 - CLI fetches credentials from `/etc/meridian/` via SSH when not found locally (handles cross-machine runs)
@@ -183,7 +181,7 @@ These are easy to break by editing one file without updating the others:
 ### Xray binary path
 - Binary is at `/app/bin/xray-linux-*` inside the 3x-ui container (architecture-dependent)
 - Discovered dynamically via `ls` glob — stored in `xray_cmd` fact
-- Used in both `roles/xray/tasks/configure_panel.yml` and `roles/xray_relay/tasks/configure_panel.yml`
+- Used in `roles/xray/tasks/configure_panel.yml`
 - x25519 output format: `PrivateKey:` and `Password:` (not `Private key:` / `Public key:` in newer Xray versions)
 - Parsing uses regex with both old and new format patterns; assertion verifies keys were parsed
 

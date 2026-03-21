@@ -40,9 +40,9 @@
 ## P2 — Medium (open)
 
 - [ ] Add deployed playbook version to diagnostics — write VERSION to `/etc/meridian/version` during deploy, read in `meridian diagnostics` to catch version mismatch
-- [ ] Consolidate 3 connection-info HTML templates into one — biggest drift risk; use `{% if domain_mode %}` / `{% if relay_mode %}` conditionals instead of 3 copies
+- [ ] Consolidate 2 connection-info HTML templates into one — use `{% if domain_mode %}` conditionals instead of 2 copies
 - [ ] Add "broke after update" issue template — capture old version, new version, timing, auto-update vs manual
-- [ ] Improve dry-run CI job — remove `|| echo` suppression, use `--tags` for local-compatible tasks, add domain mode and chain mode dry-runs
+- [ ] Improve dry-run CI job — remove `|| echo` suppression, use `--tags` for local-compatible tasks, add domain mode dry-run
 - [x] ~~Add playbook sync automation~~ — eliminated by single-copy architecture (playbooks only in `src/meridian/playbooks/`)
 - [ ] Add mypy type checking to CI — strict mode on `src/meridian/`
 

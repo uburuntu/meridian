@@ -1,6 +1,5 @@
 ---
-# Shared task: apply panel settings and credentials to a fresh 3x-ui instance.
-# Used by both xray and xray_relay roles.
+# Apply panel settings and credentials to a fresh 3x-ui instance.
 #
 # Required variables:
 #   - panel_internal_port

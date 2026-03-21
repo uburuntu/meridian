@@ -26,7 +26,6 @@ body:
         - Connection info page
         - Website (meridian.msu.rocks)
         - Documentation
-        - Chain mode (relay)
         - Other
     validations:
       required: false

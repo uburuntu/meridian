@@ -87,25 +87,6 @@
         reality_short_id: "{{ lookup('password', '/dev/null chars=hexdigits length=8') | lower }}"
       no_log: true
 
-    - name: Generate UUID for XHTTP relay connections (exit mode only)
-      ansible.builtin.command:
-        cmd: "{{ xray_cmd }} uuid"
-      register: xhttp_uuid_output
-      changed_when: false
-      no_log: true
-      when: exit_mode | default(false) | bool
-
-    - name: Set XHTTP UUID
-      ansible.builtin.set_fact:
-        xhttp_uuid: "{{ xhttp_uuid_output.stdout | trim }}"
-      no_log: true
-      when: exit_mode | default(false) | bool
-
-    - name: Set empty XHTTP UUID for non-exit mode
-      ansible.builtin.set_fact:
-        xhttp_uuid: ""
-      when: not (exit_mode | default(false) | bool)
-
     # -- SAVE CREDENTIALS FIRST (before changing the panel password) --
     # This prevents lockout if the playbook fails during password change.
     - name: Save credentials to local file
@@ -127,9 +108,8 @@
           reality_short_id: "{{ reality_short_id }}"
           reality_sni: "{{ reality_sni }}"
           wss_uuid: "{{ wss_uuid }}"
-          xhttp_uuid: "{{ xhttp_uuid | default('') }}"
           xhttp_enabled: {{ xhttp_enabled | default(false) | bool | ternary('true', 'false') }}
-          exit_ip: "{{ server_public_ip }}"
+          server_ip: "{{ server_public_ip }}"
           domain: "{{ domain | default('') }}"
         dest: "{{ credentials_file }}"
         mode: "0600"
@@ -153,7 +133,7 @@
       become: false
       no_log: true
 
-    # -- Apply settings and change credentials (shared with xray_relay) --
+    # -- Apply settings and change credentials --
     - name: Apply panel settings and credentials
       ansible.builtin.include_tasks: apply_panel_settings.yml
 

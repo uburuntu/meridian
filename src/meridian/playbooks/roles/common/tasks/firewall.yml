@@ -26,23 +26,13 @@
     proto: tcp
   when: domain_mode | bool
 
-# Exit mode: allow direct Reality fallback port
-- name: Allow direct Reality port (exit mode)
-  community.general.ufw:
-    rule: allow
-    port: "{{ reality_direct_port | default(8444) }}"
-    proto: tcp
-  when: exit_mode | default(false) | bool
-
-# XHTTP: allow dedicated port (standalone mode only — exit mode uses 443)
+# XHTTP: allow dedicated port
 - name: Allow XHTTP port through firewall
   community.general.ufw:
     rule: allow
     port: "{{ xhttp_port }}"
     proto: tcp
-  when:
-    - xhttp_enabled | default(false) | bool
-    - not (exit_mode | default(false) | bool)
+  when: xhttp_enabled | default(false) | bool
 
 # Cleanup: remove stale rules when switching modes
 - name: Remove stale HTTP port 80 rule (switching to no-domain mode)

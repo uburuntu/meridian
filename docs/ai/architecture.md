@@ -66,25 +66,6 @@ Internet
 
 Key: HAProxy does NOT terminate TLS. It reads the SNI hostname from the TLS Client Hello and forwards the raw TCP stream to the appropriate backend. This allows both Reality (which needs raw TLS) and Caddy (which terminates TLS) to coexist on port 443.
 
-### Chain Mode
-
-```
-┌─────────────────┐         ┌─────────────────────┐
-│ Relay (Russia)  │         │ Exit (Germany)       │
-│ Whitelisted IP  │         │                      │
-│                 │  VLESS   │                      │
-│ Port 443        │ Reality  │ Port 443             │
-│ VLESS+TCP ──────┼─XHTTP──→│ Xray (Reality+XHTTP) │
-│ (plain, no TLS) │         │                      │
-│                 │         │ Port 8444            │
-└─────────────────┘         │ Xray (Reality direct) │
-                            └─────────────────────┘
-```
-
-- User → Relay: plain VLESS+TCP (domestic traffic, no encryption needed)
-- Relay → Exit: VLESS+Reality+XHTTP (looks like normal HTTPS to censors on the international link)
-- Exit port 8444: direct Reality fallback when relay is not needed
-
 ## How Reality Protocol Works
 
 1. Server generates an x25519 keypair. Public key is shared with clients, private key stays on server.

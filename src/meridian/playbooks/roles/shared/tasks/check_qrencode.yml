@@ -1,6 +1,6 @@
 ---
 # Shared pre-task: verify qrencode is installed locally.
-# Used by playbook.yml and playbook-chain.yml.
+# Used by playbook.yml.
 
 - name: Check that qrencode is installed locally
   ansible.builtin.command: qrencode --version

@@ -1,6 +1,6 @@
 ---
 # Shared pre-task: resolve server public IP.
-# Used by playbook.yml and playbook-chain.yml.
+# Used by playbook.yml.
 
 - name: Use ansible_host as public IP (normal SSH runs)
   ansible.builtin.set_fact:
