@@ -34,7 +34,9 @@ src/meridian/              Python CLI package
   config.py                Paths, URLs, constants
   console.py               Rich terminal output: info/ok/warn/fail/prompt/confirm
   credentials.py           ServerCredentials dataclass, YAML load/save
-  protocols.py             InboundType registry — remark strings, email prefixes, flow values
+  protocols.py             Protocol ABC + InboundType registry + concrete implementations (Reality, XHTTP, WSS)
+  panel.py                 PanelClient: 3x-ui REST API wrapper via SSH (login, inbounds, clients, keys)
+  output.py                Connection output: VLESS URL building, QR codes, HTML/text generation
   servers.py               ServerRegistry: list/find/add/remove
   ssh.py                   ServerConnection: run, check_ssh, detect_local_mode, tcp_connect
   ansible.py               Playbook execution, Ansible bootstrap, inventory generation
@@ -45,7 +47,7 @@ src/meridian/              Python CLI package
   commands/                One module per subcommand
     resolve.py             Server resolution logic (shared by most commands)
     setup.py               Interactive wizard + playbook execution
-    client.py              client add/list/remove (list=direct API, add/remove=ansible)
+    client.py              client add/list/remove (all use PanelClient directly, no Ansible)
     server.py              server add/list/remove
     check.py               Pre-flight validation (SNI, ports, DNS, OS, disk, clock)
     scan.py                RealiTLScanner download + execution + SNI selection
@@ -71,7 +73,13 @@ tests/
   test_servers.py          Server registry tests
   test_ansible.py          Inventory generation + playbook bundling tests
   test_update.py           Version comparison + update throttle tests
-  test_protocols.py        InboundType registry tests
+  test_protocols.py        Protocol ABC + InboundType registry tests
+  test_panel.py            PanelClient tests with mocked SSH
+  test_output.py           VLESS URL building and output generation tests
+  test_resolve.py          Server resolution logic tests (all 5 paths)
+  test_console.py          Console confirm/fail/prompt tests
+  test_setup.py            Setup wizard tests (IP detection, validation)
+  test_ssh.py              SSH connection and tcp_connect tests
   test_integration_3xui.py 3x-ui Docker API round-trip (requires container)
   render_templates.py      Jinja2 template rendering test (with Ansible filter mocks)
   conftest.py              Shared fixtures
@@ -115,7 +123,7 @@ These are easy to break by editing one file without updating the others:
 
 ### meridian subcommands
 - `meridian setup [IP] [--domain --email --sni --xhttp --name --user --yes]` — deploy server
-- `meridian client add|list|remove NAME [--server]` — manage clients via `playbook-client.yml`
+- `meridian client add|list|remove NAME [--server]` — manage clients via PanelClient (direct API, no Ansible)
 - `meridian server add|list|remove` — manage known servers
 - `meridian check [IP] [--ai --server]` — pre-flight validation (SNI, ports, DNS, OS, disk, ASN)
 - `meridian scan [IP] [--server]` — find optimal SNI targets via RealiTLScanner on server
@@ -172,11 +180,14 @@ These are easy to break by editing one file without updating the others:
 - Add/remove client tasks use `include_tasks` loops over `inbound_types` (from `group_vars/all.yml`) via parameterized `_add_client_to_inbound.yml` / `_remove_client_from_inbound.yml`
 
 ### Protocol/inbound type registry
-- Python: `src/meridian/protocols.py` — `INBOUND_TYPES` dict mapping key to `InboundType(remark, email_prefix, flow)`
+- Python: `src/meridian/protocols.py` — `Protocol` ABC with concrete `RealityProtocol`, `XHTTPProtocol`, `WSSProtocol`
+- Each protocol defines: `build_url()`, `client_settings()`, `find_inbound()`, `requires_domain`, `shares_uuid_with`
+- `INBOUND_TYPES` dict maps key to `InboundType(remark, email_prefix, flow)` — referenced by protocol classes
+- `PROTOCOLS` ordered list — Reality first (primary), then XHTTP, then WSS
+- `available_protocols(inbounds, domain)` filters to what's active on this server
 - Ansible: `inbound_types` list in `group_vars/all.yml` — same values, used by `client_management` role loops
 - These MUST stay in sync — same remark strings, email prefixes, and flow values
-- Used by: `client.py` (client list display), `add_client.yml` (loop), `remove_client.yml` (loop)
-- XHTTP reuses the Reality UUID (one identity for both transports) — the `_add_client_to_inbound.yml` handles this via `client_wss_uuid if key == 'wss' else client_reality_uuid`
+- Adding a new protocol: add `InboundType`, create `Protocol` subclass, append to `PROTOCOLS`
 
 ### Caddy config pattern
 - Meridian writes to `/etc/caddy/conf.d/meridian.caddy` (not the main Caddyfile)
@@ -298,7 +309,8 @@ cd src/meridian/playbooks && ansible-playbook playbook.yml
 - **Auto-update**: checks PyPI JSON API for latest version. Auto-upgrades patches via `uv tool upgrade` / `pipx upgrade`, prompts for minor/major. Uses `os.execvp()` to re-exec after auto-patch.
 - **Auto-update direction**: only updates when remote version is strictly newer (`packaging.version.Version` comparison). Running a local dev build with a higher version will NOT trigger a downgrade.
 - **`jinja2_native = True` in ansible.cfg**: required for `body_format: json` to send native integer types (e.g., `port`). Safe with mixed text+expression templates (`settings: >-` blocks) because Jinja2 NativeEnvironment only returns native types for single-expression templates. Do NOT remove without an alternative solution for integer typing.
-- **`client list` bypasses Ansible**: uses direct curl + native Python JSON parsing for instant results instead of running a full playbook. `client add` and `client remove` still use Ansible playbooks because they modify state and benefit from idempotency.
+- **`client add/remove/list` use PanelClient directly**: All client operations go through `PanelClient` (Python class wrapping 3x-ui REST API via SSH curl). No Ansible playbooks involved. This gives instant results vs. 15-20s playbook startup. The `playbook-client.yml` is kept only for backward compatibility with the initial setup output generation.
+- **PanelClient API patterns**: Login uses form-urlencoded. Inbound/client operations use JSON. The `settings` field is a JSON STRING inside the JSON body (3x-ui Go struct quirk). Remove client by UUID (not email — email silently fails).
 - **Playbook bundling**: playbooks exist only in `src/meridian/playbooks/` (bundled in package via `package_data`). No root-level copies — CI and `make` targets run from the `src/meridian/playbooks/` directory.
 - **Credential management**: `ServerCredentials` dataclass in `credentials.py` uses v2 nested format: `panel`, `server`, `protocols` (dict of protocol dataclasses), `clients` (list). V1 flat format is auto-migrated on load. Access via `creds.panel.username`, `creds.server.sni`, `creds.reality.uuid`, etc. `None` = "not set" (distinct from `""`). Handles special characters, preserves unknown fields, type-safe access.
 - **When the user says "remember"**: save the instruction to this CLAUDE.md file so it persists across sessions. Don't use auto-memory — CLAUDE.md is the canonical place for project conventions.
