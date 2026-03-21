@@ -21,7 +21,7 @@ from meridian.output import (
     save_connection_text,
 )
 from meridian.panel import Inbound, PanelClient, PanelError
-from meridian.protocols import INBOUND_TYPES
+from meridian.protocols import PROTOCOLS, get_protocol
 from meridian.servers import ServerRegistry
 
 # -- Helpers --
@@ -133,13 +133,10 @@ def run_add(
         except PanelError as e:
             fail(f"Failed to list inbounds: {e}")
 
-        # Check for duplicate in Reality inbound (canonical)
-        reality_type = INBOUND_TYPES["reality"]
-        reality_inbound = None
-        for ib in inbounds:
-            if ib.remark == reality_type.remark:
-                reality_inbound = ib
-                break
+        # Reality is the canonical protocol -- must exist
+        reality_proto = get_protocol("reality")
+        assert reality_proto is not None
+        reality_inbound = reality_proto.find_inbound(inbounds)
 
         if reality_inbound is None:
             fail(
@@ -148,72 +145,56 @@ def run_add(
             )
 
         # Check if client already exists in the panel (by email)
+        reality_email = f"{reality_proto.email_prefix}{name}"
         for client in reality_inbound.clients:
-            if client.get("email") == f"{reality_type.email_prefix}{name}":
+            if client.get("email") == reality_email:
                 fail(f"Client '{name}' already exists on the panel", hint="Use: meridian client list")
 
-        # Generate UUIDs
+        # Generate UUIDs -- one for Reality (shared with XHTTP), one for WSS
         try:
             reality_uuid = panel.generate_uuid()
         except PanelError as e:
             fail(f"Failed to generate UUID: {e}")
 
-        # WSS UUID only if domain mode with WSS inbound
         wss_uuid = ""
-        wss_type = INBOUND_TYPES["wss"]
-        wss_inbound = None
-        for ib in inbounds:
-            if ib.remark == wss_type.remark:
-                wss_inbound = ib
-                break
+        domain = creds.server.domain or ""
 
-        if wss_inbound:
-            try:
-                wss_uuid = panel.generate_uuid()
-            except PanelError as e:
-                fail(f"Failed to generate WSS UUID: {e}")
+        # Build active protocol list: (protocol, inbound, uuid)
+        active: list[tuple[object, Inbound, str]] = []
+        uuids: dict[str, str] = {"reality": reality_uuid}
 
-        # Find XHTTP inbound
-        xhttp_type = INBOUND_TYPES["xhttp"]
-        xhttp_inbound = None
-        xhttp_port = 0
-        for ib in inbounds:
-            if ib.remark == xhttp_type.remark:
-                xhttp_inbound = ib
-                xhttp_port = ib.port
-                break
+        for proto in PROTOCOLS:
+            ib = proto.find_inbound(inbounds)
+            if ib is None:
+                continue
+            if proto.requires_domain and not domain:
+                continue
+
+            # Determine UUID: shared or unique
+            if proto.shares_uuid_with and proto.shares_uuid_with in uuids:
+                uuid = uuids[proto.shares_uuid_with]
+            elif proto.key in uuids:
+                uuid = uuids[proto.key]
+            else:
+                try:
+                    uuid = panel.generate_uuid()
+                except PanelError as e:
+                    fail(f"Failed to generate UUID for {proto.key}: {e}")
+                uuids[proto.key] = uuid
+
+            if proto.key == "wss":
+                wss_uuid = uuid
+
+            active.append((proto, ib, uuid))
 
         # Add client to each active inbound
-        # Build the inbound map: (inbound, uuid, type_key)
-        active_inbounds: list[tuple[object, str, str]] = []
-        active_inbounds.append((reality_inbound, reality_uuid, "reality"))
-        if xhttp_inbound:
-            active_inbounds.append((xhttp_inbound, reality_uuid, "xhttp"))
-        if wss_inbound:
-            active_inbounds.append((wss_inbound, wss_uuid, "wss"))
-
-        for ib, uuid, type_key in active_inbounds:
-            itype = INBOUND_TYPES[type_key]
-            client_settings = {
-                "clients": [
-                    {
-                        "id": uuid,
-                        "flow": itype.flow,
-                        "email": f"{itype.email_prefix}{name}",
-                        "limitIp": 2,
-                        "totalGB": 0,
-                        "expiryTime": 0,
-                        "enable": True,
-                        "tgId": "",
-                        "subId": "",
-                        "reset": 0,
-                    }
-                ]
-            }
+        for proto, ib, uuid in active:
+            email = f"{proto.email_prefix}{name}"
+            client_settings = proto.client_settings(uuid, email)
             try:
                 panel.add_client(ib.id, client_settings)
             except PanelError as e:
-                fail(f"Failed to add client to {itype.remark}: {e}")
+                fail(f"Failed to add client to {proto.remark}: {e}")
 
         ok(f"Client '{name}' added to panel")
 
@@ -227,6 +208,14 @@ def run_add(
             )
         )
         creds.save(resolved.creds_dir / "proxy.yml")
+
+        # Find XHTTP port for URL building
+        xhttp_proto = get_protocol("xhttp")
+        xhttp_port = 0
+        if xhttp_proto is not None:
+            xhttp_ib = xhttp_proto.find_inbound(inbounds)
+            if xhttp_ib is not None:
+                xhttp_port = xhttp_ib.port
 
         # Generate output files
         urls = build_vless_urls(
@@ -248,7 +237,7 @@ def run_add(
             urls,
             resolved.creds_dir / f"{file_prefix}-connection-info.html",
             server_ip,
-            domain=creds.server.domain or "",
+            domain=domain,
         )
 
         # Sync credentials to server
@@ -318,18 +307,15 @@ def run_remove(
             fail(f"Failed to list inbounds: {e}")
 
         # Verify client exists in Reality inbound (canonical)
-        reality_type = INBOUND_TYPES["reality"]
-        reality_inbound = None
-        for ib in inbounds:
-            if ib.remark == reality_type.remark:
-                reality_inbound = ib
-                break
+        reality_proto = get_protocol("reality")
+        assert reality_proto is not None
+        reality_inbound = reality_proto.find_inbound(inbounds)
 
         if reality_inbound is None:
             fail("No Reality inbound found on the server")
 
         # Find client by email in Reality inbound
-        client_email = f"{reality_type.email_prefix}{name}"
+        client_email = f"{reality_proto.email_prefix}{name}"
         client_found = False
         for client in reality_inbound.clients:
             if client.get("email") == client_email:
@@ -339,21 +325,21 @@ def run_remove(
         if not client_found:
             fail(f"Client '{name}' not found", hint="Check client name with: meridian client list")
 
-        # Remove from each active inbound
-        for type_key, itype in INBOUND_TYPES.items():
-            email = f"{itype.email_prefix}{name}"
-            for ib in inbounds:
-                if ib.remark != itype.remark:
-                    continue
-                # Find client UUID by email
-                for client in ib.clients:
-                    if client.get("email") == email:
-                        client_uuid = client.get("id", "")
-                        if client_uuid:
-                            try:
-                                panel.remove_client(ib.id, client_uuid)
-                            except PanelError as e:
-                                warn(f"Failed to remove from {itype.remark}: {e}")
+        # Remove from each active protocol's inbound
+        for proto in PROTOCOLS:
+            email = f"{proto.email_prefix}{name}"
+            ib = proto.find_inbound(inbounds)
+            if ib is None:
+                continue
+            # Find client UUID by email
+            for client in ib.clients:
+                if client.get("email") == email:
+                    client_uuid = client.get("id", "")
+                    if client_uuid:
+                        try:
+                            panel.remove_client(ib.id, client_uuid)
+                        except PanelError as e:
+                            warn(f"Failed to remove from {proto.remark}: {e}")
 
         ok(f"Client '{name}' removed from panel")
 
@@ -391,18 +377,17 @@ def _display_client_list_from_inbounds(inbounds: list[Inbound]) -> None:
         emails = {c.get("email", "") for c in ib.clients}
         clients_by_remark[ib.remark] = emails
 
-    # Reality is the canonical inbound
-    reality_type = INBOUND_TYPES["reality"]
+    # Reality is the canonical protocol
+    reality_proto = get_protocol("reality")
+    assert reality_proto is not None
     reality_clients: list[dict] = []
-    for ib in inbounds:
-        if ib.remark == reality_type.remark:
-            reality_clients = ib.clients
-            break
+    reality_ib = reality_proto.find_inbound(inbounds)
+    if reality_ib is not None:
+        reality_clients = reality_ib.clients
 
-    # Build email sets for non-canonical inbound types
-    other_types = {
-        key: clients_by_remark.get(itype.remark, set()) for key, itype in INBOUND_TYPES.items() if key != "reality"
-    }
+    # Build email sets for non-canonical protocols
+    other_protocols = [p for p in PROTOCOLS if p.key != "reality"]
+    other_emails: dict[str, set[str]] = {p.key: clients_by_remark.get(p.remark, set()) for p in other_protocols}
 
     table = Table(title="Proxy Clients", show_lines=False, pad_edge=False, box=None, padding=(0, 2))
     table.add_column("Name", style="bold")
@@ -411,14 +396,12 @@ def _display_client_list_from_inbounds(inbounds: list[Inbound]) -> None:
 
     for c in reality_clients:
         email = c.get("email", "")
-        name = email.removeprefix(reality_type.email_prefix) if email.startswith(reality_type.email_prefix) else email
+        name = email.removeprefix(reality_proto.email_prefix) if email.startswith(reality_proto.email_prefix) else email
         status = "[green]active[/green]" if c.get("enable", True) else "[dim]disabled[/dim]"
         protos = ["Reality"]
-        for key, itype in INBOUND_TYPES.items():
-            if key == "reality":
-                continue
-            if f"{itype.email_prefix}{name}" in other_types[key]:
-                protos.append(key.upper())
+        for p in other_protocols:
+            if f"{p.email_prefix}{name}" in other_emails[p.key]:
+                protos.append(p.key.upper())
         table.add_row(name, status, " + ".join(protos))
 
     count = len(reality_clients)
