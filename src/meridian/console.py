@@ -63,11 +63,19 @@ def prompt(message: str, default: str = "") -> str:
     return value or default
 
 
-def confirm(message: str = "Press Enter to continue...") -> None:
-    """Wait for user to press Enter."""
+def confirm(message: str = "Continue?") -> bool:
+    """Y/n confirmation prompt. Returns True on accept, raises typer.Exit(1) on reject.
+
+    Accepts: y, Y, Enter (default yes).
+    Rejects: n, N (raises typer.Exit(1)).
+    """
     try:
         with open("/dev/tty") as tty:
-            err_console.print(f"\n  [dim]{message}[/dim]", end="")
-            tty.readline()
+            err_console.print(f"\n  [info]\u2192[/info] {message} [dim][Y/n][/dim] ", end="")
+            answer = tty.readline().strip().lower()
     except OSError:
-        pass
+        # No TTY available — default to yes (non-interactive/CI)
+        return True
+    if answer in ("", "y", "yes"):
+        return True
+    raise typer.Exit(code=1)

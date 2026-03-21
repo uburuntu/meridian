@@ -87,7 +87,7 @@ def run(
         line()
 
         if not yes:
-            confirm()
+            confirm(f"Deploy to {ansible_user}@{server_ip}?")
         err_console.print()
 
     # Validate IP
