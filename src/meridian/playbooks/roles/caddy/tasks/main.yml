@@ -8,31 +8,6 @@
 # and ensures the main Caddyfile imports /etc/caddy/conf.d/*. This way the user's
 # own Caddyfile is never overwritten — they can add their own site blocks freely.
 
-# -- Pre-flight: check that the domain resolves to this server --
-- name: Resolve domain DNS to check it points to this server
-  ansible.builtin.command:
-    cmd: "dig +short {{ domain }} @8.8.8.8"
-  register: domain_dns_check
-  changed_when: false
-  failed_when: false
-
-- name: Fail if domain does not resolve to this server
-  ansible.builtin.fail:
-    msg: |
-      {{ domain }} does not resolve to this server's IP ({{ server_public_ip }}).
-      DNS returned: {{ domain_dns_check.stdout | default('(empty)') }}
-
-      Caddy needs the domain to point DIRECTLY to this server for TLS certificates.
-
-      Fix: In Cloudflare, set the A record to "DNS only" (grey cloud), then re-run.
-      After the playbook succeeds, switch to "Proxied" (orange cloud).
-
-      To skip this check: add -e skip_dns_check=true
-  when:
-    - not (skip_dns_check | default(false) | bool)
-    - domain_dns_check.stdout | default('') | trim != server_public_ip
-    - domain_dns_check.stdout | default('') | trim != ''
-
 - name: Install Caddy prerequisites
   ansible.builtin.apt:
     name:
@@ -112,7 +87,7 @@
 
 - name: Generate Reality QR code as base64 PNG
   ansible.builtin.shell:
-    cmd: printf '%s' '{{ vless_reality_url }}' | qrencode -t PNG -o - -s 6 | base64 -w0
+    cmd: printf '%s' {{ vless_reality_url | quote }} | qrencode -t PNG -o - -s 6 | base64 -w0
   register: reality_qr_b64
   changed_when: false
 
@@ -124,14 +99,14 @@
 
 - name: Generate XHTTP QR code as base64 PNG
   ansible.builtin.shell:
-    cmd: printf '%s' '{{ vless_xhttp_url }}' | qrencode -t PNG -o - -s 6 | base64 -w0
+    cmd: printf '%s' {{ vless_xhttp_url | quote }} | qrencode -t PNG -o - -s 6 | base64 -w0
   register: xhttp_qr_b64
   changed_when: false
   when: xhttp_enabled | default(false) | bool
 
 - name: Generate WSS QR code as base64 PNG
   ansible.builtin.shell:
-    cmd: printf '%s' '{{ vless_wss_url }}' | qrencode -t PNG -o - -s 6 | base64 -w0
+    cmd: printf '%s' {{ vless_wss_url | quote }} | qrencode -t PNG -o - -s 6 | base64 -w0
   register: wss_qr_b64
   changed_when: false
 
