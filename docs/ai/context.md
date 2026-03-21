@@ -1,6 +1,6 @@
 # Meridian — AI Context
 
-Meridian is an open-source CLI tool that deploys censorship-resistant VLESS+Reality proxy servers on any VPS. It uses Ansible under the hood but exposes a simple `meridian` command. Users typically run it from their laptop to configure a remote server.
+Meridian is an open-source CLI tool that deploys censorship-resistant VLESS+Reality proxy servers on any VPS. It uses a pure-Python provisioner that connects via SSH but exposes a simple `meridian` command. Users typically run it from their laptop to configure a remote server.
 
 GitHub: https://github.com/uburuntu/meridian
 Website: https://meridian.msu.rocks
@@ -12,7 +12,7 @@ Website: https://meridian.msu.rocks
 - **HAProxy** — TCP-level SNI router (domain mode only). Routes traffic on port 443 by SNI hostname without terminating TLS.
 - **Caddy** — reverse proxy with automatic Let's Encrypt TLS (domain mode only). Serves the connection info page and proxies WSS traffic.
 - **Docker** — runs 3x-ui (which contains Xray). All proxy traffic flows through the Docker container.
-- **Ansible** — automation engine. Meridian bundles playbooks inside the Python package and runs them locally against the target server via SSH.
+- **Pure-Python provisioner** — `src/meridian/provision/` executes deployment steps via SSH. Each step gets `(conn: ServerConnection, ctx: ProvisionContext)` and returns a `StepResult`.
 - **uTLS** — impersonates Chrome's TLS Client Hello fingerprint, making connections indistinguishable from real browser traffic.
 
 ## Deployment Modes

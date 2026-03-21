@@ -190,7 +190,7 @@ details .inner p{margin-bottom:12px}
   <div id="builder" style="background:var(--s1);border:1px solid var(--b1);border-radius:12px;margin:20px 0;overflow:hidden">
     <!-- Tabs -->
     <div style="display:flex;border-bottom:1px solid var(--b1);flex-wrap:wrap">
-      <button class="btab active" onclick="setTab('install')" data-i18n="tab.install">Install</button>
+      <button class="btab active" onclick="setTab('install')" data-i18n="tab.setup">Setup</button>
       <button class="btab" onclick="setTab('check')" data-i18n="tab.check">Pre-flight</button>
       <button class="btab" onclick="setTab('scan')" data-i18n="tab.scan">SNI Scan</button>
       <button class="btab" onclick="setTab('diag')" data-i18n="tab.diag">Diagnostics</button>
@@ -198,7 +198,7 @@ details .inner p{margin-bottom:12px}
     </div>
     <div style="padding:20px 24px 24px">
       <!-- Tab descriptions -->
-      <p id="tab-desc" style="font-size:.78rem;color:var(--t3);margin-bottom:16px" data-i18n="tab.install.desc">Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.</p>
+      <p id="tab-desc" style="font-size:.78rem;color:var(--t3);margin-bottom:16px" data-i18n="tab.setup.desc">Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.</p>
 
       <!-- Fields -->
       <div id="fields">
@@ -220,11 +220,11 @@ details .inner p{margin-bottom:12px}
         <div class="bf" id="row-sni">
           <label class="bl" style="cursor:pointer"><input id="f-sni-on" type="checkbox" onchange="buildCmd()" style="accent-color:var(--ac);margin-right:6px"><span data-i18n="field.sni">Custom SNI</span></label>
           <input id="f-sni" type="text" placeholder="www.microsoft.com" class="bi" oninput="buildCmd()" style="display:none">
-          <span class="bh">Site that Reality impersonates. Default: www.microsoft.com. Run <code>meridian scan</code> or use <a href="https://github.com/XTLS/RealiTLScanner" style="color:var(--ac)">RealiTLScanner</a> to find optimal same-network targets. Avoid apple.com (detectable ASN).</span>
+          <span class="bh" data-i18n="field.sni.hint">Site that Reality impersonates. Default: www.microsoft.com. Run <code>meridian scan</code> or use <a href="https://github.com/XTLS/RealiTLScanner" style="color:var(--ac)">RealiTLScanner</a> to find optimal same-network targets. Avoid apple.com (detectable ASN).</span>
         </div>
         <div class="bf" id="row-xhttp">
           <label class="bl" style="cursor:pointer"><input id="f-xhttp" type="checkbox" onchange="buildCmd()" style="accent-color:var(--ac);margin-right:6px"><span data-i18n="field.xhttp">XHTTP transport</span></label>
-          <span class="bh">Add XHTTP transport for enhanced post-handshake stealth. Requires v2rayNG 1.9+ or Hiddify.</span>
+          <span class="bh" data-i18n="field.xhttp.hint">Add XHTTP transport for enhanced post-handshake stealth. Requires v2rayNG 1.9+ or Hiddify.</span>
         </div>
         <div class="bf" id="row-yes">
           <label class="bl" style="cursor:pointer"><input id="f-yes" type="checkbox" onchange="buildCmd()" style="accent-color:var(--ac);margin-right:6px"><span data-i18n="field.yes">Skip prompts</span></label>
@@ -281,7 +281,7 @@ details .inner p{margin-bottom:12px}
 <div class="w">
   <p class="label" data-i18n="steps.label">What happens</p>
   <h2 data-i18n="steps.title">Setup steps</h2>
-  <p class="desc" data-i18n="steps.desc">The script connects to your server via SSH and runs an Ansible playbook that configures everything automatically.</p>
+  <p class="desc" data-i18n="steps.desc">The script connects to your server via SSH and configures everything automatically.</p>
   <div class="timeline">
     <div class="tl-item"><div class="tl-n">1</div><div class="tl-text" data-i18n="step.1"><strong>Installs Docker</strong> and deploys <strong>Xray</strong> (the proxy engine) via the <strong>3x-ui</strong> management panel</div></div>
     <div class="tl-item"><div class="tl-n">2</div><div class="tl-text" data-i18n="step.2"><strong>Generates x25519 keypair</strong> — unique encryption keys for Reality protocol authentication</div></div>
@@ -351,18 +351,21 @@ details .inner p{margin-bottom:12px}
   <h2 data-i18n="ref.title">Configuration &amp; operations</h2>
 
   <details>
-    <summary>Customization (group_vars/all.yml) <span></span></summary>
+    <summary>Customization <span></span></summary>
     <div class="inner">
+      <p>All settings are passed as CLI flags to <code>meridian setup</code>:</p>
       <table class="tbl">
-        <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
-        <tr><td>reality_sni</td><td>www.microsoft.com</td><td>Site that Reality impersonates</td></tr>
-        <tr><td>utls_fingerprint</td><td>chrome</td><td>TLS client fingerprint</td></tr>
-        <tr><td>client_limit_ip</td><td>2</td><td>Max simultaneous IPs per client</td></tr>
-        <tr><td>threexui_version</td><td>2.8.11</td><td>Pinned 3x-ui Docker image version</td></tr>
-        <tr><td>ssh_disable_password</td><td>true</td><td>Disable SSH password auth</td></tr>
-        <tr><td>bbr_enabled</td><td>true</td><td>TCP BBR congestion control</td></tr>
+        <tr><th>Flag</th><th>Default</th><th>Description</th></tr>
+        <tr><td>--sni HOST</td><td>www.microsoft.com</td><td>Site that Reality impersonates</td></tr>
+        <tr><td>--domain DOMAIN</td><td>(none)</td><td>Enable domain mode with CDN fallback</td></tr>
+        <tr><td>--xhttp</td><td>enabled</td><td>Add XHTTP transport for enhanced stealth</td></tr>
+        <tr><td>--no-xhttp</td><td></td><td>Disable XHTTP transport</td></tr>
+        <tr><td>--email EMAIL</td><td>(none)</td><td>Email for TLS certificates (optional)</td></tr>
+        <tr><td>--name NAME</td><td>default</td><td>Name for the first client</td></tr>
+        <tr><td>--user USER</td><td>root</td><td>SSH user (non-root gets sudo automatically)</td></tr>
+        <tr><td>--yes</td><td></td><td>Skip confirmation prompts</td></tr>
       </table>
-      <p>For optimal stealth, use <a href="https://github.com/XTLS/RealiTLScanner" style="color:var(--ac)">RealiTLScanner</a> to find an SNI target near your server's datacenter.</p>
+      <p>For optimal stealth, use <code>meridian scan</code> or <a href="https://github.com/XTLS/RealiTLScanner" style="color:var(--ac)">RealiTLScanner</a> to find an SNI target near your server's datacenter.</p>
     </div>
   </details>
 
@@ -372,7 +375,7 @@ details .inner p{margin-bottom:12px}
       <p><strong>Follow this order</strong> to avoid TLS certificate issues:</p>
       <p>1. Add domain in Cloudflare, create A record to server IP<br>
          2. Keep cloud icon <strong>grey</strong> ("DNS only") — don't proxy yet<br>
-         3. Run the playbook — Caddy gets the TLS cert automatically<br>
+         3. Run <code>meridian setup</code> — Caddy gets the TLS cert automatically<br>
          4. Switch to <strong>orange cloud</strong> (Proxied)<br>
          5. SSL/TLS → <strong>Full (Strict)</strong>, Network → <strong>Enable WebSockets</strong></p>
       <p>Caddy obtains certs via HTTP-01 on port 80. If Cloudflare's "Always Use HTTPS" is active, it breaks the challenge. Disable it or add a page rule for <code>/.well-known/acme-challenge/*</code>.</p>
@@ -443,7 +446,7 @@ cd /opt/3x-ui && docker compose pull && docker compose up -d</div>
     <summary>Security notes <span></span></summary>
     <div class="inner">
       <p>Credentials are stored at <code>/etc/meridian/</code> on the server (source of truth) and cached locally at <code>~/.meridian/credentials/</code>. The panel binds to localhost — access via SSH tunnel only. SSH password auth is disabled. UFW allows only ports 22 and 443.</p>
-      <p>The 3x-ui Docker image is pinned to a tested version. All secrets use <code>no_log: true</code> in Ansible output.</p>
+      <p>The 3x-ui Docker image is pinned to a tested version. All secrets are redacted from terminal output.</p>
     </div>
   </details>
 </div>
@@ -483,7 +486,7 @@ function setLang(lang){
   var lbl=(typeof copyLabels!=='undefined'&&copyLabels[lang])||['Copy'];
   document.querySelectorAll('.cp').forEach(function(b){if(!b.classList.contains('ok'))b.textContent=lbl[0]});
   // Update tab description for current tab
-  if(typeof setTab==='function'){var cfg=tabConfig[curTab];if(cfg){var dk='tab.'+curTab+'.desc';var td=(T[lang]&&T[lang][dk])||cfg.desc;document.getElementById('tab-desc').textContent=td;}}
+  if(typeof setTab==='function'){var cfg=tabConfig[curTab];if(cfg){var dk=cfg.descKey||('tab.'+curTab+'.desc');var td=(T[lang]&&T[lang][dk])||cfg.desc;document.getElementById('tab-desc').textContent=td;}}
 }
 
 /* --- Copy & flash --- */
@@ -502,7 +505,7 @@ function flash(btn){var lbl=copyLabels[curLang()]||copyLabels.en;btn.textContent
 /* --- Command builder --- */
 var curTab='install';
 var tabConfig={
-  install:{desc:'Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.',show:['ip','user','domain','sni','xhttp','yes'],cmd:'setup'},
+  install:{desc:'Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.',show:['ip','user','domain','sni','xhttp','yes'],cmd:'setup',descKey:'tab.setup.desc'},
   check:{desc:'Test if your server is compatible — checks SNI, ports, DNS, OS, disk, ASN match. Installs nothing.',show:['ip','user','domain'],cmd:'check'},
   scan:{desc:'Find optimal SNI targets on your server\'s network using RealiTLScanner. Best stealth = same-network SNI.',show:['ip','user'],cmd:'scan'},
   diag:{desc:'Collect system diagnostics for bug reports. Secrets are auto-redacted. Add --ai for AI-ready prompt.',show:['ip','user'],cmd:'diagnostics'},
@@ -514,7 +517,7 @@ function setTab(t){
   document.querySelectorAll('.btab').forEach(function(b,i){b.classList.toggle('active',tabOrder[i]===t)});
   var cfg=tabConfig[t];
   var lang=localStorage.getItem('meridian-lang')||'en';
-  var dk='tab.'+t+'.desc';
+  var dk=cfg.descKey||('tab.'+t+'.desc');
   var td=(T[lang]&&T[lang][dk])||cfg.desc;
   document.getElementById('tab-desc').textContent=td;
   ['ip','user','domain','sni','xhttp','yes'].forEach(function(f){
