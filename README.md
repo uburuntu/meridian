@@ -17,7 +17,17 @@
   <img src="docs/img/connection-page.png" width="720" alt="Connection page with QR codes">
 </p>
 
+## What is this
+
+Meridian deploys a private, undetectable VPN server in minutes. Share secure internet access with family and friends — they scan a QR code and connect. When your IP gets blocked, spin up a new server and be back online in minutes. No technical knowledge required on the client side.
+
+Whether you're the "tech friend" setting up VPN for people you care about, a power user managing multiple servers, or an NGO providing access in a censored region — Meridian handles the complexity so you can focus on staying connected.
+
+See [SECURITY.md](SECURITY.md) for the threat model and what Meridian protects against (and what it doesn't).
+
 ## Install
+
+Works on **macOS and Linux**. Windows users: use WSL.
 
 ```bash
 curl -sSf https://meridian.msu.rocks/install.sh | bash
@@ -101,13 +111,15 @@ After setup, connect with any of these apps:
 | Windows | [v2rayN](https://github.com/2dust/v2rayN/releases/latest) |
 | All platforms | [Hiddify](https://github.com/hiddify/hiddify-app/releases/latest) |
 
-## Docs
+## Common scenarios
 
-Full documentation, interactive command builder, and setup guides:
+**My IP got blocked** — The most common scenario in censored regions. Get a new VPS, run `meridian setup NEW_IP`, then re-add clients with `meridian client add`. If you're in domain mode, update the DNS A record to point at the new IP and re-run setup. If you're not using domain mode yet, consider switching (`--domain`) to get a CDN fallback through Cloudflare — when the IP is blocked, the WSS/CDN link still works.
 
-**[meridian.msu.rocks](https://meridian.msu.rocks)** · [Connection page demo](https://meridian.msu.rocks/demo)
+**Sharing with family** — After `meridian client add alice`, you get an HTML file. Send it by email, iMessage, or AirDrop. They open it on their phone, install the app (one tap), scan the QR code, and connect. In domain mode, the page is also hosted at a URL (`https://yourdomain/connection`) you can share as a link — no file transfer needed.
 
-## Feedback
+**First-time VPS setup** — Rent a VPS from any provider (DigitalOcean, Hetzner, Vultr — $4–6/month). Choose Debian 12 or Ubuntu 22.04+. Make sure you have SSH key access (not just password). Then run `meridian setup YOUR_SERVER_IP`.
+
+## Troubleshooting
 
 Not connecting? Run `meridian ping` to check if the server is reachable, or use the [web-based ping tool](https://meridian.msu.rocks/ping).
 
@@ -120,3 +132,9 @@ meridian diagnostics --ai        # copies an AI-ready prompt to clipboard
 Paste the prompt into ChatGPT, Claude, or any AI assistant for personalized troubleshooting.
 
 Or [open an issue](https://github.com/uburuntu/meridian/issues) with `meridian diagnostics` output.
+
+## Docs
+
+Full documentation, interactive command builder, and setup guides:
+
+**[meridian.msu.rocks](https://meridian.msu.rocks)** · [Connection page demo](https://meridian.msu.rocks/demo)
