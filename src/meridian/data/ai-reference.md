@@ -12,7 +12,7 @@ Website: https://meridian.msu.rocks
 - **HAProxy** — TCP-level SNI router (domain mode only). Routes traffic on port 443 by SNI hostname without terminating TLS.
 - **Caddy** — reverse proxy with automatic Let's Encrypt TLS (domain mode only). Serves the connection info page and proxies WSS traffic.
 - **Docker** — runs 3x-ui (which contains Xray). All proxy traffic flows through the Docker container.
-- **Ansible** — automation engine. Meridian downloads playbooks and runs them locally against the target server via SSH.
+- **Ansible** — automation engine. Meridian bundles playbooks inside the Python package and runs them locally against the target server via SSH.
 - **uTLS** — impersonates Chrome's TLS Client Hello fingerprint, making connections indistinguishable from real browser traffic.
 
 ## Deployment Modes
@@ -81,8 +81,7 @@ Global flag: `--server NAME` targets a specific named server.
 
 | Path | Purpose |
 |------|---------|
-| `/etc/meridian/proxy.yml` | Saved credentials (panel login, keys, UUIDs) |
-| `/etc/meridian/*-clients.yml` | Client list with UUIDs and timestamps |
+| `/etc/meridian/proxy.yml` | Saved credentials (panel login, keys, UUIDs, client list) |
 | `/etc/caddy/conf.d/meridian.caddy` | Caddy config (domain mode) |
 | `/etc/haproxy/haproxy.cfg` | HAProxy SNI routing config (domain mode) |
 | Docker container `3x-ui` | Xray + 3x-ui panel (all modes) |
@@ -222,8 +221,7 @@ Caddy handles:
 ## File Locations Reference
 
 ### On the server
-- `/etc/meridian/proxy.yml` — credentials
-- `/etc/meridian/*-clients.yml` — client list
+- `/etc/meridian/proxy.yml` — credentials and client list
 - `/etc/caddy/conf.d/meridian.caddy` — Caddy config
 - `/etc/haproxy/haproxy.cfg` — HAProxy config
 - Docker container `3x-ui` — Xray + panel
@@ -231,7 +229,7 @@ Caddy handles:
 ### On the local machine
 - `~/.meridian/credentials/<IP>/` — cached credentials per server
 - `~/.meridian/servers` — server registry
-- `~/.meridian/cache/` — update check, AI docs cache
+- `~/.meridian/cache/` — update check throttle cache
 - `~/.local/bin/meridian` — CLI entry point (installed via uv/pipx)
 # Meridian — Troubleshooting Guide
 
