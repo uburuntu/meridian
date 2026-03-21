@@ -106,7 +106,7 @@ def run(
     playbooks_dir = get_playbooks_dir()
     ensure_collections(playbooks_dir)
 
-    ensure_server_connection(resolved)
+    resolved = ensure_server_connection(resolved)
     fetch_credentials(resolved)
 
     # Suggest scanned SNI if available and no --sni was given

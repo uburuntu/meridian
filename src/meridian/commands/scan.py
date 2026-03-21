@@ -24,7 +24,7 @@ def run(
     registry = ServerRegistry(SERVERS_FILE)
     resolved = resolve_server(registry, requested_server=requested_server, explicit_ip=ip, user=user)
 
-    ensure_server_connection(resolved)
+    resolved = ensure_server_connection(resolved)
     fetch_credentials(resolved)
 
     err_console.print()
