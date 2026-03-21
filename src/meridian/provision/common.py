@@ -273,8 +273,8 @@ class ConfigureFirewall:
         if "Skipping" not in result.stdout:
             changed = True
 
-        # Domain mode: allow port 80 for ACME challenges
-        if ctx.domain_mode:
+        # Domain mode or hosted page: allow port 80 for ACME challenges
+        if ctx.needs_web_server:
             result = conn.run("ufw allow 80/tcp", timeout=10)
             if result.returncode != 0:
                 return StepResult(
@@ -285,7 +285,7 @@ class ConfigureFirewall:
             if "Skipping" not in result.stdout:
                 changed = True
         else:
-            # Cleanup stale port 80 rule if switching from domain mode
+            # Cleanup stale port 80 rule if switching from domain/hosted mode
             result = conn.run("ufw delete allow 80/tcp 2>/dev/null", timeout=10)
             if result.returncode == 0 and "Skipping" not in result.stdout and "Could not" not in result.stdout:
                 changed = True

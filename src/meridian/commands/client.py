@@ -20,7 +20,7 @@ from meridian.display import print_terminal_output
 from meridian.models import Inbound
 from meridian.panel import PanelClient, PanelError
 from meridian.protocols import PROTOCOLS, Protocol, get_protocol
-from meridian.render import save_connection_html, save_connection_text
+from meridian.render import render_hosted_html, save_connection_html, save_connection_text
 from meridian.servers import ServerRegistry
 from meridian.ssh import SSH_OPTS
 from meridian.urls import build_protocol_urls
@@ -96,6 +96,86 @@ def _sync_credentials_to_server(resolved: ResolvedServer) -> None:
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
         warn("Could not sync credentials to server")
+
+
+def _deploy_client_page(
+    resolved: ResolvedServer,
+    creds: ServerCredentials,
+    protocol_urls: list,
+    client_name: str,
+    reality_uuid: str,
+) -> str:
+    """Render and upload a server-hosted connection page for a client.
+
+    Returns the hosted page URL, or empty string on failure.
+    """
+    import shlex
+
+    from meridian.urls import generate_qr_base64
+
+    info_page_path = creds.panel.info_page_path or ""
+    server_ip = creds.server.ip or resolved.ip
+    domain = creds.server.domain or ""
+
+    # Generate QR codes locally
+    reality_url = next((p.url for p in protocol_urls if p.key == "reality"), "")
+    xhttp_url = next((p.url for p in protocol_urls if p.key == "xhttp"), "")
+    wss_url = next((p.url for p in protocol_urls if p.key == "wss"), "")
+
+    reality_qr = generate_qr_base64(reality_url) if reality_url else ""
+    xhttp_qr = generate_qr_base64(xhttp_url) if xhttp_url else ""
+    wss_qr = generate_qr_base64(wss_url) if wss_url else ""
+
+    html = render_hosted_html(
+        reality_url=reality_url,
+        xhttp_url=xhttp_url,
+        wss_url=wss_url,
+        server_ip=server_ip,
+        domain=domain,
+        client_name=client_name,
+        reality_qr_b64=reality_qr,
+        xhttp_qr_b64=xhttp_qr,
+        wss_qr_b64=wss_qr,
+    )
+
+    # Upload to server
+    conn = resolved.conn
+    q_uuid = shlex.quote(reality_uuid)
+    conn.run(
+        f"mkdir -p /var/www/private/{q_uuid} && chown caddy:caddy /var/www/private/{q_uuid}",
+        timeout=10,
+    )
+
+    q_html = shlex.quote(html)
+    result = conn.run(
+        f"printf '%s' {q_html} > /var/www/private/{q_uuid}/index.html && "
+        f"chown caddy:caddy /var/www/private/{q_uuid}/index.html",
+        timeout=15,
+    )
+
+    if result.returncode != 0:
+        warn("Could not deploy server-hosted connection page")
+        return ""
+
+    return f"https://{server_ip}/{info_page_path}/{reality_uuid}/"
+
+
+def _remove_client_page(
+    resolved: ResolvedServer,
+    creds: ServerCredentials,
+    client_name: str,
+) -> None:
+    """Remove a client's server-hosted connection page."""
+    import shlex
+
+    # Find the client's reality_uuid from credentials
+    client_entry = next((c for c in creds.clients if c.name == client_name), None)
+    if not client_entry or not client_entry.reality_uuid:
+        return
+
+    conn = resolved.conn
+    q_uuid = shlex.quote(client_entry.reality_uuid)
+    conn.run(f"rm -rf /var/www/private/{q_uuid}", timeout=10)
 
 
 # -- Client Add --
@@ -242,8 +322,18 @@ def run_add(
         # Sync credentials to server
         _sync_credentials_to_server(resolved)
 
+        # Deploy server-hosted connection page (if enabled)
+        hosted_page_url = ""
+        if creds.server.hosted_page and creds.panel.info_page_path:
+            hosted_page_url = _deploy_client_page(resolved, creds, protocol_urls, name, reality_uuid)
+
         # Print terminal output
-        print_terminal_output(protocol_urls, resolved.creds_dir, server_ip)
+        print_terminal_output(
+            protocol_urls,
+            resolved.creds_dir,
+            server_ip,
+            hosted_page_url=hosted_page_url,
+        )
 
         err_console.print(f"  [dim]Test reachability: meridian ping {resolved.ip}[/dim]")
         err_console.print("  [dim]View all clients:  meridian client list[/dim]\n")
@@ -349,6 +439,10 @@ def run_remove(
         ]:
             for f in resolved.creds_dir.glob(pattern):
                 f.unlink(missing_ok=True)
+
+        # Remove server-hosted connection page (if enabled)
+        if creds.server.hosted_page:
+            _remove_client_page(resolved, creds, name)
 
         # Sync credentials to server
         _sync_credentials_to_server(resolved)

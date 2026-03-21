@@ -318,3 +318,90 @@ def _html_card(title: str, url: str, qr_b64: str) -> str:
 <div class="url">{url}</div>
 </div>
 """
+
+
+def render_hosted_html(
+    reality_url: str,
+    server_ip: str,
+    domain: str = "",
+    *,
+    xhttp_url: str = "",
+    wss_url: str = "",
+    client_name: str = "",
+    reality_qr_b64: str = "",
+    xhttp_qr_b64: str = "",
+    wss_qr_b64: str = "",
+) -> str:
+    """Render connection info HTML for server hosting (is_server_hosted=True).
+
+    Returns the rendered HTML string. Used by the provisioner's
+    DeployConnectionPage step and by ``client add`` for server-hosted pages.
+
+    Args:
+        reality_url: VLESS Reality connection URL.
+        server_ip: Server IP address.
+        domain: Optional domain (enables WSS card).
+        xhttp_url: Optional XHTTP connection URL.
+        wss_url: Optional WSS connection URL.
+        client_name: Client name for page title.
+        reality_qr_b64: Base64-encoded QR PNG for Reality URL.
+        xhttp_qr_b64: Base64-encoded QR PNG for XHTTP URL.
+        wss_qr_b64: Base64-encoded QR PNG for WSS URL.
+    """
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Try the Jinja2 template first
+    try:
+        from importlib.resources import files
+
+        template_path = files("meridian") / "templates" / "connection-info.html.j2"
+        template_text: str | None = template_path.read_text(encoding="utf-8")
+    except Exception:
+        template_text = None
+
+    if template_text:
+        try:
+            from jinja2 import BaseLoader, Environment
+
+            env = Environment(loader=BaseLoader(), autoescape=False)
+
+            def default_filter(value: object, default_value: object = "") -> object:
+                if value is None or value == "":
+                    return default_value
+                return value
+
+            env.filters["default"] = default_filter
+            env.filters["bool"] = lambda v: str(v).lower() in ("true", "1", "yes")
+
+            tmpl = env.from_string(template_text)
+            return tmpl.render(
+                vless_reality_url=reality_url,
+                vless_xhttp_url=xhttp_url,
+                vless_wss_url=wss_url,
+                server_public_ip=server_ip,
+                domain=domain,
+                domain_mode=bool(domain),
+                xhttp_enabled=bool(xhttp_url),
+                is_server_hosted=True,
+                client_name=client_name,
+                reality_qr_b64=reality_qr_b64,
+                xhttp_qr_b64=xhttp_qr_b64,
+                wss_qr_b64=wss_qr_b64,
+                generated_at={"iso8601": now},
+            )
+        except Exception:
+            pass
+
+    # Fallback: minimal HTML
+    from meridian.models import ProtocolURL as _PU
+
+    purls = []
+    if reality_url:
+        purls.append(_PU(key="reality", label="Primary", url=reality_url))
+    if xhttp_url:
+        purls.append(_PU(key="xhttp", label="XHTTP", url=xhttp_url))
+    if wss_url:
+        purls.append(_PU(key="wss", label="CDN Backup", url=wss_url))
+
+    qr_map = {"reality": reality_qr_b64, "xhttp": xhttp_qr_b64, "wss": wss_qr_b64}
+    return _generate_minimal_html(client_name, purls, qr_map, server_ip, domain, now)

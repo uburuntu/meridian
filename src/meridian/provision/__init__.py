@@ -1,7 +1,7 @@
 """Provisioning engine — deploys and configures proxy servers via SSH.
 
 The build_setup_steps() function assembles the full deployment pipeline:
-  common -> docker -> xray (panel + inbounds) -> haproxy -> caddy -> output
+  common -> docker -> xray (panel + inbounds) -> haproxy -> caddy -> connection page
 """
 
 from __future__ import annotations
@@ -20,8 +20,9 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     1. common: packages, hardening, sysctl, firewall
     2. docker: install Docker, deploy 3x-ui container
     3. xray: configure panel, login, create inbounds, verify
-    4. haproxy: SNI router (domain mode only)
-    5. caddy: TLS + connection page (domain mode only)
+    4. haproxy: SNI router (domain mode or hosted page)
+    5. caddy: TLS + web serving (domain mode or hosted page)
+    6. connection page: QR codes, stats, HTML (domain mode or hosted page)
     """
     from meridian.provision.common import (
         ConfigureBBR,
@@ -78,11 +79,27 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
 
     steps.append(VerifyXray())
 
-    # Domain mode: HAProxy + Caddy
-    if ctx.domain_mode:
-        from meridian.provision.services import InstallCaddy, InstallHAProxy
+    # HAProxy + Caddy + connection page (domain mode or hosted page)
+    if ctx.needs_web_server:
+        from meridian.provision.services import (
+            DeployConnectionPage,
+            InstallCaddy,
+            InstallHAProxy,
+        )
 
         steps.append(InstallHAProxy(reality_sni=ctx.sni))
-        steps.append(InstallCaddy(domain=ctx.domain))
+
+        if ctx.domain_mode:
+            steps.append(InstallCaddy(domain=ctx.domain))
+        else:
+            steps.append(
+                InstallCaddy(
+                    domain="",
+                    ip_mode=True,
+                    server_ip=ctx.ip,
+                )
+            )
+
+        steps.append(DeployConnectionPage(server_ip=ctx.ip))
 
     return steps

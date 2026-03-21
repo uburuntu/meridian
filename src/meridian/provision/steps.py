@@ -50,6 +50,7 @@ class ProvisionContext:
     domain: str = ""
     sni: str = DEFAULT_SNI
     xhttp_enabled: bool = True
+    hosted_page: bool = False  # serve connection pages via HTTPS on server
     creds_dir: str = ""  # local credentials directory path
 
     results: list[StepResult] = field(default_factory=list)
@@ -68,6 +69,11 @@ class ProvisionContext:
     @property
     def domain_mode(self) -> bool:
         return bool(self.domain)
+
+    @property
+    def needs_web_server(self) -> bool:
+        """Whether this setup needs HAProxy + Caddy (domain mode OR hosted page)."""
+        return self.domain_mode or self.hosted_page
 
     def __getitem__(self, key: str) -> Any:
         return self._state[key]

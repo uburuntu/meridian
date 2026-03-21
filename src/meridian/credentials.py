@@ -34,6 +34,7 @@ class ServerConfig:
     domain: str | None = None
     sni: str | None = None
     scanned_sni: str | None = None
+    hosted_page: bool = False
 
 
 @dataclass
@@ -293,6 +294,7 @@ def _load_v2(data: dict[str, Any]) -> ServerCredentials:
         domain=server_data.get("domain"),
         sni=server_data.get("sni"),
         scanned_sni=server_data.get("scanned_sni"),
+        hosted_page=bool(server_data.get("hosted_page", False)),
     )
 
     # Protocols

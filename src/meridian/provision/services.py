@@ -131,20 +131,12 @@ def _render_caddy_config(
                 reverse_proxy 127.0.0.1:{panel_internal_port}
             }}
 
-            # --- Connection Info Page (QR codes and setup instructions) ---
-            handle /{info_page_path} {{
-                rewrite * /index.html
-                root * /var/www/private
-                file_server
-                header Cache-Control "no-store"
-            }}
-
-            # --- Per-client stats (fetched by connection info page JS) ---
-            handle /{info_page_path}/stats/* {{
+            # --- Connection Info Pages (per-client QR codes and instructions) ---
+            handle /{info_page_path}/* {{
                 uri strip_prefix /{info_page_path}
                 root * /var/www/private
                 file_server
-                header Cache-Control "no-store, max-age=0"
+                header Cache-Control "no-store"
                 header Access-Control-Allow-Origin *
             }}
 
@@ -163,6 +155,70 @@ def _render_caddy_config(
 
         http://{domain} {{
             redir https://{domain}{{uri}} permanent
+        }}
+    """)
+
+
+def _render_caddy_ip_config(
+    server_ip: str,
+    caddy_internal_port: int,
+    panel_web_base_path: str,
+    panel_internal_port: int,
+    info_page_path: str,
+    email: str = "",
+) -> str:
+    """Render Caddy configuration for IP certificate mode (no domain).
+
+    Architecture: HAProxy (port 443) -> Caddy (internal port)
+    TLS via Let's Encrypt IP certificate (ACME profile shortlived, 6-day validity).
+    Falls back to self-signed if IP cert issuance is not supported.
+    """
+    email_line = f"\n            email {email}" if email else ""
+
+    return textwrap.dedent(f"""\
+        # Meridian Proxy Configuration (IP Certificate Mode)
+        # Managed by Meridian -- this file is overwritten on each run.
+        # Your own Caddy config in /etc/caddy/Caddyfile is NOT touched.
+        #
+        # Architecture: HAProxy (port 443) -> Caddy (port {caddy_internal_port})
+        # TLS: Let's Encrypt IP certificate (6-day, auto-renewed by Caddy)
+
+        {server_ip}:{caddy_internal_port} {{
+            tls {{
+                issuer acme {{{email_line}
+                    profile shortlived
+                }}
+            }}
+
+            # --- 3x-ui Panel (management interface on secret path) ---
+            handle /{panel_web_base_path}/* {{
+                reverse_proxy 127.0.0.1:{panel_internal_port}
+            }}
+
+            # --- Connection Info Pages (per-client QR codes and instructions) ---
+            handle /{info_page_path}/* {{
+                uri strip_prefix /{info_page_path}
+                root * /var/www/private
+                file_server
+                header Cache-Control "no-store"
+                header Access-Control-Allow-Origin *
+            }}
+
+            header -Server
+            header X-Content-Type-Options "nosniff"
+            header X-Frame-Options "DENY"
+            header Referrer-Policy "no-referrer"
+
+            log {{
+                output file /var/log/caddy/access.log {{
+                    roll_size 10mb
+                    roll_keep 3
+                }}
+            }}
+        }}
+
+        http://{server_ip} {{
+            redir https://{server_ip}{{uri}} permanent
         }}
     """)
 
@@ -422,6 +478,7 @@ class InstallCaddy:
         email: str = "",
         server_ip: str = "",
         skip_dns_check: bool = False,
+        ip_mode: bool = False,
     ) -> None:
         self.domain = domain
         self.caddy_internal_port = caddy_internal_port
@@ -433,11 +490,12 @@ class InstallCaddy:
         self.email = email
         self.server_ip = server_ip
         self.skip_dns_check = skip_dns_check
+        self.ip_mode = ip_mode
 
     @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
-        # -- DNS pre-check --
-        if not self.skip_dns_check:
+        # -- DNS pre-check (domain mode only) --
+        if not self.ip_mode and not self.skip_dns_check:
             dns_result = _check_domain_dns(conn, self.domain, self.server_ip)
             if dns_result is not None:
                 return StepResult(name=self.name, status="failed", detail=dns_result)
@@ -507,16 +565,26 @@ class InstallCaddy:
         )
 
         # -- Deploy Meridian Caddy config --
-        caddy_config = _render_caddy_config(
-            domain=self.domain,
-            caddy_internal_port=self.caddy_internal_port,
-            ws_path=self.ws_path,
-            wss_internal_port=self.wss_internal_port,
-            panel_web_base_path=self.panel_web_base_path,
-            panel_internal_port=self.panel_internal_port,
-            info_page_path=self.info_page_path,
-            email=self.email,
-        )
+        if self.ip_mode:
+            caddy_config = _render_caddy_ip_config(
+                server_ip=self.server_ip,
+                caddy_internal_port=self.caddy_internal_port,
+                panel_web_base_path=self.panel_web_base_path,
+                panel_internal_port=self.panel_internal_port,
+                info_page_path=self.info_page_path,
+                email=self.email,
+            )
+        else:
+            caddy_config = _render_caddy_config(
+                domain=self.domain,
+                caddy_internal_port=self.caddy_internal_port,
+                ws_path=self.ws_path,
+                wss_internal_port=self.wss_internal_port,
+                panel_web_base_path=self.panel_web_base_path,
+                panel_internal_port=self.panel_internal_port,
+                info_page_path=self.info_page_path,
+                email=self.email,
+            )
         q_config = shlex.quote(caddy_config)
         result = conn.run(
             f"printf '%s' {q_config} > /etc/caddy/conf.d/meridian.caddy",
@@ -547,10 +615,11 @@ class InstallCaddy:
                 detail=f"Failed to start Caddy: {result.stderr.strip()}",
             )
 
+        host = self.server_ip if self.ip_mode else self.domain
         return StepResult(
             name=self.name,
             status="changed",
-            detail=f"Caddy configured for {self.domain}:{self.caddy_internal_port}",
+            detail=f"Caddy configured for {host}:{self.caddy_internal_port}",
         )
 
 
@@ -562,10 +631,12 @@ class InstallCaddy:
 class DeployConnectionPage:
     """Deploy the connection info HTML page and stats infrastructure.
 
-    Replaces: the connection page deployment portion of roles/caddy/tasks/main.yml
-
     Generates QR codes on the server using qrencode, deploys the stats update
-    script with a cron job, and writes the connection-info HTML page.
+    script with a cron job, and renders+uploads the connection-info HTML page
+    for the default client.
+
+    Reads credentials and config from ProvisionContext (populated by
+    ConfigurePanel and earlier steps).
     """
 
     name = "Deploy connection page"
@@ -573,35 +644,35 @@ class DeployConnectionPage:
     def __init__(
         self,
         server_ip: str,
-        domain: str,
-        sni: str,
-        reality_uuid: str,
-        reality_public_key: str,
-        reality_short_id: str,
-        wss_uuid: str,
-        ws_path: str,
-        info_page_path: str,
-        panel_internal_port: int = DEFAULT_PANEL_PORT,
         fingerprint: str = DEFAULT_FINGERPRINT,
-        xhttp_enabled: bool = True,
-        xhttp_port: int = 0,
     ) -> None:
         self.server_ip = server_ip
-        self.domain = domain
-        self.sni = sni
-        self.reality_uuid = reality_uuid
-        self.reality_public_key = reality_public_key
-        self.reality_short_id = reality_short_id
-        self.wss_uuid = wss_uuid
-        self.ws_path = ws_path
-        self.info_page_path = info_page_path
-        self.panel_internal_port = panel_internal_port
         self.fingerprint = fingerprint
-        self.xhttp_enabled = xhttp_enabled
-        self.xhttp_port = xhttp_port
 
     @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
+        # Read credentials from context (populated by ConfigurePanel)
+        creds = ctx["credentials"]
+        sni = creds.server.sni or ctx.sni
+        domain = creds.server.domain or ctx.domain
+        reality_uuid = creds.reality.uuid or ""
+        reality_public_key = creds.reality.public_key or ""
+        reality_short_id = creds.reality.short_id or ""
+        wss_uuid = creds.wss.uuid or ""
+        ws_path = creds.wss.ws_path or ""
+        info_page_path = creds.panel.info_page_path or ctx.get("info_page_path", "")
+        panel_internal_port = creds.panel.port or ctx.panel_port
+        first_client_name = ctx.get("first_client_name", "default") or "default"
+        xhttp_enabled = ctx.xhttp_enabled
+        xhttp_port = ctx.xhttp_port
+
+        if not reality_uuid:
+            return StepResult(
+                name=self.name,
+                status="failed",
+                detail="No Reality UUID found — ConfigurePanel may have failed",
+            )
+
         # Install qrencode
         result = conn.run(
             "DEBIAN_FRONTEND=noninteractive apt-get install -y qrencode",
@@ -616,18 +687,20 @@ class DeployConnectionPage:
 
         # Build connection URLs
         reality_url = (
-            f"vless://{self.reality_uuid}@{self.server_ip}:443"
+            f"vless://{reality_uuid}@{self.server_ip}:443"
             f"?encryption=none&flow=xtls-rprx-vision"
-            f"&security=reality&sni={self.sni}&fp={self.fingerprint}"
-            f"&pbk={self.reality_public_key}&sid={self.reality_short_id}"
+            f"&security=reality&sni={sni}&fp={self.fingerprint}"
+            f"&pbk={reality_public_key}&sid={reality_short_id}"
             f"&type=tcp&headerType=none#VLESS-Reality"
         )
 
-        wss_url = (
-            f"vless://{self.wss_uuid}@{self.domain}:443"
-            f"?encryption=none&security=tls&sni={self.domain}"
-            f"&type=ws&host={self.domain}&path=%2F{self.ws_path}#VLESS-WSS-CDN"
-        )
+        wss_url = ""
+        if domain and wss_uuid and ws_path:
+            wss_url = (
+                f"vless://{wss_uuid}@{domain}:443"
+                f"?encryption=none&security=tls&sni={domain}"
+                f"&type=ws&host={domain}&path=%2F{ws_path}#VLESS-WSS-CDN"
+            )
 
         # Generate QR codes as base64 PNG
         q_reality = shlex.quote(reality_url)
@@ -637,20 +710,22 @@ class DeployConnectionPage:
         )
         reality_qr_b64 = result.stdout.strip() if result.returncode == 0 else ""
 
-        q_wss = shlex.quote(wss_url)
-        result = conn.run(
-            f"printf '%s' {q_wss} | qrencode -t PNG -o - -s 6 | base64 -w0",
-            timeout=15,
-        )
-        wss_qr_b64 = result.stdout.strip() if result.returncode == 0 else ""
+        wss_qr_b64 = ""
+        if wss_url:
+            q_wss = shlex.quote(wss_url)
+            result = conn.run(
+                f"printf '%s' {q_wss} | qrencode -t PNG -o - -s 6 | base64 -w0",
+                timeout=15,
+            )
+            wss_qr_b64 = result.stdout.strip() if result.returncode == 0 else ""
 
         xhttp_qr_b64 = ""
         xhttp_url = ""
-        if self.xhttp_enabled and self.xhttp_port > 0:
+        if xhttp_enabled and xhttp_port > 0:
             xhttp_url = (
-                f"vless://{self.reality_uuid}@{self.server_ip}:{self.xhttp_port}"
-                f"?encryption=none&security=reality&sni={self.sni}&fp={self.fingerprint}"
-                f"&pbk={self.reality_public_key}&sid={self.reality_short_id}"
+                f"vless://{reality_uuid}@{self.server_ip}:{xhttp_port}"
+                f"?encryption=none&security=reality&sni={sni}&fp={self.fingerprint}"
+                f"&pbk={reality_public_key}&sid={reality_short_id}"
                 f"&type=xhttp&mode=packet-up&path=%2F#VLESS-XHTTP"
             )
             q_xhttp = shlex.quote(xhttp_url)
@@ -669,7 +744,7 @@ class DeployConnectionPage:
         ctx["xhttp_url"] = xhttp_url
 
         # Deploy stats update script
-        stats_script = _render_stats_script(self.panel_internal_port)
+        stats_script = _render_stats_script(panel_internal_port)
         q_script = shlex.quote(stats_script)
         conn.run("mkdir -p /etc/meridian", timeout=5)
         conn.run(f"printf '%s' {q_script} > /etc/meridian/update-stats.py", timeout=10)
@@ -692,21 +767,82 @@ class DeployConnectionPage:
             timeout=10,
         )
 
-        # NOTE: The actual connection-info.html.j2 template deployment is handled
-        # separately because it requires the full Jinja2 template rendering pipeline
-        # with the connection-info.html.j2 template. The caller should render the
-        # template with the QR data from ctx and write it to /var/www/private/index.html.
+        # Render and upload connection info HTML for default client
+        html = _render_connection_page(
+            reality_url=reality_url,
+            xhttp_url=xhttp_url,
+            wss_url=wss_url,
+            server_ip=self.server_ip,
+            domain=domain,
+            client_name=first_client_name,
+            reality_qr_b64=reality_qr_b64,
+            xhttp_qr_b64=xhttp_qr_b64,
+            wss_qr_b64=wss_qr_b64,
+        )
+
+        q_uuid = shlex.quote(reality_uuid)
+        conn.run(
+            f"mkdir -p /var/www/private/{q_uuid} && chown caddy:caddy /var/www/private/{q_uuid}",
+            timeout=10,
+        )
+
+        q_html = shlex.quote(html)
+        result = conn.run(
+            f"printf '%s' {q_html} > /var/www/private/{q_uuid}/index.html && "
+            f"chown caddy:caddy /var/www/private/{q_uuid}/index.html",
+            timeout=15,
+        )
+        if result.returncode != 0:
+            return StepResult(
+                name=self.name,
+                status="changed",
+                detail="Stats deployed but HTML upload failed",
+            )
+
+        page_url = f"https://{self.server_ip}/{info_page_path}/{reality_uuid}/"
+        ctx["hosted_page_url"] = page_url
 
         return StepResult(
             name=self.name,
             status="changed",
-            detail=("Connection page infrastructure deployed (QR codes generated, stats cron enabled)"),
+            detail=f"Connection page live at {page_url}",
         )
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _render_connection_page(
+    reality_url: str,
+    xhttp_url: str,
+    wss_url: str,
+    server_ip: str,
+    domain: str,
+    client_name: str,
+    reality_qr_b64: str,
+    xhttp_qr_b64: str,
+    wss_qr_b64: str,
+) -> str:
+    """Render the connection info HTML with is_server_hosted=True.
+
+    Uses the bundled Jinja2 template when available, falls back to
+    render.py's minimal HTML generator.
+    """
+    from meridian.render import render_hosted_html
+
+    return render_hosted_html(
+        reality_url=reality_url,
+        xhttp_url=xhttp_url,
+        wss_url=wss_url,
+        server_ip=server_ip,
+        domain=domain,
+        client_name=client_name,
+        reality_qr_b64=reality_qr_b64,
+        xhttp_qr_b64=xhttp_qr_b64,
+        wss_qr_b64=wss_qr_b64,
+    )
 
 
 def _check_domain_dns(conn: ServerConnection, domain: str, server_ip: str) -> str | None:

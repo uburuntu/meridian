@@ -125,6 +125,7 @@ class ConfigurePanel:
         creds.server.ip = self.server_ip
         creds.server.domain = self.domain
         creds.server.sni = self.sni
+        creds.server.hosted_page = ctx.hosted_page
         creds.reality.uuid = reality_uuid
         creds.reality.private_key = private_key
         creds.reality.public_key = public_key

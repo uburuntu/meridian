@@ -179,13 +179,14 @@ def _run_provisioner(
         domain=domain,
         sni=sni or DEFAULT_SNI,
         xhttp_enabled=xhttp,
+        hosted_page=True,  # always serve connection pages on server
         creds_dir=str(resolved.creds_dir),
     )
 
     # Default panel port — 3x-ui starts on 2053. ConfigurePanel may change it later.
     ctx.panel_port = DEFAULT_PANEL_PORT
     ctx.xhttp_port = 30000 + (hash(ctx.ip) % 10000)
-    ctx.reality_port = 443 if not ctx.domain_mode else (10000 + hash(ctx.ip) % 1000)
+    ctx.reality_port = 443 if not ctx.needs_web_server else (10000 + hash(ctx.ip) % 1000)
 
     # Load existing credentials into context if available
     proxy_file = Path(ctx.creds_dir) / "proxy.yml"
@@ -246,12 +247,25 @@ def _print_success(resolved: ResolvedServer, name: str, domain: str) -> None:
     html_files = list(creds_dir.glob(f"*-{client_label}-connection-info.html"))
     txt_files = list(creds_dir.glob("*-connection-info.txt"))
 
+    # Check if there's a hosted page URL from credentials
+    hosted_page_url = ""
+    proxy_file = creds_dir / "proxy.yml"
+    if proxy_file.exists():
+        creds = ServerCredentials.load(proxy_file)
+        if creds.server.hosted_page and creds.panel.info_page_path and creds.reality.uuid:
+            ip = creds.server.ip or resolved.ip
+            hosted_page_url = f"https://{ip}/{creds.panel.info_page_path}/{creds.reality.uuid}/"
+
     err_console.print("\n  [ok][bold]Done![/bold][/ok]\n")
     ok("Your proxy server is live and ready to use.")
     err_console.print()
     err_console.print("  [bold]Next steps:[/bold]\n")
 
-    if html_files:
+    if hosted_page_url:
+        err_console.print("  [ok]1.[/ok] Share this link with whoever needs access:")
+        err_console.print(f"     [bold]{hosted_page_url}[/bold]")
+        err_console.print("     [dim](They open it, scan the QR code, and connect)[/dim]\n")
+    elif html_files:
         err_console.print("  [ok]1.[/ok] Send this file to whoever needs access:")
         err_console.print(f"     [bold]{html_files[0]}[/bold]")
         err_console.print("     [dim](They open it, scan the QR code, and connect)[/dim]\n")

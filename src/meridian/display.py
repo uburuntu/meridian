@@ -14,6 +14,7 @@ def print_terminal_output(
     server_ip: str,
     *,
     client_name: str = "",
+    hosted_page_url: str = "",
 ) -> None:
     """Print connection info with QR codes to the terminal.
 
@@ -23,6 +24,7 @@ def print_terminal_output(
         server_ip: Server IP address for display.
         client_name: Client name for the summary header (derived from the
             first URL fragment when omitted).
+        hosted_page_url: If set, show this URL as the shareable link.
     """
     from meridian.console import err_console
 
@@ -73,7 +75,14 @@ def print_terminal_output(
         if txt_files:
             err_console.print(f"  Text file: {txt_files[0]}")
 
-    err_console.print()
-    err_console.print(f"  Send the HTML file to {name} --")
-    err_console.print("  they open it, scan the QR code, and connect.")
+    if hosted_page_url:
+        err_console.print()
+        err_console.print(f"  [bold]Shareable link:[/bold] [ok]{hosted_page_url}[/ok]")
+        err_console.print()
+        err_console.print(f"  Send this URL to {name} --")
+        err_console.print("  they open it, scan the QR code, and connect.")
+    else:
+        err_console.print()
+        err_console.print(f"  Send the HTML file to {name} --")
+        err_console.print("  they open it, scan the QR code, and connect.")
     err_console.print()
