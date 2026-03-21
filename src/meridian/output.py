@@ -20,12 +20,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from meridian.credentials import ServerCredentials
+from meridian.display import print_terminal_output as _display_print  # noqa: F401
 from meridian.protocols import get_protocol
+from meridian.render import save_connection_html as _render_save_html  # noqa: F401
 
 # Re-export new API so callers can import either from here or the new modules.
 from meridian.urls import build_protocol_urls  # noqa: F401
-from meridian.render import save_connection_html as _render_save_html  # noqa: F401
-from meridian.display import print_terminal_output as _display_print  # noqa: F401
 
 
 @dataclass(frozen=True)

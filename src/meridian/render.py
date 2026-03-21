@@ -151,14 +151,7 @@ def save_connection_html(
     try:
         from importlib.resources import files
 
-        template_path = (
-            files("meridian")
-            / "playbooks"
-            / "roles"
-            / "shared"
-            / "templates"
-            / "connection-info.html.j2"
-        )
+        template_path = files("meridian") / "playbooks" / "roles" / "shared" / "templates" / "connection-info.html.j2"
         template_text: str | None = template_path.read_text(encoding="utf-8")
     except Exception:
         template_text = None
@@ -265,11 +258,7 @@ def _generate_minimal_html(
     now: str,
 ) -> str:
     """Generate a minimal HTML page when the Jinja2 template is not available."""
-    cards = "".join(
-        _html_card(purl.label, purl.url, qr_map.get(purl.key, ""))
-        for purl in protocol_urls
-        if purl.url
-    )
+    cards = "".join(_html_card(purl.label, purl.url, qr_map.get(purl.key, "")) for purl in protocol_urls if purl.url)
 
     ping_url = f"https://meridian.msu.rocks/ping?ip={server_ip}"
     if domain:
@@ -324,11 +313,7 @@ el.onclick=function(){{navigator.clipboard&&navigator.clipboard.writeText(el.tex
 
 def _html_card(title: str, url: str, qr_b64: str) -> str:
     """Generate a single protocol card for the minimal HTML page."""
-    qr_html = (
-        f'<div class="qr"><img src="data:image/png;base64,{qr_b64}" alt="QR"></div>'
-        if qr_b64
-        else ""
-    )
+    qr_html = f'<div class="qr"><img src="data:image/png;base64,{qr_b64}" alt="QR"></div>' if qr_b64 else ""
     return f"""<div class="card">
 <h2>{title}</h2>
 <a class="btn" href="{url}">Open in App</a>

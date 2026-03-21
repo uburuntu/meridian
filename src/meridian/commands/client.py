@@ -16,13 +16,13 @@ from meridian.commands.resolve import (
 from meridian.config import SERVERS_FILE
 from meridian.console import err_console, fail, info, ok, warn
 from meridian.credentials import ClientEntry, ServerCredentials
+from meridian.models import Inbound
 from meridian.output import (
     build_vless_urls,
     print_terminal_output,
     save_connection_html,
     save_connection_text,
 )
-from meridian.models import Inbound
 from meridian.panel import PanelClient, PanelError
 from meridian.protocols import PROTOCOLS, Protocol, get_protocol
 from meridian.servers import ServerRegistry

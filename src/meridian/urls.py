@@ -7,7 +7,7 @@ import subprocess
 
 from meridian.credentials import ServerCredentials
 from meridian.models import ProtocolURL
-from meridian.protocols import PROTOCOLS, get_protocol
+from meridian.protocols import PROTOCOLS
 
 # Human-readable labels for each protocol key.
 _PROTOCOL_LABELS: dict[str, str] = {
@@ -59,7 +59,7 @@ def build_protocol_urls(
 
     result: list[ProtocolURL] = []
 
-    for proto in PROTOCOLS:
+    for proto in PROTOCOLS.values():
         key = proto.key
         label = _PROTOCOL_LABELS.get(key, key.upper())
         url = ""
