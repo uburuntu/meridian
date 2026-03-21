@@ -114,7 +114,7 @@ def save_connection_html(
     """Save a connection info HTML page with QR codes.
 
     Generates QR codes as base64 PNGs and embeds them inline.
-    Uses the same HTML structure as the Ansible template when available,
+    Uses the same HTML structure as the Jinja2 template when available,
     falling back to a minimal self-contained HTML page.
 
     Args:
@@ -200,6 +200,11 @@ def _render_html_template(
 ) -> str:
     """Render the connection-info Jinja2 template with Python variables."""
     try:
+        from jinja2 import TemplateError
+    except ImportError:
+        TemplateError = Exception  # type: ignore[assignment,misc]
+
+    try:
         from jinja2 import BaseLoader, Environment
 
         env = Environment(loader=BaseLoader(), autoescape=False)
@@ -228,9 +233,9 @@ def _render_html_template(
             reality_qr_b64_local=types.SimpleNamespace(stdout=reality_qr),
             xhttp_qr_b64_local=types.SimpleNamespace(stdout=xhttp_qr),
             wss_qr_b64_local=types.SimpleNamespace(stdout=wss_qr),
-            ansible_date_time={"iso8601": now},
+            generated_at={"iso8601": now},
         )
-    except Exception:
+    except (TemplateError, ImportError, FileNotFoundError, OSError):
         from meridian.models import ProtocolURL as _PU
 
         purls = []

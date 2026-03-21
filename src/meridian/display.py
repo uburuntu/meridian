@@ -43,9 +43,7 @@ def print_terminal_output(
 
     # Print summary.
     err_console.print()
-    err_console.print(f"  [bold]{'=' * 60}[/bold]")
-    err_console.print(f'  [bold]           CLIENT "{name}" ADDED[/bold]')
-    err_console.print(f"  [bold]{'=' * 60}[/bold]")
+    err_console.print(f'  [bold green]\u2713[/bold green] [bold]Client "{name}" added[/bold]')
     err_console.print()
     err_console.print("  [bold]Connection URLs:[/bold]")
 
@@ -81,6 +79,4 @@ def print_terminal_output(
     err_console.print()
     err_console.print(f"  Send the HTML file to {name} --")
     err_console.print("  they open it, scan the QR code, and connect.")
-    err_console.print()
-    err_console.print(f"  [bold]{'=' * 60}[/bold]")
     err_console.print()

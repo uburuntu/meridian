@@ -259,7 +259,7 @@ def run_list(
     user: str = "root",
     requested_server: str = "",
 ) -> None:
-    """List all clients via direct panel API query (no Ansible)."""
+    """List all clients via direct panel API query."""
     registry = ServerRegistry(SERVERS_FILE)
     resolved = resolve_server(registry, requested_server=requested_server, user=user)
 

@@ -1,6 +1,6 @@
 """Pytest version of template rendering tests.
 
-Auto-discovers all .j2 templates under src/meridian/playbooks/roles/ and
+Auto-discovers all .j2 templates under src/meridian/templates/ and
 renders each with a mock variable context. Failures are reported as proper
 pytest assertions (one test case per template file).
 
@@ -99,8 +99,7 @@ MOCK_VARS: dict[str, object] = {
     "reality_dest": "www.microsoft.com:443",
     "server_public_ip": "1.2.3.4",
     "inventory_hostname": "proxy",
-    "ansible_host": "1.2.3.4",
-    "ansible_date_time": {"iso8601": "2026-01-01T00:00:00Z", "year": "2026"},
+    "generated_at": {"iso8601": "2026-01-01T00:00:00Z", "year": "2026"},
     "threexui_version": "2.8.11",
     "utls_fingerprint": "chrome",
     "xhttp_mode": "packet-up",
@@ -133,7 +132,7 @@ MOCK_VARS: dict[str, object] = {
 
 
 def _make_env(template_dir: Path) -> Environment:
-    """Create a Jinja2 Environment with Ansible-compatible filters and mocks."""
+    """Create a Jinja2 Environment with template filters and mocks."""
     env = Environment(
         loader=FileSystemLoader(str(template_dir)),
         undefined=MockUndefined,

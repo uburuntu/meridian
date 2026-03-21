@@ -213,7 +213,7 @@ def save_connection_html(
     """Save a connection info HTML page with QR codes.
 
     Generates QR codes as base64 PNGs and embeds them inline.
-    Uses the same HTML structure as the Ansible template but generated in Python.
+    Uses the same HTML structure as the Jinja2 template but generated in Python.
     """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     reality_qr = generate_qr_base64(urls.reality)
@@ -262,17 +262,21 @@ def _render_html_template(
 ) -> str:
     """Render the connection-info Jinja2 template with Python variables.
 
-    Uses a minimal Jinja2 rendering approach with simple string substitution
-    to avoid depending on the full Ansible template engine.
+    Uses a minimal Jinja2 rendering approach with simple string substitution.
     """
     import types as _types
+
+    try:
+        from jinja2 import TemplateError
+    except ImportError:
+        TemplateError = Exception  # type: ignore[assignment,misc]
 
     try:
         from jinja2 import BaseLoader, Environment
 
         env = Environment(loader=BaseLoader(), autoescape=False)
 
-        # Add Ansible-compatible 'default' filter
+        # Add 'default' filter (matches Jinja2 built-in semantics)
         def default_filter(value: object, default_value: object = "") -> object:
             if value is None or value == "":
                 return default_value
@@ -297,9 +301,9 @@ def _render_html_template(
             reality_qr_b64_local=_types.SimpleNamespace(stdout=reality_qr),
             xhttp_qr_b64_local=_types.SimpleNamespace(stdout=xhttp_qr),
             wss_qr_b64_local=_types.SimpleNamespace(stdout=wss_qr),
-            ansible_date_time={"iso8601": now},
+            generated_at={"iso8601": now},
         )
-    except Exception as e:
+    except (TemplateError, ImportError, FileNotFoundError, OSError) as e:
         warnings.warn(f"HTML template rendering failed, falling back to minimal HTML: {e}", stacklevel=2)
         return _generate_minimal_html(urls, server_ip, domain, now, reality_qr, xhttp_qr, wss_qr)
 
@@ -412,9 +416,7 @@ def print_terminal_output(
 
     # Print summary
     err_console.print()
-    err_console.print(f"  [bold]{'=' * 60}[/bold]")
-    err_console.print(f'  [bold]           CLIENT "{urls.name}" ADDED[/bold]')
-    err_console.print(f"  [bold]{'=' * 60}[/bold]")
+    err_console.print(f'  [bold green]\u2713[/bold green] [bold]Client "{urls.name}" added[/bold]')
     err_console.print()
     err_console.print("  [bold]Connection URLs:[/bold]")
     err_console.print("  [info]Primary (Reality):[/info]")
@@ -442,6 +444,4 @@ def print_terminal_output(
     err_console.print()
     err_console.print(f"  Send the HTML file to {urls.name} --")
     err_console.print("  they open it, scan the QR code, and connect.")
-    err_console.print()
-    err_console.print(f"  [bold]{'=' * 60}[/bold]")
     err_console.print()

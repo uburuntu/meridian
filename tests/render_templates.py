@@ -26,7 +26,7 @@ class MockUndefined(Undefined):
         return MockUndefined()
 
 
-# Mock Ansible filters that templates use
+# Mock Jinja2 filters that templates use
 def mock_bool(value):
     if isinstance(value, str):
         return value.lower() in ("true", "yes", "1")
@@ -85,8 +85,7 @@ MOCK_VARS = {
     "reality_dest": "www.microsoft.com:443",
     "server_public_ip": "1.2.3.4",
     "inventory_hostname": "proxy",
-    "ansible_host": "1.2.3.4",
-    "ansible_date_time": {"iso8601": "2026-01-01T00:00:00Z", "year": "2026"},
+    "generated_at": {"iso8601": "2026-01-01T00:00:00Z", "year": "2026"},
     "threexui_version": "2.8.11",
     "utls_fingerprint": "chrome",
     "xhttp_mode": "packet-up",
@@ -132,7 +131,7 @@ for tpl_dir, tpl_name in TEMPLATES:
             loader=FileSystemLoader(tpl_dir),
             undefined=MockUndefined,
         )
-        # Register Ansible-compatible filters
+        # Register template filters
         env.filters["bool"] = mock_bool
         env.filters["default"] = mock_default
         env.filters["d"] = mock_default
@@ -145,7 +144,7 @@ for tpl_dir, tpl_name in TEMPLATES:
         env.filters["lower"] = lambda x: str(x).lower()
         env.filters["upper"] = lambda x: str(x).upper()
         env.filters["to_json"] = lambda x: str(x)
-        # Register Ansible tests
+        # Register Jinja2 tests
         env.tests["defined"] = lambda x: not isinstance(x, Undefined)
         env.tests["undefined"] = lambda x: isinstance(x, Undefined)
         env.tests["none"] = lambda x: x is None

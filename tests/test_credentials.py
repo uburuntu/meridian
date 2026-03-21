@@ -175,7 +175,7 @@ class TestV1Migration:
         assert creds.server.ip == "1.2.3.4"
 
     def test_v1_server_ip_becomes_server_ip(self, tmp_path: Path) -> None:
-        """V1 server_ip field (from Ansible) maps to server.ip in v2."""
+        """V1 server_ip field maps to server.ip in v2."""
         f = tmp_path / "proxy.yml"
         f.write_text("server_ip: 5.6.7.8\npanel_username: admin\npanel_password: pass\n")
         creds = ServerCredentials.load(f)
@@ -190,14 +190,14 @@ class TestV1Migration:
         assert "xhttp_enabled" not in creds._extra
 
     def test_v1_panel_configured_preserved(self, tmp_path: Path) -> None:
-        """V1 panel_configured is preserved in _extra for Ansible compatibility."""
+        """V1 panel_configured is preserved in _extra for backward compatibility."""
         f = tmp_path / "proxy.yml"
         f.write_text("panel_username: admin\npanel_configured: true\n")
         creds = ServerCredentials.load(f)
         assert creds._extra["panel_configured"] is True
 
     def test_panel_configured_round_trip(self, tmp_path: Path) -> None:
-        """panel_configured survives load→save→load (critical for Ansible)."""
+        """panel_configured survives load-save-load round trip."""
         f = tmp_path / "proxy.yml"
         f.write_text("panel_username: admin\npanel_configured: true\n")
         creds = ServerCredentials.load(f)
