@@ -361,15 +361,24 @@ class TestAddClientBodyFormat:
         panel.add_client(3, client_settings)
 
         call_args = conn.run.call_args[0][0]
-        # The curl -d argument should contain a JSON string where 'settings'
-        # is a stringified JSON (double-encoded). Parse the curl body to verify.
-        # Find the JSON body in the curl command
         assert "addClient" in call_args
-        # The body should contain '"settings":' with an escaped JSON string value
-        # Since the body is passed through shlex.quote, we verify the structure
-        # by checking that json.dumps of client_settings appears in the command
-        settings_json = json.dumps(client_settings)
-        assert settings_json in call_args or "uuid-abc" in call_args
+
+        # Extract the JSON body from the curl -d argument.
+        # The curl command format: curl -s -b COOKIE -H ... -d 'JSON' URL
+        import shlex as _shlex
+
+        parts = _shlex.split(call_args)
+        d_index = parts.index("-d")
+        body_str = parts[d_index + 1]
+        body = json.loads(body_str)
+
+        # The 'settings' field must be a string (JSON-encoded), not a dict
+        assert isinstance(body["settings"], str), (
+            f"'settings' should be a JSON string, got {type(body['settings']).__name__}"
+        )
+        # And that string should parse back to the original client_settings
+        parsed_settings = json.loads(body["settings"])
+        assert parsed_settings == client_settings
 
 
 class TestGenerateUUIDEdgeCases:
