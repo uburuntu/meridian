@@ -13,7 +13,7 @@ from meridian.ssh import ServerConnection
 def run_add(ip: str, name: str = "", user: str = "root") -> None:
     """Register a server, verify SSH, and fetch credentials."""
     if name and not _valid_name(name):
-        fail("Server name must be alphanumeric (hyphens and underscores allowed)")
+        fail("Server name must be alphanumeric (hyphens and underscores allowed)", hint_type="user")
 
     registry = ServerRegistry(SERVERS_FILE)
     conn = ServerConnection(ip=ip, user=user, local_mode=False)
@@ -57,7 +57,7 @@ def run_remove(query: str) -> None:
 
     entry = registry.find(query)
     if not entry:
-        fail(f"Server '{query}' not found")
+        fail(f"Server '{query}' not found", hint_type="user")
 
     host = entry.host
     registry.remove(query)

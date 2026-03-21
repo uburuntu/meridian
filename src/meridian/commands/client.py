@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from meridian.commands.resolve import (
     ensure_server_connection,
@@ -24,6 +26,11 @@ from meridian.models import Inbound
 from meridian.panel import PanelClient, PanelError
 from meridian.protocols import PROTOCOLS, Protocol, get_protocol
 from meridian.servers import ServerRegistry
+from meridian.ssh import SSH_OPTS
+
+if TYPE_CHECKING:
+    from meridian.commands.resolve import ResolvedServer
+    from meridian.ssh import ServerConnection
 
 # -- Helpers --
 
@@ -31,11 +38,12 @@ from meridian.servers import ServerRegistry
 def _validate_client_name(name: str) -> None:
     """Validate client name format. Exits on invalid."""
     if not name:
-        fail("Client name is required", hint="Usage: meridian client add NAME")
+        fail("Client name is required", hint="Usage: meridian client add NAME", hint_type="user")
     if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", name):
         fail(
             f"Client name '{name}' is invalid",
             hint="Use letters, numbers, hyphens, and underscores.",
+            hint_type="user",
         )
 
 
@@ -43,19 +51,16 @@ def _load_creds(creds_dir: Path) -> ServerCredentials:
     """Load and validate credentials from creds_dir."""
     proxy_file = creds_dir / "proxy.yml"
     if not proxy_file.exists():
-        fail("No credentials found", hint="Deploy the server first: meridian setup")
+        fail("No credentials found", hint="Deploy the server first: meridian setup", hint_type="user")
 
     creds = ServerCredentials.load(proxy_file)
     if not creds.has_credentials:
-        fail("No panel credentials found", hint="Deploy the server first: meridian setup")
+        fail("No panel credentials found", hint="Deploy the server first: meridian setup", hint_type="user")
     return creds
 
 
-def _make_panel(creds: ServerCredentials, conn: object) -> PanelClient:
+def _make_panel(creds: ServerCredentials, conn: ServerConnection) -> PanelClient:
     """Create and authenticate a PanelClient."""
-    from meridian.ssh import ServerConnection
-
-    assert isinstance(conn, ServerConnection)
     panel = PanelClient(
         conn=conn,
         panel_port=creds.panel.port,
@@ -64,31 +69,21 @@ def _make_panel(creds: ServerCredentials, conn: object) -> PanelClient:
     try:
         panel.login(creds.panel.username or "", creds.panel.password or "")
     except PanelError as e:
-        fail(f"Panel login failed: {e}", hint="Check credentials or run: meridian setup")
+        fail(f"Panel login failed: {e}", hint="Check credentials or run: meridian setup", hint_type="system")
     return panel
 
 
-def _sync_credentials_to_server(resolved: object) -> None:
+def _sync_credentials_to_server(resolved: ResolvedServer) -> None:
     """Sync local credentials back to the server's /etc/meridian/."""
-    from meridian.commands.resolve import ResolvedServer
-
-    assert isinstance(resolved, ResolvedServer)
     if resolved.local_mode:
         return  # Already on the server
 
     # SCP the credentials directory to the server
-    import subprocess
-
     try:
         subprocess.run(
             [
                 "scp",
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "ConnectTimeout=5",
-                "-o",
-                "StrictHostKeyChecking=accept-new",
+                *SSH_OPTS,
                 "-r",
                 f"{resolved.creds_dir}/",
                 f"{resolved.user}@{resolved.ip}:/etc/meridian/",
@@ -123,39 +118,41 @@ def run_add(
 
     # Check for duplicates in credentials
     if any(c.name == name for c in creds.clients):
-        fail(f"Client '{name}' already exists", hint="Use: meridian client list")
+        fail(f"Client '{name}' already exists", hint="Use: meridian client list", hint_type="user")
 
     # Connect to panel
     panel = _make_panel(creds, resolved.conn)
-    try:
+    with panel:
         # List inbounds and find active ones
         try:
             inbounds = panel.list_inbounds()
         except PanelError as e:
-            fail(f"Failed to list inbounds: {e}")
+            fail(f"Failed to list inbounds: {e}", hint_type="system")
 
         # Reality is the canonical protocol -- must exist
         reality_proto = get_protocol("reality")
-        assert reality_proto is not None
+        if reality_proto is None:
+            raise ValueError("Reality protocol not registered -- this is a bug")
         reality_inbound = reality_proto.find_inbound(inbounds)
 
         if reality_inbound is None:
             fail(
                 "No Reality inbound found on the server",
                 hint="Make sure the server is set up first: meridian setup",
+                hint_type="system",
             )
 
         # Check if client already exists in the panel (by email)
         reality_email = f"{reality_proto.email_prefix}{name}"
         for client in reality_inbound.clients:
             if client.get("email") == reality_email:
-                fail(f"Client '{name}' already exists on the panel", hint="Use: meridian client list")
+                fail(f"Client '{name}' already exists on the panel", hint="Use: meridian client list", hint_type="user")
 
         # Generate UUIDs -- one for Reality (shared with XHTTP), one for WSS
         try:
             reality_uuid = panel.generate_uuid()
         except PanelError as e:
-            fail(f"Failed to generate UUID: {e}")
+            fail(f"Failed to generate UUID: {e}", hint_type="system")
 
         wss_uuid = ""
         domain = creds.server.domain or ""
@@ -180,7 +177,7 @@ def run_add(
                 try:
                     uuid = panel.generate_uuid()
                 except PanelError as e:
-                    fail(f"Failed to generate UUID for {proto.key}: {e}")
+                    fail(f"Failed to generate UUID for {proto.key}: {e}", hint_type="system")
                 uuids[proto.key] = uuid
 
             if proto.key == "wss":
@@ -195,7 +192,7 @@ def run_add(
             try:
                 panel.add_client(ib.id, client_settings)
             except PanelError as e:
-                fail(f"Failed to add client to {proto.remark}: {e}")
+                fail(f"Failed to add client to {proto.remark}: {e}", hint_type="system")
 
         ok(f"Client '{name}' added to panel")
 
@@ -250,9 +247,6 @@ def run_add(
         err_console.print(f"  [dim]Test reachability: meridian ping {resolved.ip}[/dim]")
         err_console.print("  [dim]View all clients:  meridian client list[/dim]\n")
 
-    finally:
-        panel.cleanup()
-
 
 # -- Client List --
 
@@ -270,15 +264,13 @@ def run_list(
 
     creds = _load_creds(resolved.creds_dir)
     panel = _make_panel(creds, resolved.conn)
-    try:
+    with panel:
         try:
             inbounds = panel.list_inbounds()
         except PanelError as e:
-            fail(f"Failed to list inbounds: {e}")
+            fail(f"Failed to list inbounds: {e}", hint_type="system")
 
         _display_client_list_from_inbounds(inbounds)
-    finally:
-        panel.cleanup()
 
 
 # -- Client Remove --
@@ -301,19 +293,20 @@ def run_remove(
     info(f"Removing client '{name}'...")
 
     panel = _make_panel(creds, resolved.conn)
-    try:
+    with panel:
         try:
             inbounds = panel.list_inbounds()
         except PanelError as e:
-            fail(f"Failed to list inbounds: {e}")
+            fail(f"Failed to list inbounds: {e}", hint_type="system")
 
         # Verify client exists in Reality inbound (canonical)
         reality_proto = get_protocol("reality")
-        assert reality_proto is not None
+        if reality_proto is None:
+            raise ValueError("Reality protocol not registered -- this is a bug")
         reality_inbound = reality_proto.find_inbound(inbounds)
 
         if reality_inbound is None:
-            fail("No Reality inbound found on the server")
+            fail("No Reality inbound found on the server", hint_type="system")
 
         # Find client by email in Reality inbound
         client_email = f"{reality_proto.email_prefix}{name}"
@@ -324,7 +317,7 @@ def run_remove(
                 break
 
         if not client_found:
-            fail(f"Client '{name}' not found", hint="Check client name with: meridian client list")
+            fail(f"Client '{name}' not found", hint="Check client name with: meridian client list", hint_type="user")
 
         # Remove from each active protocol's inbound
         for proto in PROTOCOLS.values():
@@ -361,9 +354,6 @@ def run_remove(
 
         err_console.print(f"\n  Client '{name}' has been removed from all active inbounds.\n")
 
-    finally:
-        panel.cleanup()
-
 
 # -- Display --
 
@@ -380,7 +370,8 @@ def _display_client_list_from_inbounds(inbounds: list[Inbound]) -> None:
 
     # Reality is the canonical protocol
     reality_proto = get_protocol("reality")
-    assert reality_proto is not None
+    if reality_proto is None:
+        raise ValueError("Reality protocol not registered -- this is a bug")
     reality_clients: list[dict] = []
     reality_ib = reality_proto.find_inbound(inbounds)
     if reality_ib is not None:

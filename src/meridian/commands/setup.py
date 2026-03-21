@@ -35,7 +35,7 @@ def run(
     # --server flag: resolve from registry
     if requested_server:
         if server_ip:
-            fail("Cannot use both positional IP and --server flag")
+            fail("Cannot use both positional IP and --server flag", hint_type="user")
         entry = registry.find(requested_server)
         if not entry:
             if is_ipv4(requested_server):
@@ -44,6 +44,7 @@ def run(
                 fail(
                     f"Server '{requested_server}' not found",
                     hint="See registered servers: meridian server list",
+                    hint_type="user",
                 )
         else:
             server_ip = entry.host
@@ -111,7 +112,11 @@ def run(
 
     # Validate IP
     if not is_ipv4(server_ip):
-        fail(f"Invalid IP address: {server_ip}", hint="Enter a valid IPv4 address (e.g. meridian setup 123.45.67.89)")
+        fail(
+            f"Invalid IP address: {server_ip}",
+            hint="Enter a valid IPv4 address (e.g. meridian setup 123.45.67.89)",
+            hint_type="user",
+        )
 
     # Resolve and prepare
     resolved = resolve_server(
@@ -182,6 +187,7 @@ def run(
         fail(
             "Setup playbook failed",
             hint="Check server IP and SSH access. Run: meridian check " + resolved.ip,
+            hint_type="system",
         )
 
     # Register server

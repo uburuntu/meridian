@@ -34,11 +34,26 @@ def warn(msg: str) -> None:
     err_console.print(f"  [warn]![/warn] {msg}")
 
 
-def fail(msg: str, *, hint: str = "") -> NoReturn:
+def fail(msg: str, *, hint: str = "", hint_type: str = "bug") -> NoReturn:
+    """Print an error message and exit with code 1.
+
+    Args:
+        msg: The error message to display.
+        hint: Optional hint shown below the error.
+        hint_type: Controls the footer line shown:
+            "user"   -- input validation errors; no GitHub link shown.
+            "system" -- infrastructure errors; suggests 'meridian diagnostics'.
+            "bug"    -- unexpected errors (default); shows GitHub issues link.
+    """
     err_console.print(f"\n  [error]\u2717 {msg}[/error]")
     if hint:
         err_console.print(f"  [dim]{hint}[/dim]")
-    err_console.print("  [dim]Report: https://github.com/uburuntu/meridian/issues[/dim]\n")
+    if hint_type == "user":
+        err_console.print()
+    elif hint_type == "system":
+        err_console.print("  [dim]Run: meridian diagnostics  (to collect server info)[/dim]\n")
+    else:  # "bug"
+        err_console.print("  [dim]Report: https://github.com/uburuntu/meridian/issues[/dim]\n")
     raise typer.Exit(code=1)
 
 

@@ -39,6 +39,31 @@ class TestFail:
         captured = capsys.readouterr()
         assert "github.com/uburuntu/meridian/issues" in captured.err
 
+    def test_fail_hint_type_user_no_github_link(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """hint_type='user' should not show GitHub link."""
+        with pytest.raises(typer.Exit):
+            fail("Invalid IP address", hint_type="user")
+        captured = capsys.readouterr()
+        assert "Invalid IP address" in captured.err
+        assert "github.com" not in captured.err
+        assert "diagnostics" not in captured.err
+
+    def test_fail_hint_type_system_suggests_diagnostics(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """hint_type='system' should suggest meridian diagnostics."""
+        with pytest.raises(typer.Exit):
+            fail("SSH connection failed", hint_type="system")
+        captured = capsys.readouterr()
+        assert "SSH connection failed" in captured.err
+        assert "diagnostics" in captured.err
+        assert "github.com" not in captured.err
+
+    def test_fail_hint_type_bug_is_default(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Default hint_type='bug' shows GitHub link."""
+        with pytest.raises(typer.Exit):
+            fail("unexpected state", hint_type="bug")
+        captured = capsys.readouterr()
+        assert "github.com/uburuntu/meridian/issues" in captured.err
+
 
 def _make_tty_mock(input_text: str) -> MagicMock:
     """Create a context manager mock that simulates /dev/tty with given input."""

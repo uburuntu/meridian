@@ -81,6 +81,7 @@ def resolve_server(
             fail(
                 f"Server '{requested_server}' not found",
                 hint="See registered servers: meridian server list",
+                hint_type="user",
             )
 
     # 3. Running on the server itself as root — /etc/meridian/ readable
@@ -105,10 +106,10 @@ def resolve_server(
                 label = entry.name or entry.host
                 err_console.print(f"    [info]{label:<15s}[/info]  {entry.host}  ({entry.user})")
             err_console.print()
-            fail("Specify a server with --server", hint="Example: meridian <command> --server NAME")
+            fail("Specify a server with --server", hint="Example: meridian <command> --server NAME", hint_type="user")
 
         else:
-            fail("No servers configured", hint="Deploy a server first: meridian setup IP")
+            fail("No servers configured", hint="Deploy a server first: meridian setup IP", hint_type="user")
 
     # Resolve user: explicit flag > registry > default root
     resolved_user = user or registry_user or "root"

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -62,21 +63,24 @@ def build_vless_urls(
 
     # Reality (always present)
     reality_proto = get_protocol("reality")
-    assert reality_proto is not None
+    if reality_proto is None:
+        raise ValueError("Reality protocol not registered -- this is a bug")
     reality_url = reality_proto.build_url(reality_uuid, name, **reality_kwargs)
 
     # XHTTP (optional, shares Reality UUID)
     xhttp_url = ""
     if xhttp_port > 0:
         xhttp_proto = get_protocol("xhttp")
-        assert xhttp_proto is not None
+        if xhttp_proto is None:
+            raise ValueError("XHTTP protocol not registered -- this is a bug")
         xhttp_url = xhttp_proto.build_url(reality_uuid, name, port=xhttp_port, **reality_kwargs)
 
     # WSS (optional, requires domain + own UUID)
     wss_url = ""
     if domain and wss_uuid:
         wss_proto = get_protocol("wss")
-        assert wss_proto is not None
+        if wss_proto is None:
+            raise ValueError("WSS protocol not registered -- this is a bug")
         wss_url = wss_proto.build_url(wss_uuid, name, domain=domain, ws_path=ws_path)
 
     return ClientURLs(name=name, reality=reality_url, xhttp=xhttp_url, wss=wss_url)
@@ -202,7 +206,8 @@ def save_connection_html(
 
         template_path = files("meridian") / "playbooks" / "roles" / "shared" / "templates" / "connection-info.html.j2"
         template_text = template_path.read_text(encoding="utf-8")
-    except Exception:
+    except Exception as e:
+        warnings.warn(f"Could not load connection-info template: {e}", stacklevel=2)
         # Fallback: generate a minimal HTML page
         template_text = None
 
@@ -271,7 +276,8 @@ def _render_html_template(
             wss_qr_b64_local=type("obj", (), {"stdout": wss_qr})(),
             ansible_date_time={"iso8601": now},
         )
-    except Exception:
+    except Exception as e:
+        warnings.warn(f"HTML template rendering failed, falling back to minimal HTML: {e}", stacklevel=2)
         return _generate_minimal_html(urls, server_ip, domain, now, reality_qr, xhttp_qr, wss_qr)
 
 
