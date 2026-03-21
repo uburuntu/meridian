@@ -34,7 +34,7 @@ Repository = "https://github.com/uburuntu/meridian"
 Issues = "https://github.com/uburuntu/meridian/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "ruff>=0.4", "mypy>=1.0", "jinja2>=3.0", "ansible-lint>=24.0"]
+dev = ["pytest>=7.0", "ruff>=0.4", "mypy>=1.0", "types-PyYAML>=6.0", "jinja2>=3.0", "ansible-lint>=24.0"]
 
 [tool.hatch.version]
 path = "VERSION"
@@ -58,3 +58,4 @@ testpaths = ["tests"]
 
 [tool.mypy]
 python_version = "3.10"
+ignore_missing_imports = true

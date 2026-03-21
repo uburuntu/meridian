@@ -30,7 +30,7 @@ format-check: ## Check formatting without changes
 	uv run ruff format --check src/ tests/
 
 typecheck: ## Run mypy type checker
-	uv run mypy src/meridian/ --ignore-missing-imports
+	uv run mypy src/meridian/
 
 check: lint format-check test ## Run all Python checks (lint + format + test)
 

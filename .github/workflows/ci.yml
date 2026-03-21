@@ -59,6 +59,20 @@ jobs:
       - name: Ruff format check
         run: ruff format --check src/ tests/
 
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install package with dev dependencies
+        run: uv sync --extra dev
+
+      - name: Run mypy
+        run: uv run mypy src/meridian/
+
   validate:
     name: Validate
     runs-on: ubuntu-latest
