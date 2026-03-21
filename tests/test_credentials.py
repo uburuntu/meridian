@@ -189,12 +189,12 @@ class TestV1Migration:
         # xhttp_enabled is not a v2 field — it's runtime-only
         assert "xhttp_enabled" not in creds._extra
 
-    def test_v1_panel_configured_skipped(self, tmp_path: Path) -> None:
-        """V1 panel_configured is consumed but not in v2 structure."""
+    def test_v1_panel_configured_preserved(self, tmp_path: Path) -> None:
+        """V1 panel_configured is preserved in _extra for Ansible compatibility."""
         f = tmp_path / "proxy.yml"
         f.write_text("panel_username: admin\npanel_configured: true\n")
         creds = ServerCredentials.load(f)
-        assert "panel_configured" not in creds._extra
+        assert creds._extra["panel_configured"] is True
 
 
 class TestMergeClientsFile:

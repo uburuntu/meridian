@@ -128,6 +128,13 @@ def run(
     resolved = ensure_server_connection(resolved)
     fetch_credentials(resolved)
 
+    # Migrate v1 credentials to v2 before Ansible runs (Ansible pre_tasks expect v2 format)
+    proxy_file = resolved.creds_dir / "proxy.yml"
+    if proxy_file.exists():
+        creds = ServerCredentials.load(proxy_file)
+        if creds.has_credentials:
+            creds.save(proxy_file)  # Re-save as v2 if loaded from v1
+
     # Suggest scanned SNI if available and no --sni was given
     if not sni:
         proxy_file = resolved.creds_dir / "proxy.yml"

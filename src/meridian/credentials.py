@@ -222,7 +222,7 @@ _V1_FIELD_MAP: dict[str, tuple[str, str]] = {
 }
 
 # Fields to skip during v1 migration (consumed but not carried forward)
-_V1_SKIP = {"panel_configured", "version", "xhttp_enabled"}
+_V1_SKIP = {"version", "xhttp_enabled"}
 
 
 def _migrate_v1(data: dict[str, Any]) -> ServerCredentials:
