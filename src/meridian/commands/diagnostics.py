@@ -5,7 +5,6 @@ from __future__ import annotations
 import platform
 import re
 import shlex
-import shutil
 
 from meridian.commands.resolve import (
     ensure_server_connection,
@@ -44,26 +43,11 @@ def run(
 
     # --- Local Machine ---
     local_os = platform.platform()
-    ansible_ver = "not installed"
-    if shutil.which("ansible"):
-        import subprocess
-
-        try:
-            r = subprocess.run(
-                ["ansible", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if r.returncode == 0:
-                ansible_ver = r.stdout.splitlines()[0] if r.stdout else "unknown"
-        except Exception:
-            pass
 
     sections.append(
         (
             "Local Machine",
-            f"OS: {local_os}\nAnsible: {ansible_ver}\nMeridian: {__version__}",
+            f"OS: {local_os}\nMeridian: {__version__}",
         )
     )
 

@@ -157,7 +157,7 @@ def check_cmd(
     domain: str = typer.Option("", "--domain", "-d", help="Domain to check"),
     sni: str = typer.Option("", "--sni", "-s", help="SNI target to verify"),
     user: str = typer.Option("", "--user", "-u", help="SSH user (default: from server registry)"),
-    ai: bool = typer.Option(False, "--ai", help="Build AI-ready diagnostic prompt"),
+    ai: bool = typer.Option(False, "--ai", help="Copy AI-ready prompt to clipboard for ChatGPT/Claude"),
     server: str = typer.Option("", "--server", help="Target server (name or IP)"),
 ) -> None:
     """Pre-flight server validation."""
@@ -201,7 +201,7 @@ def diagnostics_cmd(
     ip: str = typer.Argument("", help="Server IP address"),
     sni: str = typer.Option("", "--sni", "-s", help="SNI target"),
     user: str = typer.Option("", "--user", "-u", help="SSH user (default: from server registry)"),
-    ai: bool = typer.Option(False, "--ai", help="Build AI-ready diagnostic prompt"),
+    ai: bool = typer.Option(False, "--ai", help="Copy AI-ready prompt to clipboard for ChatGPT/Claude"),
     server: str = typer.Option("", "--server", help="Target server (name or IP)"),
 ) -> None:
     """Collect system info for bug reports."""

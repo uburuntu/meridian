@@ -9,7 +9,6 @@ import subprocess
 import sys
 import time
 import urllib.request
-import warnings
 from pathlib import Path
 
 from packaging.version import Version
@@ -25,8 +24,7 @@ def get_pypi_latest() -> str | None:
         with urllib.request.urlopen(req, timeout=3) as resp:
             data = json.loads(resp.read())
             return data["info"]["version"]
-    except Exception as e:
-        warnings.warn(f"Could not fetch latest version from PyPI: {e}", stacklevel=2)
+    except Exception:
         return None
 
 
@@ -59,8 +57,7 @@ def check_for_update(current_version: str) -> None:
     try:
         current = Version(current_version)
         remote = Version(latest)
-    except Exception as e:
-        warnings.warn(f"Could not parse version for update check: {e}", stacklevel=2)
+    except Exception:
         return
 
     if remote <= current:
@@ -151,8 +148,7 @@ def run_self_update() -> None:
     try:
         current = Version(__version__)
         remote = Version(latest)
-    except Exception as e:
-        warnings.warn(f"Could not parse version numbers: {e}", stacklevel=2)
+    except Exception:
         warn("Could not parse version numbers")
         return
 

@@ -1,7 +1,5 @@
 """Protocol/inbound type definitions — single source of truth.
 
-Keep in sync with inbound_types in group_vars/all.yml.
-
 Adding a new protocol (e.g., Hysteria2, TUIC) requires:
 1. Add an InboundType entry to INBOUND_TYPES
 2. Create a Protocol subclass below
@@ -30,7 +28,6 @@ class InboundType:
 
 
 # Single source of truth for all inbound types.
-# Ansible equivalent: inbound_types in group_vars/all.yml
 INBOUND_TYPES: dict[str, InboundType] = {
     "reality": InboundType(
         remark="VLESS-Reality",

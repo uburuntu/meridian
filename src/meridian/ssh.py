@@ -28,8 +28,9 @@ SSH_OPTS: list[str] = [
 class ServerConnection:
     """Manage SSH connections to a remote server.
 
-    Non-root remote users: Ansible handles privilege escalation via ansible_become.
-    Non-root local users: Commands run via sudo, Ansible uses local connection + become.
+    Non-root remote users: commands are wrapped in sudo -n sh -c via SSH.
+    Non-root local users: detect_local_mode sets needs_sudo, commands run
+    via sudo -n bash -c for privilege escalation.
     Passwordless sudo is required (standard on AWS/GCP/Azure/DO).
     """
 
@@ -107,8 +108,8 @@ class ServerConnection:
         """Check if we're running on the target server itself.
 
         Local mode requires root access to /etc/meridian/. If we detect we're
-        on the server but not root, we warn and fall through to SSH mode
-        (connecting to self via SSH with ansible_become for privilege escalation).
+        on the server but not root, we set needs_sudo=True and run commands
+        via sudo -n bash -c for privilege escalation.
         """
         from meridian.config import SERVER_CREDS_DIR
 

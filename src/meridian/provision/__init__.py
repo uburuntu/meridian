@@ -1,8 +1,7 @@
-"""Provisioning engine — pure Python replacement for Ansible playbooks.
+"""Provisioning engine — deploys and configures proxy servers via SSH.
 
-The build_setup_steps() function assembles the full deployment pipeline,
-matching the Ansible playbook.yml role order:
-  common → docker → xray (panel + inbounds) → haproxy → caddy → output
+The build_setup_steps() function assembles the full deployment pipeline:
+  common -> docker -> xray (panel + inbounds) -> haproxy -> caddy -> output
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ __all__ = ["Provisioner", "ProvisionContext", "Step", "StepResult", "build_setup
 def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     """Assemble the full deployment step pipeline.
 
-    Matches the Ansible playbook.yml role execution order:
+    Execution order:
     1. common: packages, hardening, sysctl, firewall
     2. docker: install Docker, deploy 3x-ui container
     3. xray: configure panel, login, create inbounds, verify

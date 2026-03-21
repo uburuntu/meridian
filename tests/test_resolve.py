@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 import typer
 
-from meridian.commands.resolve import resolve_and_connect, resolve_server
+from meridian.commands.resolve import resolve_server
 from meridian.config import CREDS_BASE, SERVER_CREDS_DIR
 from meridian.servers import ServerEntry, ServerRegistry
 
@@ -159,91 +158,3 @@ class TestResolvedServer:
         assert result.conn.ip == "1.2.3.4"
         assert result.conn.user == "ubuntu"
         assert result.conn.local_mode is False
-
-
-class TestResolveAndConnect:
-    """Tests for the resolve_and_connect() convenience wrapper."""
-
-    def test_chains_all_three_steps(self, servers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """resolve_and_connect chains resolve, ensure_connection, fetch_creds."""
-        import meridian.commands.resolve as resolve_mod
-
-        mock_resolved = MagicMock()
-        mock_resolved.ip = "1.2.3.4"
-
-        resolve_calls: list[str] = []
-
-        def fake_resolve(registry, explicit_ip="", requested_server="", user=""):
-            resolve_calls.append("resolve")
-            return mock_resolved
-
-        def fake_ensure(resolved):
-            resolve_calls.append("ensure")
-            return resolved
-
-        def fake_fetch(resolved):
-            resolve_calls.append("fetch")
-            return True
-
-        monkeypatch.setattr(resolve_mod, "ServerRegistry", lambda path: MagicMock())
-        monkeypatch.setattr(resolve_mod, "resolve_server", fake_resolve)
-        monkeypatch.setattr(resolve_mod, "ensure_server_connection", fake_ensure)
-        monkeypatch.setattr(resolve_mod, "fetch_credentials", fake_fetch)
-
-        result = resolve_and_connect(ip="1.2.3.4")
-
-        assert resolve_calls == ["resolve", "ensure", "fetch"]
-        assert result is mock_resolved
-
-    def test_skip_ssh_check(self, servers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """check_ssh=False skips ensure_server_connection."""
-        import meridian.commands.resolve as resolve_mod
-
-        mock_resolved = MagicMock()
-        ensure_called = []
-
-        monkeypatch.setattr(resolve_mod, "ServerRegistry", lambda path: MagicMock())
-        monkeypatch.setattr(resolve_mod, "resolve_server", lambda *a, **kw: mock_resolved)
-        monkeypatch.setattr(resolve_mod, "ensure_server_connection", lambda r: ensure_called.append(r) or r)
-        monkeypatch.setattr(resolve_mod, "fetch_credentials", lambda r: True)
-
-        resolve_and_connect(ip="1.2.3.4", check_ssh=False)
-
-        assert ensure_called == [], "ensure_server_connection should not be called when check_ssh=False"
-
-    def test_skip_fetch_creds(self, servers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """fetch_creds=False skips fetch_credentials."""
-        import meridian.commands.resolve as resolve_mod
-
-        mock_resolved = MagicMock()
-        fetch_called = []
-
-        monkeypatch.setattr(resolve_mod, "ServerRegistry", lambda path: MagicMock())
-        monkeypatch.setattr(resolve_mod, "resolve_server", lambda *a, **kw: mock_resolved)
-        monkeypatch.setattr(resolve_mod, "ensure_server_connection", lambda r: r)
-        monkeypatch.setattr(resolve_mod, "fetch_credentials", lambda r: fetch_called.append(r) or True)
-
-        resolve_and_connect(ip="1.2.3.4", fetch_creds=False)
-
-        assert fetch_called == [], "fetch_credentials should not be called when fetch_creds=False"
-
-    def test_passes_requested_server(self, servers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """requested_server is forwarded to resolve_server correctly."""
-        import meridian.commands.resolve as resolve_mod
-
-        captured: dict[str, str] = {}
-
-        def fake_resolve(registry, explicit_ip="", requested_server="", user=""):
-            captured["requested_server"] = requested_server
-            captured["user"] = user
-            return MagicMock()
-
-        monkeypatch.setattr(resolve_mod, "ServerRegistry", lambda path: MagicMock())
-        monkeypatch.setattr(resolve_mod, "resolve_server", fake_resolve)
-        monkeypatch.setattr(resolve_mod, "ensure_server_connection", lambda r: r)
-        monkeypatch.setattr(resolve_mod, "fetch_credentials", lambda r: True)
-
-        resolve_and_connect(requested_server="mybox", user="ubuntu")
-
-        assert captured["requested_server"] == "mybox"
-        assert captured["user"] == "ubuntu"

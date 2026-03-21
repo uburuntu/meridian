@@ -143,5 +143,5 @@ def run(
             err_console.print("  [dim]Tip: with --domain, your own domain works as SNI too (self-steal).[/dim]\n")
             return
 
-    info("Skipped. You can set SNI manually with --sni flag.")
+    info("No target selected. The default (www.microsoft.com) works well for most servers.")
     err_console.print()

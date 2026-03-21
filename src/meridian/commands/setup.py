@@ -30,12 +30,16 @@ def run(
     """Deploy a VLESS+Reality proxy server."""
     registry = ServerRegistry(SERVERS_FILE)
     server_ip = ip
-    ansible_user = user
+    ssh_user = user
 
     # --server flag: resolve from registry
     if requested_server:
         if server_ip:
-            fail("Cannot use both positional IP and --server flag", hint_type="user")
+            fail(
+                "Use either the IP address or --server, not both.\n"
+                "  Example: meridian setup 1.2.3.4  OR  meridian setup --server mybox",
+                hint_type="user",
+            )
         entry = registry.find(requested_server)
         if not entry:
             if is_ipv4(requested_server):
@@ -49,7 +53,7 @@ def run(
         else:
             server_ip = entry.host
             if user == "root" and entry.user:
-                ansible_user = entry.user
+                ssh_user = entry.user
 
     # Interactive wizard if no IP given
     if not server_ip:
@@ -70,8 +74,8 @@ def run(
                 break
             err_console.print("  [error]Enter a valid IPv4 address (e.g. 123.45.67.89)[/error]")
 
-        ansible_user = prompt("SSH user", default="root")
-        if ansible_user != "root":
+        ssh_user = prompt("SSH user", default="root")
+        if ssh_user != "root":
             err_console.print("  [dim](sudo will be used for privileged operations)[/dim]")
 
         err_console.print()
@@ -95,7 +99,7 @@ def run(
         line()
         err_console.print()
         err_console.print("  [bold]Summary[/bold]\n")
-        err_console.print(f"  Target:  [ok]{ansible_user}@{server_ip}[/ok]")
+        err_console.print(f"  Target:  [ok]{ssh_user}@{server_ip}[/ok]")
         if domain:
             err_console.print(f"  Domain:  [ok]{domain}[/ok]")
             err_console.print("  Mode:    Reality + CDN fallback")
@@ -106,7 +110,7 @@ def run(
         line()
 
         if not yes:
-            confirm(f"Deploy to {ansible_user}@{server_ip}?")
+            confirm(f"Deploy to {ssh_user}@{server_ip}?")
         err_console.print()
 
     # Validate IP
@@ -121,7 +125,7 @@ def run(
     resolved = resolve_server(
         registry,
         explicit_ip=server_ip,
-        user=ansible_user,
+        user=ssh_user,
     )
 
     resolved = ensure_server_connection(resolved)
@@ -242,6 +246,8 @@ def _print_success(resolved: object, name: str, domain: str) -> None:
     txt_files = list(creds_dir.glob("*-connection-info.txt"))
 
     err_console.print("\n  [ok][bold]Done![/bold][/ok]\n")
+    ok("Your proxy server is live and ready to use.")
+    err_console.print()
     err_console.print("  [bold]Next steps:[/bold]\n")
 
     if html_files:

@@ -43,7 +43,7 @@ def build_ai_prompt(command_name: str, output: str, version: str) -> None:
 
     prompt_text = f"""You are a Meridian VPN proxy troubleshooting assistant.
 
-Meridian is an Ansible-based tool for deploying censorship-resistant VLESS+Reality proxy servers.
+Meridian is a Python CLI tool for deploying censorship-resistant VLESS+Reality proxy servers.
 
 ## Reference Documentation
 
