@@ -113,8 +113,7 @@ Caddy handles:
 ## File Locations Reference
 
 ### On the server
-- `/etc/meridian/proxy.yml` — credentials
-- `/etc/meridian/*-clients.yml` — client list
+- `/etc/meridian/proxy.yml` — credentials and client list
 - `/etc/caddy/conf.d/meridian.caddy` — Caddy config
 - `/etc/haproxy/haproxy.cfg` — HAProxy config
 - Docker container `3x-ui` — Xray + panel
@@ -122,5 +121,5 @@ Caddy handles:
 ### On the local machine
 - `~/.meridian/credentials/<IP>/` — cached credentials per server
 - `~/.meridian/servers` — server registry
-- `~/.meridian/cache/` — update check, AI docs cache
+- `~/.meridian/cache/` — update check throttle cache
 - `~/.local/bin/meridian` — CLI entry point (installed via uv/pipx)
