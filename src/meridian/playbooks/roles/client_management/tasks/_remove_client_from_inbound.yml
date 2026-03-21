@@ -1,0 +1,32 @@
+---
+# Parameterized task: remove a client from a single inbound.
+# Called via include_tasks with loop over inbound_types.
+#
+# Expected variables from the loop item:
+#   _inbound.key           — e.g., "reality"
+#   _inbound.email_prefix  — e.g., "reality-"
+#
+# Expected variables from the parent:
+#   _inbound_clients       — dict mapping key -> client list
+#   _inbound_ids           — dict mapping key -> inbound_id
+
+- name: "Find {{ _inbound.key }} client by email"
+  ansible.builtin.set_fact:
+    _client_match: "{{ _inbound_clients[_inbound.key] | selectattr('email', 'equalto', _inbound.email_prefix + client_name) | list }}"
+
+- name: "Remove client from {{ _inbound.key }} inbound"
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ panel_internal_port }}/{{ panel_web_base_path }}/panel/api/inbounds/{{ _inbound_ids[_inbound.key] }}/delClient/{{ _client_match[0].id }}"
+    method: POST
+    headers:
+      Cookie: "{{ session_cookie }}"
+    return_content: true
+  register: _del_result
+  no_log: true
+  when: _client_match | length > 0
+
+- name: "Verify {{ _inbound.key }} client was removed"
+  ansible.builtin.assert:
+    that: _del_result.json.success | default(false)
+    fail_msg: "Failed to remove client from {{ _inbound.key }} inbound: {{ _del_result.json.msg | default('unknown error') }}"
+  when: _client_match | length > 0
