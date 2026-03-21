@@ -159,3 +159,29 @@ jobs:
       - name: Stop container
         if: always()
         run: docker compose -f docker-compose.test.yml down -v
+
+  e2e:
+    name: E2E Provisioner
+    runs-on: ubuntu-latest
+    needs: [python-test, python-lint]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Pre-pull 3x-ui image
+        run: docker pull ghcr.io/mhsanaei/3x-ui:2.8.11
+
+      - name: Run E2E tests
+        run: docker compose -f tests/e2e/docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e
+
+      - name: Dump E2E container logs on failure
+        if: failure()
+        run: |
+          docker compose -f tests/e2e/docker-compose.e2e.yml logs
+          docker logs 3x-ui 2>&1 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f 3x-ui 2>/dev/null || true
+          docker compose -f tests/e2e/docker-compose.e2e.yml down -v
