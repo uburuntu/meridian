@@ -1,10 +1,73 @@
 ---
 title: Getting Started
-description: Install Meridian and deploy your first proxy server in minutes.
+description: Install Meridian and deploy your first proxy server in two minutes.
 order: 1
 section: guides
 ---
 
-# Getting Started
+## Prerequisites
 
-This guide will be expanded in Phase 2.
+You need:
+- A **VPS** running Debian or Ubuntu (root SSH key access)
+- A **terminal** on your local machine (macOS, Linux, or WSL)
+
+## Install the CLI
+
+```
+curl -sSf https://getmeridian.org/install.sh | bash
+```
+
+This installs the `meridian` command via [uv](https://docs.astral.sh/uv/) (preferred) or pipx.
+
+## Deploy
+
+```
+meridian deploy
+```
+
+The interactive wizard asks for your server IP, SSH user, and camouflage target (SNI). Smart defaults are provided for everything.
+
+Or specify everything upfront:
+
+```
+meridian deploy 1.2.3.4 --sni www.microsoft.com
+```
+
+## What happens
+
+1. **Installs Docker** and deploys Xray via the 3x-ui management panel
+2. **Generates x25519 keypair** — unique keys for Reality authentication
+3. **Hardens the server** — UFW firewall, SSH key-only auth, BBR congestion control
+4. **Configures VLESS+Reality** on port 443 — impersonates a real TLS server
+5. **Enables XHTTP transport** — additional stealth layer, routed through Caddy
+6. **Outputs QR codes** and saves an HTML connection page
+
+## Connect
+
+The deploy command outputs:
+- A **QR code** you can scan with your phone
+- An **HTML file** with connection links to share with family
+- A **shareable URL** (if server-hosted pages are enabled)
+
+Install one of these apps, then scan the QR code or tap "Open in App":
+
+| Platform | App |
+|----------|-----|
+| iOS | [v2RayTun](https://apps.apple.com/app/v2raytun/id6476628951) |
+| Android | [v2rayNG](https://github.com/2dust/v2rayNG/releases/latest) |
+| Windows | [v2rayN](https://github.com/2dust/v2rayN/releases/latest) |
+| All platforms | [Hiddify](https://github.com/hiddify/hiddify-app/releases/latest) |
+
+## Add more users
+
+```
+meridian client add alice
+```
+
+Each client gets their own key and connection page. List clients with `meridian client list`, revoke with `meridian client remove alice`.
+
+## Next steps
+
+- [Deploy guide](/docs/en/deploy/) — full deployment walkthrough with all options
+- [Domain mode](/docs/en/domain-mode/) — add CDN fallback via Cloudflare
+- [Troubleshooting](/docs/en/troubleshooting/) — common issues and fixes

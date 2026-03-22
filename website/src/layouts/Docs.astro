@@ -1,0 +1,229 @@
+---
+/**
+ * Docs layout — sidebar + content area + TOC.
+ * Used by docs/[...slug].astro for all documentation pages.
+ */
+import Base from './Base.astro';
+import DocsSidebar from '../components/DocsSidebar.astro';
+import TOC from '../components/TOC.astro';
+
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+interface NavItem {
+  title: string;
+  slug: string;
+  order: number;
+}
+
+interface NavSection {
+  label: string;
+  items: NavItem[];
+}
+
+interface Props {
+  title: string;
+  description?: string;
+  headings: Heading[];
+  sections: NavSection[];
+  currentSlug: string;
+}
+
+const { title, description, headings, sections, currentSlug } = Astro.props;
+---
+
+<Base title={`${title} — Meridian Docs`} description={description}>
+  <div class="docs-layout">
+    <DocsSidebar sections={sections} currentSlug={currentSlug} />
+
+    <main id="main" class="docs-content">
+      <article class="docs-article">
+        <h1>{title}</h1>
+        <slot />
+      </article>
+    </main>
+
+    <TOC headings={headings} />
+  </div>
+</Base>
+
+<style is:global>
+  .docs-layout {
+    display: flex;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 52px 24px 0;
+    gap: 40px;
+  }
+
+  .docs-content {
+    flex: 1;
+    min-width: 0;
+    padding: 32px 0 80px;
+  }
+
+  .docs-article {
+    max-width: 680px;
+  }
+
+  .docs-article h1 {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--b1);
+  }
+
+  /* Markdown content styles */
+  .docs-article h2 {
+    margin-top: 48px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--b1);
+  }
+
+  .docs-article h3 {
+    margin-top: 32px;
+    margin-bottom: 12px;
+  }
+
+  .docs-article p {
+    color: var(--t2);
+    font-size: 0.92rem;
+    line-height: 1.75;
+    margin-bottom: 16px;
+  }
+
+  .docs-article ul, .docs-article ol {
+    color: var(--t2);
+    font-size: 0.92rem;
+    line-height: 1.75;
+    margin-bottom: 16px;
+    padding-left: 24px;
+  }
+
+  .docs-article li {
+    margin-bottom: 6px;
+  }
+
+  .docs-article strong {
+    color: var(--t1);
+    font-weight: 500;
+  }
+
+  .docs-article em {
+    color: var(--t1);
+    font-style: italic;
+  }
+
+  .docs-article code {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    background: var(--s1);
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid var(--b1);
+    color: var(--t1);
+  }
+
+  .docs-article pre {
+    background: var(--s1);
+    border: 1px solid var(--b1);
+    border-radius: var(--r);
+    padding: 18px 22px;
+    margin: 16px 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .docs-article pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.82rem;
+    line-height: 1.65;
+    color: var(--t1);
+  }
+
+  .docs-article a {
+    color: var(--ac);
+    text-decoration: underline;
+    text-decoration-color: #d4a24e40;
+    text-underline-offset: 2px;
+    transition: text-decoration-color 0.1s;
+  }
+  .docs-article a:hover {
+    text-decoration-color: var(--ac);
+    color: var(--ac);
+  }
+
+  .docs-article table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+    margin: 16px 0;
+  }
+
+  .docs-article th {
+    text-align: left;
+    color: var(--t3);
+    font-weight: 500;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--b2);
+  }
+
+  .docs-article td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--b1);
+    color: var(--t2);
+    vertical-align: top;
+  }
+
+  .docs-article td:first-child {
+    color: var(--t1);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+  }
+
+  .docs-article tr:last-child td {
+    border-bottom: none;
+  }
+
+  .docs-article blockquote {
+    border-left: 3px solid var(--ac);
+    padding: 12px 18px;
+    margin: 16px 0;
+    background: var(--ac3);
+    border-radius: 0 var(--r) var(--r) 0;
+    color: var(--t2);
+    font-size: 0.9rem;
+  }
+
+  .docs-article hr {
+    border: none;
+    height: 1px;
+    background: var(--b1);
+    margin: 40px 0;
+  }
+
+  .docs-article img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--r);
+    border: 1px solid var(--b1);
+  }
+
+  @media (max-width: 860px) {
+    .docs-layout {
+      padding-top: 52px;
+    }
+    .docs-content {
+      padding: 24px 0 60px;
+    }
+  }
+</style>
