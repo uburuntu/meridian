@@ -1,0 +1,111 @@
+/*
+ * Meridian Global Styles
+ * Reset, base typography, utility classes, accessibility, focus states.
+ */
+
+@import './tokens.css';
+
+/* Reset */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Base */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--t1);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--ac);
+  color: var(--bg);
+}
+
+/* Focus states (accessibility) */
+button:focus-visible,
+input:focus-visible,
+a:focus-visible,
+details summary:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  background: var(--ac);
+  color: var(--bg);
+  padding: 8px 16px;
+  border-radius: var(--r);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  z-index: 200;
+  transition: top 0.06s;
+}
+.skip-link:focus {
+  top: 16px;
+}
+
+/* RTL support */
+[dir="rtl"] pre,
+[dir="rtl"] code {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: embed;
+}
+
+/* Responsive container */
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Section spacing */
+section {
+  padding: 80px 0;
+}
+
+/* Headings */
+h1, h2, h3 {
+  font-family: var(--serif);
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: clamp(2.4rem, 6vw, 3.8rem);
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+  margin-bottom: 12px;
+}
+
+h3 {
+  font-size: clamp(1.1rem, 2vw, 1.3rem);
+  margin-bottom: 8px;
+}
+
+/* Links */
+a {
+  color: var(--ac);
+  text-decoration: none;
+  transition: color 0.06s;
+}
+a:hover {
+  color: var(--t1);
+}

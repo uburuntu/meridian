@@ -1,0 +1,202 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Meridian — Censorship-Resistant Proxy">
+  <main id="main">
+    <section class="hero">
+      <div class="container">
+        <div class="chip">
+          <i></i>
+          Open Source
+        </div>
+        <h1>Deploy an <em>undetectable</em> proxy in&nbsp;minutes</h1>
+        <p class="sub">
+          One command gives you a fully configured VLESS+Reality server.
+          Share access with family via QR codes and guided connection&nbsp;pages.
+        </p>
+        <div class="actions">
+          <a href="/docs/getting-started/" class="btn btn-p">Get Started</a>
+          <a href="https://github.com/msu-rocks/meridian" class="btn btn-s">
+            GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="install">
+      <div class="container">
+        <div class="oneliner">
+          <pre><code>curl -fsSL https://getmeridian.org/install.sh | bash</code></pre>
+          <button class="cp" data-copy="curl -fsSL https://getmeridian.org/install.sh | bash">Copy</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <div class="container">
+        <p>
+          <a href="https://github.com/msu-rocks/meridian">Meridian</a>
+          &mdash; censorship-resistant proxy deployment
+        </p>
+      </div>
+    </footer>
+  </main>
+</Base>
+
+<style>
+  .hero {
+    padding: min(18vh, 140px) 0 80px;
+    position: relative;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -30%;
+    left: 10%;
+    width: 80%;
+    height: 80%;
+    background: radial-gradient(ellipse at 40% 50%, #d4a24e08, transparent 70%);
+    pointer-events: none;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ac);
+    background: var(--ac2);
+    border: 1px solid #d4a24e44;
+    border-radius: 99px;
+    padding: 5px 14px;
+    margin-bottom: 28px;
+  }
+  .chip i {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--ac);
+    animation: blink 2s infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--ac);
+  }
+  .sub {
+    font-size: 1.05rem;
+    color: var(--t2);
+    max-width: 480px;
+    margin-bottom: 36px;
+  }
+  .actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 12px 24px;
+    border-radius: var(--r);
+    font-family: var(--sans);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: filter 0.06s, transform 0.06s;
+  }
+  .btn-p {
+    background: var(--ac);
+    color: var(--bg);
+  }
+  .btn-p:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+  }
+  .btn-s {
+    background: var(--s1);
+    color: var(--t1);
+    border: 1px solid var(--b1);
+  }
+  .btn-s:hover {
+    border-color: var(--b2);
+    background: var(--s2);
+  }
+  .oneliner {
+    background: var(--s1);
+    border: 1px solid var(--b1);
+    border-radius: 12px;
+    padding: 24px 28px;
+    position: relative;
+  }
+  .oneliner pre {
+    font-family: var(--mono);
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--t1);
+    white-space: pre-wrap;
+    word-break: break-all;
+    padding-right: 60px;
+  }
+  .cp {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--s2);
+    border: 1px solid var(--b1);
+    color: var(--t2);
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.06s;
+  }
+  .cp:hover {
+    color: var(--t1);
+    border-color: var(--b2);
+  }
+  .install {
+    padding: 0 0 80px;
+  }
+  .foot {
+    padding: 40px 0;
+    border-top: 1px solid var(--b1);
+    text-align: center;
+    color: var(--t3);
+    font-size: 0.8rem;
+  }
+  .foot a {
+    color: var(--t2);
+    text-decoration: none;
+    transition: color 0.06s;
+  }
+  .foot a:hover {
+    color: var(--ac);
+  }
+</style>
+
+<script>
+  document.querySelectorAll('.cp').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const text = btn.getAttribute('data-copy') || '';
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('ok');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('ok');
+        }, 1500);
+      });
+    });
+  });
+</script>

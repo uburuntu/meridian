@@ -1,0 +1,58 @@
+/*
+ * Meridian Design Tokens
+ * Single source of truth for colors, typography, spacing, and radii.
+ * Shared between the Astro website and the Jinja2 connection-info template.
+ */
+
+:root {
+  /* Backgrounds & surfaces */
+  --bg: #08080a;
+  --s1: #111114;
+  --s2: #19191e;
+
+  /* Borders */
+  --b1: #252530;
+  --b2: #35354a;
+
+  /* Text */
+  --t1: #ececec;
+  --t2: #9090a0;
+  --t3: #7a7a90;
+
+  /* Accent (gold) */
+  --ac: #d4a24e;
+  --ac2: #d4a24e20;
+
+  /* Status */
+  --ok: #5ce88e;
+  --ok2: #5ce88e18;
+  --err: #f06060;
+  --warn: #e8c85c;
+
+  /* Radii */
+  --r: 8px;
+  --r2: 14px;
+
+  /* Typography */
+  --serif: Georgia, 'Times New Roman', serif;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+/* Light mode overrides */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f5f7;
+    --s1: #fff;
+    --s2: #f0f0f3;
+    --b1: #d8d8e0;
+    --b2: #c0c0cc;
+    --t1: #1a1a2e;
+    --t2: #5a5a70;
+    --t3: #7a7a90;
+    --ac: #b8892a;
+    --ac2: #b8892a14;
+    --ok: #1a9d5a;
+    --ok2: #1a9d5a14;
+  }
+}
