@@ -7,7 +7,7 @@ import subprocess
 
 from meridian.config import DEFAULT_SNI
 from meridian.credentials import ServerCredentials
-from meridian.models import ProtocolURL
+from meridian.models import ProtocolURL, RelayURLSet
 from meridian.protocols import PROTOCOLS
 
 # Module-level flag to warn about missing qrencode only once per session.
@@ -85,6 +85,68 @@ def build_protocol_urls(
             result.append(ProtocolURL(key=key, label=label, url=url))
 
     return result
+
+
+def build_relay_urls(
+    name: str,
+    reality_uuid: str,
+    creds: ServerCredentials,
+    relay_ip: str,
+    relay_name: str = "",
+) -> RelayURLSet:
+    """Build Reality-only connection URLs that route through a relay node.
+
+    Only Reality+TCP works reliably through a dumb L4 relay because the
+    Reality handshake is end-to-end.  XHTTP and WSS require TLS cert
+    matching that would break with a relay IP.
+
+    Args:
+        name: Client display name.
+        reality_uuid: UUID for Reality connection.
+        creds: Exit server credentials (for SNI, public key, short ID).
+        relay_ip: Relay node IP address (substituted for exit IP).
+        relay_name: Friendly relay name (used in URL fragment).
+
+    Returns:
+        A ``RelayURLSet`` with Reality-only URLs via this relay.
+    """
+    from meridian.protocols import get_protocol
+
+    reality_proto = get_protocol("reality")
+    if reality_proto is None:
+        return RelayURLSet(relay_ip=relay_ip, relay_name=relay_name, urls=[])
+
+    sni = creds.server.sni or DEFAULT_SNI
+    public_key = creds.reality.public_key or ""
+    short_id = creds.reality.short_id or ""
+
+    suffix = f"-via-{relay_name}" if relay_name else f"-via-{relay_ip}"
+    url = reality_proto.build_url(
+        reality_uuid,
+        f"{name}{suffix}",
+        ip=relay_ip,
+        sni=sni,
+        public_key=public_key,
+        short_id=short_id,
+    )
+
+    urls = [ProtocolURL(key="reality", label="Primary (via relay)", url=url)]
+    return RelayURLSet(relay_ip=relay_ip, relay_name=relay_name, urls=urls)
+
+
+def build_all_relay_urls(
+    name: str,
+    reality_uuid: str,
+    creds: ServerCredentials,
+) -> list[RelayURLSet]:
+    """Build relay URL sets for all relays attached to the exit server.
+
+    Returns an empty list if no relays are configured.
+    """
+    return [
+        build_relay_urls(name, reality_uuid, creds, relay.ip, relay.name)
+        for relay in creds.relays
+    ]
 
 
 def generate_qr_terminal(url: str) -> str:

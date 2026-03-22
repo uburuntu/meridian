@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from meridian.models import ProtocolURL, derive_client_name
+from meridian.models import ProtocolURL, RelayURLSet, derive_client_name
 from meridian.urls import generate_qr_terminal
 
 
@@ -15,6 +15,7 @@ def print_terminal_output(
     *,
     client_name: str = "",
     hosted_page_url: str = "",
+    relay_entries: list[RelayURLSet] | None = None,
 ) -> None:
     """Print connection info with QR codes to the terminal.
 
@@ -25,6 +26,8 @@ def print_terminal_output(
         client_name: Client name for the summary header (derived from the
             first URL fragment when omitted).
         hosted_page_url: If set, show this URL as the shareable link.
+        relay_entries: Optional relay URL sets. When present, relay URLs are
+            shown first as "Recommended", direct URLs as "Backup".
     """
     from meridian.console import err_console
 
@@ -46,15 +49,35 @@ def print_terminal_output(
         err_console.print()
         err_console.print("  " + "\u2500" * 50)
 
-    # QR code for the primary (first) protocol.
-    for purl in protocol_urls:
-        if not purl.url:
-            continue
-        qr = generate_qr_terminal(purl.url)
-        if qr:
+    # Relay URLs first (if any)
+    if relay_entries:
+        for relay_set in relay_entries:
+            relay_label = relay_set.relay_name or relay_set.relay_ip
             err_console.print()
-            print(qr, end="")
-        break  # only the primary protocol QR
+            err_console.print(f"  [bold green]* Recommended (via relay {relay_label}):[/bold green]")
+            for purl in relay_set.urls:
+                if not purl.url:
+                    continue
+                qr = generate_qr_terminal(purl.url)
+                if qr:
+                    err_console.print()
+                    print(qr, end="")
+                err_console.print(f"  {purl.url}")
+
+        err_console.print()
+        err_console.print("  " + "\u2500" * 50)
+        err_console.print()
+        err_console.print("  [bold dim]Backup (direct):[/bold dim]")
+    else:
+        # QR code for the primary (first) protocol.
+        for purl in protocol_urls:
+            if not purl.url:
+                continue
+            qr = generate_qr_terminal(purl.url)
+            if qr:
+                err_console.print()
+                print(qr, end="")
+            break  # only the primary protocol QR
 
     # Find saved files.
     html_files = list(creds_dir.glob(f"*-{name}-connection-info.html"))

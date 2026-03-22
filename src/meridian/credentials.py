@@ -74,6 +74,16 @@ class ClientEntry:
 
 
 @dataclass
+class RelayEntry:
+    """A relay node that forwards traffic to this exit server."""
+
+    ip: str = ""
+    name: str = ""  # optional friendly name (e.g., "ru-moscow")
+    port: int = 443  # relay listen port
+    added: str = ""  # ISO8601 timestamp
+
+
+@dataclass
 class ServerCredentials:
     """Protocol-indexed credential storage (v2 format).
 
@@ -87,6 +97,7 @@ class ServerCredentials:
     server: ServerConfig = field(default_factory=ServerConfig)
     protocols: dict[str, Any] = field(default_factory=dict)
     clients: list[ClientEntry] = field(default_factory=list)
+    relays: list[RelayEntry] = field(default_factory=list)
     # Extra fields from the YAML that we don't know about (forward-compat)
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
@@ -145,6 +156,10 @@ class ServerCredentials:
         # Clients
         if self.clients:
             out["clients"] = [_strip_none(asdict(c)) for c in self.clients]
+
+        # Relays
+        if self.relays:
+            out["relays"] = [_strip_none(asdict(r)) for r in self.relays]
 
         # Extra fields (forward-compat)
         for k, v in self._extra.items():
@@ -350,8 +365,20 @@ def _load_v2(data: dict[str, Any]) -> ServerCredentials:
             )
         )
 
+    # Relays
+    relays: list[RelayEntry] = []
+    for r in data.get("relays", []):
+        relays.append(
+            RelayEntry(
+                ip=r.get("ip", ""),
+                name=r.get("name", ""),
+                port=r.get("port", 443),
+                added=r.get("added", ""),
+            )
+        )
+
     # Extra fields
-    known_top = {"version", "panel", "server", "protocols", "clients"}
+    known_top = {"version", "panel", "server", "protocols", "clients", "relays"}
     extra = {k: v for k, v in data.items() if k not in known_top}
 
     return ServerCredentials(
@@ -360,6 +387,7 @@ def _load_v2(data: dict[str, Any]) -> ServerCredentials:
         server=server,
         protocols=protocols,
         clients=clients,
+        relays=relays,
         _extra=extra,
     )
 

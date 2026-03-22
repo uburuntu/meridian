@@ -7,7 +7,7 @@ import types
 from datetime import datetime, timezone
 from pathlib import Path
 
-from meridian.models import ProtocolURL, derive_client_name
+from meridian.models import ProtocolURL, RelayURLSet, derive_client_name
 from meridian.urls import generate_qr_base64
 
 
@@ -17,6 +17,7 @@ def save_connection_text(
     server_ip: str,
     *,
     client_name: str = "",
+    relay_entries: list[RelayURLSet] | None = None,
 ) -> None:
     """Save a plain-text connection summary file.
 
@@ -26,6 +27,8 @@ def save_connection_text(
         server_ip: Server IP address for display.
         client_name: Client name for the header (derived from URL fragments
             if omitted).
+        relay_entries: Optional list of relay URL sets. When present, relay
+            URLs are shown first as "Recommended", direct URLs as "Backup".
     """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     name = client_name or derive_client_name(protocol_urls)
@@ -38,6 +41,17 @@ def save_connection_text(
         "=" * 78,
         "",
     ]
+
+    # Relay URLs first (if any)
+    if relay_entries:
+        for relay_set in relay_entries:
+            relay_label = relay_set.relay_name or relay_set.relay_ip
+            lines.append(f"--- * Recommended: via relay ({relay_label}) ---")
+            for purl in relay_set.urls:
+                if purl.url:
+                    lines.extend([purl.url, ""])
+        lines.append("--- Backup: direct connection ---")
+        lines.append("")
 
     for purl in protocol_urls:
         if not purl.url:
@@ -106,6 +120,7 @@ def save_connection_html(
     domain: str = "",
     *,
     client_name: str = "",
+    relay_entries: list[RelayURLSet] | None = None,
 ) -> None:
     """Save a connection info HTML page with QR codes.
 
@@ -120,6 +135,7 @@ def save_connection_html(
         domain: Optional domain name (enables WSS card in template).
         client_name: Client name for the page title (derived from URLs if
             omitted).
+        relay_entries: Optional relay URL sets for relay-aware rendering.
     """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -153,6 +169,7 @@ def save_connection_html(
         reality_qr_b64=reality_qr,
         xhttp_qr_b64=xhttp_qr,
         wss_qr_b64=wss_qr,
+        relay_entries=relay_entries,
     )
 
     result_html = _render_template(
@@ -186,6 +203,7 @@ def render_hosted_html(
     reality_qr_b64: str = "",
     xhttp_qr_b64: str = "",
     wss_qr_b64: str = "",
+    relay_entries: list[RelayURLSet] | None = None,
 ) -> str:
     """Render connection info HTML for server hosting (is_server_hosted=True).
 
@@ -202,6 +220,7 @@ def render_hosted_html(
         reality_qr_b64: Base64-encoded QR PNG for Reality URL.
         xhttp_qr_b64: Base64-encoded QR PNG for XHTTP URL.
         wss_qr_b64: Base64-encoded QR PNG for WSS URL.
+        relay_entries: Optional relay URL sets for relay-aware rendering.
     """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -218,6 +237,7 @@ def render_hosted_html(
         reality_qr_b64=reality_qr_b64,
         xhttp_qr_b64=xhttp_qr_b64,
         wss_qr_b64=wss_qr_b64,
+        relay_entries=relay_entries,
     )
 
     return _render_template(
@@ -268,6 +288,7 @@ def _build_template_variables(
     reality_qr_b64: str,
     xhttp_qr_b64: str,
     wss_qr_b64: str,
+    relay_entries: list[RelayURLSet] | None = None,
 ) -> dict[str, object]:
     """Build the Jinja2 template variable dict.
 
@@ -297,6 +318,24 @@ def _build_template_variables(
         variables["reality_qr_b64_local"] = types.SimpleNamespace(stdout=reality_qr_b64)
         variables["xhttp_qr_b64_local"] = types.SimpleNamespace(stdout=xhttp_qr_b64)
         variables["wss_qr_b64_local"] = types.SimpleNamespace(stdout=wss_qr_b64)
+
+    # Relay entries (if any)
+    if relay_entries:
+        relay_data = []
+        for relay_set in relay_entries:
+            relay_url = relay_set.urls[0].url if relay_set.urls else ""
+            relay_qr = generate_qr_base64(relay_url) if relay_url else ""
+            relay_data.append({
+                "ip": relay_set.relay_ip,
+                "name": relay_set.relay_name,
+                "url": relay_url,
+                "qr_b64": relay_qr,
+            })
+        variables["relays"] = relay_data
+        variables["has_relays"] = True
+    else:
+        variables["relays"] = []
+        variables["has_relays"] = False
 
     return variables
 
@@ -366,7 +405,21 @@ def _render_template(
         purls.append(ProtocolURL(key="wss", label="CDN Backup", url=wss_url))
 
     qr_map = {"reality": reality_qr, "xhttp": xhttp_qr, "wss": wss_qr}
-    return _generate_minimal_html(client_name, purls, qr_map, server_ip, domain, now)
+    # Extract relay entries from variables for fallback rendering
+    relay_data_raw = variables.get("relays")
+    fallback_relays: list[RelayURLSet] | None = None
+    if relay_data_raw and isinstance(relay_data_raw, list):
+        fallback_relays = []
+        for rd in relay_data_raw:
+            if isinstance(rd, dict) and rd.get("url"):
+                fallback_relays.append(
+                    RelayURLSet(
+                        relay_ip=rd["ip"],
+                        relay_name=rd.get("name", ""),
+                        urls=[ProtocolURL(key="reality", label="Primary (via relay)", url=rd["url"])],
+                    )
+                )
+    return _generate_minimal_html(client_name, purls, qr_map, server_ip, domain, now, relay_entries=fallback_relays)
 
 
 def _generate_minimal_html(
@@ -376,6 +429,7 @@ def _generate_minimal_html(
     server_ip: str,
     domain: str,
     now: str,
+    relay_entries: list[RelayURLSet] | None = None,
 ) -> str:
     """Generate a minimal HTML page when the Jinja2 template is not available."""
     safe_name = html_mod.escape(client_name)
@@ -383,7 +437,19 @@ def _generate_minimal_html(
     safe_domain = html_mod.escape(domain)
     safe_now = html_mod.escape(now)
 
-    cards = "".join(_html_card(purl.label, purl.url, qr_map.get(purl.key, "")) for purl in protocol_urls if purl.url)
+    cards = ""
+
+    # Relay cards (if any)
+    if relay_entries:
+        for relay_set in relay_entries:
+            relay_label = relay_set.relay_name or relay_set.relay_ip
+            for purl in relay_set.urls:
+                if purl.url:
+                    relay_qr = generate_qr_base64(purl.url)
+                    cards += _html_card(f"* Recommended: via {html_mod.escape(relay_label)}", purl.url, relay_qr)
+        cards += '<div class="card"><h2 style="color:#e5a44e">Backup (direct)</h2></div>'
+
+    cards += "".join(_html_card(purl.label, purl.url, qr_map.get(purl.key, "")) for purl in protocol_urls if purl.url)
 
     ping_url = f"https://getmeridian.org/ping?ip={html_mod.escape(server_ip)}"
     if domain:

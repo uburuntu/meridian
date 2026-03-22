@@ -18,8 +18,10 @@ app = typer.Typer(
 # Subcommand groups
 client_app = typer.Typer(help="Manage proxy clients", no_args_is_help=True)
 server_app = typer.Typer(help="Manage known servers", no_args_is_help=True)
+relay_app = typer.Typer(help="Manage relay nodes", no_args_is_help=True)
 app.add_typer(client_app, name="client")
 app.add_typer(server_app, name="server")
+app.add_typer(relay_app, name="relay")
 
 
 @app.callback(invoke_without_command=True)
@@ -268,3 +270,64 @@ def update_cmd() -> None:
     from meridian.update import run_self_update
 
     run_self_update()
+
+
+# =============================================================================
+# Relay
+# =============================================================================
+
+
+@relay_app.command("deploy")
+def relay_deploy_cmd(
+    relay_ip: str = typer.Argument(..., help="Relay server IP address"),
+    exit: str = typer.Option(..., "--exit", "-e", help="Exit server (IP or name)"),
+    user: str = typer.Option("root", "--user", "-u", help="SSH user on the relay"),
+    name: str = typer.Option("", "--name", help="Friendly name for the relay (e.g., ru-moscow)"),
+    port: int = typer.Option(443, "--port", "-p", help="Relay listen port"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+) -> None:
+    """Deploy a TCP relay that forwards to an exit server.
+
+    [dim]Examples:[/dim]
+      [cyan]meridian relay deploy 1.2.3.4 --exit 5.6.7.8[/cyan]
+      [cyan]meridian relay deploy 1.2.3.4 --exit myserver --name ru-moscow[/cyan]
+    """
+    from meridian.commands.relay import run_deploy
+
+    run_deploy(relay_ip, exit, user, name, port, yes)
+
+
+@relay_app.command("list")
+def relay_list_cmd(
+    exit: str = typer.Option("", "--exit", "-e", help="Filter by exit server (IP or name)"),
+    user: str = typer.Option("", "--user", "-u", help="SSH user"),
+) -> None:
+    """List relay nodes."""
+    from meridian.commands.relay import run_list
+
+    run_list(exit, user)
+
+
+@relay_app.command("remove")
+def relay_remove_cmd(
+    relay_ip: str = typer.Argument(..., help="Relay IP to remove"),
+    exit: str = typer.Option("", "--exit", "-e", help="Exit server (IP or name)"),
+    user: str = typer.Option("", "--user", "-u", help="SSH user"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+) -> None:
+    """Remove a relay node."""
+    from meridian.commands.relay import run_remove
+
+    run_remove(relay_ip, exit, user, yes)
+
+
+@relay_app.command("check")
+def relay_check_cmd(
+    relay_ip: str = typer.Argument(..., help="Relay IP to check"),
+    exit: str = typer.Option("", "--exit", "-e", help="Exit server (IP or name)"),
+    user: str = typer.Option("", "--user", "-u", help="SSH user"),
+) -> None:
+    """Check health of a relay node."""
+    from meridian.commands.relay import run_check
+
+    run_check(relay_ip, exit, user)

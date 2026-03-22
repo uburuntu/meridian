@@ -34,6 +34,19 @@ class ProtocolURL:
     url: str  # Full connection URL (e.g., vless://...)
 
 
+@dataclass(frozen=True)
+class RelayURLSet:
+    """Connection URLs for a client via a specific relay node.
+
+    Groups the relay metadata with the Reality-only URLs that route
+    through that relay.
+    """
+
+    relay_ip: str  # Relay node IP address
+    relay_name: str  # Friendly name (e.g., "ru-moscow") or empty
+    urls: list[ProtocolURL]  # Reality-only URLs with relay IP
+
+
 def derive_client_name(protocol_urls: list[ProtocolURL], fallback: str = "client") -> str:
     """Derive client name from the first URL's fragment.
 

@@ -169,6 +169,22 @@ body{
 </div>
 {% endif %}
 
+{# -- Relay connections (if relay nodes are configured) -- #}
+{% if has_relays | default(false) | bool %}
+{% for relay in relays %}
+<div class="card card-blue">
+  <div class="card-label"><i></i> <span>&#9733; Recommended</span><span class="card-rec">via {{ relay.name or relay.ip }}</span></div>
+  <p class="card-desc">Connect via relay for best reliability in your region.</p>
+  <a href="{{ relay.url }}" class="open-btn" data-t="open">Open in App</a>
+{% if relay.qr_b64 %}
+  <div class="qr"><img src="data:image/png;base64,{{ relay.qr_b64 }}" alt="QR code for relay connection" loading="lazy"></div>
+{% endif %}
+  <div class="url" onclick="cp(this)" data-url="{{ relay.url }}">{{ relay.url }}<span class="url-hint"><span data-t="copy.hint">tap to copy</span></span></div>
+</div>
+{% endfor %}
+<div style="text-align:center;padding:8px 0 4px;color:var(--tx3);font-size:.82rem;font-weight:600;letter-spacing:.04em">BACKUP (DIRECT)</div>
+{% endif %}
+
 {# -- Primary: Reality connection -- #}
 {# QR variable name differs: server-hosted uses reality_qr_b64, local uses reality_qr_b64_local #}
 <div class="card card-blue">

@@ -23,7 +23,7 @@ from meridian.protocols import PROTOCOLS, Protocol, get_protocol
 from meridian.render import render_hosted_html, save_connection_html, save_connection_text
 from meridian.servers import ServerRegistry
 from meridian.ssh import SSH_OPTS
-from meridian.urls import build_protocol_urls
+from meridian.urls import build_all_relay_urls, build_protocol_urls
 
 if TYPE_CHECKING:
     from meridian.commands.resolve import ResolvedServer
@@ -104,6 +104,7 @@ def _deploy_client_page(
     protocol_urls: list,
     client_name: str,
     reality_uuid: str,
+    relay_entries: list | None = None,
 ) -> str:
     """Render and upload a server-hosted connection page for a client.
 
@@ -136,6 +137,7 @@ def _deploy_client_page(
         reality_qr_b64=reality_qr,
         xhttp_qr_b64=xhttp_qr,
         wss_qr_b64=wss_qr,
+        relay_entries=relay_entries,
     )
 
     # Upload to server
@@ -305,18 +307,23 @@ def run_add(
             xhttp_port=xhttp_port,
         )
 
+        # Build relay URL sets (if exit has relays)
+        relay_url_sets = build_all_relay_urls(name, reality_uuid, creds)
+
         server_ip = creds.server.ip or resolved.ip
         file_prefix = f"{resolved.ip}-{name}"
         save_connection_text(
             protocol_urls,
             resolved.creds_dir / f"{file_prefix}-connection-info.txt",
             server_ip,
+            relay_entries=relay_url_sets,
         )
         save_connection_html(
             protocol_urls,
             resolved.creds_dir / f"{file_prefix}-connection-info.html",
             server_ip,
             domain=domain,
+            relay_entries=relay_url_sets,
         )
 
         # Sync credentials to server
@@ -325,7 +332,10 @@ def run_add(
         # Deploy server-hosted connection page (if enabled)
         hosted_page_url = ""
         if creds.server.hosted_page and creds.panel.info_page_path:
-            hosted_page_url = _deploy_client_page(resolved, creds, protocol_urls, name, reality_uuid)
+            hosted_page_url = _deploy_client_page(
+                resolved, creds, protocol_urls, name, reality_uuid,
+                relay_entries=relay_url_sets or None,
+            )
 
         # Print terminal output
         print_terminal_output(
@@ -333,6 +343,7 @@ def run_add(
             resolved.creds_dir,
             server_ip,
             hosted_page_url=hosted_page_url,
+            relay_entries=relay_url_sets or None,
         )
 
         err_console.print(f"  [dim]Test reachability: meridian test {resolved.ip}[/dim]")
