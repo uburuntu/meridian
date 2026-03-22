@@ -1,8 +1,4 @@
 ---
-/**
- * CopyButton — click-to-copy with visual feedback.
- * Use inside any component that needs copy-to-clipboard.
- */
 interface Props {
   text: string;
   label?: string;
@@ -37,8 +33,7 @@ const { text, label = 'Copy', class: className = '' } = Astro.props;
     padding: 4px 10px;
     border-radius: 6px;
     cursor: pointer;
-    transition: color 0.1s, border-color 0.1s;
-    letter-spacing: 0.02em;
+    transition: color 0.12s, border-color 0.12s;
   }
   .copy-btn:hover {
     color: var(--t1);

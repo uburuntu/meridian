@@ -1,13 +1,11 @@
 ---
 /**
- * Footer — site footer with links and version badge.
+ * Footer — warm, understated.
  */
 ---
 
 <footer class="footer">
   <div class="footer__inner">
-    <div class="footer__line"></div>
-
     <div class="footer__content">
       <p class="footer__tagline">
         Open source. No tracking. No accounts.
@@ -15,10 +13,10 @@
 
       <div class="footer__links">
         <a href="https://github.com/uburuntu/meridian" target="_blank" rel="noopener">GitHub</a>
-        <span class="footer__sep" aria-hidden="true">/</span>
+        <span class="footer__sep">&middot;</span>
         <a href="https://github.com/uburuntu/meridian/issues" target="_blank" rel="noopener">Issues</a>
-        <span class="footer__sep" aria-hidden="true">/</span>
-        <a href="/docs/">Docs</a>
+        <span class="footer__sep">&middot;</span>
+        <a href="/docs/" data-astro-prefetch>Docs</a>
       </div>
 
       <div class="footer__version" id="footer-version"></div>
@@ -41,15 +39,12 @@
 <style>
   .footer {
     padding: 0 24px;
-    margin-top: 40px;
+    margin-top: 32px;
   }
   .footer__inner {
     max-width: 960px;
     margin: 0 auto;
-  }
-  .footer__line {
-    height: 1px;
-    background: var(--b1);
+    border-top: 1px solid var(--b1);
   }
   .footer__content {
     padding: 32px 0 40px;
@@ -57,36 +52,33 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
   .footer__tagline {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     color: var(--t3);
     font-style: italic;
-    font-family: var(--serif);
+    font-family: var(--heading);
   }
   .footer__links {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.78rem;
+    font-size: 0.82rem;
   }
   .footer__links a {
     color: var(--t2);
-    text-decoration: none;
-    transition: color 0.1s;
+    transition: color 0.12s;
   }
-  .footer__links a:hover {
-    color: var(--ac);
-  }
+  .footer__links a:hover { color: var(--ac); }
   .footer__sep {
     color: var(--b2);
-    font-size: 0.65rem;
+    font-size: 0.6rem;
   }
   .footer__version {
     font-family: var(--mono);
-    font-size: 0.65rem;
+    font-size: 0.68rem;
     color: var(--t3);
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
   }
 </style>

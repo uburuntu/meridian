@@ -1,66 +1,76 @@
 /*
- * Meridian Design Tokens
- * Single source of truth for colors, typography, spacing, and radii.
- * Shared between the Astro website and the Jinja2 connection-info template.
+ * Meridian Design Tokens — Warm Editorial
+ * Single source of truth for colors, typography, spacing.
+ *
+ * Light-first design with warm cream tones.
+ * Dark mode as a considered alternative, not an afterthought.
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500&display=swap');
-
 :root {
-  /* Backgrounds & surfaces */
-  --bg: #06070b;
-  --s1: #0d0f15;
-  --s2: #13161f;
-  --s3: #191d28;
+  /* Backgrounds */
+  --bg: #FDFAF6;
+  --s1: #FFFFFF;
+  --s2: #F5F0E8;
+  --s3: #EDE7DB;
 
   /* Borders */
-  --b1: #1e2230;
-  --b2: #2a2f42;
-  --b3: #363d55;
+  --b1: #E5DFD3;
+  --b2: #D5CFC3;
 
   /* Text */
-  --t1: #e8eaf0;
-  --t2: #8b90a8;
-  --t3: #555a72;
+  --t1: #1A1D2E;
+  --t2: #6B7084;
+  --t3: #9095A4;
 
-  /* Accent (gold) */
-  --ac: #d4a24e;
-  --ac2: #d4a24e16;
-  --ac3: #d4a24e08;
+  /* Accent (warm gold) */
+  --ac: #C8933A;
+  --ac2: #C8933A14;
+  --ac3: #C8933A08;
+  --ac-hover: #B07E2E;
 
   /* Status */
-  --ok: #5ce88e;
-  --ok2: #5ce88e14;
-  --err: #f06060;
-  --warn: #e8c85c;
+  --ok: #2D8B5F;
+  --ok2: #2D8B5F10;
+  --err: #C93B3B;
+  --warn: #C8933A;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(26, 29, 46, 0.04);
+  --shadow-md: 0 2px 8px rgba(26, 29, 46, 0.06);
+  --shadow-lg: 0 4px 16px rgba(26, 29, 46, 0.08);
 
   /* Radii */
   --r: 8px;
-  --r2: 14px;
+  --r2: 12px;
+  --r3: 16px;
 
   /* Typography */
-  --serif: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
-  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --mono: 'JetBrains Mono', 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  --heading: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --body: 'Source Sans 3', system-ui, -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
 }
 
-/* Light mode overrides */
-@media (prefers-color-scheme: light) {
+/* Dark mode — warm charcoal, not pitch black */
+@media (prefers-color-scheme: dark) {
   :root {
-    --bg: #f2f3f7;
-    --s1: #ffffff;
-    --s2: #f7f8fb;
-    --s3: #edeef3;
-    --b1: #d4d6e0;
-    --b2: #c0c4d4;
-    --b3: #a8adc2;
-    --t1: #12152a;
-    --t2: #555a72;
-    --t3: #8b90a8;
-    --ac: #b8892a;
-    --ac2: #b8892a14;
-    --ac3: #b8892a08;
-    --ok: #1a9d5a;
-    --ok2: #1a9d5a10;
+    --bg: #1C1E28;
+    --s1: #252836;
+    --s2: #2E3145;
+    --s3: #373B50;
+    --b1: #3A3E52;
+    --b2: #4A4F66;
+    --t1: #E4E2DE;
+    --t2: #9A9CAA;
+    --t3: #6B6E7E;
+    --ac: #D4A24E;
+    --ac2: #D4A24E18;
+    --ac3: #D4A24E0A;
+    --ac-hover: #E0B060;
+    --ok: #5CE88E;
+    --ok2: #5CE88E14;
+    --err: #F06060;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.3);
   }
 }

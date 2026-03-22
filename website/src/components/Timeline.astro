@@ -1,8 +1,4 @@
 ---
-/**
- * Timeline — numbered step timeline.
- * Each step is a { number, title, text } item.
- */
 interface Step {
   title: string;
   text: string;
@@ -18,7 +14,10 @@ const { steps } = Astro.props;
 <div class="timeline">
   {steps.map((step, i) => (
     <div class="timeline__item">
-      <div class="timeline__number">{i + 1}</div>
+      <div class="timeline__marker">
+        <div class="timeline__number">{i + 1}</div>
+        {i < steps.length - 1 && <div class="timeline__line"></div>}
+      </div>
       <div class="timeline__content">
         <strong>{step.title}</strong>
         <span set:html={step.text} />
@@ -34,36 +33,42 @@ const { steps } = Astro.props;
   .timeline__item {
     display: flex;
     gap: 16px;
-    padding: 16px 0;
-    border-bottom: 1px solid var(--b1);
-    font-size: 0.88rem;
-    line-height: 1.55;
+    font-size: 0.92rem;
+    line-height: 1.6;
   }
-  .timeline__item:last-child {
-    border-bottom: none;
+  .timeline__marker {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
   }
   .timeline__number {
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    background: var(--ac2);
-    border: 1px solid #d4a24e30;
-    color: var(--ac);
+    background: var(--ac);
+    color: #fff;
     font-family: var(--mono);
-    font-size: 0.68rem;
-    font-weight: 500;
+    font-size: 0.72rem;
+    font-weight: 600;
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
-    margin-top: 1px;
+  }
+  .timeline__line {
+    width: 1px;
+    flex: 1;
+    background: var(--b1);
+    min-height: 16px;
   }
   .timeline__content {
     color: var(--t2);
+    padding-bottom: 20px;
+    padding-top: 3px;
   }
   .timeline__content strong {
     color: var(--t1);
-    font-weight: 500;
+    font-weight: 600;
   }
 
   [dir="rtl"] .timeline__item {

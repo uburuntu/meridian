@@ -1,119 +1,71 @@
 ---
 /**
- * Hero — landing page hero section.
- * "Signal intelligence" aesthetic — classified feel, precision, gold marker.
+ * Hero — warm editorial. Benefits-first messaging.
+ * "Share secure internet with your family" > "Deploy VLESS+Reality"
  */
 ---
 
-<section class="hero" id="hero">
-  <div class="hero__bg" aria-hidden="true">
-    <div class="hero__glow"></div>
-    <div class="hero__glow hero__glow--2"></div>
-  </div>
-
+<section class="hero">
   <div class="container hero__content">
-    <div class="hero__marker">
-      <span class="hero__dot"></span>
-      Open Source
-    </div>
+    <p class="hero__kicker">Open-source privacy tool</p>
 
     <h1 class="hero__title">
-      Undetectable proxy,<br /><em>one command</em>
+      Share <em>secure internet</em> with the people you&nbsp;care&nbsp;about
     </h1>
 
     <p class="hero__sub">
-      Deploy a VLESS+Reality server invisible to DPI, active probing, and
-      TLS fingerprinting. Fully automated. Takes two&nbsp;minutes.
+      One command deploys an undetectable proxy server. Share access with
+      family and friends via QR codes — they scan once and&nbsp;connect.
     </p>
 
     <div class="hero__actions">
       <a href="#setup" class="hero__btn hero__btn--primary">Get started</a>
-      <a href="https://github.com/uburuntu/meridian" class="hero__btn hero__btn--secondary" target="_blank" rel="noopener">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-        </svg>
-        GitHub
+      <a href="/docs/en/getting-started/" class="hero__btn hero__btn--secondary" data-astro-prefetch>
+        Read the docs
       </a>
     </div>
+  </div>
 
-    <a href="/demo/" class="hero__preview" target="_blank">
-      <img
-        src="/img/connection-page.png"
-        alt="Connection page preview — what your friends receive"
-        loading="eager"
-        width="1200"
-        height="669"
-      />
-    </a>
-    <p class="hero__demo-link">
-      What your friends receive — <a href="/demo/" target="_blank">see the demo</a>
-    </p>
+  <div class="container">
+    <div class="hero__preview-wrap">
+      <a href="/demo/" class="hero__preview" data-astro-prefetch>
+        <img
+          src="/img/connection-page.png"
+          alt="Connection page — what your friends receive"
+          loading="eager"
+          width="1200"
+          height="669"
+        />
+      </a>
+      <p class="hero__caption">
+        What your friends receive — <a href="/demo/" data-astro-prefetch>see the demo</a>
+      </p>
+    </div>
   </div>
 </section>
 
 <style>
   .hero {
-    padding: calc(52px + min(14vh, 100px)) 0 60px;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .hero__bg {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    overflow: hidden;
-  }
-
-  .hero__glow {
-    position: absolute;
-    top: -40%;
-    left: 20%;
-    width: 60%;
-    height: 70%;
-    background: radial-gradient(ellipse at center, #d4a24e06, transparent 70%);
-  }
-
-  .hero__glow--2 {
-    top: -20%;
-    left: 50%;
-    width: 40%;
-    height: 50%;
-    background: radial-gradient(ellipse at center, #d4a24e04, transparent 70%);
+    padding: calc(56px + 48px) 0 40px;
   }
 
   .hero__content {
-    position: relative;
+    max-width: 640px;
+    margin-bottom: 48px;
   }
 
-  .hero__marker {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+  .hero__kicker {
     font-family: var(--mono);
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     font-weight: 500;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--ac);
-    margin-bottom: 32px;
-  }
-
-  .hero__dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--ac);
-    animation: pulse 2.5s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.2; }
+    margin-bottom: 20px;
   }
 
   .hero__title {
-    margin-bottom: 24px;
+    margin-bottom: 20px;
   }
 
   .hero__title em {
@@ -122,18 +74,17 @@
   }
 
   .hero__sub {
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     color: var(--t2);
-    max-width: 500px;
-    margin-bottom: 40px;
-    line-height: 1.65;
+    max-width: 520px;
+    margin-bottom: 32px;
+    line-height: 1.7;
   }
 
   .hero__actions {
     display: flex;
     gap: 12px;
     flex-wrap: wrap;
-    margin-bottom: 56px;
   }
 
   .hero__btn {
@@ -142,24 +93,22 @@
     gap: 8px;
     padding: 12px 28px;
     border-radius: var(--r);
-    font-family: var(--sans);
-    font-size: 0.88rem;
-    font-weight: 500;
+    font-family: var(--body);
+    font-size: 0.92rem;
+    font-weight: 600;
     text-decoration: none;
-    border: none;
-    cursor: pointer;
-    transition: all 0.12s;
-    letter-spacing: -0.01em;
+    transition: all 0.15s;
   }
 
   .hero__btn--primary {
     background: var(--ac);
-    color: var(--bg);
+    color: #fff;
   }
   .hero__btn--primary:hover {
-    filter: brightness(1.12);
+    background: var(--ac-hover);
+    color: #fff;
     transform: translateY(-1px);
-    color: var(--bg);
+    box-shadow: var(--shadow-md);
   }
 
   .hero__btn--secondary {
@@ -173,15 +122,22 @@
     color: var(--t1);
   }
 
+  .hero__preview-wrap {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
   .hero__preview {
     display: block;
-    border-radius: 12px;
+    border-radius: var(--r2);
     overflow: hidden;
     border: 1px solid var(--b1);
-    transition: border-color 0.15s;
+    box-shadow: var(--shadow-lg);
+    transition: box-shadow 0.2s, border-color 0.2s;
   }
   .hero__preview:hover {
     border-color: var(--b2);
+    box-shadow: 0 8px 32px rgba(26, 29, 46, 0.1);
   }
   .hero__preview img {
     display: block;
@@ -189,22 +145,22 @@
     height: auto;
   }
 
-  .hero__demo-link {
+  .hero__caption {
     text-align: center;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     color: var(--t3);
-    margin-top: 10px;
+    margin-top: 12px;
   }
-  .hero__demo-link a {
+  .hero__caption a {
     color: var(--ac);
   }
 
-  @media (max-width: 540px) {
+  @media (max-width: 640px) {
     .hero {
-      padding-top: calc(52px + 48px);
+      padding-top: calc(56px + 32px);
     }
-    .hero__actions {
-      margin-bottom: 40px;
+    .hero__content {
+      margin-bottom: 36px;
     }
   }
 </style>

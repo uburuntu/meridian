@@ -1,8 +1,4 @@
 ---
-/**
- * Callout — note/warning callout box.
- * Variants: 'note' (gold), 'warning' (amber), 'tip' (green), 'danger' (red).
- */
 interface Props {
   variant?: 'note' | 'warning' | 'tip' | 'danger';
   icon?: string;
@@ -32,52 +28,47 @@ const displayIcon = icon ?? icons[variant];
     border-radius: var(--r);
     padding: 14px 18px;
     margin: 20px 0;
-    font-size: 0.85rem;
+    font-size: 0.88rem;
     display: flex;
     gap: 10px;
-    line-height: 1.6;
-    border: 1px solid;
+    line-height: 1.65;
+    border-left: 3px solid;
   }
-
   .callout--note {
     background: var(--ac2);
-    border-color: #d4a24e30;
-    color: var(--ac);
+    border-left-color: var(--ac);
+    color: var(--t1);
   }
-
   .callout--warning {
-    background: #e8c85c10;
-    border-color: #e8c85c30;
-    color: var(--warn);
+    background: #C8933A0A;
+    border-left-color: var(--warn);
+    color: var(--t1);
   }
-
   .callout--tip {
     background: var(--ok2);
-    border-color: #5ce88e25;
-    color: var(--ok);
+    border-left-color: var(--ok);
+    color: var(--t1);
   }
-
   .callout--danger {
-    background: #f0606010;
-    border-color: #f0606030;
-    color: var(--err);
+    background: #C93B3B08;
+    border-left-color: var(--err);
+    color: var(--t1);
   }
-
   .callout__icon {
     font-weight: 600;
     flex-shrink: 0;
-    line-height: 1.6;
+    color: var(--t3);
   }
-
-  .callout__content {
-    flex: 1;
-  }
-
-  .callout__content :global(strong) {
-    font-weight: 500;
-  }
+  .callout__content { flex: 1; }
+  .callout__content :global(strong) { font-weight: 600; }
 
   [dir="rtl"] .callout {
     flex-direction: row-reverse;
+    border-left: none;
+    border-right: 3px solid;
   }
+  [dir="rtl"] .callout--note { border-right-color: var(--ac); }
+  [dir="rtl"] .callout--warning { border-right-color: var(--warn); }
+  [dir="rtl"] .callout--tip { border-right-color: var(--ok); }
+  [dir="rtl"] .callout--danger { border-right-color: var(--err); }
 </style>

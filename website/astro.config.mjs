@@ -13,4 +13,11 @@ export default defineConfig({
   build: {
     format: 'directory',
   },
+  prefetch: {
+    prefetchAll: true,
+    defaultStrategy: 'viewport',
+  },
+  image: {
+    experimentalLayout: 'constrained',
+  },
 });

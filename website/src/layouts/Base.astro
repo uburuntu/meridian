@@ -17,7 +17,6 @@ const {
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 const ogImageURL = new URL(ogImage, Astro.site);
 
-// Detect RTL for Farsi locale
 const locale = Astro.currentLocale ?? 'en';
 const dir = locale === 'fa' ? 'rtl' : 'ltr';
 ---
@@ -30,25 +29,27 @@ const dir = locale === 'fa' ? 'rtl' : 'ltr';
     <title>{title}</title>
     <meta name="description" content={description} />
 
-    <!-- Open Graph -->
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonicalURL} />
     <meta property="og:image" content={ogImageURL} />
-
-    <!-- Twitter -->
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageURL} />
 
-    <!-- Canonical -->
     <link rel="canonical" href={canonicalURL} />
-
-    <!-- Favicon -->
     <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png" />
     <link rel="apple-touch-icon" href="/img/logo-180.png" />
+
+    <!-- Fonts: preconnect + load -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
 
     <meta name="generator" content={Astro.generator} />
   </head>

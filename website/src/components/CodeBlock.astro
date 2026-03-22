@@ -1,8 +1,4 @@
 ---
-/**
- * CodeBlock — code snippet with integrated copy button.
- * Can display single-line commands or multi-line code.
- */
 import CopyButton from './CopyButton.astro';
 
 interface Props {
@@ -44,7 +40,7 @@ const { code, lang, label } = Astro.props;
     background: var(--s1);
     border: 1px solid var(--b1);
     border-radius: var(--r);
-    padding: 18px 22px;
+    padding: 16px 20px;
     position: relative;
   }
   .code-block__label + .code-block__inner {
@@ -55,7 +51,7 @@ const { code, lang, label } = Astro.props;
   pre {
     font-family: var(--mono);
     font-size: 0.84rem;
-    line-height: 1.6;
+    line-height: 1.65;
     color: var(--t1);
     white-space: pre-wrap;
     word-break: break-all;

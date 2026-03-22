@@ -8,30 +8,18 @@ import Accordion from '../components/Accordion.astro';
 import Callout from '../components/Callout.astro';
 
 const setupSteps = [
-  {
-    title: 'Installs Docker',
-    text: ' and deploys <strong>Xray</strong> (the proxy engine) via the <strong>3x-ui</strong> management panel',
-  },
-  {
-    title: 'Generates x25519 keypair',
-    text: ' — unique encryption keys for Reality protocol authentication',
-  },
-  {
-    title: 'Hardens the server',
-    text: ' — UFW firewall (ports 22 + 443 only), SSH key-only auth, <strong>BBR</strong> congestion control for faster throughput',
-  },
-  {
-    title: 'Configures VLESS+Reality inbound',
-    text: ' on port 443 — the proxy that impersonates a real TLS server',
-  },
-  {
-    title: 'With a domain:',
-    text: ' adds HAProxy (TLS SNI routing), Caddy (auto-TLS), and a VLESS+WSS fallback for CDN routing through Cloudflare',
-  },
-  {
-    title: 'Outputs QR codes',
-    text: ' and saves an HTML page with connection links, copy buttons, and setup instructions',
-  },
+  { title: 'Install the CLI', text: ' on your laptop — one command, nothing on the server yet' },
+  { title: 'Run deploy', text: ' — the interactive wizard configures everything via SSH' },
+  { title: 'Share the QR code', text: ' — your friends scan it once and they\'re connected' },
+];
+
+const detailSteps = [
+  { title: 'Installs Docker', text: ' and deploys <strong>Xray</strong> via the <strong>3x-ui</strong> management panel' },
+  { title: 'Generates x25519 keypair', text: ' — unique encryption keys for Reality authentication' },
+  { title: 'Hardens the server', text: ' — UFW firewall (ports 22 + 443 only), SSH key-only auth, <strong>BBR</strong> congestion control' },
+  { title: 'Configures VLESS+Reality', text: ' on port 443 — impersonates a real TLS server' },
+  { title: 'Enables XHTTP transport', text: ' — additional stealth routed through Caddy, no extra port' },
+  { title: 'Outputs QR codes', text: ' and generates an HTML connection page with setup instructions' },
 ];
 ---
 
@@ -39,26 +27,39 @@ const setupSteps = [
   <main id="main">
     <Hero />
 
-    <!-- SETUP -->
+    <!-- HOW IT WORKS (simple) -->
     <section id="setup">
       <div class="container">
-        <div class="section-label">Setup</div>
-        <h2>One command</h2>
+        <div class="section-label">How it works</div>
+        <h2>Three steps to secure internet</h2>
         <p class="section-desc">
-          You need a VPS (Debian/Ubuntu, root SSH key access) and a terminal.
-          Run it directly or build a command below.
+          You need a VPS (any $5/month server) and a terminal on your laptop. Meridian handles everything else.
         </p>
 
-        <CodeBlock code="curl -sSf https://getmeridian.org/install.sh | bash" label="Install the CLI" />
+        <div class="setup-grid">
+          <div class="setup-main">
+            <CodeBlock code="curl -sSf https://getmeridian.org/install.sh | bash" label="Step 1 — Install" />
 
-        <div class="or-sep"><span>then</span></div>
+            <div class="step-separator">
+              <span>then</span>
+            </div>
 
-        <CodeBlock code="meridian deploy" label="Deploy to your server" />
+            <CodeBlock code="meridian deploy" label="Step 2 — Deploy" />
 
-        <p class="wizard-hint">
-          The interactive wizard asks for everything. Or check the
-          <a href="/docs/reference/cli-commands/">full CLI reference</a> for flags.
-        </p>
+            <p class="setup-hint">
+              The wizard asks for your server IP and handles the rest. Or pass flags directly —
+              see the <a href="/docs/en/cli-reference/" data-astro-prefetch>CLI reference</a>.
+            </p>
+          </div>
+
+          <div class="setup-aside">
+            <h3>What happens behind the scenes</h3>
+            <Timeline steps={detailSteps} />
+            <Callout variant="tip" icon="⏱">
+              Safe to re-run anytime. Fully idempotent — credentials preserved, settings updated in place.
+            </Callout>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -68,75 +69,50 @@ const setupSteps = [
     <section id="technology">
       <div class="container">
         <div class="section-label">Technology</div>
-        <h2>Why it's undetectable</h2>
+        <h2>Why censors can't detect it</h2>
         <p class="section-desc">
-          Censorship systems use three methods to detect proxies.
-          Reality defeats all of them.
+          Traditional VPNs have distinctive traffic signatures. VLESS+Reality is
+          indistinguishable from normal web browsing.
         </p>
 
-        <Accordion title="Deep Packet Inspection (DPI)" open>
-          <p>
-            DPI analyzes traffic patterns to identify proxy protocols. VPNs like
-            OpenVPN and WireGuard have distinctive packet signatures that are
-            trivial to block.
-          </p>
-          <p>
-            <strong>VLESS+Reality</strong> produces traffic that is byte-for-byte
-            identical to a normal HTTPS connection. There are no headers, no
-            handshake patterns, no packet sizes that distinguish it from regular
-            web browsing.
-          </p>
-        </Accordion>
+        <div class="tech-grid">
+          <Accordion title="Deep Packet Inspection (DPI)" open>
+            <p>
+              DPI analyzes traffic patterns to identify proxy protocols. VPNs like
+              OpenVPN and WireGuard have distinctive packet signatures that are trivial to block.
+            </p>
+            <p>
+              <strong>VLESS+Reality</strong> produces traffic byte-for-byte identical to a normal
+              HTTPS connection. No headers, no patterns, no packet sizes that distinguish it from
+              regular web browsing.
+            </p>
+          </Accordion>
 
-        <Accordion title="Active probing">
-          <p>
-            Censors connect to suspicious servers and try to fingerprint them. If
-            a server responds differently than the website it claims to be, it
-            gets blocked.
-          </p>
-          <p>
-            <strong>Reality</strong> steals the TLS certificate from a real
-            website (e.g., microsoft.com). When a probe connects, your server
-            completes the TLS handshake using Microsoft's actual certificate. The
-            probe sees a legitimate Microsoft server — because, at the TLS level,
-            it <em>is</em> one. Only clients with your private key get the proxy
-            tunnel.
-          </p>
-        </Accordion>
+          <Accordion title="Active probing">
+            <p>
+              Censors connect to suspicious servers and try to fingerprint them. If a server
+              responds differently than the website it claims to be, it gets blocked.
+            </p>
+            <p>
+              <strong>Reality</strong> uses the TLS certificate from a real website (e.g., microsoft.com).
+              When a probe connects, your server completes the handshake using Microsoft's actual
+              certificate. The probe sees a legitimate server. Only clients with your private key
+              get the proxy tunnel.
+            </p>
+          </Accordion>
 
-        <Accordion title="TLS fingerprinting">
-          <p>
-            Every TLS client (Chrome, Firefox, curl) sends a unique "Client
-            Hello" fingerprint. Censors flag connections where the fingerprint
-            doesn't match the claimed application.
-          </p>
-          <p>
-            Meridian uses <strong>uTLS</strong> to impersonate Chrome's exact TLS
-            fingerprint — the same one used by billions of devices. Your traffic
-            is indistinguishable from someone browsing the web with Chrome.
-          </p>
-        </Accordion>
-      </div>
-    </section>
-
-    <hr class="hr" />
-
-    <!-- WHAT HAPPENS -->
-    <section id="steps">
-      <div class="container">
-        <div class="section-label">What happens</div>
-        <h2>Setup steps</h2>
-        <p class="section-desc">
-          The script connects to your server via SSH and configures everything
-          automatically.
-        </p>
-
-        <Timeline steps={setupSteps} />
-
-        <Callout variant="note" icon="⏱">
-          Safe to re-run at any time. Fully idempotent — credentials are
-          preserved, settings are updated in place.
-        </Callout>
+          <Accordion title="TLS fingerprinting">
+            <p>
+              Every TLS client sends a unique "Client Hello" fingerprint. Censors flag connections
+              where the fingerprint doesn't match the claimed application.
+            </p>
+            <p>
+              Meridian uses <strong>uTLS</strong> to impersonate Chrome's exact TLS fingerprint —
+              the same one used by billions of devices. Your traffic is indistinguishable from
+              someone browsing the web with Chrome.
+            </p>
+          </Accordion>
+        </div>
       </div>
     </section>
 
@@ -148,15 +124,15 @@ const setupSteps = [
         <div class="section-label">Connect</div>
         <h2>Scan and go</h2>
         <p class="section-desc">
-          The script generates an HTML file with a QR code and an "Open in App"
-          deep link. Send it to whoever needs it — they tap once and connect.
+          After deploying, you get a connection page with QR codes. Send it to
+          whoever needs it — they tap once and connect.
         </p>
 
         <AppGrid />
 
         <Callout variant="warning">
-          Device clock must be accurate within 30 seconds. Enable automatic
-          date/time in your device settings.
+          Device clock must be accurate within 30 seconds. Enable automatic date/time
+          in your device settings.
         </Callout>
       </div>
     </section>
@@ -167,9 +143,9 @@ const setupSteps = [
     <section id="architecture">
       <div class="container">
         <div class="section-label">Architecture</div>
-        <h2>How it works</h2>
+        <h2>Under the hood</h2>
 
-        <div class="arch-diagram">
+        <div class="arch-img">
           <img
             src="/img/architecture.png"
             alt="Meridian architecture — HAProxy SNI routing, Caddy TLS, Xray Reality"
@@ -179,44 +155,31 @@ const setupSteps = [
           />
         </div>
 
-        <Accordion title="Standalone mode (no domain)" open>
-          <p>
-            <strong>HAProxy</strong> sits on port 443 and routes traffic by TLS
-            SNI. Reality connections (SNI = microsoft.com) route to
-            <strong>Xray</strong>, while <strong>Caddy</strong> handles
-            everything else — serving hosted connection pages with QR codes over
-            HTTPS, using a Let's Encrypt IP certificate (auto-renewed every 6
-            days). XHTTP transport is also routed through Caddy via path-based
-            routing on port 443 — no extra port exposed.
-          </p>
-          <p>
-            The 3x-ui panel is reverse-proxied by Caddy on a secret path —
-            accessible via HTTPS, no SSH tunnel needed. Every connection looks
-            like normal HTTPS. Only clients with your private key get through to
-            the proxy.
-          </p>
-        </Accordion>
+        <div class="arch-grid">
+          <Accordion title="Standalone mode (no domain)" open>
+            <p>
+              <strong>HAProxy</strong> sits on port 443 and routes traffic by TLS SNI.
+              Reality connections route to <strong>Xray</strong>, while <strong>Caddy</strong>
+              handles everything else — serving connection pages over HTTPS with a Let's Encrypt
+              IP certificate. XHTTP transport runs through Caddy via path-based routing — no
+              extra port exposed.
+            </p>
+            <p>
+              The 3x-ui panel is reverse-proxied by Caddy on a secret path — accessible
+              via HTTPS, no SSH tunnel needed.
+            </p>
+          </Accordion>
 
-        <Accordion title="Domain mode (CDN fallback)">
-          <p>Adds three components on top of the standalone setup:</p>
-          <p>
-            <strong>HAProxy</strong> sits on port 443 and inspects the TLS SNI
-            header (the hostname in the Client Hello) <em>without</em>
-            terminating encryption. Reality traffic (SNI = microsoft.com) routes
-            to Xray. Domain traffic (SNI = your domain) routes to Caddy.
-          </p>
-          <p>
-            <strong>Caddy</strong> terminates TLS for your domain using automatic
-            Let's Encrypt certificates and reverse-proxies the 3x-ui panel on a
-            secret path.
-          </p>
-          <p>
-            <strong>VLESS+WSS inbound</strong> provides a CDN fallback path.
-            Traffic flows through Cloudflare's CDN to your domain via WebSocket,
-            making the connection work even if your server's IP is blocked —
-            Cloudflare's IP ranges are too widely used to block.
-          </p>
-        </Accordion>
+          <Accordion title="Domain mode (CDN fallback)">
+            <p>Adds three components on top of standalone:</p>
+            <p>
+              <strong>HAProxy</strong> inspects TLS SNI without terminating encryption.
+              <strong>Caddy</strong> terminates TLS with automatic Let's Encrypt certificates.
+              <strong>VLESS+WSS</strong> provides a CDN fallback through Cloudflare — works even
+              if your server's IP is blocked.
+            </p>
+          </Accordion>
+        </div>
       </div>
     </section>
 
@@ -238,9 +201,8 @@ const setupSteps = [
               <tbody>
                 <tr><td>--sni HOST</td><td>www.microsoft.com</td><td>Site that Reality impersonates</td></tr>
                 <tr><td>--domain DOMAIN</td><td>(none)</td><td>Enable domain mode with CDN fallback</td></tr>
-                <tr><td>--xhttp</td><td>enabled</td><td>XHTTP transport (routed through port 443 via Caddy)</td></tr>
-                <tr><td>--no-xhttp</td><td></td><td>Disable XHTTP transport</td></tr>
-                <tr><td>--email EMAIL</td><td>(none)</td><td>Email for TLS certificates (optional)</td></tr>
+                <tr><td>--xhttp / --no-xhttp</td><td>enabled</td><td>XHTTP transport (through port 443)</td></tr>
+                <tr><td>--email EMAIL</td><td>(none)</td><td>Email for TLS certificates</td></tr>
                 <tr><td>--name NAME</td><td>default</td><td>Name for the first client</td></tr>
                 <tr><td>--user USER</td><td>root</td><td>SSH user (non-root gets sudo)</td></tr>
                 <tr><td>--yes</td><td></td><td>Skip confirmation prompts</td></tr>
@@ -250,77 +212,19 @@ const setupSteps = [
           <p>
             For optimal stealth, use <code>meridian scan</code> or
             <a href="https://github.com/XTLS/RealiTLScanner">RealiTLScanner</a>
-            to find an SNI target near your server's datacenter.
+            to find an SNI target near your server.
           </p>
         </Accordion>
 
-        <Accordion title="Cloudflare CDN setup (domain mode)">
+        <Accordion title="Cloudflare CDN setup">
           <p><strong>Follow this order</strong> to avoid TLS certificate issues:</p>
           <p>
             1. Add domain in Cloudflare, create A record to server IP<br />
-            2. Keep cloud icon <strong>grey</strong> ("DNS only") — don't proxy yet<br />
-            3. Run <code>meridian deploy</code> — Caddy gets the TLS cert automatically<br />
+            2. Keep cloud icon <strong>grey</strong> ("DNS only")<br />
+            3. Run <code>meridian deploy</code> — Caddy gets the cert<br />
             4. Switch to <strong>orange cloud</strong> (Proxied)<br />
-            5. SSL/TLS → <strong>Full (Strict)</strong>, Network → <strong>Enable WebSockets</strong>
+            5. SSL/TLS → <strong>Full (Strict)</strong>, enable WebSockets
           </p>
-          <p>
-            Caddy obtains certs via HTTP-01 on port 80. If Cloudflare's "Always
-            Use HTTPS" is active, it breaks the challenge. Disable it or add a
-            page rule for <code>/.well-known/acme-challenge/*</code>.
-          </p>
-        </Accordion>
-
-        <Accordion title="Update & maintenance">
-          <p>Update Xray and 3x-ui:</p>
-          <CodeBlock code={`ssh root@YOUR_SERVER\ncd /opt/3x-ui && docker compose pull && docker compose up -d`} />
-          <p>
-            Or re-run <code>meridian deploy</code> — it's safe to repeat. Manage
-            clients with <code>meridian client add|list|remove</code>.
-          </p>
-        </Accordion>
-
-        <Accordion title="Pre-flight check">
-          <p>Not sure if your server is compatible? Run a pre-flight check first:</p>
-          <CodeBlock code="meridian preflight 1.2.3.4" />
-          <p>
-            Tests SNI target reachability, ASN match, port availability, DNS, OS,
-            and disk space — without installing anything.
-          </p>
-          <p>For optimal SNI stealth, scan your server's network for same-ASN targets:</p>
-          <CodeBlock code="meridian scan 1.2.3.4" />
-        </Accordion>
-
-        <Accordion title="Troubleshooting">
-          <p><strong>Not connecting?</strong> Test if the server is reachable from your device:</p>
-          <CodeBlock code="meridian test" />
-          <p>
-            Or use the <a href="/ping/">web-based ping tool</a> — no install
-            needed, works from any device.
-          </p>
-          <p>
-            <strong>Connection fails immediately:</strong> Check device clock is
-            accurate within 30 seconds. Enable "Set Automatically" in date/time
-            settings.
-          </p>
-          <p>
-            <strong>Connection stops after days:</strong> Server IP may have been
-            blocked. Switch to CDN fallback, or get a new IP and re-run.
-          </p>
-          <p>
-            <strong>Slow speeds:</strong> Some hosting IP ranges are throttled.
-            Try a different provider or datacenter (Finland, Netherlands, Sweden).
-          </p>
-          <p>
-            <strong>Do NOT</strong> run other protocols (OpenVPN, WireGuard) on
-            the same server — it flags the IP.
-          </p>
-          <p>Get instant AI-powered help (copies a prompt to your clipboard):</p>
-          <CodeBlock code="meridian doctor --ai" />
-          <p>
-            Or collect diagnostics for a
-            <a href="https://github.com/uburuntu/meridian/issues">GitHub issue</a>:
-          </p>
-          <CodeBlock code="meridian doctor" />
         </Accordion>
 
         <Accordion title="Client management">
@@ -328,38 +232,37 @@ const setupSteps = [
           <CodeBlock code="meridian client add alice" />
           <p>List all clients:</p>
           <CodeBlock code="meridian client list" />
-          <p>Revoke a client:</p>
+          <p>Revoke access:</p>
           <CodeBlock code="meridian client remove alice" />
+        </Accordion>
+
+        <Accordion title="Troubleshooting">
+          <p><strong>Not connecting?</strong> Test reachability from your device:</p>
+          <CodeBlock code="meridian test" />
           <p>
-            Each client gets a unique connection key. Generates an HTML file with
-            QR codes to share. The server IP is auto-detected from saved
-            credentials.
+            Or use the <a href="/ping/" data-astro-prefetch>web-based ping tool</a> — no install needed.
           </p>
+          <p><strong>Connection fails immediately:</strong> Check device clock (±30 seconds).</p>
+          <p><strong>Was working, now stopped:</strong> IP may be blocked. Use CDN fallback or deploy a new server.</p>
+          <p>AI-powered diagnostics:</p>
+          <CodeBlock code="meridian doctor --ai" />
+        </Accordion>
+
+        <Accordion title="Update & maintenance">
+          <CodeBlock code={`ssh root@YOUR_SERVER\ncd /opt/3x-ui && docker compose pull && docker compose up -d`} />
+          <p>Or re-run <code>meridian deploy</code> — safe to repeat anytime.</p>
         </Accordion>
 
         <Accordion title="Uninstall">
-          <p>Remove the proxy from your server:</p>
           <CodeBlock code="meridian teardown" />
-          <p>
-            Removes the proxy container, configs, and firewall rules. Does
-            <strong>not</strong> remove Docker or system packages — those may be
-            used by other applications.
-          </p>
+          <p>Removes the proxy container, configs, and firewall rules. Docker and system packages are kept.</p>
         </Accordion>
 
         <Accordion title="Security notes">
           <p>
-            Credentials are stored at <code>/etc/meridian/</code> on the server
-            (source of truth) and cached locally at
-            <code>~/.meridian/credentials/</code>. The panel is reverse-proxied
-            by Caddy on a secret HTTPS path in all modes — no SSH tunnel
-            required. SSH password auth is disabled. UFW allows only ports 22,
-            80, and 443 — all transports (Reality, XHTTP, WSS) run through port
-            443.
-          </p>
-          <p>
-            The 3x-ui Docker image is pinned to a tested version. All secrets are
-            redacted from terminal output.
+            Credentials at <code>/etc/meridian/</code> (server) and <code>~/.meridian/credentials/</code> (local).
+            Panel reverse-proxied on a secret HTTPS path. SSH password auth disabled. UFW allows only 22, 80, 443.
+            Docker image pinned. All secrets redacted from output.
           </p>
         </Accordion>
       </div>
@@ -368,43 +271,68 @@ const setupSteps = [
 </Base>
 
 <style>
-  .or-sep {
+  /* Setup section — two-column on desktop */
+  .setup-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  @media (min-width: 768px) {
+    .setup-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+    }
+  }
+
+  .setup-aside h3 {
+    font-size: 0.95rem;
+    margin-bottom: 16px;
+    color: var(--t2);
+    font-family: var(--body);
+    font-weight: 600;
+  }
+
+  .step-separator {
     text-align: center;
     color: var(--t3);
     font-family: var(--mono);
     font-size: 0.72rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    margin: 20px 0;
+    margin: 16px 0;
     display: flex;
     align-items: center;
     gap: 16px;
   }
-  .or-sep::before,
-  .or-sep::after {
+  .step-separator::before,
+  .step-separator::after {
     content: '';
     flex: 1;
     height: 1px;
     background: var(--b1);
   }
 
-  .wizard-hint {
-    font-size: 0.82rem;
+  .setup-hint {
+    font-size: 0.85rem;
     color: var(--t3);
     margin-top: 16px;
-    line-height: 1.5;
+    line-height: 1.6;
   }
-  .wizard-hint a {
+  .setup-hint a {
     color: var(--ac);
   }
 
-  .arch-diagram {
+  /* Architecture image */
+  .arch-img {
     border-radius: var(--r2);
     overflow: hidden;
     border: 1px solid var(--b1);
+    box-shadow: var(--shadow-md);
     margin-bottom: 28px;
+    max-width: 720px;
   }
-  .arch-diagram img {
+  .arch-img img {
     display: block;
     width: 100%;
     height: auto;
@@ -414,23 +342,22 @@ const setupSteps = [
   .ref-table-wrap {
     overflow-x: auto;
     margin: 12px 0;
-    -webkit-overflow-scrolling: touch;
   }
   .ref-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.82rem;
+    font-size: 0.85rem;
   }
   .ref-table th {
     text-align: left;
     color: var(--t3);
-    font-weight: 500;
+    font-weight: 600;
     font-family: var(--mono);
     font-size: 0.72rem;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 8px 14px;
-    border-bottom: 1px solid var(--b1);
+    border-bottom: 2px solid var(--b1);
   }
   .ref-table td {
     padding: 8px 14px;
@@ -441,14 +368,12 @@ const setupSteps = [
   .ref-table td:first-child {
     color: var(--t1);
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     white-space: nowrap;
   }
   .ref-table tr:last-child td {
     border-bottom: none;
   }
 
-  [dir="rtl"] .ref-table th {
-    text-align: right;
-  }
+  [dir="rtl"] .ref-table th { text-align: right; }
 </style>
