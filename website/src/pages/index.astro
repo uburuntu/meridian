@@ -9,12 +9,12 @@ import Callout from '../components/Callout.astro';
 import CommandBuilder from '../components/CommandBuilder.astro';
 
 const detailSteps = [
-  { title: 'Installs Docker', text: ' and deploys <strong>Xray</strong> via the <strong>3x-ui</strong> management panel' },
-  { title: 'Generates x25519 keypair', text: ' — unique encryption keys for Reality authentication' },
-  { title: 'Hardens the server', text: ' — UFW firewall (ports 22 + 443 only), SSH key-only auth, <strong>BBR</strong> congestion control' },
-  { title: 'Configures VLESS+Reality', text: ' on port 443 — impersonates a real TLS server' },
-  { title: 'Enables XHTTP transport', text: ' — additional stealth routed through Caddy, no extra port' },
-  { title: 'Outputs QR codes', text: ' and generates an HTML connection page with setup instructions' },
+  { title: 'Installs Docker', text: ' and deploys <strong>Xray</strong> via the <strong>3x-ui</strong> management panel', titleKey: 'step.1.title', textKey: 'step.1.text' },
+  { title: 'Generates x25519 keypair', text: ' — unique encryption keys for Reality authentication', titleKey: 'step.2.title', textKey: 'step.2.text' },
+  { title: 'Hardens the server', text: ' — UFW firewall (ports 22 + 443 only), SSH key-only auth, <strong>BBR</strong> congestion control', titleKey: 'step.3.title', textKey: 'step.3.text' },
+  { title: 'Configures VLESS+Reality', text: ' on port 443 — impersonates a real TLS server', titleKey: 'step.4.title', textKey: 'step.4.text' },
+  { title: 'Enables XHTTP transport', text: ' — additional stealth routed through Caddy, no extra port', titleKey: 'step.5.title', textKey: 'step.5.text' },
+  { title: 'Outputs QR codes', text: ' and generates an HTML connection page with setup instructions', titleKey: 'step.6.title', textKey: 'step.6.text' },
 ];
 ---
 
@@ -50,7 +50,7 @@ const detailSteps = [
           <div class="setup-aside">
             <h3 data-t="setup.details">What happens behind the scenes</h3>
             <Timeline steps={detailSteps} />
-            <Callout variant="tip" icon="⏱">
+            <Callout variant="tip" icon="⏱" data-t="setup.idempotent">
               Safe to re-run anytime. Fully idempotent — credentials preserved, settings updated in place.
             </Callout>
           </div>
@@ -140,7 +140,7 @@ const detailSteps = [
 
         <AppGrid />
 
-        <Callout variant="warning">
+        <Callout variant="warning" data-t="connect.clock">
           Device clock must be accurate within 30 seconds. Enable automatic date/time
           in your device settings.
         </Callout>

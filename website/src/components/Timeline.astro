@@ -2,6 +2,8 @@
 interface Step {
   title: string;
   text: string;
+  titleKey?: string;
+  textKey?: string;
 }
 
 interface Props {
@@ -19,8 +21,8 @@ const { steps } = Astro.props;
         {i < steps.length - 1 && <div class="timeline__line"></div>}
       </div>
       <div class="timeline__content">
-        <strong>{step.title}</strong>
-        <span set:html={step.text} />
+        <strong {...(step.titleKey ? { 'data-t': step.titleKey } : {})}>{step.title}</strong>
+        <span {...(step.textKey ? { 'data-t': step.textKey } : {})} set:html={step.text} />
       </div>
     </div>
   ))}

@@ -2,9 +2,10 @@
 interface Props {
   variant?: 'note' | 'warning' | 'tip' | 'danger';
   icon?: string;
+  'data-t'?: string;
 }
 
-const { variant = 'note', icon } = Astro.props;
+const { variant = 'note', icon, 'data-t': dataT } = Astro.props;
 
 const icons: Record<string, string> = {
   note: '→',
@@ -18,7 +19,7 @@ const displayIcon = icon ?? icons[variant];
 
 <div class:list={['callout', `callout--${variant}`]}>
   <span class="callout__icon" aria-hidden="true">{displayIcon}</span>
-  <div class="callout__content">
+  <div class="callout__content" {...(dataT ? { 'data-t': dataT } : {})}>
     <slot />
   </div>
 </div>

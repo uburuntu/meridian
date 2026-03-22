@@ -198,6 +198,9 @@ import Base from '../layouts/Base.astro';
   function saveServers(s: ServerEntry[]) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   }
+  function esc(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
 
   async function probeIp(host: string, timeoutMs: number): Promise<boolean> {
     const controller = new AbortController();
@@ -304,13 +307,13 @@ import Base from '../layouts/Base.astro';
     cardsDiv.innerHTML = servers.map((s, i) => `
       <div class="history-card ${s.status || ''}" data-index="${i}">
         <div class="hc-top">
-          <span class="hc-name">${s.name || s.ip}</span>
+          <span class="hc-name">${esc(s.name || s.ip)}</span>
           <span class="hc-status ${s.status || ''}">${s.status === 'pass' ? '✓' : s.status === 'fail' ? '✕' : '?'}</span>
         </div>
-        <div class="hc-ip">${s.ip}${s.domain ? ` · ${s.domain}` : ''}</div>
+        <div class="hc-ip">${esc(s.ip)}${s.domain ? ` · ${esc(s.domain)}` : ''}</div>
         ${s.lastCheck ? `<div class="hc-time">${new Date(s.lastCheck).toLocaleString()}</div>` : ''}
         <div class="hc-actions">
-          <button class="hc-retest" data-ip="${s.ip}" data-domain="${s.domain || ''}">Retest</button>
+          <button class="hc-retest" data-ip="${esc(s.ip)}" data-domain="${esc(s.domain || '')}">Retest</button>
           <button class="hc-delete" data-index="${i}">Remove</button>
         </div>
       </div>

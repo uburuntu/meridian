@@ -24,7 +24,7 @@ const { currentSlug, sections } = Astro.props;
 
 <aside class="sidebar" id="docs-sidebar">
   <div class="sidebar__search" id="search-container">
-    <input type="search" placeholder="Search docs..." class="sidebar__search-fallback" id="search-fallback" />
+    <input type="search" placeholder="Search docs..." class="sidebar__search-fallback" id="search-fallback" aria-label="Search documentation" />
   </div>
   <nav aria-label="Documentation">
     {sections.map((section) => (
@@ -36,6 +36,7 @@ const { currentSlug, sections } = Astro.props;
               <a
                 href={`/docs/${item.slug}/`}
                 class:list={['sidebar__link', { 'sidebar__link--active': currentSlug === item.slug }]}
+                {...(currentSlug === item.slug ? { 'aria-current': 'page' } : {})}
               >
                 {item.title}
               </a>
