@@ -332,6 +332,8 @@ def _build_template_variables(
                         "url": purl.url,
                         "qr_b64": generate_qr_base64(purl.url),
                     })
+            if not relay_urls_data:
+                continue  # skip relay entries with no valid URLs
             relay_data.append({
                 "ip": relay_set.relay_ip,
                 "name": relay_set.relay_name,

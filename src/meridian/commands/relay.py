@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from datetime import datetime, timezone
 
 import yaml
@@ -17,7 +18,7 @@ from meridian.config import CREDS_BASE, RELAY_SERVICE_NAME, SERVERS_FILE, is_ipv
 from meridian.console import confirm, err_console, fail, info, line, ok, warn
 from meridian.credentials import RelayEntry, ServerCredentials
 from meridian.servers import ServerEntry, ServerRegistry
-from meridian.ssh import ServerConnection
+from meridian.ssh import SSH_OPTS, ServerConnection
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -103,6 +104,28 @@ def _save_relay_local(relay_ip: str, exit_ip: str, exit_port: int, listen_port: 
         if os.path.exists(tmp):
             os.unlink(tmp)
         raise
+
+
+def _sync_exit_credentials_to_server(resolved_exit: ResolvedServer) -> None:
+    """Sync exit server credentials back to /etc/meridian/ after relay changes."""
+    if resolved_exit.local_mode:
+        return
+    try:
+        subprocess.run(
+            [
+                "scp",
+                *SSH_OPTS,
+                "-r",
+                f"{resolved_exit.creds_dir}/",
+                f"{resolved_exit.user}@{resolved_exit.ip}:/etc/meridian/",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            stdin=subprocess.DEVNULL,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        warn("Could not sync credentials to exit server")
 
 
 def _regenerate_client_pages(
@@ -326,6 +349,9 @@ def run_deploy(
     exit_creds.relays.append(relay_entry)
     exit_creds.save(resolved_exit.creds_dir / "proxy.yml")
 
+    # Sync credentials to exit server
+    _sync_exit_credentials_to_server(resolved_exit)
+
     # Save relay metadata locally
     _save_relay_local(relay_ip, resolved_exit.ip, 443, listen_port)
 
@@ -519,6 +545,9 @@ def run_remove(
     exit_creds.relays = [r for r in exit_creds.relays if r.ip != relay_ip]
     exit_creds.save(resolved_exit.creds_dir / "proxy.yml")
     ok(f"Relay {relay_ip} removed from exit configuration")
+
+    # Sync credentials to exit server
+    _sync_exit_credentials_to_server(resolved_exit)
 
     # Clean up local relay credentials
     relay_creds_dir = CREDS_BASE / relay_ip
