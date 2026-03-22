@@ -53,10 +53,11 @@ class PanelClient:
             f" {shlex.quote(self.base_url + '/login')}"
         )
         result = self.conn.run(cmd, timeout=15, sudo=False)
-        # Secure cookie file permissions (don't leave world-readable)
-        self.conn.run(f"chmod 600 {self._cookie_path} 2>/dev/null", timeout=5, sudo=False)
         if result.returncode != 0:
             raise PanelError(f"Login request failed: {result.stderr.strip()}")
+
+        # Secure cookie file permissions after successful curl (don't leave world-readable)
+        self.conn.run(f"chmod 600 {self._cookie_path} 2>/dev/null", timeout=5, sudo=False)
 
         raw = result.stdout.strip()
         if not raw:

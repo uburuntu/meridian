@@ -59,9 +59,10 @@ class ProvisionContext:
     panel_port: int = DEFAULT_PANEL_PORT  # internal panel port
     xhttp_port: int = 0  # computed from seed
     reality_port: int = 443  # 443 standalone, ~10443 domain mode
+    wss_port: int = 0  # computed from seed (domain mode only)
 
-    # 3x-ui image version (pinned to tested release)
-    threexui_version: str = "2.8.11"
+    # 3x-ui image version (pinned to tested release, digest for supply chain integrity)
+    threexui_version: str = "2.8.11@sha256:34c46ea6d838df981c4760bd1fe442413c2b99bbe4bb49dfa3d1bfb8a8a92496"
 
     # Dynamic inter-step state (PanelClient, credentials, UUIDs, etc.)
     _state: dict[str, Any] = field(default_factory=dict, repr=False)

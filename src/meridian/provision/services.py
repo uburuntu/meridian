@@ -541,6 +541,8 @@ class InstallCaddy:
         server_ip = self.server_ip or ctx.ip
         xhttp_path = self.xhttp_path or ctx.get("xhttp_path", "")
         xhttp_internal_port = self.xhttp_internal_port or (ctx.xhttp_port if ctx.xhttp_enabled else 0)
+        ws_path = self.ws_path or ctx.get("ws_path", "")
+        wss_internal_port = self.wss_internal_port or ctx.wss_port
 
         # -- DNS pre-check (domain mode only) --
         if not self.ip_mode and not self.skip_dns_check:
@@ -634,8 +636,8 @@ class InstallCaddy:
             caddy_config = _render_caddy_config(
                 domain=self.domain,
                 caddy_internal_port=self.caddy_internal_port,
-                ws_path=self.ws_path or ctx.get("ws_path", ""),
-                wss_internal_port=self.wss_internal_port,
+                ws_path=ws_path,
+                wss_internal_port=wss_internal_port,
                 panel_web_base_path=panel_web_base_path,
                 panel_internal_port=panel_internal_port,
                 info_page_path=info_page_path,

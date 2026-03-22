@@ -75,7 +75,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
 
     # Domain mode: WSS inbound
     if ctx.domain_mode:
-        steps.append(CreateWSSInbound(port=0))  # WSS binds to 127.0.0.1
+        steps.append(CreateWSSInbound(port=ctx.wss_port))  # WSS binds to 127.0.0.1
 
     steps.append(VerifyXray())
 

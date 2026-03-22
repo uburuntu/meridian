@@ -26,9 +26,9 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 ### Provisioner hardening
 
 - [x] ~~**Re-deploy context loading** — when `ConfigurePanel` is skipped on re-deploy, `ws_path`/`xhttp_path` aren't loaded into context from saved credentials, breaking Caddy config~~
-- [ ] **WSS inbound port=0** — WSS created with `port=0` (undocumented 3x-ui behavior); compute deterministic port like XHTTP
-- [ ] **Non-atomic credential writes** — `path.write_text()` risks truncation on crash; use tempfile+rename pattern
-- [ ] **Panel login cookie ordering** — `chmod 600` runs before error check; stale cookies on retry cause confusing 403s
+- [x] ~~**WSS inbound port=0** — WSS created with `port=0` (undocumented 3x-ui behavior); compute deterministic port like XHTTP~~
+- [x] ~~**Non-atomic credential writes** — `path.write_text()` risks truncation on crash; use tempfile+rename pattern~~
+- [x] ~~**Panel login cookie ordering** — `chmod 600` runs before error check; stale cookies on retry cause confusing 403s~~
 - [ ] Domain mode E2E test (HAProxy + Caddy + WSS on a server with domain)
 - [ ] Provisioner unit tests (mock `conn.run()`, test idempotency) — priority: `ConfigurePanel`, `CreateRealityInbound`, `LoginToPanel`
 - [ ] Credential file corruption test (truncated/malformed YAML)
@@ -48,9 +48,9 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 ### Security hardening
 
 - [x] ~~SSH host key verification — `accept-new` enables TOFU MitM. Switch to prompt-based or `--accept-new-host-key` flag~~
-- [ ] Docker image digest pinning — pin to `@sha256:...`
-- [ ] RealiTLScanner checksum verification — binary downloaded without integrity check
-- [ ] `confirm()` defaults to yes without TTY — destructive ops should default to "no"
+- [x] ~~Docker image digest pinning — pin to `@sha256:...`~~
+- [x] ~~RealiTLScanner checksum verification — binary downloaded without integrity check~~
+- [x] ~~`confirm()` defaults to yes without TTY — destructive ops should default to "no"~~
 
 ### UX improvements
 

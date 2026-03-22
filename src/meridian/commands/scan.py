@@ -54,6 +54,20 @@ def scan_for_sni(conn: ServerConnection, ip: str) -> list[str]:
         warn("Failed to download RealiTLScanner")
         return []
 
+    # Verify downloaded binary integrity (ELF header + minimum size)
+    try:
+        verify_result = conn.run(
+            "file /tmp/realitlscanner | grep -q 'ELF.*executable' && "
+            "test $(stat -c%s /tmp/realitlscanner 2>/dev/null || stat -f%z /tmp/realitlscanner) -gt 100000",
+            timeout=10,
+        )
+        if verify_result.returncode != 0:
+            warn("Downloaded scanner binary failed integrity check")
+            conn.run("rm -f /tmp/realitlscanner", timeout=5)
+            return []
+    except Exception:
+        pass  # verification is best-effort
+
     # Get server's subnet CIDR for scanning
     try:
         cidr_result = conn.run(

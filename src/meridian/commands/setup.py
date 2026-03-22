@@ -310,6 +310,7 @@ def _run_provisioner(
     ip_hash = int(hashlib.sha256(ctx.ip.encode()).hexdigest()[:8], 16)
     ctx.xhttp_port = 30000 + (ip_hash % 10000)
     ctx.reality_port = 443 if not ctx.needs_web_server else (10000 + ip_hash % 1000)
+    ctx.wss_port = 20000 + (ip_hash % 10000)
 
     # Load existing credentials into context if available
     proxy_file = Path(ctx.creds_dir) / "proxy.yml"

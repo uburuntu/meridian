@@ -90,8 +90,8 @@ def confirm(message: str = "Continue?") -> bool:
             err_console.print(f"\n  [info]\u2192[/info] {message} [dim][Y/n][/dim] ", end="")
             answer = tty.readline().strip().lower()
     except OSError:
-        # No TTY available — default to yes (non-interactive/CI)
-        return True
+        # No TTY available — default to reject (don't auto-confirm destructive ops)
+        raise typer.Exit(code=1)
     if answer in ("", "y", "yes"):
         return True
     raise typer.Exit(code=1)

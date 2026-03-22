@@ -111,7 +111,10 @@ class ServerCredentials:
         return _migrate_v1(data)
 
     def save(self, path: Path) -> None:
-        """Write v2 format to proxy.yml."""
+        """Write v2 format to proxy.yml (atomic via tempfile+rename)."""
+        import os
+        import tempfile
+
         out: dict[str, Any] = {"version": 2}
 
         # Panel
@@ -149,8 +152,20 @@ class ServerCredentials:
                 out[k] = v
 
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        path.write_text(yaml.dump(out, default_flow_style=False, sort_keys=False))
-        path.chmod(0o600)
+        # Atomic write: tempfile in same directory, then rename
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+        try:
+            os.write(fd, yaml.dump(out, default_flow_style=False, sort_keys=False).encode())
+            os.close(fd)
+            fd = -1  # mark as closed
+            os.chmod(tmp, 0o600)
+            os.rename(tmp, str(path))
+        except BaseException:
+            if fd >= 0:
+                os.close(fd)
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
 
     # --- Convenience properties ---
 

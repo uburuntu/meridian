@@ -102,10 +102,11 @@ class TestConfirm:
             with pytest.raises(typer.Exit):
                 confirm("Deploy?")
 
-    def test_confirm_no_tty_defaults_true(self) -> None:
-        """When /dev/tty is not available (CI), default to yes."""
+    def test_confirm_no_tty_defaults_to_reject(self) -> None:
+        """When /dev/tty is not available (CI), default to reject."""
         with patch("builtins.open", side_effect=OSError("No TTY")):
-            assert confirm("Deploy?") is True
+            with pytest.raises(typer.Exit):
+                confirm("Deploy?")
 
 
 class TestPrompt:
