@@ -4,6 +4,57 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.7.0] - 2026-03-22
+
+### Added — Website (getmeridian.org)
+- **New Astro website** replacing old static HTML docs — 45 pages, fully static
+- **Full i18n**: 30 translated doc pages (10 each for Russian, Farsi, Chinese) + landing page UI translations (~250 keys)
+- **CommandBuilder**: 5-tab interactive CLI builder (Deploy, Preflight, SNI Scan, Doctor, Teardown) with real-time command generation, localStorage persistence, IPv4 validation
+- **Pagefind search**: static full-text search across all 40 doc pages in 4 languages
+- **Scroll reveal animations**: IntersectionObserver fade-in-up on landing page sections
+- **Mobile navigation**: hamburger menu at <640px with slide-down drawer
+- **404 page**: branded with noindex meta tag
+- **Sitemap** (`@astrojs/sitemap`) and `robots.txt`
+- **Mermaid diagram rendering** via `rehype-mermaid` (build-time inline SVGs)
+- **llms.txt endpoints**: `/llms.txt`, `/llms-full.txt`, `/md/{locale}/{slug}` for AI consumption
+- **Terminal deploy SVG**: recorded from live server deploy, sanitized with RFC 5737 example IPs
+- **Locale-aware docs**: sidebar filters by locale, locale switcher buttons, `<link rel="alternate" hreflang>` for SEO
+- **hreflang links** on all doc pages for proper multi-language indexing
+- **CSS sync script** (`sync-template-css.mjs`): extracts tokens from Astro and injects into Jinja2 template (ready for SYNC markers)
+- **App links single source of truth**: `src/data/apps.json` validated by CI and pre-push hook against Jinja2 template
+
+### Changed — Website
+- **Self-hosted fonts**: Fraunces, Source Sans 3, JetBrains Mono served from `/fonts/` — zero external requests to Google (critical for users in censored regions)
+- **Demo page dark mode**: all hardcoded hex colors replaced with CSS custom properties
+- Protocol card colors (`--blue`, `--amber`) added to design token system with dark mode variants
+- Early `<script>` in `<head>` sets `lang`/`dir` from localStorage before paint (prevents RTL layout shift)
+- Docs redirect (`/docs/`) detects stored locale preference before redirecting
+
+### Changed — CI/CD
+- **Release workflow** builds Astro site instead of copying old `docs/`
+- **Website Build** job added to CI pipeline
+- Actions upgraded: `setup-node` v6 (Node 24, npm caching), `setup-python` v6, `setup-uv` v7, `upload-pages-artifact` v4
+- Playwright Chromium installed in CI/release for Mermaid rendering
+- Pre-push hook validates app links against `apps.json` (was `docs/demo.html`)
+- AI docs source moved to `website/src/content/ai/` (Makefile, hooks, workflows updated)
+
+### Changed — Repository
+- `docs/` directory removed entirely — all content consolidated under `website/`
+- README.md image paths updated to `website/public/img/`
+
+### Security
+- `<meta name="referrer" content="no-referrer">` prevents origin leaks for at-risk users
+- Ping page XSS fix: HTML-escape all localStorage-rendered values
+- Demo page uses RFC 5737 documentation IPs (was real-ish subnet)
+- Terminal SVG uses example IPs and redacted paths (was live server data)
+- All `target="_blank"` links have `rel="noopener"`
+
+### Accessibility
+- `aria-current="page"` on active sidebar link
+- `aria-label` on search input
+- `for=` attributes linking CommandBuilder labels to inputs
+- Translatable timeline steps, code block labels, callouts, TOC label, "then" separator
+
 ## [3.6.0] - 2026-03-22
 
 ### Changed
