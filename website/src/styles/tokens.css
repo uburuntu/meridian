@@ -32,7 +32,9 @@
   --ok: #2D8B5F;
   --ok2: #2D8B5F10;
   --err: #C93B3B;
+  --err2: #C93B3B10;
   --warn: #C8933A;
+  --warn2: #C8933A10;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(26, 29, 46, 0.04);
@@ -48,6 +50,10 @@
   --heading: 'Fraunces', Georgia, 'Times New Roman', serif;
   --body: 'Source Sans 3', system-ui, -apple-system, sans-serif;
   --mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Aliases (used by demo/ping pages) */
+  --serif: var(--heading);
+  --sans: var(--body);
 }
 
 /* Dark mode — warm charcoal, not pitch black */
@@ -69,6 +75,9 @@
     --ok: #5CE88E;
     --ok2: #5CE88E14;
     --err: #F06060;
+    --err2: #F0606014;
+    --warn: #D4A24E;
+    --warn2: #D4A24E14;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
     --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.25);
     --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.3);
