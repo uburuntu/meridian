@@ -105,6 +105,16 @@ jobs:
           fi
           echo "OK: VERSION=$VERSION"
 
+      - name: Verify CHANGELOG has current version
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          if ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            echo "CHANGELOG.md missing entry for version $VERSION"
+            echo "Add a '## [$VERSION]' section to CHANGELOG.md before releasing"
+            exit 1
+          fi
+          echo "OK: CHANGELOG.md has entry for $VERSION"
+
   shellcheck:
     name: Shell
     runs-on: ubuntu-latest

@@ -108,14 +108,20 @@ jobs:
         id: notes
         if: steps.check_tag.outputs.exists == 'false'
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$PREV_TAG" ]; then
-            NOTES=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --no-merges)
+          VERSION="${{ steps.version.outputs.version }}"
+          # Extract the changelog section for this version
+          # Matches from "## [X.Y.Z]" to the next "## [" or end of file
+          if grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d' > /tmp/release-notes.md
           else
-            NOTES=$(git log --pretty=format:"- %s" --no-merges -20)
+            # Fallback to git log if version not in CHANGELOG
+            PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [ -n "$PREV_TAG" ]; then
+              git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --no-merges > /tmp/release-notes.md
+            else
+              git log --pretty=format:"- %s" --no-merges -20 > /tmp/release-notes.md
+            fi
           fi
-          # Write to file to handle multiline
-          echo "$NOTES" > /tmp/release-notes.md
 
       - name: Create tag and release
         id: create_release

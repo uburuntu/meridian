@@ -320,7 +320,7 @@ When adding or changing a feature, update ALL relevant surfaces. The source of t
 | **SNI recommendations** | ★ `CLAUDE.md` conventions section | docs/ai/troubleshooting.md SNI section |
 | **Troubleshooting guidance** | ★ `docs/ai/troubleshooting.md` | docs/index.html troubleshooting section, connection_issue.yml template |
 | **App download links** | ★ `docs/index.html` apps section | `src/meridian/templates/connection-info.html.j2`, docs/demo.html, README.md client apps table |
-| **Version** | ★ `VERSION` file | `importlib.metadata` at runtime (hatchling reads VERSION at build), `version` in Pages deploy artifact |
+| **Version** | ★ `VERSION` file | `importlib.metadata` at runtime (hatchling reads VERSION at build), `version` in Pages deploy artifact, `docs/index.html` fetches dynamically, `CHANGELOG.md` section header |
 | **Error/failure guidance** | ★ `src/meridian/console.py` `fail()` function | docs/ai/troubleshooting.md decision tree |
 
 ### Surface update checklist
@@ -421,16 +421,19 @@ After completing a feature or fix, **always bump the version as part of the comm
 - Added a new command, flag, or transport? → Bump Y (minor): `1.1.0` → `1.2.0`
 - Changed defaults or broke backward compat? → Bump X (major): `1.2.0` → `2.0.0`
 
-**Do NOT skip version bumps.** Every meaningful change to the CLI or provisioner should get a version bump (just edit the `VERSION` file) so users on auto-patch get fixes and users on manual update see the prompt. If multiple features are in one session, one version bump at the end is fine.
+**Do NOT skip version bumps.** Every meaningful change to the CLI or provisioner should get a version bump (edit `VERSION` + add CHANGELOG.md entry) so users on auto-patch get fixes and users on manual update see the prompt. If multiple features are in one session, one version bump at the end is fine.
+
+**CHANGELOG.md is mandatory.** CI validates that CHANGELOG.md has a `## [X.Y.Z]` section matching the VERSION file. When bumping VERSION, always add the corresponding CHANGELOG entry. The Release workflow extracts the CHANGELOG section for GitHub Release notes.
 
 ### Release artifacts
 
 - **PyPI package**: `meridian-vpn` on PyPI (published by release workflow)
 - **Version file**: `meridian.msu.rocks/version` (CD sync from VERSION)
+- **Website version badge**: `docs/index.html` fetches `/version` dynamically (no hardcoded version)
 - **Installer**: `meridian.msu.rocks/install.sh` (CD sync)
-- **GitHub Release**: auto-created by `.github/workflows/release.yml` when VERSION changes
+- **GitHub Release**: auto-created by `.github/workflows/release.yml` when VERSION changes, release notes extracted from CHANGELOG.md
 
-CI validates VERSION format (`^\d+\.\d+\.\d+$`) on every push.
+CI validates VERSION format (`^\d+\.\d+\.\d+$`) and CHANGELOG.md entry on every push.
 
 ## Codified patterns (follow at scale)
 

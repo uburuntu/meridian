@@ -1,61 +1,7 @@
 # Backlog
 
-**Last updated:** 2026-03-21
-**Version:** 3.4.0
-
----
-
-## Strategic direction
-
-**Ansible is fully purged.** All code, docs, templates, comments, and CI references to Ansible have been removed. The Python provisioner is the only deployment engine. CLAUDE.md rewritten to reflect the provisioner architecture.
-
-**We are keeping 3x-ui.** Coupling is contained in `PanelClient` (API methods now public).
-
----
-
-## What shipped in v3.4.0
-
-- **Hosted connection pages:** Standalone mode now deploys HAProxy + Caddy alongside Xray, serving per-client connection pages over HTTPS at `https://<IP>/<path>/<uuid>/`. Caddy requests a Let's Encrypt IP certificate using the ACME `shortlived` profile (6-day validity, auto-renewed). Falls back to self-signed if IP cert issuance is not yet supported by the installed Caddy version.
-- **Architecture change:** All modes now use HAProxy (port 443, SNI routing) + Caddy (port 80 ACME + port 8443 HTTPS). Connection pages, stats, and panel are served via Caddy.
-- **DeployConnectionPage activated:** The provisioner step that was built but never wired in is now live — renders and uploads per-client HTML pages with QR codes during setup.
-- **`client add`/`remove` integration:** Adding a client automatically deploys a server-hosted page; removing deletes it. Terminal output shows the shareable URL.
-- **`render_hosted_html()`:** New function for server-hosted page rendering with `is_server_hosted=True` (live stats support).
-- **Caddy IP config:** New `_render_caddy_ip_config()` for standalone mode with ACME profile shortlived, panel proxy, and per-client page serving.
-
-## What shipped in v3.3.1
-
-- **Bug fix:** Uninstall cron grep pattern (`meridian-`) never matched actual cron entry (`update-stats.py`) — stats cron job was never cleaned up
-- **Bug fix:** i18n `textContent` stripped the ping test `<a>` link for RU/FA/ZH users — restructured to separate `data-t` elements
-- **Bug fix:** `test_panel.py` body format test used `assert X or Y` which always passed — now properly verifies JSON-string-inside-JSON encoding
-- **Code quality:** Completed output.py migration — `client.py` now imports from `urls.py`/`render.py`/`display.py` directly, `output.py` reduced from 449→140 lines (thin backwards-compat wrappers)
-- **Code quality:** Centralized magic values (`DEFAULT_SNI`, `DEFAULT_FINGERPRINT`, `DEFAULT_PANEL_PORT`) in `config.py`, replacing ~25 scattered literals across 12 files
-- **Code quality:** Fixed `resolved: object` typing in `setup.py` — proper `ResolvedServer` import, removed 6 `type: ignore` comments
-- **Code quality:** Normalized provisioner step names to human-readable format (e.g. `"configure_panel"` → `"Configure panel"`)
-- **Code quality:** Extracted `derive_client_name()` helper, removed `_PROTOCOL_LABELS` duplication, fixed dead conditional in `Provisioner.run()`
-- **BACKLOG:** Added 17 strategic items with design options from 5-reviewer grand code review
-
-## What shipped in v3.3.0
-
-- **Bug fix:** `--xhttp` flag was always True (`xhttp or True`), now `--xhttp/--no-xhttp` toggle defaulting on
-- **Bug fix:** `InstallHAProxy` status always "changed" (copy-paste), `ConfigureFirewall` idempotency was fake
-- **Ansible purge (88 files, -3,785 lines net):** removed from CLAUDE.md (~40% rewritten), website, AI docs, GitHub templates, CONTRIBUTING, SECURITY, code comments, variable names (`ansible_user`→`ssh_user`), diagnostics (removed Ansible version check), `ai.py` prompt, `protocols.py` comments, `ssh.py` docstrings, template variable (`ansible_date_time`→`generated_at`)
-- **Provisioner refactor:** `_timed` decorator deduplicated (3→1), `PanelClient` private methods promoted to public API, client settings builders consolidated (3→1), `ctx` type annotations fixed (`dict[str,Any]`→`ProvisionContext`)
-- **UX improvements:** setup success celebration message, better error messages, `--ai` help text updated, scanner "Skipped" → friendly message, `Install`→`Setup` tab on website, i18n for SNI/XHTTP hints
-- **Output cleanup:** ALL CAPS client header → title case with checkmark, Ansible template refs → Jinja2, broad `except Exception` narrowed
-- **Dead code removed:** `resolve_and_connect()`, `inventory.yml.example`, unused imports
-- **Architecture docs rewritten:** `docs/architecture.md` now describes Python provisioner steps
-- **E2E verified:** setup, --no-xhttp, idempotent re-run, client add/list/remove, uninstall, ping, check, diagnostics — all on real Ubuntu 24.04 server with non-root sudo user
-
-## What shipped in v3.1.0–3.2.0
-
-- Python provisioner engine (15 steps replacing all Ansible roles)
-- Ansible fully deleted (-2,825 lines): playbooks, roles, ansible.py, CI jobs
-- Uninstall provisioner (replaces playbook-uninstall.yml)
-- Protocol foundation (ProtocolURL, dict registry, DRY base class)
-- Output split into urls.py / render.py / display.py
-- Error taxonomy, sudo escalation, PanelClient context manager
-- E2E tested: 2 full setup→client→uninstall→setup cycles on real server
-- README emotional hook, common scenarios, AI docs fixes
+Prioritized task list for Meridian development.
+Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -65,7 +11,6 @@
 
 - [ ] Domain mode E2E test (HAProxy + Caddy + WSS on a server with domain)
 - [ ] Provisioner unit tests (mock `conn.run()`, test idempotency checks) — priority: `ConfigurePanel`, `CreateRealityInbound`, `LoginToPanel`
-- [ ] Domain prompt yes/no gate (replace `Domain [skip]:`)
 - [ ] Credential file corruption test (`ServerCredentials.load()` with truncated/malformed YAML)
 
 ### Architecture debt
@@ -85,6 +30,7 @@
   - **Option A:** `MeridianError` hierarchy, catch at CLI boundary (`main_callback`)
   - **Option B:** Keep `fail()` as-is for commands, add `SSHError`/`PanelError` for library code only
 - [ ] Partial client add rollback (if Reality succeeds but WSS fails, clean up added entries)
+- [ ] Delete stale `output.py` legacy facade — `build_vless_urls()` and `ClientURLs` unused, migrate `test_output.py`
 
 ### Security hardening
 
@@ -106,11 +52,10 @@
 
 ### UX improvements
 
-- [x] ~~File delivery gap~~ — **Resolved in v3.4.0:** Standalone mode now hosts connection pages via Let's Encrypt IP certificates (HAProxy + Caddy)
 - [ ] `meridian client show NAME` — regenerate connection info without destroying and recreating the client
 - [ ] `client list` usage stats — surface last connected time and traffic from 3x-ui API
 - [ ] IPv6 support — currently IPv4-only (`is_ipv4` validation, `curl -4` for IP detection)
-- [ ] `qrencode` dependency check at install time — silently fails if not installed
+- [ ] Subscription URL support — expose 3x-ui's `subEnable` for auto-config updates on IP change
 
 ### Scale features
 
@@ -123,18 +68,13 @@
 
 ## Icebox
 
-- [ ] Subscription URL support
 - [ ] Key/credential rotation without reinstall
 - [ ] Proactive IP block notification (Telegram/webhook)
 - [ ] Zero-to-VPN onboarding wizard on website
 - [ ] Password-protected connection info page
 - [ ] Shell completion (typer built-in)
-- [ ] Website section reorder
 - [ ] Deployed version in diagnostics
 - [ ] "Broke after update" issue template
-- [ ] Ping web tool i18n (4 languages like main site)
-- [ ] macOS app recommendation in HTML connection page
-- [ ] Progress feedback during provisioning (per-step status lines)
 - [ ] Remove v1→v2 credential migration (sunset old format)
 - [ ] `conn.run()` complexity — four-variable truth table for execution modes (split into `RemoteConnection`/`LocalConnection`)
 - [ ] `_render_stats_script()` embeds 127-line Python program as f-string — move to template file

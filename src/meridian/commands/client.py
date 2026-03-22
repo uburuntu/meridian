@@ -455,6 +455,7 @@ def run_remove(
 
 def _display_client_list_from_inbounds(inbounds: list[Inbound]) -> None:
     """Display client list from parsed Inbound objects."""
+    from rich.box import ROUNDED
     from rich.table import Table
 
     # Build lookup: remark -> set of client emails
@@ -476,15 +477,21 @@ def _display_client_list_from_inbounds(inbounds: list[Inbound]) -> None:
     other_protocols = [p for p in PROTOCOLS.values() if p.key != "reality"]
     other_emails: dict[str, set[str]] = {p.key: clients_by_remark.get(p.remark, set()) for p in other_protocols}
 
-    table = Table(title="Proxy Clients", show_lines=False, pad_edge=False, box=None, padding=(0, 2))
-    table.add_column("Name", style="bold")
-    table.add_column("Status")
-    table.add_column("Protocols")
+    table = Table(
+        title="Proxy Clients",
+        show_lines=False,
+        pad_edge=False,
+        box=ROUNDED,
+        padding=(0, 2),
+    )
+    table.add_column("Name", style="bold cyan")
+    table.add_column("Status", justify="center")
+    table.add_column("Protocols", style="dim")
 
     for c in reality_clients:
         email = c.get("email", "")
         name = email.removeprefix(reality_proto.email_prefix) if email.startswith(reality_proto.email_prefix) else email
-        status = "[green]active[/green]" if c.get("enable", True) else "[dim]disabled[/dim]"
+        status = "[green]● active[/green]" if c.get("enable", True) else "[dim]● disabled[/dim]"
         protos = ["Reality"]
         for p in other_protocols:
             if f"{p.email_prefix}{name}" in other_emails[p.key]:

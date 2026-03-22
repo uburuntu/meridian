@@ -10,7 +10,7 @@ from meridian.console import banner
 app = typer.Typer(
     name="meridian",
     help="Censorship-resistant proxy server management",
-    add_completion=False,
+    add_completion=True,
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -28,6 +28,9 @@ def main_callback(
     version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
 ) -> None:
     """Meridian — Censorship-resistant proxy server management."""
+    if ctx.resilient_parsing:
+        return
+
     if version:
         print(f"meridian {__version__}")
         raise typer.Exit()
@@ -65,7 +68,13 @@ def setup_cmd(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip prompts"),
     server: str = typer.Option("", "--server", help="Target server (name or IP) for re-runs"),
 ) -> None:
-    """Deploy a VLESS+Reality proxy server. Interactive wizard if no IP provided."""
+    """Deploy a VLESS+Reality proxy server. Interactive wizard if no IP provided.
+
+    [dim]Examples:[/dim]
+      [cyan]meridian setup[/cyan]                         Interactive wizard
+      [cyan]meridian setup 1.2.3.4[/cyan]                 Deploy with defaults
+      [cyan]meridian setup 1.2.3.4 --domain d.io[/cyan]   CDN fallback via Cloudflare
+    """
     from meridian.commands.setup import run
 
     run(ip, domain, email, sni, xhttp, name, user, yes, server)

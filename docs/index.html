@@ -475,7 +475,7 @@ cd /opt/3x-ui && docker compose pull && docker compose up -d</div>
 <div class="w">
   <p style="margin-bottom:6px" data-i18n="footer">Open source. No tracking. No accounts. Evolving based on your feedback.</p>
   <a href="https://github.com/uburuntu/meridian" target="_blank">GitHub</a> · <a href="https://github.com/uburuntu/meridian/issues" target="_blank">Report Issue</a> · <a href="https://github.com/uburuntu/meridian/issues" target="_blank">Request Feature</a>
-  <p style="margin-top:10px;font-size:.7rem;color:var(--t3)">v3.5.0</p>
+  <p style="margin-top:10px;font-size:.7rem;color:var(--t3)" id="version-badge"></p>
 </div>
 </footer>
 
@@ -622,6 +622,7 @@ document.querySelectorAll('.rv').forEach(el=>obs.observe(el));
     }
   }catch(e){}
 }();
+fetch('version').then(r=>r.ok?r.text():null).then(v=>{if(v){var el=document.getElementById('version-badge');if(el)el.textContent='v'+v.trim()}}).catch(()=>{});
 </script>
 </body>
 </html>
