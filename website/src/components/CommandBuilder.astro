@@ -38,13 +38,13 @@ const tabs = [
     <!-- Fields -->
     <div class="builder__fields">
       <div class="builder__field" id="row-ip">
-        <label class="builder__label" data-t="builder.field.ip">Server IP</label>
+        <label class="builder__label" for="f-ip" data-t="builder.field.ip">Server IP</label>
         <input id="f-ip" type="text" placeholder="123.45.67.89" class="builder__input" />
         <span class="builder__hint" data-t="builder.field.ip.hint">Your VPS public IPv4 address. Leave empty for interactive mode.</span>
       </div>
 
       <div class="builder__field" id="row-user">
-        <label class="builder__label" data-t="builder.field.user">SSH user</label>
+        <label class="builder__label" for="f-user" data-t="builder.field.user">SSH user</label>
         <input id="f-user" type="text" value="root" placeholder="root" class="builder__input builder__input--short" />
         <span class="builder__hint" data-t="builder.field.user.hint">Default: root. Non-root users get sudo automatically.</span>
       </div>
