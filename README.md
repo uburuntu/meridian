@@ -43,9 +43,9 @@ pipx install meridian-vpn       # alternative
 ## Quick start
 
 ```bash
-meridian setup                       # interactive wizard
-meridian setup 1.2.3.4               # deploy to server
-meridian setup 1.2.3.4 --domain d.io # with CDN fallback
+meridian deploy                       # interactive wizard
+meridian deploy 1.2.3.4               # deploy to server
+meridian deploy 1.2.3.4 --domain d.io # with CDN fallback
 ```
 
 After setup, your server is a fully functional proxy. Share access:
@@ -79,20 +79,20 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 
 | Command | Description |
 |---------|-------------|
-| `meridian setup [IP]` | Deploy proxy server (interactive wizard if no IP) |
+| `meridian deploy [IP]` | Deploy proxy server (interactive wizard if no IP) |
 | `meridian client add NAME` | Add a named client key |
 | `meridian client list` | List all clients |
 | `meridian client remove NAME` | Remove a client key |
 | `meridian server list` | List managed servers |
 | `meridian server add IP` | Add an existing server (fetches credentials via SSH) |
 | `meridian server remove NAME` | Remove a server from the registry |
-| `meridian check [IP]` | Pre-flight validation (ports, SNI, ASN, DNS) |
+| `meridian preflight [IP]` | Pre-flight validation (ports, SNI, ASN, DNS) |
 | `meridian scan [IP]` | Find optimal SNI targets on server's network |
-| `meridian ping [IP]` | Test proxy reachability from this device |
-| `meridian diagnostics [IP]` | Collect info for bug reports |
-| `meridian uninstall [IP]` | Remove proxy from server |
-| `meridian self-update` | Update CLI |
-| `meridian version` | Show installed version |
+| `meridian test [IP]` | Test proxy reachability from this device |
+| `meridian doctor [IP]` | Collect info for bug reports (alias: `rage`) |
+| `meridian teardown [IP]` | Remove proxy from server |
+| `meridian update` | Update CLI |
+| `meridian --version` | Show installed version |
 
 **Setup flags**: `--domain DOMAIN`, `--sni HOST`, `--xhttp/--no-xhttp` (default: enabled), `--email EMAIL`, `--name NAME`, `--user USER`, `--yes`
 
@@ -119,25 +119,25 @@ After setup, connect with any of these apps:
 
 ## Common scenarios
 
-**My IP got blocked** — The most common scenario in censored regions. Get a new VPS, run `meridian setup NEW_IP`, then re-add clients with `meridian client add`. If you're in domain mode, update the DNS A record to point at the new IP and re-run setup. If you're not using domain mode yet, consider switching (`--domain`) to get a CDN fallback through Cloudflare — when the IP is blocked, the WSS/CDN link still works.
+**My IP got blocked** — The most common scenario in censored regions. Get a new VPS, run `meridian deploy NEW_IP`, then re-add clients with `meridian client add`. If you're in domain mode, update the DNS A record to point at the new IP and re-run deploy. If you're not using domain mode yet, consider switching (`--domain`) to get a CDN fallback through Cloudflare — when the IP is blocked, the WSS/CDN link still works.
 
 **Sharing with family** — After `meridian client add alice`, you get a shareable URL hosted on the server. Send the link by email, iMessage, or any messenger. They open it on their phone, install the app (one tap), scan the QR code, and connect. No file transfer needed.
 
-**First-time VPS setup** — Rent a VPS from any provider (DigitalOcean, Hetzner, Vultr — $4–6/month). Choose Debian 12 or Ubuntu 22.04+. Make sure you have SSH key access (not just password). Then run `meridian setup YOUR_SERVER_IP`.
+**First-time VPS setup** — Rent a VPS from any provider (DigitalOcean, Hetzner, Vultr — $4–6/month). Choose Debian 12 or Ubuntu 22.04+. Make sure you have SSH key access (not just password). Then run `meridian deploy YOUR_SERVER_IP`.
 
 ## Troubleshooting
 
-Not connecting? Run `meridian ping` to check if the server is reachable, or use the [web-based ping tool](https://meridian.msu.rocks/ping).
+Not connecting? Run `meridian test` to check if the server is reachable, or use the [web-based ping tool](https://meridian.msu.rocks/ping).
 
 Something else not working? Get instant AI-powered help:
 
 ```bash
-meridian diagnostics --ai        # copies an AI-ready prompt to clipboard
+meridian doctor --ai        # copies an AI-ready prompt to clipboard
 ```
 
 Paste the prompt into ChatGPT, Claude, or any AI assistant for personalized troubleshooting.
 
-Or [open an issue](https://github.com/uburuntu/meridian/issues) with `meridian diagnostics` output.
+Or [open an issue](https://github.com/uburuntu/meridian/issues) with `meridian doctor` output.
 
 ## Docs
 

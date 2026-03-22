@@ -27,7 +27,7 @@ def run_add(ip: str, name: str = "", user: str = "root") -> None:
     if conn.fetch_credentials(creds_dir):
         ok("Fetched credentials from server")
     else:
-        warn("No credentials found on server (run meridian setup first)")
+        warn("No credentials found on server (run meridian deploy first)")
 
     registry.add(ServerEntry(host=ip, user=user, name=name))
     ok(f"Server added: {name or ip}")
@@ -39,7 +39,7 @@ def run_list() -> None:
     entries = registry.list()
 
     if not entries:
-        info("No servers configured. Run: meridian setup IP")
+        info("No servers configured. Run: meridian deploy IP")
         return
 
     err_console.print()

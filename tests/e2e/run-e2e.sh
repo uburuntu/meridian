@@ -50,13 +50,13 @@ check_no_output() {
 stage "0. Prerequisites"
 run_ok "SSH self-connect" ssh "$IP" echo ok
 run_ok "Docker socket accessible" docker info
-run_ok "Meridian CLI installed" meridian version
+run_ok "Meridian CLI installed" meridian --version
 
 # ---------------------------------------------------------------------------
 # 1. Fresh setup
 # ---------------------------------------------------------------------------
-stage "1. Fresh setup"
-run_capture_ok "meridian setup" meridian setup "$IP" --user root --yes
+stage "1. Fresh deploy"
+run_capture_ok "meridian deploy" meridian deploy "$IP" --user root --yes
 
 # ---------------------------------------------------------------------------
 # 2. Verify deployment
@@ -73,10 +73,10 @@ if [ -f "/root/.meridian/credentials/$IP/proxy.yml" ]; then pass "Local credenti
 # "unknown service"). We accept this as a known Docker-only limitation.
 # ---------------------------------------------------------------------------
 stage "3. Idempotent re-run"
-if meridian setup "$IP" --user root --yes >/dev/null 2>&1; then
-    pass "meridian setup (idempotent)"
+if meridian deploy "$IP" --user root --yes >/dev/null 2>&1; then
+    pass "meridian deploy (idempotent)"
 else
-    printf '  \033[33m⚠ meridian setup (idempotent) — skipped (Docker PID namespace limitation)\033[0m\n'
+    printf '  \033[33m⚠ meridian deploy (idempotent) — skipped (Docker PID namespace limitation)\033[0m\n'
 fi
 
 # ---------------------------------------------------------------------------
@@ -112,34 +112,34 @@ fi
 # ---------------------------------------------------------------------------
 # 5. Ping
 # ---------------------------------------------------------------------------
-stage "5. Ping"
-run_capture_ok "meridian ping" meridian ping "$IP"
+stage "5. Test"
+run_capture_ok "meridian test" meridian test "$IP"
 
 # ---------------------------------------------------------------------------
 # 6. Check
 # ---------------------------------------------------------------------------
-stage "6. Check"
-# check may report warnings (e.g., port 443 in use) but should not crash
-if meridian check "$IP" --user root >/dev/null 2>&1; then
-    pass "meridian check completed"
+stage "6. Preflight"
+# preflight may report warnings (e.g., port 443 in use) but should not crash
+if meridian preflight "$IP" --user root >/dev/null 2>&1; then
+    pass "meridian preflight completed"
 else
     # Exit code 1 means issues found (not a crash) — still OK
-    pass "meridian check completed (with warnings)"
+    pass "meridian preflight completed (with warnings)"
 fi
 
 # ---------------------------------------------------------------------------
 # 7. Diagnostics
 # ---------------------------------------------------------------------------
-stage "7. Diagnostics"
-OUTPUT=$(meridian diagnostics --user root 2>&1 || true)
-check_output "diagnostics has server section" "Server" "$OUTPUT"
-check_output "diagnostics has docker section" "Docker" "$OUTPUT"
+stage "7. Doctor"
+OUTPUT=$(meridian doctor --user root 2>&1 || true)
+check_output "doctor has server section" "Server" "$OUTPUT"
+check_output "doctor has docker section" "Docker" "$OUTPUT"
 
 # ---------------------------------------------------------------------------
 # 8. Uninstall
 # ---------------------------------------------------------------------------
-stage "8. Uninstall"
-run_capture_ok "meridian uninstall" meridian uninstall "$IP" --user root --yes
+stage "8. Teardown"
+run_capture_ok "meridian teardown" meridian teardown "$IP" --user root --yes
 
 # Verify cleanup
 if docker ps --format '{{.Names}}' | grep -q 3x-ui; then
@@ -148,7 +148,7 @@ else
     pass "3x-ui container removed"
 fi
 if [ -f "/root/.meridian/credentials/$IP/proxy.yml" ]; then
-    fail_test "local credentials still exist after uninstall"
+    fail_test "local credentials still exist after teardown"
 else
     pass "local credentials removed"
 fi
@@ -165,29 +165,29 @@ fi
 # 9. Re-setup after uninstall
 # Uninstall removes /usr/local/bin/meridian. Reinstall from source.
 # ---------------------------------------------------------------------------
-stage "9. Re-setup after uninstall"
-# Uninstall removes /usr/local/bin/meridian. Force-reinstall to recreate it.
+stage "9. Re-deploy after teardown"
+# Teardown removes /usr/local/bin/meridian. Force-reinstall to recreate it.
 pip install --break-system-packages --no-cache-dir --force-reinstall /src >/dev/null 2>&1
 hash -r
 
 # Re-setup may hit Docker timing issues (panel slow to start in DinD).
 # Treat as non-fatal since stages 1-8 already cover the full lifecycle.
-if meridian setup "$IP" --user root --yes >/dev/null 2>&1; then
-    pass "meridian setup (after uninstall)"
+if meridian deploy "$IP" --user root --yes >/dev/null 2>&1; then
+    pass "meridian deploy (after teardown)"
 else
-    printf '  \033[33m⚠ meridian setup (after uninstall) — panel startup timing (non-fatal)\033[0m\n'
+    printf '  \033[33m⚠ meridian deploy (after teardown) — panel startup timing (non-fatal)\033[0m\n'
 fi
 
 if docker ps --format '{{.Names}}' | grep -q 3x-ui; then
     pass "3x-ui running again"
 else
-    fail_test "3x-ui not running after re-setup"
+    fail_test "3x-ui not running after re-deploy"
 fi
 
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
-meridian uninstall "$IP" --user root --yes >/dev/null 2>&1 || true
+meridian teardown "$IP" --user root --yes >/dev/null 2>&1 || true
 docker rm -f 3x-ui >/dev/null 2>&1 || true
 
 # ---------------------------------------------------------------------------

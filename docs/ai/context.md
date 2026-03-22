@@ -52,7 +52,7 @@ User → Server:443 (HAProxy)
 ## CLI Commands
 
 ```
-meridian setup [IP] [flags]     Deploy proxy server
+meridian deploy [IP] [flags]     Deploy proxy server
   --domain DOMAIN               Enable domain mode with CDN fallback
   --email EMAIL                 Email for TLS certificates (optional)
   --sni HOST                    Reality SNI target (default: www.microsoft.com)
@@ -63,13 +63,13 @@ meridian setup [IP] [flags]     Deploy proxy server
 
 meridian client add|list|remove NAME    Manage client access keys (--server NAME)
 meridian server add|list|remove         Manage known servers
-meridian check [IP] [--ai] [--server NAME]      Pre-flight server validation + ASN check
+meridian preflight [IP] [--ai] [--server NAME]      Pre-flight server validation + ASN check
 meridian scan [IP] [--server NAME]               Find optimal SNI targets on server's network
-meridian ping [IP] [--server NAME]               Test proxy reachability from client device
-meridian diagnostics [IP] [--ai] [--server NAME] Collect system info for debugging
-meridian uninstall [IP] [--server NAME]          Remove proxy from server
-meridian self-update                    Update CLI to latest version
-meridian version                        Show version
+meridian test [IP] [--server NAME]               Test proxy reachability from client device
+meridian doctor [IP] [--ai] [--server NAME] Collect system info for debugging (alias: rage)
+meridian teardown [IP] [--server NAME]          Remove proxy from server
+meridian update                    Update CLI to latest version
+meridian --version / -v            Show version
 ```
 
 Global flag: `--server NAME` targets a specific named server (works with most commands).

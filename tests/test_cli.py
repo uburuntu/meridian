@@ -22,28 +22,23 @@ class TestCLIBasics:
         assert result.exit_code == 0
         assert "meridian" in _strip_ansi(result.output)
 
-    def test_version_command(self) -> None:
-        result = runner.invoke(app, ["version"])
-        assert result.exit_code == 0
-        assert "meridian" in _strip_ansi(result.output)
-
     def test_help(self) -> None:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
-        assert "setup" in output
+        assert "deploy" in output
         assert "client" in output
         assert "server" in output
 
     def test_no_args_shows_help(self) -> None:
         result = runner.invoke(app)
         output = _strip_ansi(result.output)
-        assert "setup" in output or "Usage" in output
+        assert "deploy" in output or "Usage" in output
 
 
 class TestSubcommandHelp:
-    def test_setup_help(self) -> None:
-        result = runner.invoke(app, ["setup", "--help"])
+    def test_deploy_help(self) -> None:
+        result = runner.invoke(app, ["deploy", "--help"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         assert "--domain" in output
@@ -66,16 +61,21 @@ class TestSubcommandHelp:
         assert "list" in output
         assert "remove" in output
 
-    def test_check_help(self) -> None:
-        result = runner.invoke(app, ["check", "--help"])
+    def test_preflight_help(self) -> None:
+        result = runner.invoke(app, ["preflight", "--help"])
         assert result.exit_code == 0
         assert "--ai" in _strip_ansi(result.output)
 
-    def test_diagnostics_help(self) -> None:
-        result = runner.invoke(app, ["diagnostics", "--help"])
+    def test_doctor_help(self) -> None:
+        result = runner.invoke(app, ["doctor", "--help"])
         assert result.exit_code == 0
         assert "--ai" in _strip_ansi(result.output)
 
-    def test_self_update_help(self) -> None:
-        result = runner.invoke(app, ["self-update", "--help"])
+    def test_rage_alias(self) -> None:
+        result = runner.invoke(app, ["rage", "--help"])
+        assert result.exit_code == 0
+        assert "--ai" in _strip_ansi(result.output)
+
+    def test_update_help(self) -> None:
+        result = runner.invoke(app, ["update", "--help"])
         assert result.exit_code == 0

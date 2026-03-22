@@ -24,7 +24,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - HTML escaping in minimal fallback renderer
 
 ### Changed
-- Improved CLI help text for setup, check, ping, diagnostics commands
+- Renamed CLI commands for clarity: `setup` → `deploy`, `check` → `preflight`, `ping` → `test`, `diagnostics` → `doctor` (alias: `rage`), `uninstall` → `teardown`, `self-update` → `update`
+- Removed `version` subcommand (use `--version` / `-v` flag instead)
+- Improved CLI help text for deploy, preflight, test, doctor commands
 - Improved connection page QR code guidance for non-technical users
 - Reordered client add terminal output (shareable URL first)
 

@@ -72,7 +72,7 @@ def check_for_update(current_version: str) -> None:
     else:
         # Minor/major: prompt
         err_console.print(f"\n  [warn]Update available:[/warn] v{current_version} → v{latest}")
-        err_console.print("  Run: [bold]meridian self-update[/bold]\n")
+        err_console.print("  Run: [bold]meridian update[/bold]\n")
 
 
 def do_upgrade() -> bool:

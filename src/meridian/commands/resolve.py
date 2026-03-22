@@ -109,7 +109,7 @@ def resolve_server(
             fail("Specify a server with --server", hint="Example: meridian <command> --server NAME", hint_type="user")
 
         else:
-            fail("No servers configured", hint="Deploy a server first: meridian setup IP", hint_type="user")
+            fail("No servers configured", hint="Deploy a server first: meridian deploy IP", hint_type="user")
 
     # Resolve user: explicit flag > registry > default root
     resolved_user = user or registry_user or "root"

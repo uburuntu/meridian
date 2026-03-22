@@ -253,7 +253,7 @@ class CreateRealityInbound:
             return StepResult(
                 name=self.name,
                 status="failed",
-                detail=(f"Failed to create Reality inbound: {msg}. Fix: run 'meridian uninstall' then retry setup."),
+                detail=(f"Failed to create Reality inbound: {msg}. Fix: run 'meridian teardown' then retry deploy."),
             )
 
         return StepResult(
@@ -348,7 +348,7 @@ class CreateXHTTPInbound:
             return StepResult(
                 name=self.name,
                 status="failed",
-                detail=(f"Failed to create XHTTP inbound: {msg}. Fix: run 'meridian uninstall' then retry setup."),
+                detail=(f"Failed to create XHTTP inbound: {msg}. Fix: run 'meridian teardown' then retry deploy."),
             )
 
         # Store the port in context for connection info
@@ -434,7 +434,7 @@ class CreateWSSInbound:
             return StepResult(
                 name=self.name,
                 status="failed",
-                detail=(f"Failed to create WSS inbound: {msg}. Fix: run 'meridian uninstall' then retry setup."),
+                detail=(f"Failed to create WSS inbound: {msg}. Fix: run 'meridian teardown' then retry deploy."),
             )
 
         return StepResult(
@@ -484,7 +484,7 @@ class VerifyXray:
                 f"Xray core is not running inside the 3x-ui container.\n"
                 f"This usually means the inbound configuration is invalid or the database is corrupted.\n"
                 f"\nContainer logs (last 30 lines):\n{logs}\n"
-                f"\nFix: run 'meridian uninstall{ip_hint}' then retry setup."
+                f"\nFix: run 'meridian teardown{ip_hint}' then retry deploy."
             ),
         )
 

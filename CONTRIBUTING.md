@@ -4,8 +4,8 @@ Thanks for your interest! Here's how to help.
 
 ## Reporting Issues
 
-- **Bug?** Use the [bug report template](https://github.com/uburuntu/meridian/issues/new?template=bug_report.yml) — run `meridian diagnostics` first to collect info
-- **Connection not working?** Use the [connection issue template](https://github.com/uburuntu/meridian/issues/new?template=connection_issue.yml) — run `meridian ping` and `meridian check` first
+- **Bug?** Use the [bug report template](https://github.com/uburuntu/meridian/issues/new?template=bug_report.yml) — run `meridian doctor` first to collect info
+- **Connection not working?** Use the [connection issue template](https://github.com/uburuntu/meridian/issues/new?template=connection_issue.yml) — run `meridian test` and `meridian preflight` first
 - **Feature idea?** Use the [feature request template](https://github.com/uburuntu/meridian/issues/new?template=feature_request.yml)
 - **Security vulnerability?** See [SECURITY.md](SECURITY.md) — do NOT open a public issue
 

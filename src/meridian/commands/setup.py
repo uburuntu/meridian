@@ -38,7 +38,7 @@ def run(
         if server_ip:
             fail(
                 "Use either the IP address or --server, not both.\n"
-                "  Example: meridian setup 1.2.3.4  OR  meridian setup --server mybox",
+                "  Example: meridian deploy 1.2.3.4  OR  meridian deploy --server mybox",
                 hint_type="user",
             )
         entry = registry.find(requested_server)
@@ -121,7 +121,7 @@ def run(
     if not is_ipv4(server_ip):
         fail(
             f"Invalid IP address: {server_ip}",
-            hint="Enter a valid IPv4 address (e.g. meridian setup 123.45.67.89)",
+            hint="Enter a valid IPv4 address (e.g. meridian deploy 123.45.67.89)",
             hint_type="user",
         )
 
@@ -235,7 +235,7 @@ def _run_provisioner(
     if failed:
         fail(
             "Setup failed",
-            hint=f"Step '{failed[0].name}' failed: {failed[0].detail}\nRun: meridian check {ctx.ip}",
+            hint=f"Step '{failed[0].name}' failed: {failed[0].detail}\nRun: meridian preflight {ctx.ip}",
             hint_type="system",
         )
 
@@ -279,7 +279,7 @@ def _print_success(resolved: ResolvedServer, name: str, domain: str) -> None:
 
     err_console.print("  [ok]3.[/ok] Test that the proxy works:")
     server_ip = resolved.ip
-    err_console.print(f"     [info]meridian ping {server_ip}[/info]")
+    err_console.print(f"     [info]meridian test {server_ip}[/info]")
     ping_url = f"https://meridian.msu.rocks/ping?ip={server_ip}"
     if domain:
         ping_url += f"&domain={domain}"

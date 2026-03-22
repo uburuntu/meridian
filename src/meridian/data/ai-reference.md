@@ -52,7 +52,7 @@ User → Server:443 (HAProxy)
 ## CLI Commands
 
 ```
-meridian setup [IP] [flags]     Deploy proxy server
+meridian deploy [IP] [flags]     Deploy proxy server
   --domain DOMAIN               Enable domain mode with CDN fallback
   --email EMAIL                 Email for TLS certificates (optional)
   --sni HOST                    Reality SNI target (default: www.microsoft.com)
@@ -63,13 +63,13 @@ meridian setup [IP] [flags]     Deploy proxy server
 
 meridian client add|list|remove NAME    Manage client access keys (--server NAME)
 meridian server add|list|remove         Manage known servers
-meridian check [IP] [--ai] [--server NAME]      Pre-flight server validation + ASN check
+meridian preflight [IP] [--ai] [--server NAME]      Pre-flight server validation + ASN check
 meridian scan [IP] [--server NAME]               Find optimal SNI targets on server's network
-meridian ping [IP] [--server NAME]               Test proxy reachability from client device
-meridian diagnostics [IP] [--ai] [--server NAME] Collect system info for debugging
-meridian uninstall [IP] [--server NAME]          Remove proxy from server
-meridian self-update                    Update CLI to latest version
-meridian version                        Show version
+meridian test [IP] [--server NAME]               Test proxy reachability from client device
+meridian doctor [IP] [--ai] [--server NAME] Collect system info for debugging (alias: rage)
+meridian teardown [IP] [--server NAME]          Remove proxy from server
+meridian update                    Update CLI to latest version
+meridian --version / -v            Show version
 ```
 
 Global flag: `--server NAME` targets a specific named server (works with most commands).
@@ -284,25 +284,25 @@ Steps execute sequentially via `build_setup_steps()`. Each step gets `(conn, ctx
 ## Which Tool to Use
 
 ```
-BEFORE INSTALL           → meridian check IP
+BEFORE INSTALL           → meridian preflight IP
   "Will this server work for Meridian?"
   Tests: SNI reachability, port 443, DNS, OS, disk space.
 
-AFTER INSTALL, CAN'T CONNECT → meridian ping IP
+AFTER INSTALL, CAN'T CONNECT → meridian test IP
   "Is the proxy reachable from where I am right now?"
   Tests: TCP port 443, TLS handshake (Reality), domain HTTPS.
   No SSH needed — runs from the client device.
 
-AFTER INSTALL, SOMETHING BROKE → meridian diagnostics IP
+AFTER INSTALL, SOMETHING BROKE → meridian doctor IP
   "Collect everything for debugging."
   Collects: server OS, Docker, 3x-ui logs, ports, firewall, SNI, DNS.
 
-Add --ai to check or diagnostics for an AI-ready prompt.
+Add --ai to preflight or doctor for an AI-ready prompt.
 ```
 
 ## Symptom: Can't Connect at All
 
-### Port 443 not reachable (ping fails on TCP check)
+### Port 443 not reachable (test fails on TCP check)
 
 **Causes:**
 1. Cloud provider firewall / security group blocks port 443 inbound
@@ -316,7 +316,7 @@ Add --ai to check or diagnostics for an AI-ready prompt.
 3. SSH into the server and check: `docker ps` (is 3x-ui running?), `ss -tlnp sport = :443` (is anything listening?)
 4. Check UFW: `ufw status` — should show 443/tcp ALLOW
 
-### TLS handshake fails (ping passes TCP but fails TLS)
+### TLS handshake fails (test passes TCP but fails TLS)
 
 **Causes:**
 1. Xray is not running inside the Docker container
@@ -326,9 +326,9 @@ Add --ai to check or diagnostics for an AI-ready prompt.
 **Fixes:**
 1. Check Xray: `docker logs 3x-ui --tail 20` — look for errors
 2. Check what's on port 443: `ss -tlnp sport = :443` — should be xray, haproxy, or 3x-ui
-3. Test SNI target: `meridian check IP --sni www.microsoft.com`
+3. Test SNI target: `meridian preflight IP --sni www.microsoft.com`
 
-### Domain not reachable (ping passes Reality but fails domain HTTPS)
+### Domain not reachable (test passes Reality but fails domain HTTPS)
 
 **Causes:**
 1. DNS not pointing to server IP
@@ -358,13 +358,13 @@ Add --ai to check or diagnostics for an AI-ready prompt.
 
 **Cause:** Another service (Apache, Nginx, etc.) is using port 443.
 
-**Fix:** Stop the conflicting service or run Meridian on a clean server. `meridian check IP` will tell you what's using the port.
+**Fix:** Stop the conflicting service or run Meridian on a clean server. `meridian preflight IP` will tell you what's using the port.
 
 ### Xray fails to start (invalid JSON / MarshalJSON error)
 
 **Cause:** The 3x-ui inbound `settings` or `streamSettings` fields contain corrupted JSON. This happens when the `settings` field is sent as a nested object instead of a JSON string — the 3x-ui Go struct expects a `string` type for these fields. The API returns `success: true` but stores only the first key name (e.g., `"clients"`) instead of the full JSON object.
 
-**Fix:** `PanelClient` always sends `settings` as a JSON string inside the JSON body (double-serialized). If you hit this on an older version, uninstall and reinstall: `meridian uninstall IP && meridian setup IP`. To verify the database is clean: `sqlite3 /opt/3x-ui/db/x-ui.db "SELECT settings FROM inbounds;"` — each field should be valid JSON, not a single word.
+**Fix:** `PanelClient` always sends `settings` as a JSON string inside the JSON body (double-serialized). If you hit this on an older version, uninstall and reinstall: `meridian teardown IP && meridian deploy IP`. To verify the database is clean: `sqlite3 /opt/3x-ui/db/x-ui.db "SELECT settings FROM inbounds;"` — each field should be valid JSON, not a single word.
 
 ### XHTTP inbound creation fails (port already exists)
 
@@ -405,7 +405,7 @@ Add --ai to check or diagnostics for an AI-ready prompt.
 4. 3x-ui database grew too large (unlikely — weekly cron vacuum)
 
 **Fixes:**
-1. Run `meridian ping IP` — if TCP fails, the IP is likely blocked. Use the WSS/CDN link (domain mode) or deploy a new server
+1. Run `meridian test IP` — if TCP fails, the IP is likely blocked. Use the WSS/CDN link (domain mode) or deploy a new server
 2. SSH in and check: `docker ps` — if 3x-ui is not listed, run `docker start 3x-ui`
 3. Check Caddy logs: `journalctl -u caddy --no-pager -n 20`
 4. Check disk: `df -h /`
@@ -445,7 +445,7 @@ The SNI target is the domain that Reality impersonates. Choosing the wrong one c
 
 **What actually matters more than SNI choice:** The real detection threat in 2026 is post-handshake behavioral analysis (traffic patterns, packet timing, session duration). XHTTP transport (`--xhttp`) directly addresses this by making tunnel traffic look like normal HTTP browsing. SNI choice is secondary.
 
-## Interpreting `meridian check` Output
+## Interpreting `meridian preflight` Output
 
 | Check | What It Tests | If It Fails |
 |-------|--------------|-------------|
@@ -457,7 +457,7 @@ The SNI target is the domain that Reality impersonates. Choosing the wrong one c
 | Server OS | Is it Ubuntu/Debian? | Other distros may work but are untested |
 | Disk space | At least 2GB free? | Free up space |
 
-## Interpreting `meridian diagnostics` Output
+## Interpreting `meridian doctor` Output
 
 | Section | What to Look For |
 |---------|-----------------|
@@ -470,7 +470,7 @@ The SNI target is the domain that Reality impersonates. Choosing the wrong one c
 | SNI Target | Should show CONNECTED with a certificate chain. If unreachable, Reality can't work |
 | Domain DNS | Should resolve to server IP. If different or empty, DNS is misconfigured |
 
-## Interpreting `meridian ping` Output
+## Interpreting `meridian test` Output
 
 | Check | Pass | Fail |
 |-------|------|------|
@@ -478,7 +478,7 @@ The SNI target is the domain that Reality impersonates. Choosing the wrong one c
 | TLS handshake | Reality protocol is working | Xray not running, port conflict, or SNI issue |
 | Domain HTTPS | Caddy + HAProxy working | DNS, Caddy, or HAProxy issue |
 
-**If all ping checks pass but VPN client still can't connect:**
+**If all test checks pass but VPN client still can't connect:**
 - Re-scan the QR code or re-import the VLESS link
 - Ensure device clock is accurate (within 30 seconds)
 - Try a different VPN app (v2rayNG, Hiddify)

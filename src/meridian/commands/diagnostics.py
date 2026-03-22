@@ -147,8 +147,7 @@ def run(
         build_ai_prompt("diagnostics", diag_text, __version__)
     else:
         err_console.print(
-            "  [bold]Tip:[/bold] [info]meridian diagnostics --ai[/info]"
-            " -- paste directly into ChatGPT or Claude for help"
+            "  [bold]Tip:[/bold] [info]meridian doctor --ai[/info] -- paste directly into ChatGPT or Claude for help"
         )
         err_console.print()
         err_console.print("  1. Review the output below for any private info you want to remove")

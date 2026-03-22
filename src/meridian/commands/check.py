@@ -207,12 +207,12 @@ def run(
     err_console.print()
     if issues == 0:
         err_console.print("  [ok][bold]All checks passed.[/bold][/ok] Server is ready.\n")
-        err_console.print(f"  [dim]Next: meridian setup {resolved.ip}[/dim]")
+        err_console.print(f"  [dim]Next: meridian deploy {resolved.ip}[/dim]")
         err_console.print(f"  [dim]Best SNI: meridian scan {resolved.ip}[/dim]\n")
     else:
         err_console.print(f"  [warn][bold]{issues} issue(s) found.[/bold][/warn] Review the warnings above.\n")
         if not ai:
-            err_console.print(f"  [dim]Get AI help: meridian check {resolved.ip} --ai[/dim]\n")
+            err_console.print(f"  [dim]Get AI help: meridian preflight {resolved.ip} --ai[/dim]\n")
 
     # --- AI mode ---
     if ai:

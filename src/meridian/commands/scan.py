@@ -82,7 +82,7 @@ def run(
 
     if not csv_output or csv_output == "IP,ORIGIN,CERT_DOMAIN,CERT_ISSUER,GEO_CODE":
         warn("Scan produced no results. The server may have limited network visibility.")
-        err_console.print(f"\n  [dim]You can manually set SNI with: meridian setup {resolved.ip} --sni DOMAIN[/dim]\n")
+        err_console.print(f"\n  [dim]You can manually set SNI with: meridian deploy {resolved.ip} --sni DOMAIN[/dim]\n")
         return
 
     # Parse CSV: extract cert_domain (column 3), skip header, deduplicate, filter bad targets
@@ -110,7 +110,7 @@ def run(
 
     if not domains:
         warn("No suitable SNI targets found.")
-        err_console.print(f"\n  [dim]You can manually set SNI with: meridian setup {resolved.ip} --sni DOMAIN[/dim]\n")
+        err_console.print(f"\n  [dim]You can manually set SNI with: meridian deploy {resolved.ip} --sni DOMAIN[/dim]\n")
         return
 
     err_console.print()
@@ -138,8 +138,8 @@ def run(
 
             err_console.print()
             ok(f"Saved: {selected}")
-            err_console.print(f"  [dim]Use it: meridian setup {resolved.ip} --sni {selected}[/dim]")
-            err_console.print("  [dim]Or it will be suggested automatically during setup.[/dim]")
+            err_console.print(f"  [dim]Use it: meridian deploy {resolved.ip} --sni {selected}[/dim]")
+            err_console.print("  [dim]Or it will be suggested automatically during deploy.[/dim]")
             err_console.print("  [dim]Tip: with --domain, your own domain works as SNI too (self-steal).[/dim]\n")
             return
 

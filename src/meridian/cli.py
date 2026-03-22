@@ -45,19 +45,19 @@ def main_callback(
         banner(__version__)
 
     # Auto-update check (skip for meta commands)
-    if ctx.invoked_subcommand not in ("self-update", "version"):
+    if ctx.invoked_subcommand not in ("update",):
         from meridian.update import check_for_update
 
         check_for_update(__version__)
 
 
 # =============================================================================
-# Setup
+# Deploy
 # =============================================================================
 
 
-@app.command("setup")
-def setup_cmd(
+@app.command("deploy")
+def deploy_cmd(
     ip: str = typer.Argument("", help="Server IP address"),
     domain: str = typer.Option("", "--domain", "-d", help="Add CDN fallback via Cloudflare"),
     email: str = typer.Option("", "--email", help="Email for TLS certificates (optional)"),
@@ -71,9 +71,9 @@ def setup_cmd(
     """Deploy a VLESS+Reality proxy server. Interactive wizard if no IP provided.
 
     [dim]Examples:[/dim]
-      [cyan]meridian setup[/cyan]                         Interactive wizard
-      [cyan]meridian setup 1.2.3.4[/cyan]                 Deploy with defaults
-      [cyan]meridian setup 1.2.3.4 --domain d.io[/cyan]   CDN fallback via Cloudflare
+      [cyan]meridian deploy[/cyan]                          Interactive wizard
+      [cyan]meridian deploy 1.2.3.4[/cyan]                  Deploy with defaults
+      [cyan]meridian deploy 1.2.3.4 --domain d.io[/cyan]    CDN fallback via Cloudflare
     """
     from meridian.commands.setup import run
 
@@ -156,12 +156,12 @@ def server_remove_cmd(
 
 
 # =============================================================================
-# Check / Scan / Ping
+# Preflight / Scan / Test
 # =============================================================================
 
 
-@app.command("check")
-def check_cmd(
+@app.command("preflight")
+def preflight_cmd(
     ip: str = typer.Argument("", help="Server IP address"),
     domain: str = typer.Option("", "--domain", "-d", help="Domain to check"),
     sni: str = typer.Option("", "--sni", "-s", help="SNI target to verify"),
@@ -169,7 +169,7 @@ def check_cmd(
     ai: bool = typer.Option(False, "--ai", help="Copy AI-ready prompt to clipboard for ChatGPT/Claude"),
     server: str = typer.Option("", "--server", help="Target server (name or IP)"),
 ) -> None:
-    """Validate server compatibility (SNI, ports, DNS, OS, disk, ASN) without installing."""
+    """Validate server compatibility (SNI, ports, DNS, OS, disk, ASN) before deploying."""
     from meridian.commands.check import run
 
     run(ip, domain, sni, user, ai, server)
@@ -187,8 +187,8 @@ def scan_cmd(
     run(ip, user, server)
 
 
-@app.command("ping")
-def ping_cmd(
+@app.command("test")
+def test_cmd(
     ip: str = typer.Argument("", help="Server IP to test connectivity to"),
     domain: str = typer.Option("", "--domain", "-d", help="Domain to test"),
     sni: str = typer.Option("", "--sni", "-s", help="SNI target to test"),
@@ -201,51 +201,55 @@ def ping_cmd(
 
 
 # =============================================================================
-# Diagnostics / Uninstall
+# Doctor / Teardown / Update
 # =============================================================================
 
 
-@app.command("diagnostics")
-def diagnostics_cmd(
+@app.command("doctor")
+def doctor_cmd(
     ip: str = typer.Argument("", help="Server IP address"),
     sni: str = typer.Option("", "--sni", "-s", help="SNI target"),
     user: str = typer.Option("", "--user", "-u", help="SSH user (default: from server registry)"),
     ai: bool = typer.Option(False, "--ai", help="Copy AI-ready prompt to clipboard for ChatGPT/Claude"),
     server: str = typer.Option("", "--server", help="Target server (name or IP)"),
 ) -> None:
-    """Collect system info for bug reports. Use --ai to copy prompt for ChatGPT/Claude."""
+    """Collect system info for bug reports. Use --ai for ChatGPT/Claude prompt."""
     from meridian.commands.diagnostics import run
 
     run(ip, sni, user, ai, server)
 
 
-@app.command("uninstall")
-def uninstall_cmd(
+# Alias: rage → doctor
+@app.command("rage", hidden=True)
+def rage_cmd(
+    ip: str = typer.Argument("", help="Server IP address"),
+    sni: str = typer.Option("", "--sni", "-s", help="SNI target"),
+    user: str = typer.Option("", "--user", "-u", help="SSH user (default: from server registry)"),
+    ai: bool = typer.Option(False, "--ai", help="Copy AI-ready prompt to clipboard for ChatGPT/Claude"),
+    server: str = typer.Option("", "--server", help="Target server (name or IP)"),
+) -> None:
+    """Alias for doctor."""
+    from meridian.commands.diagnostics import run
+
+    run(ip, sni, user, ai, server)
+
+
+@app.command("teardown")
+def teardown_cmd(
     ip: str = typer.Argument("", help="Server IP address"),
     user: str = typer.Option("", "--user", "-u", help="SSH user (default: from server registry)"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
     server: str = typer.Option("", "--server", help="Target server (name or IP)"),
 ) -> None:
-    """Remove proxy from server."""
+    """Remove proxy deployment from server."""
     from meridian.commands.uninstall import run
 
     run(ip, user, yes, server)
 
 
-# =============================================================================
-# Meta
-# =============================================================================
-
-
-@app.command("self-update")
-def self_update_cmd() -> None:
+@app.command("update")
+def update_cmd() -> None:
     """Update meridian to the latest version."""
     from meridian.update import run_self_update
 
     run_self_update()
-
-
-@app.command("version")
-def version_cmd() -> None:
-    """Show meridian version."""
-    print(f"meridian {__version__}")

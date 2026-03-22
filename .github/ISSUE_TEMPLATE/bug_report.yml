@@ -7,11 +7,11 @@ body:
       value: |
         Thanks for reporting! Please run diagnostics:
         ```
-        meridian diagnostics
+        meridian doctor
         ```
         Secrets are auto-redacted. Paste the output below.
 
-        For AI-assisted help, try `meridian diagnostics --ai` — it copies an AI-ready prompt to your clipboard.
+        For AI-assisted help, try `meridian doctor --ai` — it copies an AI-ready prompt to your clipboard.
 
   - type: textarea
     attributes:
@@ -47,8 +47,8 @@ body:
 
   - type: textarea
     attributes:
-      label: Diagnostics output
-      description: Paste the output from `meridian diagnostics` here. Review it first — secrets are auto-redacted but double-check. Or run `meridian diagnostics --ai` for AI-assisted help.
+      label: Doctor output
+      description: Paste the output from `meridian doctor` here. Review it first — secrets are auto-redacted but double-check. Or run `meridian doctor --ai` for AI-assisted help.
       render: text
     validations:
       required: false

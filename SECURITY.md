@@ -12,7 +12,7 @@ We aim to respond within 48 hours and will credit reporters in the fix.
 
 ## Security Design
 
-- **Credentials**: stored locally with `0600` permissions, secrets are never passed through shell command strings without `shlex.quote()` and are redacted from `meridian diagnostics` output
+- **Credentials**: stored locally with `0600` permissions, secrets are never passed through shell command strings without `shlex.quote()` and are redacted from `meridian doctor` output
 - **Panel access**: reverse-proxied by Caddy at a secret HTTPS path in all modes (no SSH tunnel required)
 - **SSH**: password authentication disabled by default
 - **Firewall**: UFW configured with deny-all-incoming, only ports 22 + 443 + 80 (ACME) opened by default. The XHTTP port is also opened when XHTTP is enabled.

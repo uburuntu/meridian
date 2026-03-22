@@ -199,7 +199,7 @@ button:focus-visible,input:focus-visible,a:focus-visible,details summary:focus-v
   <p style="font-size:.78rem;color:var(--t2);margin-top:12px;margin-bottom:8px" data-i18n="setup.deploy">Then deploy:</p>
   <div class="oneliner">
     <button class="cp" onclick="copyEl(this)">Copy</button>
-    <pre>meridian setup</pre>
+    <pre>meridian deploy</pre>
   </div>
 
   <p style="font-size:.82rem;color:var(--t2);margin-top:16px" data-i18n="setup.wizard">The interactive wizard asks for everything. Or configure your command:</p>
@@ -208,11 +208,11 @@ button:focus-visible,input:focus-visible,a:focus-visible,details summary:focus-v
   <div id="builder" style="background:var(--s1);border:1px solid var(--b1);border-radius:12px;margin:20px 0;overflow:hidden">
     <!-- Tabs -->
     <div style="display:flex;border-bottom:1px solid var(--b1);flex-wrap:wrap">
-      <button class="btab active" onclick="setTab('install')" data-i18n="tab.setup">Setup</button>
-      <button class="btab" onclick="setTab('check')" data-i18n="tab.check">Pre-flight</button>
+      <button class="btab active" onclick="setTab('install')" data-i18n="tab.setup">Deploy</button>
+      <button class="btab" onclick="setTab('check')" data-i18n="tab.check">Preflight</button>
       <button class="btab" onclick="setTab('scan')" data-i18n="tab.scan">SNI Scan</button>
-      <button class="btab" onclick="setTab('diag')" data-i18n="tab.diag">Diagnostics</button>
-      <button class="btab" onclick="setTab('uninstall')" data-i18n="tab.uninstall">Uninstall</button>
+      <button class="btab" onclick="setTab('diag')" data-i18n="tab.diag">Doctor</button>
+      <button class="btab" onclick="setTab('uninstall')" data-i18n="tab.uninstall">Teardown</button>
     </div>
     <div style="padding:20px 24px 24px">
       <!-- Tab descriptions -->
@@ -253,7 +253,7 @@ button:focus-visible,input:focus-visible,a:focus-visible,details summary:focus-v
       <!-- Output -->
       <div class="oneliner" style="margin:16px 0 0;padding:16px 20px">
         <button class="cp" onclick="copyEl(this)">Copy</button>
-        <pre id="cmd-pre" style="padding-right:60px">meridian setup</pre>
+        <pre id="cmd-pre" style="padding-right:60px">meridian deploy</pre>
       </div>
       <p id="cmd-hint" style="font-size:.78rem;color:var(--t3);margin-top:8px"></p>
     </div>
@@ -371,7 +371,7 @@ button:focus-visible,input:focus-visible,a:focus-visible,details summary:focus-v
   <details>
     <summary data-i18n="ref.customization">Customization <span></span></summary>
     <div class="inner">
-      <p>All settings are passed as CLI flags to <code>meridian setup</code>:</p>
+      <p>All settings are passed as CLI flags to <code>meridian deploy</code>:</p>
       <table class="tbl">
         <tr><th>Flag</th><th>Default</th><th>Description</th></tr>
         <tr><td>--sni HOST</td><td>www.microsoft.com</td><td>Site that Reality impersonates</td></tr>
@@ -393,7 +393,7 @@ button:focus-visible,input:focus-visible,a:focus-visible,details summary:focus-v
       <p><strong>Follow this order</strong> to avoid TLS certificate issues:</p>
       <p>1. Add domain in Cloudflare, create A record to server IP<br>
          2. Keep cloud icon <strong>grey</strong> ("DNS only") — don't proxy yet<br>
-         3. Run <code>meridian setup</code> — Caddy gets the TLS cert automatically<br>
+         3. Run <code>meridian deploy</code> — Caddy gets the TLS cert automatically<br>
          4. Switch to <strong>orange cloud</strong> (Proxied)<br>
          5. SSL/TLS → <strong>Full (Strict)</strong>, Network → <strong>Enable WebSockets</strong></p>
       <p>Caddy obtains certs via HTTP-01 on port 80. If Cloudflare's "Always Use HTTPS" is active, it breaks the challenge. Disable it or add a page rule for <code>/.well-known/acme-challenge/*</code>.</p>
@@ -406,7 +406,7 @@ button:focus-visible,input:focus-visible,a:focus-visible,details summary:focus-v
       <p>Update Xray and 3x-ui:</p>
       <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>ssh root@YOUR_SERVER
 cd /opt/3x-ui && docker compose pull && docker compose up -d</div>
-      <p>Or re-run <code>meridian setup</code> — it's safe to repeat. Manage clients with <code>meridian client add|list|remove</code>.</p>
+      <p>Or re-run <code>meridian deploy</code> — it's safe to repeat. Manage clients with <code>meridian client add|list|remove</code>.</p>
     </div>
   </details>
 
@@ -414,7 +414,7 @@ cd /opt/3x-ui && docker compose pull && docker compose up -d</div>
     <summary data-i18n="ref.preflight">Pre-flight check <span></span></summary>
     <div class="inner">
       <p>Not sure if your server is compatible? Run a pre-flight check first:</p>
-      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian check 1.2.3.4</div>
+      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian preflight 1.2.3.4</div>
       <p>Tests SNI target reachability, ASN match, port availability, DNS, OS, and disk space &mdash; without installing anything.</p>
       <p>For optimal SNI stealth, scan your server's network for same-ASN targets:</p>
       <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian scan 1.2.3.4</div>
@@ -425,16 +425,16 @@ cd /opt/3x-ui && docker compose pull && docker compose up -d</div>
     <summary data-i18n="ref.troubleshoot">Troubleshooting <span></span></summary>
     <div class="inner">
       <p><strong>Not connecting?</strong> Test if the server is reachable from your device:</p>
-      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian ping</div>
+      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian test</div>
       <p>Or use the <a href="ping" style="color:var(--ac)">web-based ping tool</a> — no install needed, works from any device.</p>
       <p><strong>Connection fails immediately:</strong> Check device clock is accurate within 30 seconds. Enable "Set Automatically" in date/time settings.</p>
       <p><strong>Connection stops after days:</strong> Server IP may have been blocked. Switch to CDN fallback, or get a new IP and re-run.</p>
       <p><strong>Slow speeds:</strong> Some hosting IP ranges are throttled. Try a different provider or datacenter (Finland, Netherlands, Sweden).</p>
       <p><strong>Do NOT</strong> run other protocols (OpenVPN, WireGuard) on the same server — it flags the IP.</p>
       <p>Get instant AI-powered help (copies a prompt to your clipboard):</p>
-      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian diagnostics --ai</div>
+      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian doctor --ai</div>
       <p>Or collect diagnostics for a <a href="https://github.com/uburuntu/meridian/issues" style="color:var(--ac)">GitHub issue</a>:</p>
-      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian diagnostics</div>
+      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian doctor</div>
     </div>
   </details>
 
@@ -455,7 +455,7 @@ cd /opt/3x-ui && docker compose pull && docker compose up -d</div>
     <summary data-i18n="ref.uninstall">Uninstall <span></span></summary>
     <div class="inner">
       <p>Remove the proxy from your server:</p>
-      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian uninstall</div>
+      <div class="code"><button class="cp" onclick="copyEl(this)">Copy</button>meridian teardown</div>
       <p>Removes the proxy container, configs, and firewall rules. Does <strong>not</strong> remove Docker or system packages — those may be used by other applications.</p>
     </div>
   </details>
@@ -524,11 +524,11 @@ function flash(btn){var lbl=copyLabels[curLang()]||copyLabels.en;btn.textContent
 /* --- Command builder --- */
 var curTab='install';
 var tabConfig={
-  install:{desc:'Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.',show:['ip','user','domain','sni','xhttp','yes'],cmd:'setup',descKey:'tab.setup.desc'},
-  check:{desc:'Test if your server is compatible — checks SNI, ports, DNS, OS, disk, ASN match. Installs nothing.',show:['ip','user','domain'],cmd:'check'},
+  install:{desc:'Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.',show:['ip','user','domain','sni','xhttp','yes'],cmd:'deploy',descKey:'tab.setup.desc'},
+  check:{desc:'Test if your server is compatible — checks SNI, ports, DNS, OS, disk, ASN match. Installs nothing.',show:['ip','user','domain'],cmd:'preflight'},
   scan:{desc:'Find optimal SNI targets on your server\'s network using RealiTLScanner. Best stealth = same-network SNI.',show:['ip','user'],cmd:'scan'},
-  diag:{desc:'Collect system diagnostics for bug reports. Secrets are auto-redacted. Add --ai for AI-ready prompt.',show:['ip','user'],cmd:'diagnostics'},
-  uninstall:{desc:'Remove proxy container, configs, and firewall rules. Docker and system packages are kept.',show:['ip','user','yes'],cmd:'uninstall'}
+  diag:{desc:'Collect system diagnostics for bug reports. Secrets are auto-redacted. Add --ai for AI-ready prompt.',show:['ip','user'],cmd:'doctor'},
+  uninstall:{desc:'Remove proxy container, configs, and firewall rules. Docker and system packages are kept.',show:['ip','user','yes'],cmd:'teardown'}
 };
 var tabOrder=['install','check','scan','diag','uninstall'];
 function setTab(t){
@@ -581,7 +581,7 @@ function buildCmd(){
     else if(domOn&&!dom){hint.textContent='Enter a domain or uncheck to skip.';hint.style.color='var(--t3)';}
     else{var mode=domOn?'Reality + CDN fallback':'Reality-only';if(xhttp)mode+=' + XHTTP stealth';hint.textContent='Deploys '+mode+'.';hint.style.color='var(--ok)';}
   }else if(curTab==='check'){
-    hint.textContent=ip?'Runs pre-flight checks (ports, SNI, ASN, DNS) without installing anything.':'Enter your server IP to run the check.';
+    hint.textContent=ip?'Runs preflight checks (ports, SNI, ASN, DNS) without installing anything.':'Enter your server IP to run the preflight.';
     hint.style.color=ip?'var(--ok)':'var(--t3)';
   }else if(curTab==='scan'){
     hint.textContent=ip?'Scans server\'s /24 subnet for same-network TLS targets (~30-60 seconds).':'Enter your server IP to find optimal SNI targets.';

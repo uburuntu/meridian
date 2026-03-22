@@ -184,8 +184,8 @@ h2{font-family:var(--serif);font-size:1.2rem;font-weight:400;margin-bottom:12px}
   </div>
 
   <div class="cli-hint">
-    <code>meridian ping</code> &mdash; test reachability from any device<br>
-    <code>meridian diagnostics</code> &mdash; collect server-side debug info for bug reports
+    <code>meridian test</code> &mdash; test reachability from any device<br>
+    <code>meridian doctor</code> &mdash; collect server-side debug info for bug reports
   </div>
 </div>
 </div>
@@ -558,7 +558,7 @@ async function runPing() {
       '\u2022 Check your device clock is accurate (within 30 seconds)<br>' +
       '\u2022 Try a different VPN app (v2rayNG, Hiddify, v2RayTun)</p>' +
       '<p>Still not working? Collect server-side debug info:<br>' +
-      '<code style="font-size:.82rem;color:var(--t1)">meridian diagnostics</code></p></div>';
+      '<code style="font-size:.82rem;color:var(--t1)">meridian doctor</code></p></div>';
   } else if (domainFailedButPortOk) {
     // Port 443 works but domain doesn't — server-side issue (Caddy/HAProxy/DNS)
     sumEl.innerHTML = '<div class="summary has-fail">' +
@@ -566,7 +566,7 @@ async function runPing() {
       '<p><strong>Check on the server:</strong><br>' +
       '\u2022 DNS: does <strong>' + esc(domain) + '</strong> point to <strong>' + ip + '</strong>?<br>' +
       '\u2022 Is Caddy running? Is HAProxy routing the domain correctly?<br>' +
-      '\u2022 Run <code style="font-size:.82rem;color:var(--t1)">meridian diagnostics</code> to collect debug info</p></div>';
+      '\u2022 Run <code style="font-size:.82rem;color:var(--t1)">meridian doctor</code> to collect debug info</p></div>';
   } else {
     sumEl.innerHTML = '<div class="summary has-fail">' +
       '<p><strong>' + issues + ' issue(s) found.</strong> The server is not fully reachable from this device.</p>' +

@@ -13,7 +13,7 @@ Meridian exists to make censorship-resistant VPN accessible to everyone. The cor
 - **Protocol-agnostic harness** — Meridian doesn't build protocols, it makes the best undetectable ones easy to deploy. Today that's VLESS+Reality; tomorrow it could be something else. The architecture must make swapping painless.
 - **Guided wizard** — interactive setup that explains each choice but has smart defaults. First-time users learn; repeat users skip.
 - **Guided handoff** — Meridian's responsibility ends at the server. Client setup is the user's job, but Meridian makes it effortless: polished connection pages with step-by-step instructions, app download links, QR codes, and shareable URLs.
-- **Rebuild-fast** — IPs get blocked. Spinning up a fresh VPS and running `meridian setup` should get you back online in minutes, not hours.
+- **Rebuild-fast** — IPs get blocked. Spinning up a fresh VPS and running `meridian deploy` should get you back online in minutes, not hours.
 
 ## Project overview
 
@@ -145,16 +145,16 @@ These are easy to break by editing one file without updating the others:
 - Step pipeline: common → docker → panel → xray inbounds → services (HAProxy/Caddy/connection page)
 
 ### meridian subcommands
-- `meridian setup [IP] [--domain --email --sni --xhttp --name --user --yes]` — deploy server
+- `meridian deploy [IP] [--domain --email --sni --xhttp --name --user --yes]` — deploy server
 - `meridian client add|list|remove NAME [--server]` — manage clients via PanelClient
 - `meridian server add|list|remove` — manage known servers
-- `meridian check [IP] [--ai --server]` — pre-flight validation (SNI, ports, DNS, OS, disk, ASN)
+- `meridian preflight [IP] [--ai --server]` — pre-flight validation (SNI, ports, DNS, OS, disk, ASN)
 - `meridian scan [IP] [--server]` — find optimal SNI targets via RealiTLScanner on server
-- `meridian ping [IP] [--server]` — test proxy reachability from client device (no SSH needed)
-- `meridian diagnostics [IP] [--ai --server]` — collect system info for bug reports
-- `meridian uninstall [IP] [--server --yes]` — remove proxy from server
-- `meridian self-update` — update CLI via `uv tool upgrade` / `pipx upgrade`
-- `meridian version` — show version
+- `meridian test [IP] [--server]` — test proxy reachability from client device (no SSH needed)
+- `meridian doctor [IP] [--ai --server]` — collect system info for bug reports (alias: `rage`)
+- `meridian teardown [IP] [--server --yes]` — remove proxy from server
+- `meridian update` — update CLI via `uv tool upgrade` / `pipx upgrade`
+- `meridian --version` / `meridian -v` — show version
 - Most commands accept `--server NAME` to target a specific named server from the registry.
 
 ### docs/index.html ↔ meridian CLI
@@ -182,7 +182,7 @@ These are easy to break by editing one file without updating the others:
 - Local cache: `~/.meridian/credentials/<IP>/proxy.yml` per server
 - Clients are tracked inside the main `proxy.yml` under the `clients` list (no separate file)
 - Domain is saved to credentials file (`server.domain`) for detection on re-runs
-- CLI reads saved credentials to find the server IP (`server.ip`) for client/uninstall/diagnostics commands
+- CLI reads saved credentials to find the server IP (`server.ip`) for client/teardown/doctor commands
 - CLI fetches credentials from `/etc/meridian/` via SSH when not found locally (handles cross-machine runs)
 - `meridian server add IP` fetches credentials from server, caches locally
 - `ServerCredentials` dataclass provides typed access: `creds.panel.username`, `creds.server.sni`, `creds.reality.uuid`, etc.
@@ -209,7 +209,7 @@ These are easy to break by editing one file without updating the others:
 - Meridian writes to `/etc/caddy/conf.d/meridian.caddy` (not the main Caddyfile)
 - Main Caddyfile gets a single `import /etc/caddy/conf.d/*.caddy` line added
 - Uninstall removes only `/etc/caddy/conf.d/meridian.caddy`, not the user's Caddyfile
-- `meridian setup` interactive wizard checks saved credentials for domain suggestion
+- `meridian deploy` interactive wizard checks saved credentials for domain suggestion
 
 ### Panel health check URL
 - After first run, the panel root `/` returns 404 (webBasePath is set) — health check accepts 404 as "responsive"
@@ -222,9 +222,9 @@ These are easy to break by editing one file without updating the others:
 - Parsing uses regex with both old and new format patterns; assertion verifies keys were parsed
 
 ### Feedback loop
-- `fail()` in meridian CLI suggests `meridian diagnostics` and links to GitHub issues
+- `fail()` in meridian CLI suggests `meridian doctor` and links to GitHub issues
 - Success output mentions feedback URL
-- Website has troubleshooting with `meridian check` and `meridian diagnostics` commands
+- Website has troubleshooting with `meridian preflight` and `meridian doctor` commands
 - README has troubleshooting section
 
 ## Key API patterns
@@ -278,17 +278,17 @@ make templates         # Jinja2 template rendering test
 - **HAProxy health checks**: do NOT use `check` on TLS backends (Caddy, Xray) — TCP probes fail on TLS-only ports, causing "backend has no server available" errors. These are local systemd services, not load-balanced pools.
 - **docs/ deploy**: `docs/` source files are committed to git. At deploy time, the Release workflow builds `_site/` by copying `docs/` + `install.sh` + `setup.sh` + `VERSION` (as `version`) + `SHA256SUMS` + `ai/reference.md`. Deployed via `actions/deploy-pages` artifact (no git commits for synced files).
 - **AI docs**: Source files in `docs/ai/` (`context.md`, `architecture.md`, `troubleshooting.md`). `make ai-docs` concatenates them into `src/meridian/data/ai-reference.md` (bundled in package). `make build` runs this automatically. Edit the source files, not `reference.md`. The deploy workflow also generates `ai/reference.md` for the website.
-- **`--ai` flag**: `meridian check --ai` and `meridian diagnostics --ai` bundle AI docs + command output into a clipboard-ready prompt for ChatGPT/Claude. Docs are loaded from bundled package data via `importlib.resources` (no network fetch or cache).
+- **`--ai` flag**: `meridian preflight --ai` and `meridian doctor --ai` bundle AI docs + command output into a clipboard-ready prompt for ChatGPT/Claude. Docs are loaded from bundled package data via `importlib.resources` (no network fetch or cache).
 - **VERSION consistency**: `VERSION` file is the single source of truth. Hatchling reads it at build time; Python code uses `importlib.metadata.version("meridian-vpn")` at runtime. CI validates VERSION format (`^\d+\.\d+\.\d+$`).
 - **Pre-push hook**: `.githooks/pre-push` runs 11 fast checks (~7s) before every push: VERSION format, CHANGELOG entry, AI docs freshness, app link sync, shellcheck, ruff, mypy, pytest, templates. Install with `make hooks`. Skip with `git push --no-verify`.
 - **Ecosystem cross-promotion**: Always upsell/reference related Meridian tools where contextually appropriate. When adding error messages, output, templates, issue templates, or docs — promote the relevant tool for that context. Current tools to cross-promote:
-  - `meridian ping` / `meridian.msu.rocks/ping` — for connection issues, reachability testing
-  - `meridian check` — for pre-deployment server validation
-  - `meridian diagnostics` — for bug reports and server-side debugging
+  - `meridian test` / `meridian.msu.rocks/ping` — for connection issues, reachability testing
+  - `meridian preflight` — for pre-deployment server validation
+  - `meridian doctor` — for bug reports and server-side debugging
   - `meridian.msu.rocks` — for docs, setup guides, command builder
   - Connection info pages — for end-user onboarding and troubleshooting
-  - The pattern: error/failure messages → suggest ping first (network issue?), then diagnostics (server issue?), then GitHub issues (bug?)
-  - **Context-sensitive upsells**: don't blindly suggest every tool — only suggest the tool that helps for the specific failure mode. Example: if ping shows port 443 is blocked, suggesting `meridian diagnostics` doesn't help (it's a firewall issue). But if ping passes and VPN still fails, diagnostics is the right next step.
+  - The pattern: error/failure messages → suggest test first (network issue?), then doctor (server issue?), then GitHub issues (bug?)
+  - **Context-sensitive upsells**: don't blindly suggest every tool — only suggest the tool that helps for the specific failure mode. Example: if test shows port 443 is blocked, suggesting `meridian doctor` doesn't help (it's a firewall issue). But if test passes and VPN still fails, doctor is the right next step.
   - **Pre-fill URLs with known data**: when server IP and domain are available in context (templates, CLI output), always generate pre-filled `meridian.msu.rocks/ping?ip=...&domain=...` URLs so users land on a ready-to-run test.
 - **CLI installation**: installed via `uv tool install meridian-vpn` (preferred) or `pipx install meridian-vpn`. Entry point is `meridian`. Location depends on the tool (typically `~/.local/bin/`).
 - **Auto-update**: checks PyPI JSON API for latest version. Auto-upgrades patches via `uv tool upgrade` / `pipx upgrade`, prompts for minor/major. Uses `os.execvp()` to re-exec after auto-patch.
@@ -298,7 +298,7 @@ make templates         # Jinja2 template rendering test
 - **Credential management**: `ServerCredentials` dataclass in `credentials.py` uses v2 nested format: `panel`, `server`, `protocols` (dict of protocol dataclasses), `clients` (list). V1 flat format is auto-migrated on load. Access via `creds.panel.username`, `creds.server.sni`, `creds.reality.uuid`, etc. `None` = "not set" (distinct from `""`). Handles special characters, preserves unknown fields, type-safe access.
 - **When the user says "remember"**: save the instruction to this CLAUDE.md file so it persists across sessions. Don't use auto-memory — CLAUDE.md is the canonical place for project conventions.
 - **Non-root on-server execution**: When a non-root user runs meridian on the server itself, `detect_local_mode()` sets `local_mode=True` + `needs_sudo=True`. Commands run via `sudo -n bash -c '...'`, credentials are copied via `sudo -n cat`. The `ResolvedServer.creds_dir` stays in `~/.meridian/credentials/<IP>/` (not `/etc/meridian/` which is root-only). This avoids the old hard-fail that forced users to type `sudo meridian` for every command.
-- **`sudo meridian` on servers**: `install.sh` creates a symlink `/usr/local/bin/meridian → ~/.local/bin/meridian` via `sudo -n` (non-interactive, no password prompt). `self-update` in `update.py` refreshes the symlink if it already exists. This ensures `sudo meridian` works without `secure_path` issues.
+- **`sudo meridian` on servers**: `install.sh` creates a symlink `/usr/local/bin/meridian → ~/.local/bin/meridian` via `sudo -n` (non-interactive, no password prompt). `update` in `update.py` refreshes the symlink if it already exists. This ensures `sudo meridian` works without `secure_path` issues.
 - **`.bashrc` interactivity guard**: On Debian/Ubuntu, `.bashrc` has `case $- in *i*) ;; *) return;; esac` near the top. Anything appended AFTER this guard is unreachable for non-interactive shells (`ssh host 'cmd'`). `install.sh` PREPENDS the PATH export before the guard using `mktemp` + `cat` + `mv`. Idempotency uses a `# Meridian CLI` marker (not dir string match, which false-positives on uv's env line).
 - **Shell injection in `conn.run()`**: ALL values interpolated into shell command strings passed to `conn.run()` MUST use `shlex.quote()`. This is critical because `needs_sudo` escalates commands to root via `sudo -n bash -c`. Affected files: `client.py` (credentials), `check.py` (SNI/domain), `diagnostics.py` (domain), `scan.py` (URL/CIDR), `ping.py` (SNI/IP). The shared `ssh.tcp_connect()` has quoting built in.
 - **Shared utilities in `ssh.py`**: `tcp_connect(host, port, timeout)` is the single source of truth for TCP connectivity tests (with `shlex.quote` built in). Used by both `check.py` and `ping.py`. Don't create local `_tcp_connect` copies.
@@ -336,11 +336,11 @@ When adding a **new subcommand**:
 - [ ] `CLAUDE.md` — add to meridian subcommands list
 - [ ] Regenerate AI docs (`make ai-docs`)
 
-When adding a **new flag to setup**:
+When adding a **new flag to deploy**:
 - [ ] `src/meridian/commands/setup.py` — add parameter + logic
-- [ ] `src/meridian/cli.py` — add `typer.Option` to setup_cmd
-- [ ] `docs/index.html` — add checkbox/input to setup command builder
-- [ ] `docs/ai/context.md` — add to setup flags list
+- [ ] `src/meridian/cli.py` — add `typer.Option` to deploy_cmd
+- [ ] `docs/index.html` — add checkbox/input to deploy command builder
+- [ ] `docs/ai/context.md` — add to deploy flags list
 - [ ] `CLAUDE.md` — update subcommands line
 - [ ] Regenerate AI docs (`make ai-docs`)
 
@@ -373,9 +373,9 @@ When changing **troubleshooting/error guidance**:
 
 All previously tracked inconsistencies have been resolved:
 - ~~`docs/index.html` command builder~~ — added `scan` tab, `--xhttp` checkbox, `--ai` mention, SNI guidance
-- ~~`bug_report.yml` --rage~~ → fixed to "diagnostics output"
-- ~~`CONTRIBUTING.md` --rage~~ → fixed to `meridian diagnostics`
-- ~~`SECURITY.md` --rage~~ → fixed to `meridian diagnostics`
+- ~~`bug_report.yml` --rage~~ → fixed to "doctor output"
+- ~~`CONTRIBUTING.md` --rage~~ → fixed to `meridian doctor`
+- ~~`SECURITY.md` --rage~~ → fixed to `meridian doctor`
 - ~~`README.md` missing scan/xhttp~~ → added to commands table
 - i18n translations extracted to `docs/i18n.js` (index.html reduced from 805 to ~620 lines)
 
@@ -404,8 +404,8 @@ All previously tracked inconsistencies have been resolved:
 | Bump | When | User experience |
 |------|------|----------------|
 | **Z** (patch) | Bug fixes, docs, safe tweaks | Auto-updated silently (next CLI run) |
-| **Y** (minor) | New features, opt-in changes (e.g., `--xhttp`, `scan`) | Prompted: "Update available", user runs `self-update` |
-| **X** (major) | Breaking changes, defaults change | Prompted: "Major update available", user runs `self-update` |
+| **Y** (minor) | New features, opt-in changes (e.g., `--xhttp`, `scan`) | Prompted: "Update available", user runs `update` |
+| **X** (major) | Breaking changes, defaults change | Prompted: "Major update available", user runs `update` |
 
 ### How to release
 
@@ -462,10 +462,10 @@ Server resolution follows a fixed priority cascade. All commands must use `resol
 When wrapping an external API with known quirks, write tests that explicitly verify the quirk is handled correctly. Name the test after the quirk. Never assume the API is "standard" — test the actual behavior. Exemplified by `test_panel.py` (form-urlencoded login, JSON-string settings, UUID-based deletion).
 
 ### 8. Fail-with-context — user-friendly errors
-Every `fail()` call must include a `hint_type` and, where applicable, specific action items. Types: `"user"` for input errors, `"system"` for infrastructure issues, `"bug"` for unexpected states. Always suggest the next troubleshooting tool in the chain: `meridian ping` → `meridian check` → `meridian diagnostics` → GitHub issues. Exemplified by `console.py` and `ssh.py`.
+Every `fail()` call must include a `hint_type` and, where applicable, specific action items. Types: `"user"` for input errors, `"system"` for infrastructure issues, `"bug"` for unexpected states. Always suggest the next troubleshooting tool in the chain: `meridian test` → `meridian preflight` → `meridian doctor` → GitHub issues. Exemplified by `console.py` and `ssh.py`.
 
 ### 9. Idempotent provisioning — safe re-runs
-Every provisioning step checks existing state before acting. Users must be able to re-run `meridian setup IP` safely after a partial failure. Steps return `ok` (already done) or `changed` (modified the system), never duplicate work. Exemplified by all `provision/` step classes.
+Every provisioning step checks existing state before acting. Users must be able to re-run `meridian deploy IP` safely after a partial failure. Steps return `ok` (already done) or `changed` (modified the system), never duplicate work. Exemplified by all `provision/` step classes.
 
 ### 10. Single source of truth for each concern
 Every piece of information has exactly one canonical source. Downstream consumers derive from it, never duplicate it. Examples: `VERSION` file (version), `INBOUND_TYPES` dict (protocol types), `CLAUDE.md` (architecture docs), `docs/index.html` (app download links). When you see duplication, refactor to derive from the source of truth.
@@ -476,8 +476,8 @@ See `BACKLOG.md` for the full prioritized task list with completion status.
 
 ## GitHub community files
 
-- `.github/ISSUE_TEMPLATE/bug_report.yml` — structured bug report with diagnostics prompt
-- `.github/ISSUE_TEMPLATE/connection_issue.yml` — connection troubleshooting with --check prompt
+- `.github/ISSUE_TEMPLATE/bug_report.yml` — structured bug report with doctor prompt
+- `.github/ISSUE_TEMPLATE/connection_issue.yml` — connection troubleshooting with --preflight prompt
 - `.github/ISSUE_TEMPLATE/feature_request.yml` — feature requests by area
 - `.github/ISSUE_TEMPLATE/config.yml` — disables blank issues, links to docs
 - `SECURITY.md` — vulnerability reporting policy and security design overview

@@ -96,7 +96,7 @@ class ServerConnection:
                 err_console.print(f"\n  [error]SSH connection failed:[/error] {stderr}")
                 err_console.print(f"  [dim]1. Copy your SSH key:  ssh-copy-id {self.user}@{self.ip}[/dim]")
                 err_console.print(f"  [dim]2. Test manually:      ssh {self.user}@{self.ip}[/dim]")
-                err_console.print("  [dim]3. Different user:     meridian setup IP --user ubuntu[/dim]")
+                err_console.print("  [dim]3. Different user:     meridian deploy IP --user ubuntu[/dim]")
                 fail(f"SSH connection failed to {self.user}@{self.ip}", hint_type="system")
             ok("SSH connection successful")
         except subprocess.TimeoutExpired:

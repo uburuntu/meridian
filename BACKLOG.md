@@ -47,7 +47,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
   - **Option A:** Use `hashlib.sha256` instead of `hash()` (still deterministic but less predictable)
   - **Option B:** Random port stored in credentials (fully unpredictable, idempotent on re-run)
 - [ ] `confirm()` defaults to yes without TTY — destructive ops auto-confirm in piped/CI contexts
-  - Default to "no" for destructive operations (`uninstall`)
+  - Default to "no" for destructive operations (`teardown`)
 - [ ] Diagnostics secret redaction gaps — may miss base64 keys, web_base_path, info_page_path
 
 ### UX improvements

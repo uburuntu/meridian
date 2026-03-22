@@ -49,12 +49,12 @@ class TestFail:
         assert "diagnostics" not in captured.err
 
     def test_fail_hint_type_system_suggests_diagnostics(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """hint_type='system' should suggest meridian diagnostics."""
+        """hint_type='system' should suggest meridian doctor."""
         with pytest.raises(typer.Exit):
             fail("SSH connection failed", hint_type="system")
         captured = capsys.readouterr()
         assert "SSH connection failed" in captured.err
-        assert "diagnostics" in captured.err
+        assert "doctor" in captured.err
         assert "github.com" not in captured.err
 
     def test_fail_hint_type_bug_is_default(self, capsys: pytest.CaptureFixture[str]) -> None:

@@ -48,11 +48,11 @@ def _load_creds(creds_dir: Path) -> ServerCredentials:
     """Load and validate credentials from creds_dir."""
     proxy_file = creds_dir / "proxy.yml"
     if not proxy_file.exists():
-        fail("No credentials found", hint="Deploy the server first: meridian setup", hint_type="user")
+        fail("No credentials found", hint="Deploy the server first: meridian deploy", hint_type="user")
 
     creds = ServerCredentials.load(proxy_file)
     if not creds.has_credentials:
-        fail("No panel credentials found", hint="Deploy the server first: meridian setup", hint_type="user")
+        fail("No panel credentials found", hint="Deploy the server first: meridian deploy", hint_type="user")
     return creds
 
 
@@ -68,7 +68,7 @@ def _make_panel(creds: ServerCredentials, conn: ServerConnection) -> PanelClient
     except PanelError as e:
         fail(
             f"Could not connect to server panel: {e}",
-            hint="Check credentials or run: meridian setup",
+            hint="Check credentials or run: meridian deploy",
             hint_type="system",
         )
     return panel
@@ -219,7 +219,7 @@ def run_add(
         if reality_inbound is None:
             fail(
                 "Server is not set up yet",
-                hint="Deploy first: meridian setup",
+                hint="Deploy first: meridian deploy",
                 hint_type="system",
             )
 
@@ -335,7 +335,7 @@ def run_add(
             hosted_page_url=hosted_page_url,
         )
 
-        err_console.print(f"  [dim]Test reachability: meridian ping {resolved.ip}[/dim]")
+        err_console.print(f"  [dim]Test reachability: meridian test {resolved.ip}[/dim]")
         err_console.print("  [dim]View all clients:  meridian client list[/dim]\n")
 
 
