@@ -52,6 +52,7 @@ const dir = locale === 'fa' ? 'rtl' : 'ltr';
     />
 
     <meta name="generator" content={Astro.generator} />
+    <slot name="head" />
   </head>
   <body>
     <a href="#main" class="skip-link">Skip to content</a>

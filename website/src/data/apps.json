@@ -1,0 +1,22 @@
+[
+  {
+    "name": "v2RayTun",
+    "platform": "iOS",
+    "url": "https://apps.apple.com/app/v2raytun/id6476628951"
+  },
+  {
+    "name": "v2rayNG",
+    "platform": "Android",
+    "url": "https://github.com/2dust/v2rayNG/releases/latest"
+  },
+  {
+    "name": "Hiddify",
+    "platform": "All platforms",
+    "url": "https://github.com/hiddify/hiddify-app/releases/latest"
+  },
+  {
+    "name": "v2rayN",
+    "platform": "Windows",
+    "url": "https://github.com/2dust/v2rayN/releases/latest"
+  }
+]

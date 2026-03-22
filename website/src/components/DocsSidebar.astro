@@ -23,6 +23,7 @@ const { currentSlug, sections } = Astro.props;
 ---
 
 <aside class="sidebar" id="docs-sidebar">
+  <div class="sidebar__search" id="search-container"></div>
   <nav aria-label="Documentation">
     {sections.map((section) => (
       <div class="sidebar__section">
@@ -94,4 +95,72 @@ const { currentSlug, sections } = Astro.props;
       display: none;
     }
   }
+
+  /* Pagefind search overrides */
+  .sidebar__search {
+    padding: 0 8px 16px;
+    border-bottom: 1px solid var(--b1);
+    margin-bottom: 16px;
+  }
+  .sidebar__search :global(.pagefind-ui__search-input) {
+    font-family: var(--body);
+    font-size: 0.82rem;
+    background: var(--bg);
+    border: 1px solid var(--b1);
+    border-radius: var(--r);
+    color: var(--t1);
+    padding: 8px 12px;
+    width: 100%;
+  }
+  .sidebar__search :global(.pagefind-ui__search-input:focus) {
+    border-color: var(--b2);
+    outline: none;
+  }
+  .sidebar__search :global(.pagefind-ui__search-clear) {
+    color: var(--t3);
+  }
+  .sidebar__search :global(.pagefind-ui__results-area) {
+    font-size: 0.8rem;
+  }
+  .sidebar__search :global(.pagefind-ui__result-link) {
+    color: var(--ac);
+    font-size: 0.82rem;
+  }
+  .sidebar__search :global(.pagefind-ui__result-excerpt) {
+    color: var(--t2);
+    font-size: 0.75rem;
+  }
+  .sidebar__search :global(.pagefind-ui__message) {
+    color: var(--t3);
+    font-size: 0.75rem;
+  }
+  .sidebar__search :global(.pagefind-ui) {
+    --pagefind-ui-scale: 0.75;
+    --pagefind-ui-primary: var(--ac);
+    --pagefind-ui-text: var(--t1);
+    --pagefind-ui-background: var(--bg);
+    --pagefind-ui-border: var(--b1);
+    --pagefind-ui-tag: var(--s2);
+    --pagefind-ui-border-width: 1px;
+    --pagefind-ui-border-radius: 6px;
+    --pagefind-ui-font: var(--body);
+  }
 </style>
+
+<script is:inline>
+  (async function() {
+    var container = document.getElementById('search-container');
+    if (!container) return;
+
+    try {
+      var pagefind = await import('/pagefind/pagefind-ui.js');
+      new pagefind.PagefindUI({
+        element: '#search-container',
+        showSubResults: true,
+        showImages: false,
+      });
+    } catch (e) {
+      container.innerHTML = '<input type="search" placeholder="Search docs..." style="font-family:var(--body);font-size:0.82rem;background:var(--bg);border:1px solid var(--b1);border-radius:6px;color:var(--t1);padding:8px 12px;width:100%;opacity:0.5" disabled title="Search available in production build" />';
+    }
+  })();
+</script>

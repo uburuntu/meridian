@@ -28,25 +28,34 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Build site
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build Astro site
         run: |
-          mkdir -p _site
-          # Copy docs source files
-          cp -r docs/* _site/
-          # Copy CLI files from root
-          cp install.sh _site/install.sh
-          cp setup.sh _site/setup.sh
-          cp VERSION _site/version
+          cd website
+          npm ci
+          npm run build
+
+      - name: Add deploy artifacts
+        run: |
+          # Copy CLI files into Astro dist
+          cp install.sh website/dist/install.sh
+          cp setup.sh website/dist/setup.sh
+          cp VERSION website/dist/version
           # Generate checksums
-          cd _site
+          cd website/dist
           sha256sum install.sh setup.sh > SHA256SUMS
-          cd ..
+          cd ../..
           # Bundle AI docs
-          if [ -d _site/ai ]; then
-            cat docs/ai/context.md docs/ai/architecture.md docs/ai/troubleshooting.md > _site/ai/reference.md
-          fi
+          mkdir -p website/dist/ai
+          cat docs/ai/context.md docs/ai/architecture.md docs/ai/troubleshooting.md > website/dist/ai/reference.md
 
       - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/dist
 
       - name: Deploy to GitHub Pages
         id: deploy

@@ -1,0 +1,451 @@
+---
+/**
+ * CommandBuilder — 5-tab interactive CLI command builder.
+ * Ported from docs/index.html. Pure vanilla JS, no framework.
+ */
+
+const tabs = [
+  { key: 'install', label: 'Deploy', i18n: 'builder.tab.deploy' },
+  { key: 'check', label: 'Preflight', i18n: 'builder.tab.preflight' },
+  { key: 'scan', label: 'SNI Scan', i18n: 'builder.tab.scan' },
+  { key: 'diag', label: 'Doctor', i18n: 'builder.tab.doctor' },
+  { key: 'uninstall', label: 'Teardown', i18n: 'builder.tab.teardown' },
+];
+---
+
+<div class="builder" id="builder">
+  <!-- Tabs -->
+  <div class="builder__tabs" role="tablist">
+    {tabs.map((tab, i) => (
+      <button
+        class={`builder__tab ${i === 0 ? 'builder__tab--active' : ''}`}
+        data-tab={tab.key}
+        data-t={tab.i18n}
+        role="tab"
+        aria-selected={i === 0 ? 'true' : 'false'}
+      >
+        {tab.label}
+      </button>
+    ))}
+  </div>
+
+  <div class="builder__body">
+    <!-- Tab description -->
+    <p class="builder__desc" id="builder-desc" data-t="builder.desc.deploy">
+      Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.
+    </p>
+
+    <!-- Fields -->
+    <div class="builder__fields">
+      <div class="builder__field" id="row-ip">
+        <label class="builder__label" data-t="builder.field.ip">Server IP</label>
+        <input id="f-ip" type="text" placeholder="123.45.67.89" class="builder__input" />
+        <span class="builder__hint" data-t="builder.field.ip.hint">Your VPS public IPv4 address. Leave empty for interactive mode.</span>
+      </div>
+
+      <div class="builder__field" id="row-user">
+        <label class="builder__label" data-t="builder.field.user">SSH user</label>
+        <input id="f-user" type="text" value="root" placeholder="root" class="builder__input builder__input--short" />
+        <span class="builder__hint" data-t="builder.field.user.hint">Default: root. Non-root users get sudo automatically.</span>
+      </div>
+
+      <div class="builder__field" id="row-domain">
+        <label class="builder__label builder__label--check">
+          <input id="f-domain-on" type="checkbox" class="builder__checkbox" />
+          <span data-t="builder.field.domain">Domain</span>
+        </label>
+        <input id="f-domain" type="text" placeholder="example.com" class="builder__input builder__input--toggle" />
+        <span class="builder__hint" data-t="builder.field.domain.hint">Optional. Adds CDN fallback via Cloudflare and web panel access.</span>
+      </div>
+
+      <div class="builder__field" id="row-sni">
+        <label class="builder__label builder__label--check">
+          <input id="f-sni-on" type="checkbox" class="builder__checkbox" />
+          <span data-t="builder.field.sni">Custom SNI</span>
+        </label>
+        <input id="f-sni" type="text" placeholder="www.microsoft.com" class="builder__input builder__input--toggle" />
+        <span class="builder__hint" data-t="builder.field.sni.hint">Site that Reality impersonates. Default: www.microsoft.com. Use <code>meridian scan</code> for optimal targets.</span>
+      </div>
+
+      <div class="builder__field" id="row-xhttp">
+        <label class="builder__label builder__label--check">
+          <input id="f-xhttp" type="checkbox" checked class="builder__checkbox" />
+          <span data-t="builder.field.xhttp">XHTTP transport</span>
+        </label>
+        <span class="builder__hint" data-t="builder.field.xhttp.hint">Enabled by default. Routed through port 443 via Caddy. Requires v2rayNG 1.9+ or Hiddify.</span>
+      </div>
+
+      <div class="builder__field" id="row-yes">
+        <label class="builder__label builder__label--check">
+          <input id="f-yes" type="checkbox" class="builder__checkbox" />
+          <span data-t="builder.field.yes">Skip prompts</span>
+        </label>
+        <span class="builder__hint" data-t="builder.field.yes.hint">Add --yes flag. For CI/automation or non-interactive SSH sessions.</span>
+      </div>
+    </div>
+
+    <!-- Command output -->
+    <div class="builder__output">
+      <button class="builder__copy" id="builder-copy" aria-label="Copy command">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span>Copy</span>
+      </button>
+      <pre id="builder-cmd">meridian deploy</pre>
+    </div>
+    <p class="builder__status" id="builder-status"></p>
+  </div>
+</div>
+
+<script>
+  const TAB_CONFIG: Record<string, { desc: string; show: string[]; cmd: string; descKey: string }> = {
+    install: {
+      desc: 'Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.',
+      show: ['ip', 'user', 'domain', 'sni', 'xhttp', 'yes'],
+      cmd: 'deploy',
+      descKey: 'builder.desc.deploy',
+    },
+    check: {
+      desc: 'Test if your server is compatible — checks SNI, ports, DNS, OS, disk, ASN match.',
+      show: ['ip', 'user', 'domain'],
+      cmd: 'preflight',
+      descKey: 'builder.desc.preflight',
+    },
+    scan: {
+      desc: "Find optimal SNI targets on your server's network using RealiTLScanner.",
+      show: ['ip', 'user'],
+      cmd: 'scan',
+      descKey: 'builder.desc.scan',
+    },
+    diag: {
+      desc: 'Collect system diagnostics for bug reports. Secrets are auto-redacted.',
+      show: ['ip', 'user'],
+      cmd: 'doctor',
+      descKey: 'builder.desc.doctor',
+    },
+    uninstall: {
+      desc: 'Remove proxy container, configs, and firewall rules. Docker and system packages are kept.',
+      show: ['ip', 'user', 'yes'],
+      cmd: 'teardown',
+      descKey: 'builder.desc.teardown',
+    },
+  };
+
+  const ALL_FIELDS = ['ip', 'user', 'domain', 'sni', 'xhttp', 'yes'];
+  let curTab = 'install';
+
+  function $(id: string) {
+    return document.getElementById(id);
+  }
+
+  function setTab(t: string) {
+    curTab = t;
+    document.querySelectorAll('.builder__tab').forEach((btn) => {
+      const active = (btn as HTMLElement).dataset.tab === t;
+      btn.classList.toggle('builder__tab--active', active);
+      btn.setAttribute('aria-selected', String(active));
+    });
+
+    const cfg = TAB_CONFIG[t];
+    const descEl = $('builder-desc');
+    if (descEl) {
+      descEl.textContent = cfg.desc;
+      descEl.dataset.t = cfg.descKey;
+    }
+
+    ALL_FIELDS.forEach((f) => {
+      const row = $('row-' + f);
+      if (row) row.style.display = cfg.show.includes(f) ? '' : 'none';
+    });
+
+    buildCmd();
+  }
+
+  function buildCmd() {
+    const ip = ($('f-ip') as HTMLInputElement).value.trim();
+    const user = ($('f-user') as HTMLInputElement).value.trim() || 'root';
+    const domOn = ($('f-domain-on') as HTMLInputElement).checked;
+    const dom = ($('f-domain') as HTMLInputElement).value.trim();
+    const sniOn = ($('f-sni-on') as HTMLInputElement).checked;
+    const sni = ($('f-sni') as HTMLInputElement).value.trim();
+    const xhttp = ($('f-xhttp') as HTMLInputElement).checked;
+    const yes = ($('f-yes') as HTMLInputElement).checked;
+    const status = $('builder-status')!;
+    const cfg = TAB_CONFIG[curTab];
+
+    // Toggle conditional inputs
+    ($('f-domain') as HTMLElement).style.display = domOn ? '' : 'none';
+    ($('f-sni') as HTMLElement).style.display = sniOn ? '' : 'none';
+
+    const args: string[] = [];
+
+    if (ip) {
+      if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
+        status.textContent = 'Enter a valid IPv4 address';
+        status.className = 'builder__status builder__status--error';
+        ($('builder-cmd') as HTMLElement).textContent = 'meridian ' + cfg.cmd;
+        persist();
+        return;
+      }
+      args.push(ip);
+    }
+
+    if (user && user !== 'root') args.push('--user ' + user);
+    if (cfg.show.includes('domain') && domOn && dom) args.push('--domain ' + dom);
+    if (cfg.show.includes('sni') && sniOn && sni && sni !== 'www.microsoft.com') args.push('--sni ' + sni);
+    if (cfg.show.includes('xhttp') && !xhttp) args.push('--no-xhttp');
+    if (cfg.show.includes('yes') && yes) args.push('--yes');
+
+    let cmd = 'meridian ' + cfg.cmd;
+    if (args.length) cmd += ' ' + args.join(' ');
+    ($('builder-cmd') as HTMLElement).textContent = cmd;
+
+    // Status hints
+    if (curTab === 'install') {
+      if (!ip) {
+        status.textContent = 'Enter your server IP, or just run the base command — the wizard will ask.';
+        status.className = 'builder__status';
+      } else if (domOn && !dom) {
+        status.textContent = 'Enter a domain or uncheck to skip.';
+        status.className = 'builder__status';
+      } else {
+        const mode = domOn ? 'Reality + CDN fallback' : 'Reality-only';
+        status.textContent = 'Deploys ' + mode + (xhttp ? '' : ' (XHTTP disabled)') + '.';
+        status.className = 'builder__status builder__status--ok';
+      }
+    } else if (curTab === 'check') {
+      status.textContent = ip ? 'Runs preflight checks without installing anything.' : 'Enter your server IP to run the preflight.';
+      status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
+    } else if (curTab === 'scan') {
+      status.textContent = ip ? "Scans server's /24 subnet for same-network TLS targets." : 'Enter your server IP to find optimal SNI targets.';
+      status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
+    } else if (curTab === 'diag') {
+      status.textContent = ip ? 'Collects diagnostics. Add --ai for AI-ready help prompt.' : 'Enter your server IP to collect diagnostics.';
+      status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
+    } else {
+      status.textContent = ip ? 'Removes Meridian. Docker and system packages are kept.' : 'IP is auto-detected from saved credentials if omitted.';
+      status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
+    }
+
+    persist();
+  }
+
+  function persist() {
+    try {
+      localStorage.setItem(
+        'meridian-builder',
+        JSON.stringify({
+          ip: ($('f-ip') as HTMLInputElement).value.trim(),
+          user: ($('f-user') as HTMLInputElement).value.trim(),
+          domOn: ($('f-domain-on') as HTMLInputElement).checked,
+          dom: ($('f-domain') as HTMLInputElement).value.trim(),
+          sniOn: ($('f-sni-on') as HTMLInputElement).checked,
+          sni: ($('f-sni') as HTMLInputElement).value.trim(),
+          xhttp: ($('f-xhttp') as HTMLInputElement).checked,
+          yes: ($('f-yes') as HTMLInputElement).checked,
+          tab: curTab,
+        }),
+      );
+    } catch {}
+  }
+
+  function restore() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('meridian-builder') || '{}');
+      if (saved.ip) ($('f-ip') as HTMLInputElement).value = saved.ip;
+      if (saved.user) ($('f-user') as HTMLInputElement).value = saved.user;
+      if (saved.domOn) ($('f-domain-on') as HTMLInputElement).checked = true;
+      if (saved.dom) ($('f-domain') as HTMLInputElement).value = saved.dom;
+      if (saved.sniOn) ($('f-sni-on') as HTMLInputElement).checked = true;
+      if (saved.sni) ($('f-sni') as HTMLInputElement).value = saved.sni;
+      if (saved.xhttp === false) ($('f-xhttp') as HTMLInputElement).checked = false;
+      if (saved.yes) ($('f-yes') as HTMLInputElement).checked = true;
+      if (saved.tab && TAB_CONFIG[saved.tab]) setTab(saved.tab);
+      else buildCmd();
+    } catch {
+      buildCmd();
+    }
+  }
+
+  // Wire up events
+  document.querySelectorAll('.builder__tab').forEach((btn) => {
+    btn.addEventListener('click', () => setTab((btn as HTMLElement).dataset.tab!));
+  });
+
+  document.querySelectorAll('#builder input').forEach((input) => {
+    input.addEventListener('input', buildCmd);
+    input.addEventListener('change', buildCmd);
+  });
+
+  // Copy button
+  $('builder-copy')?.addEventListener('click', () => {
+    const text = ($('builder-cmd') as HTMLElement).textContent || '';
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = $('builder-copy')!;
+      const span = btn.querySelector('span')!;
+      span.textContent = 'Copied!';
+      btn.classList.add('builder__copy--done');
+      setTimeout(() => {
+        span.textContent = 'Copy';
+        btn.classList.remove('builder__copy--done');
+      }, 1500);
+    });
+  });
+
+  // Restore saved state
+  restore();
+</script>
+
+<style>
+  .builder {
+    background: var(--s1);
+    border: 1px solid var(--b1);
+    border-radius: var(--r2);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+
+  .builder__tabs {
+    display: flex;
+    border-bottom: 1px solid var(--b1);
+    flex-wrap: wrap;
+  }
+
+  .builder__tab {
+    flex: 1;
+    padding: 11px 8px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--t3);
+    font-family: var(--body);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.1s, border-color 0.1s;
+    white-space: nowrap;
+  }
+  .builder__tab:hover { color: var(--t2); }
+  .builder__tab--active {
+    color: var(--ac);
+    border-bottom-color: var(--ac);
+  }
+
+  .builder__body {
+    padding: 20px 24px 24px;
+  }
+
+  .builder__desc {
+    font-size: 0.78rem;
+    color: var(--t3);
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  .builder__field {
+    margin-bottom: 12px;
+  }
+
+  .builder__label {
+    display: flex;
+    align-items: center;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--t1);
+    margin-bottom: 5px;
+    user-select: none;
+  }
+  .builder__label--check {
+    cursor: pointer;
+    gap: 6px;
+  }
+
+  .builder__checkbox {
+    accent-color: var(--ac);
+  }
+
+  .builder__input {
+    background: var(--bg);
+    border: 1px solid var(--b1);
+    color: var(--t1);
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    padding: 9px 12px;
+    border-radius: var(--r);
+    outline: none;
+    transition: border-color 0.1s;
+    width: 100%;
+  }
+  .builder__input:focus { border-color: var(--b2); }
+  .builder__input--short { width: 120px; }
+  .builder__input--toggle { display: none; }
+
+  .builder__hint {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--t3);
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+  .builder__hint :global(code) {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    background: var(--s2);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+
+  .builder__output {
+    position: relative;
+    margin-top: 16px;
+    background: var(--s2);
+    border: 1px solid var(--b1);
+    border-radius: var(--r);
+    padding: 16px 20px;
+    padding-right: 80px;
+  }
+  .builder__output pre {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--t1);
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .builder__copy {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    background: var(--s1);
+    border: 1px solid var(--b1);
+    border-radius: var(--r);
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--t3);
+    cursor: pointer;
+    transition: color 0.1s, border-color 0.1s;
+  }
+  .builder__copy:hover { color: var(--t1); border-color: var(--b2); }
+  .builder__copy--done { color: var(--ok); border-color: var(--ok); }
+
+  .builder__status {
+    font-size: 0.78rem;
+    color: var(--t3);
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+  .builder__status--ok { color: var(--ok); }
+  .builder__status--error { color: var(--err); }
+
+  @media (max-width: 480px) {
+    .builder__tab { font-size: 0.72rem; padding: 9px 6px; }
+    .builder__body { padding: 16px; }
+  }
+</style>

@@ -77,23 +77,26 @@ jobs:
           pip install jinja2
           python3 tests/render_templates.py
 
-      - name: Verify connection-info app links match demo.html
+      - name: Verify connection-info app links match website data
         run: |
           python3 -c "
-          import re, sys
+          import json, re, sys
           template = 'src/meridian/templates/connection-info.html.j2'
-          demo = 'docs/demo.html'
+          data_file = 'website/src/data/apps.json'
           def extract_links(path):
               content = open(path).read()
               return sorted(set(re.findall(r'https://(?:play\.google\.com|apps\.apple\.com|github\.com/\S+/releases)[^\s\"<]*', content)))
+          def extract_json_links(path):
+              data = json.load(open(path))
+              return sorted(set(item['url'] for item in data if re.match(r'https://(?:play\.google\.com|apps\.apple\.com|github\.com/)', item['url'])))
           baseline = extract_links(template)
-          demo_links = extract_links(demo)
-          if demo_links != baseline:
-              print(f'MISMATCH: {demo}')
+          data_links = extract_json_links(data_file)
+          if data_links != baseline:
+              print(f'MISMATCH between template and website/src/data/apps.json')
               print(f'  Template: {baseline}')
-              print(f'  Demo:     {demo_links}')
+              print(f'  Data:     {data_links}')
               sys.exit(1)
-          print(f'OK: App download links match between template and demo.html')
+          print(f'OK: App download links match between template and apps.json')
           "
 
       - name: Verify VERSION file format
@@ -175,6 +178,19 @@ jobs:
     runs-on: ubuntu-latest
     needs: [python-test, python-lint]
     timeout-minutes: 15
+
+  website:
+    name: Website Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build Astro site
+        run: cd website && npm ci && npm run build
     steps:
       - uses: actions/checkout@v5
 

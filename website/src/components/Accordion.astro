@@ -1,15 +1,16 @@
 ---
 interface Props {
   title: string;
+  titleKey?: string;
   open?: boolean;
 }
 
-const { title, open = false } = Astro.props;
+const { title, titleKey, open = false } = Astro.props;
 ---
 
 <details class="accordion" open={open || undefined}>
   <summary class="accordion__trigger">
-    <span class="accordion__title">{title}</span>
+    <span class="accordion__title" {...(titleKey ? { 'data-t': titleKey } : {})}>{title}</span>
     <svg class="accordion__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="6 9 12 15 18 9"></polyline>
     </svg>

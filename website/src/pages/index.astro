@@ -6,12 +6,7 @@ import Timeline from '../components/Timeline.astro';
 import AppGrid from '../components/AppGrid.astro';
 import Accordion from '../components/Accordion.astro';
 import Callout from '../components/Callout.astro';
-
-const setupSteps = [
-  { title: 'Install the CLI', text: ' on your laptop — one command, nothing on the server yet' },
-  { title: 'Run deploy', text: ' — the interactive wizard configures everything via SSH' },
-  { title: 'Share the QR code', text: ' — your friends scan it once and they\'re connected' },
-];
+import CommandBuilder from '../components/CommandBuilder.astro';
 
 const detailSteps = [
   { title: 'Installs Docker', text: ' and deploys <strong>Xray</strong> via the <strong>3x-ui</strong> management panel' },
@@ -28,7 +23,7 @@ const detailSteps = [
     <Hero />
 
     <!-- HOW IT WORKS (simple) -->
-    <section id="setup">
+    <section id="setup" class="reveal">
       <div class="container">
         <div class="section-label" data-t="setup.label">How it works</div>
         <h2 data-t="setup.title">Three steps to secure internet</h2>
@@ -65,8 +60,23 @@ const detailSteps = [
 
     <hr class="hr" />
 
+    <!-- COMMAND BUILDER -->
+    <section id="builder-section" class="reveal">
+      <div class="container">
+        <div class="section-label" data-t="builder.label">Command builder</div>
+        <h2 data-t="builder.title">Build your command</h2>
+        <p class="section-desc" data-t="builder.desc">
+          Configure flags interactively and copy the full command. Supports all Meridian CLI operations.
+        </p>
+
+        <CommandBuilder />
+      </div>
+    </section>
+
+    <hr class="hr" />
+
     <!-- WHY IT WORKS -->
-    <section id="technology">
+    <section id="technology" class="reveal">
       <div class="container">
         <div class="section-label" data-t="tech.label">Technology</div>
         <h2 data-t="tech.title">Why censors can't detect it</h2>
@@ -76,7 +86,7 @@ const detailSteps = [
         </p>
 
         <div class="tech-grid">
-          <Accordion title="Deep Packet Inspection (DPI)" open>
+          <Accordion title="Deep Packet Inspection (DPI)" titleKey="tech.dpi" open>
             <p>
               DPI analyzes traffic patterns to identify proxy protocols. VPNs like
               OpenVPN and WireGuard have distinctive packet signatures that are trivial to block.
@@ -88,7 +98,7 @@ const detailSteps = [
             </p>
           </Accordion>
 
-          <Accordion title="Active probing">
+          <Accordion title="Active probing" titleKey="tech.probe">
             <p>
               Censors connect to suspicious servers and try to fingerprint them. If a server
               responds differently than the website it claims to be, it gets blocked.
@@ -101,7 +111,7 @@ const detailSteps = [
             </p>
           </Accordion>
 
-          <Accordion title="TLS fingerprinting">
+          <Accordion title="TLS fingerprinting" titleKey="tech.fp">
             <p>
               Every TLS client sends a unique "Client Hello" fingerprint. Censors flag connections
               where the fingerprint doesn't match the claimed application.
@@ -119,7 +129,7 @@ const detailSteps = [
     <hr class="hr" />
 
     <!-- CONNECT -->
-    <section id="connect">
+    <section id="connect" class="reveal">
       <div class="container">
         <div class="section-label" data-t="connect.label">Connect</div>
         <h2 data-t="connect.title">Scan and go</h2>
@@ -140,7 +150,7 @@ const detailSteps = [
     <hr class="hr" />
 
     <!-- ARCHITECTURE -->
-    <section id="architecture">
+    <section id="architecture" class="reveal">
       <div class="container">
         <div class="section-label" data-t="arch.label">Architecture</div>
         <h2 data-t="arch.title">Under the hood</h2>
@@ -156,7 +166,7 @@ const detailSteps = [
         </div>
 
         <div class="arch-grid">
-          <Accordion title="Standalone mode (no domain)" open>
+          <Accordion title="Standalone mode (no domain)" titleKey="arch.standalone" open>
             <p>
               <strong>HAProxy</strong> sits on port 443 and routes traffic by TLS SNI.
               Reality connections route to <strong>Xray</strong>, while <strong>Caddy</strong>
@@ -170,7 +180,7 @@ const detailSteps = [
             </p>
           </Accordion>
 
-          <Accordion title="Domain mode (CDN fallback)">
+          <Accordion title="Domain mode (CDN fallback)" titleKey="arch.domain">
             <p>Adds three components on top of standalone:</p>
             <p>
               <strong>HAProxy</strong> inspects TLS SNI without terminating encryption.
@@ -186,12 +196,12 @@ const detailSteps = [
     <hr class="hr" />
 
     <!-- REFERENCE -->
-    <section id="reference">
+    <section id="reference" class="reveal">
       <div class="container">
         <div class="section-label" data-t="ref.label">Reference</div>
         <h2 data-t="ref.title">Configuration & operations</h2>
 
-        <Accordion title="Customization">
+        <Accordion title="Customization" titleKey="ref.customization">
           <p>All settings are passed as CLI flags to <code>meridian deploy</code>:</p>
           <div class="ref-table-wrap">
             <table class="ref-table">
@@ -216,7 +226,7 @@ const detailSteps = [
           </p>
         </Accordion>
 
-        <Accordion title="Cloudflare CDN setup">
+        <Accordion title="Cloudflare CDN setup" titleKey="ref.cloudflare">
           <p><strong>Follow this order</strong> to avoid TLS certificate issues:</p>
           <p>
             1. Add domain in Cloudflare, create A record to server IP<br />
@@ -227,7 +237,7 @@ const detailSteps = [
           </p>
         </Accordion>
 
-        <Accordion title="Client management">
+        <Accordion title="Client management" titleKey="ref.clients">
           <p>Share access with friends — each gets their own key:</p>
           <CodeBlock code="meridian client add alice" />
           <p>List all clients:</p>
@@ -236,7 +246,7 @@ const detailSteps = [
           <CodeBlock code="meridian client remove alice" />
         </Accordion>
 
-        <Accordion title="Troubleshooting">
+        <Accordion title="Troubleshooting" titleKey="ref.troubleshoot">
           <p><strong>Not connecting?</strong> Test reachability from your device:</p>
           <CodeBlock code="meridian test" />
           <p>
@@ -248,17 +258,17 @@ const detailSteps = [
           <CodeBlock code="meridian doctor --ai" />
         </Accordion>
 
-        <Accordion title="Update & maintenance">
+        <Accordion title="Update & maintenance" titleKey="ref.update">
           <CodeBlock code={`ssh root@YOUR_SERVER\ncd /opt/3x-ui && docker compose pull && docker compose up -d`} />
           <p>Or re-run <code>meridian deploy</code> — safe to repeat anytime.</p>
         </Accordion>
 
-        <Accordion title="Uninstall">
+        <Accordion title="Uninstall" titleKey="ref.uninstall">
           <CodeBlock code="meridian teardown" />
           <p>Removes the proxy container, configs, and firewall rules. Docker and system packages are kept.</p>
         </Accordion>
 
-        <Accordion title="Security notes">
+        <Accordion title="Security notes" titleKey="ref.security">
           <p>
             Credentials at <code>/etc/meridian/</code> (server) and <code>~/.meridian/credentials/</code> (local).
             Panel reverse-proxied on a secret HTTPS path. SSH password auth disabled. UFW allows only 22, 80, 443.
@@ -270,7 +280,35 @@ const detailSteps = [
   </main>
 </Base>
 
+<!-- Scroll reveal animations -->
+<script>
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+          observer.unobserve(entry.target);
+        }
+      });
+    },
+    { threshold: 0.08, rootMargin: '0px 0px -40px 0px' },
+  );
+
+  document.querySelectorAll('.reveal').forEach((el) => observer.observe(el));
+</script>
+
 <style>
+  /* Scroll reveal */
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .reveal.revealed {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
   /* Setup section — two-column on desktop */
   .setup-grid {
     display: grid;
