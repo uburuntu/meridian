@@ -1,0 +1,443 @@
+---
+/**
+ * Demo page — shows what a connection page looks like.
+ * Uses the same visual structure as connection-info.html.j2 but with demo data.
+ */
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Demo — Meridian Connection Page" description="Preview of the connection page your friends receive.">
+  <main id="main" class="demo-page">
+    <div class="demo-wrap">
+      <div class="demo-badge">Demo Preview</div>
+
+      <div class="demo-hdr">
+        <h1>Connection Setup</h1>
+        <p>Scan QR code or tap to open in your app</p>
+      </div>
+
+      <!-- Stats -->
+      <div class="demo-stats">
+        <div class="demo-stats-title">Usage</div>
+        <div class="demo-stats-grid">
+          <div class="demo-stats-item"><div class="demo-stats-val">0.4 GB</div><div class="demo-stats-label">Upload</div></div>
+          <div class="demo-stats-item"><div class="demo-stats-val">9.5 GB</div><div class="demo-stats-label">Download</div></div>
+        </div>
+        <div class="demo-stats-active">Active 2m ago</div>
+      </div>
+
+      <!-- Primary card -->
+      <div class="demo-card demo-card-blue">
+        <div class="demo-card-label"><span class="demo-dot demo-dot-blue"></span> Primary <span class="demo-card-rec">Recommended</span></div>
+        <p class="demo-card-desc">Recommended — fastest and most reliable connection. Use this first.</p>
+        <div class="demo-open-btn demo-open-blue">Open in App</div>
+        <div class="demo-qr" id="qr-reality"></div>
+        <div class="demo-url">vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@185.93.xx.xx:443?security=reality&amp;sni=www.microsoft.com&amp;fp=chrome&amp;pbk=demo_public_key&amp;type=tcp&amp;flow=xtls-rprx-vision#Meridian</div>
+      </div>
+
+      <!-- XHTTP card -->
+      <div class="demo-card demo-card-blue">
+        <div class="demo-card-label"><span class="demo-dot demo-dot-blue"></span> XHTTP</div>
+        <p class="demo-card-desc">Alternative — use if Primary doesn't work. More hidden from censors.</p>
+        <div class="demo-open-btn demo-open-blue">Open in App</div>
+        <div class="demo-qr" id="qr-xhttp"></div>
+        <div class="demo-url">vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@185.93.xx.xx:443?security=tls&amp;type=xhttp&amp;path=/xh_demo#Meridian-XHTTP</div>
+      </div>
+
+      <!-- Backup card -->
+      <div class="demo-card demo-card-amber">
+        <div class="demo-card-label"><span class="demo-dot demo-dot-amber"></span> Backup</div>
+        <p class="demo-card-desc">Fallback — routes through CDN. Use only if both above fail.</p>
+        <div class="demo-open-btn demo-open-amber">Open in App</div>
+        <div class="demo-qr" id="qr-wss"></div>
+        <div class="demo-url">vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@proxy.example.com:443?security=tls&amp;type=ws&amp;path=/ws_demo#Meridian-WSS</div>
+      </div>
+
+      <!-- Apps -->
+      <div class="demo-card">
+        <div class="demo-card-title">Client Apps</div>
+        <p class="demo-card-desc">Install one, then tap "Open in App" or scan the QR code.</p>
+        <div class="demo-apps" id="demo-apps">
+          <a class="demo-app" href="https://apps.apple.com/app/v2raytun/id6476628951" target="_blank" data-os="iOS">v2RayTun<span>iOS</span></a>
+          <a class="demo-app" href="https://github.com/2dust/v2rayNG/releases/latest" target="_blank" data-os="Android">v2rayNG<span>Android</span></a>
+          <a class="demo-app" href="https://github.com/hiddify/hiddify-app/releases/latest" target="_blank" data-os="All">Hiddify<span>All platforms</span></a>
+          <a class="demo-app" href="https://github.com/2dust/v2rayN/releases/latest" target="_blank" data-os="Windows">v2rayN<span>Windows</span></a>
+        </div>
+      </div>
+
+      <!-- Quick setup -->
+      <div class="demo-card">
+        <div class="demo-card-title">Quick Setup</div>
+        <div class="demo-steps">
+          <div class="demo-step">Install a client app from the list above</div>
+          <div class="demo-step">Tap "Open in App" — the connection imports automatically</div>
+          <div class="demo-step">Or scan the QR code from another device</div>
+          <div class="demo-step">Activate the connection in the app</div>
+        </div>
+      </div>
+
+      <!-- Warnings -->
+      <div class="demo-warn">
+        <h3>Clock Sync Required</h3>
+        <p>Your device clock must be accurate within 30 seconds. Go to Settings > Date & Time > enable "Set Automatically".</p>
+      </div>
+
+      <div class="demo-warn" style="border-color: #d4a24e33; background: #d4a24e08;">
+        <h3>Not connecting?</h3>
+        <p>Test if the server is reachable: <a href="/ping/">Run ping test</a></p>
+      </div>
+
+      <!-- Footer -->
+      <div class="demo-foot">
+        <a href="/">Powered by Meridian</a>
+        <span class="demo-sep">&middot;</span>
+        <a href="https://github.com/uburuntu/meridian" target="_blank">GitHub</a>
+      </div>
+
+      <p class="demo-note">
+        This is a demo preview. Real pages have working QR codes, deep links, and connection URLs unique to each client.
+      </p>
+    </div>
+  </main>
+</Base>
+
+<style>
+  .demo-page {
+    padding-top: 52px;
+    background-image: radial-gradient(var(--b1) 0.5px, transparent 0.5px);
+    background-size: 24px 24px;
+  }
+  .demo-wrap {
+    max-width: 460px;
+    margin: 0 auto;
+    padding: 24px 16px 40px;
+    position: relative;
+  }
+  .demo-badge {
+    position: absolute;
+    top: 8px;
+    right: 16px;
+    background: var(--ac);
+    color: var(--bg);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 99px;
+  }
+  .demo-hdr {
+    text-align: center;
+    padding: 20px 0 28px;
+  }
+  .demo-hdr h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    font-family: var(--sans);
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+  .demo-hdr p {
+    font-size: 0.82rem;
+    color: var(--t2);
+  }
+  .demo-stats {
+    background: var(--s1);
+    border: 1px solid var(--b1);
+    border-radius: var(--r2);
+    padding: 16px 20px;
+    margin-bottom: 14px;
+  }
+  .demo-stats-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--t3);
+    margin-bottom: 12px;
+  }
+  .demo-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .demo-stats-item {
+    text-align: center;
+  }
+  .demo-stats-val {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  .demo-stats-label {
+    font-size: 0.65rem;
+    color: var(--t3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 2px;
+  }
+  .demo-stats-active {
+    grid-column: 1 / -1;
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--t3);
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--b1);
+  }
+  .demo-card {
+    background: var(--s1);
+    border: 1px solid var(--b1);
+    border-radius: var(--r2);
+    padding: 20px;
+    margin-bottom: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .demo-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+  }
+  .demo-card-blue::before { background: #5b9cf5; }
+  .demo-card-amber::before { background: #e5a44e; }
+  .demo-card-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .demo-card-blue .demo-card-label { color: #5b9cf5; }
+  .demo-card-amber .demo-card-label { color: #e5a44e; }
+  .demo-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .demo-dot-blue { background: #5b9cf5; }
+  .demo-dot-amber { background: #e5a44e; }
+  .demo-card-rec {
+    background: var(--ok);
+    color: var(--bg);
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 99px;
+    margin-left: 6px;
+  }
+  .demo-card-desc {
+    font-size: 0.82rem;
+    color: var(--t2);
+    margin-bottom: 16px;
+    line-height: 1.4;
+  }
+  .demo-card-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .demo-open-btn {
+    display: block;
+    width: 100%;
+    padding: 13px;
+    border-radius: var(--r);
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-align: center;
+    cursor: default;
+    letter-spacing: -0.01em;
+    color: #fff;
+  }
+  .demo-open-blue { background: #5b9cf5; }
+  .demo-open-amber { background: #e5a44e; }
+  .demo-qr {
+    text-align: center;
+    margin: 16px 0;
+  }
+  .demo-qr svg {
+    width: 180px;
+    height: 180px;
+    border-radius: 8px;
+  }
+  .demo-url {
+    background: var(--s2);
+    border: 1px solid var(--b1);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    word-break: break-all;
+    color: var(--t3);
+    line-height: 1.5;
+  }
+  .demo-apps {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .demo-app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 12px 8px;
+    background: var(--s2);
+    border: 1px solid var(--b1);
+    border-radius: var(--r);
+    text-decoration: none;
+    color: var(--t1);
+    font-size: 0.82rem;
+    font-weight: 500;
+    transition: border-color 0.1s;
+  }
+  .demo-app:hover {
+    border-color: var(--b2);
+    color: var(--t1);
+  }
+  .demo-app.detected {
+    border-color: #5b9cf5;
+    background: #5b9cf510;
+  }
+  .demo-app span {
+    font-size: 0.68rem;
+    color: var(--t3);
+    font-weight: 400;
+  }
+  .demo-steps {
+    counter-reset: s;
+    margin-top: 14px;
+  }
+  .demo-step {
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--b1);
+    font-size: 0.82rem;
+    color: var(--t2);
+    line-height: 1.5;
+  }
+  .demo-step:last-child { border-bottom: none; }
+  .demo-step::before {
+    counter-increment: s;
+    content: counter(s);
+    min-width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--s2);
+    border: 1px solid var(--b1);
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--t3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .demo-warn {
+    background: #e8c85c10;
+    border: 1px solid #e8c85c30;
+    border-radius: var(--r2);
+    padding: 16px;
+    margin-top: 14px;
+  }
+  .demo-warn h3 {
+    font-size: 0.82rem;
+    color: #e5a44e;
+    margin-bottom: 4px;
+    font-weight: 600;
+    font-family: var(--sans);
+  }
+  .demo-warn p {
+    font-size: 0.78rem;
+    color: var(--t2);
+    line-height: 1.5;
+  }
+  .demo-warn a {
+    color: var(--ac);
+  }
+  .demo-foot {
+    text-align: center;
+    padding: 24px 0 8px;
+    font-size: 0.7rem;
+    color: var(--t3);
+  }
+  .demo-foot a {
+    color: var(--t2);
+    transition: color 0.1s;
+  }
+  .demo-foot a:hover { color: var(--ac); }
+  .demo-sep { opacity: 0.3; margin: 0 4px; }
+  .demo-note {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--t3);
+    margin-top: 16px;
+    font-style: italic;
+    font-family: var(--serif);
+  }
+</style>
+
+<script>
+  // Generate demo QR codes (deterministic pattern from text hash)
+  function hashStr(s: string): number {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+
+  function drawDemoQR(containerId: string, text: string) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const size = 25;
+    const h = hashStr(text);
+    let svg = `<svg viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg" style="background:#fff;padding:2px">`;
+
+    // Finder patterns
+    const drawFinder = (x: number, y: number) => {
+      for (let dy = 0; dy < 7; dy++) for (let dx = 0; dx < 7; dx++) {
+        const outer = dx === 0 || dx === 6 || dy === 0 || dy === 6;
+        const inner = dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4;
+        if (outer || inner) svg += `<rect x="${x+dx}" y="${y+dy}" width="1" height="1" fill="#000"/>`;
+      }
+    };
+    drawFinder(0, 0);
+    drawFinder(size - 7, 0);
+    drawFinder(0, size - 7);
+
+    // Data modules
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const inFinder = (x < 8 && y < 8) || (x >= size-8 && y < 8) || (x < 8 && y >= size-8);
+      if (!inFinder && ((h * (x + 1) * (y + 1)) % 3 === 0)) {
+        svg += `<rect x="${x}" y="${y}" width="1" height="1" fill="#000"/>`;
+      }
+    }
+    svg += '</svg>';
+    container.innerHTML = svg;
+  }
+
+  drawDemoQR('qr-reality', 'vless://reality-demo');
+  drawDemoQR('qr-xhttp', 'vless://xhttp-demo');
+  drawDemoQR('qr-wss', 'vless://wss-demo');
+
+  // Auto-detect OS and highlight app
+  const ua = navigator.userAgent;
+  let os: string | null = null;
+  if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS';
+  else if (/Android/i.test(ua)) os = 'Android';
+  else if (/Win/i.test(ua)) os = 'Windows';
+  else if (/Mac|Linux|X11/i.test(ua)) os = 'All';
+  if (os) {
+    document.querySelectorAll('.demo-app').forEach(a => {
+      if ((a as HTMLElement).dataset.os === os) a.classList.add('detected');
+    });
+  }
+</script>
