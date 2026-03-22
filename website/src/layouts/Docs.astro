@@ -1,6 +1,6 @@
 ---
 /**
- * Docs layout — sidebar + content area + TOC.
+ * Docs layout — sidebar + content area + TOC + locale switcher.
  * Used by docs/[...slug].astro for all documentation pages.
  */
 import Base from './Base.astro';
@@ -24,22 +24,45 @@ interface NavSection {
   items: NavItem[];
 }
 
+interface LocaleOption {
+  code: string;
+  label: string;
+  href: string;
+}
+
 interface Props {
   title: string;
   description?: string;
   headings: Heading[];
   sections: NavSection[];
   currentSlug: string;
+  locale?: string;
+  availableLocales?: LocaleOption[];
+  mdPath?: string;
 }
 
-const { title, description, headings, sections, currentSlug } = Astro.props;
+const { title, description, headings, sections, currentSlug, locale = 'en', availableLocales = [], mdPath } = Astro.props;
+const dir = locale === 'fa' ? 'rtl' : 'ltr';
 ---
 
 <Base title={`${title} — Meridian Docs`} description={description}>
-  <div class="docs-layout">
+  {mdPath && <link slot="head" rel="alternate" type="text/markdown" href={mdPath} />}
+  <div class="docs-layout" dir={dir}>
     <DocsSidebar sections={sections} currentSlug={currentSlug} />
 
     <main id="main" class="docs-content">
+      {availableLocales.length > 1 && (
+        <div class="docs-locale-switcher">
+          {availableLocales.map((l) => (
+            <a
+              href={l.href}
+              class:list={['docs-locale-btn', { 'docs-locale-btn--active': l.code === locale }]}
+            >
+              {l.label}
+            </a>
+          ))}
+        </div>
+      )}
       <article class="docs-article" data-pagefind-body>
         <h1>{title}</h1>
         <slot />
@@ -73,6 +96,32 @@ const { title, description, headings, sections, currentSlug } = Astro.props;
     margin-bottom: 24px;
     padding-bottom: 16px;
     border-bottom: 1px solid var(--b1);
+  }
+
+  /* Locale switcher */
+  .docs-locale-switcher {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+  }
+  .docs-locale-btn {
+    padding: 4px 10px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--t3);
+    text-decoration: none;
+    border: 1px solid var(--b1);
+    border-radius: 4px;
+    transition: color 0.1s, border-color 0.1s;
+  }
+  .docs-locale-btn:hover {
+    color: var(--t1);
+    border-color: var(--b2);
+  }
+  .docs-locale-btn--active {
+    color: var(--ac);
+    border-color: var(--ac);
+    background: var(--ac2);
   }
 
   /* Markdown content styles */
@@ -216,6 +265,20 @@ const { title, description, headings, sections, currentSlug } = Astro.props;
     height: auto;
     border-radius: var(--r);
     border: 1px solid var(--b1);
+  }
+
+  /* RTL support for docs */
+  [dir="rtl"] .docs-article th { text-align: right; }
+  [dir="rtl"] .docs-article { direction: rtl; }
+  [dir="rtl"] .docs-article ul,
+  [dir="rtl"] .docs-article ol {
+    padding-left: 0;
+    padding-right: 24px;
+  }
+  [dir="rtl"] .docs-article blockquote {
+    border-left: none;
+    border-right: 3px solid var(--ac);
+    border-radius: var(--r) 0 0 var(--r);
   }
 
   @media (max-width: 860px) {

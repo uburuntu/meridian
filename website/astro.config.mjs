@@ -10,7 +10,7 @@ export default defineConfig({
     rehypePlugins: [[rehypeMermaid, { strategy: 'inline-svg' }]],
   },
   i18n: {
-    locales: ['en'],
+    locales: ['en', 'ru', 'fa', 'zh'],
     defaultLocale: 'en',
   },
   build: {

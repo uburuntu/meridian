@@ -1,7 +1,8 @@
 ---
 /**
  * Dynamic docs route — renders content collection entries as pages.
- * Uses the Docs layout with sidebar navigation and TOC.
+ * Locale-aware: filters sidebar to show only docs from the same language.
+ * Adds locale switcher and markdown alternate link.
  */
 import { getCollection, render } from 'astro:content';
 import Docs from '../../layouts/Docs.astro';
@@ -17,18 +18,26 @@ export async function getStaticPaths() {
 const { entry } = Astro.props;
 const { Content, headings } = await render(entry);
 
-// Build sidebar navigation sections from the full collection
+// Detect locale from slug: "en/getting-started" → "en"
+const locale = entry.id.split('/')[0];
+const pageSlug = entry.id.split('/').slice(1).join('/');
+
+// Build sidebar from docs in the same locale only
 const allDocs = await getCollection('docs');
+const localeDocs = allDocs.filter((doc) => doc.id.startsWith(locale + '/'));
 
 const sectionOrder = ['guides', 'reference'];
-const sectionLabels: Record<string, string> = {
-  guides: 'Guides',
-  reference: 'Reference',
+const sectionLabels: Record<string, Record<string, string>> = {
+  en: { guides: 'Guides', reference: 'Reference' },
+  ru: { guides: 'Руководства', reference: 'Справочник' },
+  fa: { guides: 'راهنماها', reference: 'مرجع' },
+  zh: { guides: '指南', reference: '参考' },
 };
+const labels = sectionLabels[locale] ?? sectionLabels.en;
 
 const sections = sectionOrder
   .map((sectionKey) => {
-    const items = allDocs
+    const items = localeDocs
       .filter((doc) => doc.data.section === sectionKey)
       .sort((a, b) => (a.data.order ?? 99) - (b.data.order ?? 99))
       .map((doc) => ({
@@ -38,11 +47,20 @@ const sections = sectionOrder
       }));
 
     return {
-      label: sectionLabels[sectionKey] ?? sectionKey,
+      label: labels[sectionKey] ?? sectionKey,
       items,
     };
   })
   .filter((s) => s.items.length > 0);
+
+// Find available translations for locale switcher
+const localeNames: Record<string, string> = { en: 'EN', ru: 'RU', fa: 'فا', zh: '中文' };
+const availableLocales = [...new Set(allDocs.filter((doc) => {
+  const docPage = doc.id.split('/').slice(1).join('/');
+  return docPage === pageSlug;
+}).map((doc) => doc.id.split('/')[0]))];
+
+const mdPath = `/md/${entry.id}`;
 ---
 
 <Docs
@@ -51,6 +69,9 @@ const sections = sectionOrder
   headings={headings}
   sections={sections}
   currentSlug={entry.id}
+  locale={locale}
+  availableLocales={availableLocales.map((l) => ({ code: l, label: localeNames[l] ?? l, href: `/docs/${l}/${pageSlug}/` }))}
+  mdPath={mdPath}
 >
   <Content />
 </Docs>
