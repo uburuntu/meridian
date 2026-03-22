@@ -1,8 +1,10 @@
 import { defineConfig } from 'astro/config';
+import sitemap from '@astrojs/sitemap';
 
 export default defineConfig({
   site: 'https://getmeridian.org',
   output: 'static',
+  integrations: [sitemap()],
   i18n: {
     locales: ['en'],
     defaultLocale: 'en',

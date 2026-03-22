@@ -9,7 +9,7 @@ import LanguagePicker from './LanguagePicker.astro';
       <span>Meridian</span>
     </a>
 
-    <div class="nav__links">
+    <div class="nav__links" id="nav-links">
       <a href="/docs/" data-astro-prefetch data-t="nav.docs">Docs</a>
       <a href="/demo/" data-astro-prefetch data-t="nav.demo">Demo</a>
       <a href="/ping/" data-astro-prefetch data-t="nav.ping">Ping</a>
@@ -20,8 +20,35 @@ import LanguagePicker from './LanguagePicker.astro';
         </svg>
       </a>
     </div>
+
+    <button class="nav__burger" id="nav-burger" aria-label="Toggle menu" aria-expanded="false">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line class="nav__burger-top" x1="3" y1="6" x2="21" y2="6" />
+        <line class="nav__burger-mid" x1="3" y1="12" x2="21" y2="12" />
+        <line class="nav__burger-bot" x1="3" y1="18" x2="21" y2="18" />
+      </svg>
+    </button>
   </div>
 </nav>
+
+<script is:inline>
+  (function() {
+    var burger = document.getElementById('nav-burger');
+    var links = document.getElementById('nav-links');
+    if (!burger || !links) return;
+    burger.addEventListener('click', function() {
+      var open = links.classList.toggle('nav__links--open');
+      burger.setAttribute('aria-expanded', String(open));
+    });
+    // Close on link click
+    links.querySelectorAll('a').forEach(function(a) {
+      a.addEventListener('click', function() {
+        links.classList.remove('nav__links--open');
+        burger.setAttribute('aria-expanded', 'false');
+      });
+    });
+  })();
+</script>
 
 <style>
   .nav {
@@ -79,8 +106,42 @@ import LanguagePicker from './LanguagePicker.astro';
     color: var(--t1);
   }
 
-  @media (max-width: 480px) {
-    .nav__links { gap: 18px; }
-    .nav__links a { font-size: 0.84rem; }
+  /* Hamburger — hidden on desktop */
+  .nav__burger {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--t2);
+    cursor: pointer;
+    padding: 4px;
+  }
+
+  @media (max-width: 640px) {
+    .nav__burger { display: flex; }
+    .nav__links {
+      display: none;
+      position: absolute;
+      top: 56px;
+      left: 0;
+      right: 0;
+      background: var(--bg);
+      border-bottom: 1px solid var(--b1);
+      flex-direction: column;
+      align-items: stretch;
+      padding: 12px 24px 16px;
+      gap: 0;
+      box-shadow: var(--shadow-md);
+    }
+    .nav__links--open { display: flex; }
+    .nav__links a {
+      padding: 10px 0;
+      font-size: 0.92rem;
+      border-bottom: 1px solid var(--b1);
+    }
+    .nav__links a:last-child { border-bottom: none; }
+    .nav__links .nav__gh {
+      padding: 10px 0;
+      border-bottom: none;
+    }
   }
 </style>

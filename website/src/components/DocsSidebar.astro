@@ -23,7 +23,9 @@ const { currentSlug, sections } = Astro.props;
 ---
 
 <aside class="sidebar" id="docs-sidebar">
-  <div class="sidebar__search" id="search-container"></div>
+  <div class="sidebar__search" id="search-container">
+    <input type="search" placeholder="Search docs..." class="sidebar__search-fallback" id="search-fallback" />
+  </div>
   <nav aria-label="Documentation">
     {sections.map((section) => (
       <div class="sidebar__section">
@@ -145,22 +147,57 @@ const { currentSlug, sections } = Astro.props;
     --pagefind-ui-border-radius: 6px;
     --pagefind-ui-font: var(--body);
   }
+
+  /* Fallback search input (shown before Pagefind loads, or in dev mode) */
+  .sidebar__search-fallback {
+    font-family: var(--body);
+    font-size: 0.82rem;
+    background: var(--bg);
+    border: 1px solid var(--b1);
+    border-radius: var(--r);
+    color: var(--t1);
+    padding: 8px 12px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .sidebar__search-fallback:focus {
+    border-color: var(--b2);
+    outline: none;
+  }
 </style>
 
 <script is:inline>
   (async function() {
     var container = document.getElementById('search-container');
+    var fallback = document.getElementById('search-fallback');
     if (!container) return;
 
     try {
+      // Load Pagefind CSS
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/pagefind/pagefind-ui.css';
+      document.head.appendChild(link);
+
       var pagefind = await import('/pagefind/pagefind-ui.js');
+      // Remove fallback input before mounting Pagefind
+      if (fallback) fallback.remove();
       new pagefind.PagefindUI({
         element: '#search-container',
         showSubResults: true,
         showImages: false,
       });
     } catch (e) {
-      container.innerHTML = '<input type="search" placeholder="Search docs..." style="font-family:var(--body);font-size:0.82rem;background:var(--bg);border:1px solid var(--b1);border-radius:6px;color:var(--t1);padding:8px 12px;width:100%;opacity:0.5" disabled title="Search available in production build" />';
+      // Dev mode — keep fallback visible but mark as non-functional
+      if (fallback) {
+        fallback.title = 'Search available in production build';
+        fallback.addEventListener('focus', function() {
+          fallback.placeholder = 'Build site first (npm run build)';
+        });
+        fallback.addEventListener('blur', function() {
+          fallback.placeholder = 'Search docs...';
+        });
+      }
     }
   })();
 </script>

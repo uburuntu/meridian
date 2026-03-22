@@ -36,7 +36,6 @@ const { title, description, headings, sections, currentSlug } = Astro.props;
 ---
 
 <Base title={`${title} — Meridian Docs`} description={description}>
-  <link slot="head" rel="stylesheet" href="/pagefind/pagefind-ui.css" />
   <div class="docs-layout">
     <DocsSidebar sections={sections} currentSlug={currentSlug} />
 
