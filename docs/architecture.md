@@ -286,7 +286,7 @@ The installer (`install.sh`) handles tool detection, installation, PATH configur
 
 ```mermaid
 graph TD
-    Start["curl -sSf meridian.msu.rocks/install.sh | bash"]
+    Start["curl -sSf getmeridian.org/install.sh | bash"]
     Start --> Migrate{"Old bash CLI<br/>found?"}
     Migrate -->|yes| Remove["Remove old CLI<br/>(preserve credentials)"]
     Migrate -->|no| Install

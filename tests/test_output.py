@@ -376,7 +376,7 @@ class TestSaveConnectionHtml:
         with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
         content = dest.read_text()
-        assert "meridian.msu.rocks/ping" in content
+        assert "getmeridian.org/ping" in content
 
 
 class TestSaveConnectionTextAllProtocols:

@@ -385,7 +385,7 @@ def _generate_minimal_html(
 
     cards = "".join(_html_card(purl.label, purl.url, qr_map.get(purl.key, "")) for purl in protocol_urls if purl.url)
 
-    ping_url = f"https://meridian.msu.rocks/ping?ip={html_mod.escape(server_ip)}"
+    ping_url = f"https://getmeridian.org/ping?ip={html_mod.escape(server_ip)}"
     if domain:
         ping_url += f"&domain={safe_domain}"
 
@@ -425,7 +425,7 @@ Test server reachability: <a href="{ping_url}" target="_blank" style="color:#e5a
 </p>
 </div>
 <div class="foot">
-<a href="https://meridian.msu.rocks">Powered by Meridian</a> &middot; {safe_now}
+<a href="https://getmeridian.org">Powered by Meridian</a> &middot; {safe_now}
 </div>
 </div>
 <script>

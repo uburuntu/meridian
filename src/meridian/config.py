@@ -20,6 +20,7 @@ PYPI_PACKAGE = "meridian-vpn"
 PYPI_JSON_URL = f"https://pypi.org/pypi/{PYPI_PACKAGE}/json"
 GITHUB_REPO = "https://github.com/uburuntu/meridian"
 GITHUB_ISSUES = f"{GITHUB_REPO}/issues"
+WEBSITE_URL = "https://getmeridian.org"
 
 # Update throttle (seconds)
 UPDATE_CHECK_INTERVAL = 60

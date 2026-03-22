@@ -111,7 +111,7 @@ tests/
   render_templates.py      Jinja2 template rendering validation (CI)
   conftest.py              Shared fixtures
 docs/architecture.md       Mermaid architecture diagrams (CLI flow, modes, credentials, CI/CD)
-docs/index.html            Website hosted on meridian.msu.rocks (GitHub Pages)
+docs/index.html            Legacy website (being replaced by website/ Astro project on getmeridian.org)
 docs/ping.html             Web-based ping tool (server reachability test)
 docs/CNAME                 Custom domain for GitHub Pages
 .github/workflows/ci.yml   CI: pytest, ruff, mypy, shellcheck, template validation
@@ -253,7 +253,7 @@ make templates         # Jinja2 template rendering test
 ### Ecosystem cross-promotion
 - Error/failure flow: suggest `meridian test` first (network?), then `meridian doctor` (server?), then GitHub issues (bug?)
 - **Context-sensitive**: only suggest the tool that helps for the specific failure mode.
-- **Pre-fill URLs**: generate `meridian.msu.rocks/ping?ip=...&domain=...` when IP/domain available.
+- **Pre-fill URLs**: generate `getmeridian.org/ping?ip=...&domain=...` when IP/domain available.
 
 ### Misc conventions
 - **When the user says "remember"**: save the instruction to this CLAUDE.md file. Don't use auto-memory.
@@ -327,7 +327,7 @@ After completing a feature or fix, **always bump the version**: patch for fixes/
 ### Release artifacts
 
 - **PyPI**: `meridian-vpn` (published by release workflow)
-- **Website**: `meridian.msu.rocks/version` (CD sync), `meridian.msu.rocks/install.sh`
+- **Website**: `getmeridian.org/version` (CD sync), `getmeridian.org/install.sh`
 - **GitHub Release**: auto-created when VERSION changes, notes from CHANGELOG.md
 
 ## Codified patterns (follow at scale)

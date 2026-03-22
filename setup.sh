@@ -5,11 +5,11 @@
 # This script installs the `meridian` CLI and guides users to the new interface.
 # The old `curl setup.sh | bash` pattern is replaced by:
 #
-#   curl -sSf https://meridian.msu.rocks/install.sh | bash
+#   curl -sSf https://getmeridian.org/install.sh | bash
 #   meridian setup 1.2.3.4
 #
 # For backward compatibility, this script still works:
-#   curl -sS https://meridian.msu.rocks/setup.sh | bash
+#   curl -sS https://getmeridian.org/setup.sh | bash
 # =============================================================================
 set -euo pipefail
 
@@ -48,7 +48,7 @@ fi
 # Install meridian CLI (handles old bash CLI migration automatically)
 printf "  Installing meridian CLI...\n\n"
 
-INSTALL_URL="https://meridian.msu.rocks/install.sh"
+INSTALL_URL="https://getmeridian.org/install.sh"
 FALLBACK_URL="https://raw.githubusercontent.com/uburuntu/meridian/main/install.sh"
 
 INSTALLER=""

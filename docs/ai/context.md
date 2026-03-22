@@ -3,7 +3,7 @@
 Meridian is an open-source CLI tool that deploys censorship-resistant VLESS+Reality proxy servers on any VPS. It uses a pure-Python provisioner that connects via SSH but exposes a simple `meridian` command. Users typically run it from their laptop to configure a remote server.
 
 GitHub: https://github.com/uburuntu/meridian
-Website: https://meridian.msu.rocks
+Website: https://getmeridian.org
 
 ## Technology Stack
 

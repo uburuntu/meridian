@@ -6,7 +6,7 @@
 # Detects and migrates old bash CLI installations automatically.
 #
 # Usage:
-#   curl -sSf https://meridian.msu.rocks/install.sh | bash
+#   curl -sSf https://getmeridian.org/install.sh | bash
 # =============================================================================
 set -euo pipefail
 
@@ -192,5 +192,5 @@ printf "     ${C}meridian ping 1.2.3.4${R}       ${D}# test connection from your
 printf "     ${C}meridian client add alice${R}    ${D}# share access with others${R}\n"
 printf "     ${C}meridian client list${R}         ${D}# view all clients${R}\n\n"
 printf "  ${D}All commands: meridian --help${R}\n"
-printf "  ${D}Docs: https://meridian.msu.rocks${R}\n"
+printf "  ${D}Docs: https://getmeridian.org${R}\n"
 printf "\n"

@@ -63,7 +63,7 @@ def deploy_cmd(
         "",
         "--domain",
         "-d",
-        help="CDN fallback via Cloudflare (guide: meridian.msu.rocks/cloudflare)",
+        help="CDN fallback via Cloudflare (guide: getmeridian.org/docs/en/domain-mode/)",
     ),
     email: str = typer.Option("", "--email", help="Email for TLS certificate notifications"),
     sni: str = typer.Option(

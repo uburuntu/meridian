@@ -30,7 +30,7 @@ See [SECURITY.md](SECURITY.md) for the threat model and what Meridian protects a
 Works on **macOS and Linux**. Windows users: use WSL.
 
 ```bash
-curl -sSf https://meridian.msu.rocks/install.sh | bash
+curl -sSf https://getmeridian.org/install.sh | bash
 ```
 
 Or install directly from PyPI:
@@ -56,7 +56,7 @@ meridian client list                 # see all clients
 meridian client remove alice         # revoke access
 ```
 
-Each client gets a connection page hosted on the server with QR codes, one-tap deep links, and [live usage stats](https://meridian.msu.rocks/demo). Share the URL directly — no file transfer needed.
+Each client gets a connection page hosted on the server with QR codes, one-tap deep links, and [live usage stats](https://getmeridian.org/demo). Share the URL directly — no file transfer needed.
 
 ## How it works
 
@@ -127,7 +127,7 @@ After setup, connect with any of these apps:
 
 ## Troubleshooting
 
-Not connecting? Run `meridian test` to check if the server is reachable, or use the [web-based ping tool](https://meridian.msu.rocks/ping).
+Not connecting? Run `meridian test` to check if the server is reachable, or use the [web-based ping tool](https://getmeridian.org/ping).
 
 Something else not working? Get instant AI-powered help:
 
@@ -143,4 +143,4 @@ Or [open an issue](https://github.com/uburuntu/meridian/issues) with `meridian d
 
 Full documentation, interactive command builder, and setup guides:
 
-**[meridian.msu.rocks](https://meridian.msu.rocks)** · [Connection page demo](https://meridian.msu.rocks/demo)
+**[getmeridian.org](https://getmeridian.org)** · [Connection page demo](https://getmeridian.org/demo)

@@ -31,7 +31,7 @@ dependencies = [
 meridian = "meridian.cli:app"
 
 [project.urls]
-Homepage = "https://meridian.msu.rocks"
+Homepage = "https://getmeridian.org"
 Repository = "https://github.com/uburuntu/meridian"
 Issues = "https://github.com/uburuntu/meridian/issues"
 

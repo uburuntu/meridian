@@ -215,7 +215,7 @@ def _interactive_wizard(
     err_console.print()
     err_console.print("  [bold]CDN fallback[/bold] [dim](optional)[/dim]")
     err_console.print("  [dim]Routes through Cloudflare when direct connection is blocked.[/dim]")
-    err_console.print("  [dim]Guide: meridian.msu.rocks/cloudflare[/dim]")
+    err_console.print("  [dim]Guide: getmeridian.org/docs/en/domain-mode/[/dim]")
 
     # Suggest domain from saved credentials
     suggested_domain = domain
@@ -390,7 +390,7 @@ def _print_success(resolved: ResolvedServer, name: str, domain: str) -> None:
     err_console.print("  [ok]3.[/ok] Test that the proxy works:")
     server_ip = resolved.ip
     err_console.print(f"     [info]meridian test {server_ip}[/info]")
-    ping_url = f"https://meridian.msu.rocks/ping?ip={server_ip}"
+    ping_url = f"https://getmeridian.org/ping?ip={server_ip}"
     if domain:
         ping_url += f"&domain={domain}"
     err_console.print(f"     [dim]Or from browser: {ping_url}[/dim]\n")
