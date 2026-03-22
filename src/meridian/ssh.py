@@ -21,8 +21,116 @@ SSH_OPTS: list[str] = [
     "-o",
     "ConnectTimeout=5",
     "-o",
-    "StrictHostKeyChecking=accept-new",
+    "StrictHostKeyChecking=yes",
 ]
+
+
+def _host_key_known(ip: str) -> bool:
+    """Check if the host key for this IP is already in known_hosts."""
+    try:
+        result = subprocess.run(
+            ["ssh-keygen", "-F", ip],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            stdin=subprocess.DEVNULL,
+        )
+        return result.returncode == 0 and bool(result.stdout.strip())
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def _verify_host_key(ip: str) -> bool:
+    """Scan, display, and prompt user to verify the SSH host key.
+
+    Returns True if the user accepts (key added to known_hosts), False otherwise.
+    Uses ssh-keyscan to fetch the key and ssh-keygen to compute the fingerprint.
+    """
+    # Scan the host key
+    try:
+        result = subprocess.run(
+            ["ssh-keyscan", "-T", "5", ip],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            warn(f"Could not scan host key for {ip}")
+            return False
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        warn(f"Could not scan host key for {ip}")
+        return False
+
+    key_lines = [line for line in result.stdout.strip().splitlines() if line and not line.startswith("#")]
+    if not key_lines:
+        warn(f"No host keys found for {ip}")
+        return False
+
+    # Prefer ed25519 > ecdsa > rsa
+    preferred = None
+    for pref in ("ssh-ed25519", "ecdsa-sha2", "ssh-rsa"):
+        for line in key_lines:
+            if pref in line:
+                preferred = line
+                break
+        if preferred:
+            break
+    if not preferred:
+        preferred = key_lines[0]
+
+    # Compute fingerprint
+    try:
+        result = subprocess.run(
+            ["ssh-keygen", "-lf", "-"],
+            input=preferred,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        fingerprint = result.stdout.strip() if result.returncode == 0 else ""
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        fingerprint = ""
+
+    # Display to user
+    key_type = preferred.split()[1] if len(preferred.split()) >= 2 else "unknown"
+    # key_type is the full key data, extract algorithm from the 3rd field
+    parts = preferred.split()
+    algo = parts[1] if len(parts) >= 3 else key_type
+
+    err_console.print()
+    err_console.print(f"  [warn]![/warn] First connection to {ip}")
+    if fingerprint:
+        err_console.print("  [dim]Host key fingerprint:[/dim]")
+        err_console.print(f"  [bold]{fingerprint}[/bold]")
+    else:
+        err_console.print(f"  [dim]Host key type: {algo}[/dim]")
+    err_console.print()
+    err_console.print("  [dim]Verify this matches your VPS provider's console.[/dim]")
+    err_console.print("  [dim]A mismatch may indicate a network attack.[/dim]")
+
+    # Prompt user
+    try:
+        with open("/dev/tty") as tty:
+            err_console.print("\n  [info]\u2192[/info] Trust this host key? [dim][Y/n][/dim] ", end="")
+            answer = tty.readline().strip().lower()
+    except OSError:
+        # No TTY — fall back to accept-new behavior for non-interactive use
+        warn("No terminal available — accepting host key automatically")
+        answer = "y"
+
+    if answer not in ("", "y", "yes"):
+        return False
+
+    # Add all scanned keys to known_hosts
+    known_hosts = Path.home() / ".ssh" / "known_hosts"
+    known_hosts.parent.mkdir(mode=0o700, exist_ok=True)
+    with open(known_hosts, "a") as f:
+        for line in key_lines:
+            f.write(line + "\n")
+
+    ok("Host key saved")
+    return True
 
 
 class ServerConnection:
@@ -85,14 +193,35 @@ class ServerConnection:
         )
 
     def check_ssh(self) -> None:
-        """Verify SSH connectivity. Exits on failure."""
+        """Verify SSH connectivity. Exits on failure.
+
+        On first connection to an unknown host, scans the host key,
+        displays the fingerprint, and prompts the user to verify it.
+        """
         if self.local_mode:
             return
         info(f"Checking SSH connectivity to {self.user}@{self.ip}")
+
+        # Verify host key on first connection
+        if not _host_key_known(self.ip):
+            if not _verify_host_key(self.ip):
+                fail(
+                    f"Host key for {self.ip} not accepted",
+                    hint="Verify the fingerprint matches your VPS provider's console.",
+                    hint_type="user",
+                )
+
         try:
             result = self.run("echo ok", timeout=10)
             if result.returncode != 0:
                 stderr = result.stderr.strip()
+                # Host key changed — warn clearly
+                if "REMOTE HOST IDENTIFICATION HAS CHANGED" in stderr:
+                    err_console.print(f"\n  [error]Host key for {self.ip} has CHANGED![/error]")
+                    err_console.print("  [warn]This could indicate a network attack (MitM).[/warn]")
+                    err_console.print("  [dim]If you recently rebuilt this server, remove the old key:[/dim]")
+                    err_console.print(f"  [dim]  ssh-keygen -R {self.ip}[/dim]")
+                    fail(f"Host key verification failed for {self.ip}", hint_type="system")
                 err_console.print(f"\n  [error]SSH connection failed:[/error] {stderr}")
                 err_console.print(f"  [dim]1. Copy your SSH key:  ssh-copy-id {self.user}@{self.ip}[/dim]")
                 err_console.print(f"  [dim]2. Test manually:      ssh {self.user}@{self.ip}[/dim]")

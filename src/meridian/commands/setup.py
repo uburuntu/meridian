@@ -327,6 +327,12 @@ def _run_provisioner(
             # Use saved panel port (not computed) for re-runs
             if creds.panel.port:
                 ctx.panel_port = creds.panel.port
+            # Load protocol paths so downstream steps (InstallCaddy) have them
+            # even when ConfigurePanel is skipped on re-deploy
+            if creds.wss.ws_path:
+                ctx["ws_path"] = creds.wss.ws_path
+            if creds.xhttp.xhttp_path:
+                ctx["xhttp_path"] = creds.xhttp.xhttp_path
 
     # First client name
     ctx["first_client_name"] = name or "default"

@@ -25,7 +25,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Provisioner hardening
 
-- [ ] **Re-deploy context loading** — when `ConfigurePanel` is skipped on re-deploy, `ws_path`/`xhttp_path` aren't loaded into context from saved credentials, breaking Caddy config
+- [x] ~~**Re-deploy context loading** — when `ConfigurePanel` is skipped on re-deploy, `ws_path`/`xhttp_path` aren't loaded into context from saved credentials, breaking Caddy config~~
 - [ ] **WSS inbound port=0** — WSS created with `port=0` (undocumented 3x-ui behavior); compute deterministic port like XHTTP
 - [ ] **Non-atomic credential writes** — `path.write_text()` risks truncation on crash; use tempfile+rename pattern
 - [ ] **Panel login cookie ordering** — `chmod 600` runs before error check; stale cookies on retry cause confusing 403s
@@ -47,7 +47,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Security hardening
 
-- [ ] SSH host key verification — `accept-new` enables TOFU MitM. Switch to prompt-based or `--accept-new-host-key` flag
+- [x] ~~SSH host key verification — `accept-new` enables TOFU MitM. Switch to prompt-based or `--accept-new-host-key` flag~~
 - [ ] Docker image digest pinning — pin to `@sha256:...`
 - [ ] RealiTLScanner checksum verification — binary downloaded without integrity check
 - [ ] `confirm()` defaults to yes without TTY — destructive ops should default to "no"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -69,7 +70,7 @@ class TestServerConnectionRun:
             cmd = call_args[0][0]
             assert "BatchMode=yes" in cmd
             assert "ConnectTimeout=5" in cmd
-            assert "StrictHostKeyChecking=accept-new" in cmd
+            assert "StrictHostKeyChecking=yes" in cmd
 
     def test_stdin_devnull(self) -> None:
         conn = ServerConnection(ip="1.2.3.4")
@@ -157,13 +158,15 @@ class TestCheckSSH:
         # Should return without doing anything
         conn.check_ssh()  # no exception
 
-    def test_ssh_success(self) -> None:
+    @patch("meridian.ssh._host_key_known", return_value=True)
+    def test_ssh_success(self, _mock_hk: Any) -> None:
         conn = ServerConnection(ip="1.2.3.4")
         with patch.object(conn, "run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="ok\n", stderr="")
             conn.check_ssh()  # should not raise
 
-    def test_ssh_failure_exits(self) -> None:
+    @patch("meridian.ssh._host_key_known", return_value=True)
+    def test_ssh_failure_exits(self, _mock_hk: Any) -> None:
         conn = ServerConnection(ip="1.2.3.4")
         with patch.object(conn, "run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(
@@ -172,14 +175,31 @@ class TestCheckSSH:
             with pytest.raises(typer.Exit):
                 conn.check_ssh()
 
-    def test_ssh_timeout_exits(self) -> None:
+    @patch("meridian.ssh._host_key_known", return_value=True)
+    def test_ssh_timeout_exits(self, _mock_hk: Any) -> None:
         conn = ServerConnection(ip="1.2.3.4")
         with patch.object(conn, "run", side_effect=subprocess.TimeoutExpired(cmd="ssh", timeout=10)):
             with pytest.raises(typer.Exit):
                 conn.check_ssh()
 
-    def test_ssh_not_found_exits(self) -> None:
+    @patch("meridian.ssh._host_key_known", return_value=True)
+    def test_ssh_not_found_exits(self, _mock_hk: Any) -> None:
         conn = ServerConnection(ip="1.2.3.4")
         with patch.object(conn, "run", side_effect=FileNotFoundError):
             with pytest.raises(typer.Exit):
                 conn.check_ssh()
+
+    @patch("meridian.ssh._verify_host_key", return_value=False)
+    @patch("meridian.ssh._host_key_known", return_value=False)
+    def test_unknown_host_key_rejected_exits(self, _mock_hk: Any, _mock_vhk: Any) -> None:
+        conn = ServerConnection(ip="1.2.3.4")
+        with pytest.raises(typer.Exit):
+            conn.check_ssh()
+
+    @patch("meridian.ssh._verify_host_key", return_value=True)
+    @patch("meridian.ssh._host_key_known", return_value=False)
+    def test_unknown_host_key_accepted_continues(self, _mock_hk: Any, _mock_vhk: Any) -> None:
+        conn = ServerConnection(ip="1.2.3.4")
+        with patch.object(conn, "run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="ok\n", stderr="")
+            conn.check_ssh()  # should not raise
