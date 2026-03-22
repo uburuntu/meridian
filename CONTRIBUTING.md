@@ -17,6 +17,9 @@ git clone https://github.com/uburuntu/meridian.git && cd meridian
 # Install the CLI in editable mode with all dev dependencies (uses uv sync --extra dev)
 make install
 
+# Install pre-push hook (runs 11 fast checks before every push)
+make hooks
+
 # Run full CI locally (lint + format + test + templates)
 make ci
 

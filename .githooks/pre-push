@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Pre-push hook — runs fast CI checks before pushing.
+# Install: make hooks
+# Skip:    git push --no-verify (use sparingly)
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+DIM='\033[0;2m'
+RESET='\033[0m'
+
+PASS=0
+FAIL=0
+START=$(date +%s)
+
+check() {
+    local desc="$1"; shift
+    printf "  ${DIM}→${RESET} %s" "$desc"
+    if output=$("$@" 2>&1); then
+        printf "\r  ${GREEN}✓${RESET} %s\n" "$desc"
+        PASS=$((PASS + 1))
+    else
+        printf "\r  ${RED}✗${RESET} %s\n" "$desc"
+        echo "$output" | head -20 | sed 's/^/    /'
+        FAIL=$((FAIL + 1))
+    fi
+}
+
+echo ""
+echo "  Pre-push checks"
+echo ""
+
+# --- Fast validation (no deps needed) ---
+
+check "VERSION format" bash -c '
+    VERSION=$(cat VERSION | tr -d "[:space:]")
+    echo "$VERSION" | grep -qE "^[0-9]+\.[0-9]+\.[0-9]+$"
+'
+
+check "CHANGELOG has VERSION entry" bash -c '
+    VERSION=$(cat VERSION | tr -d "[:space:]")
+    grep -q "## \[$VERSION\]" CHANGELOG.md
+'
+
+check "AI docs up to date" bash -c '
+    expected=$(cat docs/ai/context.md docs/ai/architecture.md docs/ai/troubleshooting.md)
+    actual=$(cat src/meridian/data/ai-reference.md)
+    [ "$expected" = "$actual" ]
+'
+
+check "App links match (template ↔ demo)" python3 -c "
+import re, sys
+def extract(p):
+    return sorted(set(re.findall(r'https://(?:play\.google\.com|apps\.apple\.com|github\.com/\S+/releases)[^\s\"<]*', open(p).read())))
+t = extract('src/meridian/templates/connection-info.html.j2')
+d = extract('docs/demo.html')
+if t != d:
+    print(f'Template: {t}')
+    print(f'Demo:     {d}')
+    sys.exit(1)
+"
+
+# --- Shell scripts ---
+
+if command -v shellcheck &>/dev/null; then
+    check "shellcheck install.sh" shellcheck -e SC2086,SC2029,SC2087,SC2155 -S warning install.sh
+    check "shellcheck setup.sh" shellcheck -e SC2086,SC2029,SC2087,SC2155 -S warning setup.sh
+else
+    check "bash -n install.sh" bash -n install.sh
+    check "bash -n setup.sh" bash -n setup.sh
+fi
+
+# --- Python quality (requires uv + dev deps) ---
+
+if command -v uv &>/dev/null; then
+    check "ruff check" uv run ruff check src/ tests/
+    check "ruff format" uv run ruff format --check src/ tests/
+    check "mypy" uv run mypy src/meridian/
+    check "pytest" uv run pytest tests/ -q --tb=line --ignore=tests/test_integration_3xui.py
+    check "templates render" uv run python tests/render_templates.py
+else
+    echo "  ${DIM}(uv not found — skipping Python checks)${RESET}"
+fi
+
+# --- Summary ---
+
+END=$(date +%s)
+ELAPSED=$((END - START))
+
+echo ""
+if [ "$FAIL" -eq 0 ]; then
+    printf "  ${GREEN}All %d checks passed${RESET} (%ds)\n\n" "$PASS" "$ELAPSED"
+    exit 0
+else
+    printf "  ${RED}%d of %d checks failed${RESET} (%ds)\n" "$FAIL" $((PASS + FAIL)) "$ELAPSED"
+    printf "  ${DIM}Fix issues above, then push again.${RESET}\n"
+    printf "  ${DIM}Skip with: git push --no-verify${RESET}\n\n"
+    exit 1
+fi

@@ -280,6 +280,7 @@ make templates         # Jinja2 template rendering test
 - **AI docs**: Source files in `docs/ai/` (`context.md`, `architecture.md`, `troubleshooting.md`). `make ai-docs` concatenates them into `src/meridian/data/ai-reference.md` (bundled in package). `make build` runs this automatically. Edit the source files, not `reference.md`. The deploy workflow also generates `ai/reference.md` for the website.
 - **`--ai` flag**: `meridian check --ai` and `meridian diagnostics --ai` bundle AI docs + command output into a clipboard-ready prompt for ChatGPT/Claude. Docs are loaded from bundled package data via `importlib.resources` (no network fetch or cache).
 - **VERSION consistency**: `VERSION` file is the single source of truth. Hatchling reads it at build time; Python code uses `importlib.metadata.version("meridian-vpn")` at runtime. CI validates VERSION format (`^\d+\.\d+\.\d+$`).
+- **Pre-push hook**: `.githooks/pre-push` runs 11 fast checks (~7s) before every push: VERSION format, CHANGELOG entry, AI docs freshness, app link sync, shellcheck, ruff, mypy, pytest, templates. Install with `make hooks`. Skip with `git push --no-verify`.
 - **Ecosystem cross-promotion**: Always upsell/reference related Meridian tools where contextually appropriate. When adding error messages, output, templates, issue templates, or docs — promote the relevant tool for that context. Current tools to cross-promote:
   - `meridian ping` / `meridian.msu.rocks/ping` — for connection issues, reachability testing
   - `meridian check` — for pre-deployment server validation

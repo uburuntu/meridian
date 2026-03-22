@@ -1,5 +1,5 @@
 .PHONY: help install sync test lint format check typecheck ci e2e \
-       templates ai-docs build publish clean server-test
+       templates ai-docs build publish clean hooks
 
 ## —— Setup ——————————————————————————————————————————————
 
@@ -10,6 +10,10 @@ install: ## Install package in dev mode with all dependencies
 	uv sync --extra dev
 
 sync: install ## Alias for install
+
+hooks: ## Install git pre-push hook
+	git config core.hooksPath .githooks
+	@echo "  ✓ Git hooks installed (.githooks/pre-push)"
 
 ## —— Quality ————————————————————————————————————————————
 
