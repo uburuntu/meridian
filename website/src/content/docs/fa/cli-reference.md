@@ -45,6 +45,27 @@ meridian server list
 meridian server remove NAME
 ```
 
+### meridian relay
+
+مدیریت نودهای relay — دستگاه‌های ارسال TCP سبکی که ترافیک را از طریق یک سرور داخلی به سرور خروجی در خارج از کشور منتقل می‌کنند.
+
+```
+meridian relay deploy RELAY_IP --exit EXIT [flags]
+meridian relay list [--exit EXIT]
+meridian relay remove RELAY_IP [--exit EXIT] [--yes]
+meridian relay check RELAY_IP [--exit EXIT]
+```
+
+| پرچم | پیش‌فرض | توضیح |
+|------|---------|-------------|
+| `--exit/-e EXIT` | (الزامی برای deploy) | IP یا نام سرور خروجی |
+| `--name NAME` | (خودکار) | نام دوستانه برای relay (مثلاً "ru-moscow") |
+| `--port/-p PORT` | 443 | پورت شنوندگی روی سرور relay |
+| `--user/-u USER` | root | کاربر SSH روی relay |
+| `--yes/-y` | | عدم تأیید پیش‌ |
+
+**نحوه کار relay**: کلاینت به IP داخلی relay متصل می‌شود. Relay TCP خام را به سرور خروجی در خارج منتقل می‌کند. تمامی رمزگذاری میان کلاینت و سرور خروجی انجام می‌شود — relay هرگز plaintext را نمی‌بیند. تمام پروتکل‌ها (Reality، XHTTP، WSS) از طریق relay کار می‌کنند.
+
 ### meridian preflight
 
 تأیید سرور قبل از نصب. SNI، پورت‌ها، DNS، OS، دیسک، ASN را بدون نصب هیچ چیز تست می‌کند.

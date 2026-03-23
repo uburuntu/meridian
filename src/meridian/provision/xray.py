@@ -16,7 +16,7 @@ from typing import Any
 from meridian.config import DEFAULT_FINGERPRINT
 from meridian.panel import PanelClient, PanelError
 from meridian.protocols import INBOUND_TYPES
-from meridian.provision.steps import ProvisionContext, StepResult, timed
+from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
 # ---------------------------------------------------------------------------
@@ -214,7 +214,6 @@ class CreateRealityInbound:
         self.client_total_gb = client_total_gb
         self.fingerprint = fingerprint
 
-    @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         panel: PanelClient | None = ctx.get("panel")
         if panel is None:
@@ -307,7 +306,6 @@ class CreateXHTTPInbound:
         self.client_limit_ip = client_limit_ip
         self.client_total_gb = client_total_gb
 
-    @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         panel: PanelClient | None = ctx.get("panel")
         if panel is None:
@@ -403,7 +401,6 @@ class CreateWSSInbound:
         self.client_limit_ip = client_limit_ip
         self.client_total_gb = client_total_gb
 
-    @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         panel: PanelClient | None = ctx.get("panel")
         if panel is None:
@@ -472,7 +469,6 @@ class VerifyXray:
 
     name = "Verify Xray configuration"
 
-    @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         result = conn.run("docker exec 3x-ui pgrep -f xray", timeout=10)
         if result.returncode == 0:

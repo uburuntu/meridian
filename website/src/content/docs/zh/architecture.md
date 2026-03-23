@@ -9,34 +9,15 @@ section: reference
 
 ### 独立模式（无域名）
 
-```
-Internet
-  │
-  ▼
-┌──────────────────────────────────────┐
-│ Server                               │
-│                                      │
-│  Port 443: HAProxy (SNI router)      │
-│  ┌──────────────────────────────┐    │
-│  │ SNI = reality_sni            │    │
-│  │  → Port 10443: Xray (Reality)│    │
-│  │                              │    │
-│  │ SNI = server IP              │    │
-│  │  → Port 8443: Caddy (TLS)   │    │
-│  │     ├─ /info-path → page    │    │
-│  │     ├─ /panel-path → 3x-ui  │    │
-│  │     └─ /xhttp-path → Xray   │    │
-│  └──────────────────────────────┘    │
-│                                      │
-│  Port 80: Caddy (ACME challenges)    │
-│                                      │
-│  Docker: 3x-ui                       │
-│  ├─ Reality inbound (port 10443)     │
-│  └─ XHTTP inbound (localhost port)   │
-│                                      │
-│  Caddy: IP cert (ACME shortlived)    │
-│  HAProxy: TCP SNI, no TLS terminate  │
-└──────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Internet((Internet)) -->|Port 443| HAProxy[HAProxy<br>SNI Router]
+    HAProxy -->|"SNI = reality_sni"| Xray["Xray Reality<br>:10443"]
+    HAProxy -->|"SNI = server IP"| Caddy["Caddy TLS<br>:8443"]
+    Caddy -->|/info-path| Page[Connection Page]
+    Caddy -->|/panel-path| Panel[3x-ui Panel]
+    Caddy -->|/xhttp-path| XrayXHTTP["Xray XHTTP<br>localhost"]
+    Internet -->|Port 80| CaddyACME["Caddy<br>ACME challenges"]
 ```
 
 HAProxy **不**终止 TLS。它从 TLS Client Hello 中读取 SNI 主机名，并将原始 TCP 流转发到相应的后端。
@@ -47,37 +28,31 @@ XHTTP 运行在仅限本地的端口上，由 Caddy 反向代理——无需暴�
 
 ### 域名模式
 
-```
-Internet
-  │
-  ▼
-┌──────────────────────────────────────┐
-│ Server                               │
-│                                      │
-│  Port 443: HAProxy (SNI router)      │
-│  ┌──────────────────────────────┐    │
-│  │ SNI = reality_sni            │    │
-│  │  → Port 10443: Xray (Reality)│    │
-│  │                              │    │
-│  │ SNI = domain                 │    │
-│  │  → Port 8443: Caddy (TLS)   │    │
-│  │     ├─ /info-path → page    │    │
-│  │     ├─ /panel-path → 3x-ui  │    │
-│  │     ├─ /xhttp-path → Xray   │    │
-│  │     └─ /ws-path → Xray WSS  │    │
-│  └──────────────────────────────┘    │
-│                                      │
-│  Docker: 3x-ui                       │
-│  ├─ Reality inbound (port 10443)     │
-│  ├─ XHTTP inbound (localhost port)   │
-│  └─ WSS inbound (localhost port)     │
-│                                      │
-│  Caddy: domain cert (Let's Encrypt)  │
-│  HAProxy: TCP SNI, no TLS terminate  │
-└──────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Internet((Internet)) -->|Port 443| HAProxy[HAProxy<br>SNI Router]
+    HAProxy -->|"SNI = reality_sni"| Xray["Xray Reality<br>:10443"]
+    HAProxy -->|"SNI = domain"| Caddy["Caddy TLS<br>:8443"]
+    Caddy -->|/info-path| Page[Connection Page]
+    Caddy -->|/panel-path| Panel[3x-ui Panel]
+    Caddy -->|/xhttp-path| XrayXHTTP["Xray XHTTP<br>localhost"]
+    Caddy -->|/ws-path| XrayWSS["Xray WSS<br>localhost"]
+    Internet -->|Port 80| CaddyACME["Caddy<br>ACME challenges"]
+    Internet -.->|"CDN (Cloudflare)"| Caddy
 ```
 
 域名模式添加 VLESS+WSS 作为 CDN 回退路径。流量通过 Cloudflare 的 CDN 经由 WebSocket 流动，即使服务器 IP 被阻断也能工作。
+
+### 中继拓扑
+
+```mermaid
+flowchart LR
+    Client([Client]) -->|Port 443| Relay["Relay<br>(Realm TCP)"]
+    Relay -->|Port 443| Exit["Exit Server<br>(abroad)"]
+    Exit --> Internet((Internet))
+```
+
+中继节点是一个轻量级 TCP 转发器，运行 [Realm](https://github.com/zhboner/realm)。客户端连接到中继的国内 IP，中继将原始 TCP 转发到国外的出口服务器。所有加密都是端到端的，在客户端和出口之间——中继永远看不到明文。
 
 ## Reality 协议如何工作
 

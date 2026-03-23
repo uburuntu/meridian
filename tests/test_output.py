@@ -1,4 +1,4 @@
-"""Tests for output module -- VLESS URL building and file generation."""
+"""Tests for URL building, QR generation, and connection file output."""
 
 from __future__ import annotations
 
@@ -13,14 +13,9 @@ from meridian.credentials import (
     WSSConfig,
     XHTTPConfig,
 )
-from meridian.output import (
-    ClientURLs,
-    build_vless_urls,
-    generate_qr_base64,
-    generate_qr_terminal,
-    save_connection_html,
-    save_connection_text,
-)
+from meridian.models import ProtocolURL
+from meridian.render import save_connection_html, save_connection_text
+from meridian.urls import build_protocol_urls, generate_qr_base64, generate_qr_terminal
 
 
 def _make_creds(
@@ -52,97 +47,100 @@ def _make_creds(
     return creds
 
 
-class TestBuildVlessURLs:
+def _find_url(urls: list[ProtocolURL], key: str) -> str:
+    """Find a URL by protocol key, return empty string if not found."""
+    return next((p.url for p in urls if p.key == key), "")
+
+
+class TestBuildProtocolURLs:
     def test_reality_url_basic(self) -> None:
         creds = _make_creds()
-        urls = build_vless_urls("alice", "uuid-1", "", creds)
+        urls = build_protocol_urls("alice", "uuid-1", "", creds)
 
-        assert urls.name == "alice"
-        assert urls.reality.startswith("vless://uuid-1@1.2.3.4:443")
-        assert "flow=xtls-rprx-vision" in urls.reality
-        assert "security=reality" in urls.reality
-        assert "sni=www.microsoft.com" in urls.reality
-        assert "fp=chrome" in urls.reality
-        assert "pbk=K6JYbz4MflVPaaxdtRHo" in urls.reality
-        assert "sid=abcd1234" in urls.reality
-        assert "type=tcp" in urls.reality
-        assert "#alice" in urls.reality
+        reality = _find_url(urls, "reality")
+        assert reality.startswith("vless://uuid-1@1.2.3.4:443")
+        assert "flow=xtls-rprx-vision" in reality
+        assert "security=reality" in reality
+        assert "sni=www.microsoft.com" in reality
+        assert "fp=chrome" in reality
+        assert "pbk=K6JYbz4MflVPaaxdtRHo" in reality
+        assert "sid=abcd1234" in reality
+        assert "type=tcp" in reality
+        assert "#alice" in reality
 
     def test_no_xhttp_when_no_path(self) -> None:
         creds = _make_creds()
-        urls = build_vless_urls("alice", "uuid-1", "", creds, xhttp_port=0)
-        assert urls.xhttp == ""
+        urls = build_protocol_urls("alice", "uuid-1", "", creds)
+        assert _find_url(urls, "xhttp") == ""
 
     def test_xhttp_url_with_path(self) -> None:
         creds = _make_creds(xhttp_path="myxhttp")
-        urls = build_vless_urls("alice", "uuid-1", "", creds)
+        urls = build_protocol_urls("alice", "uuid-1", "", creds)
 
-        assert urls.xhttp.startswith("vless://uuid-1@1.2.3.4:443")
-        assert "type=xhttp" in urls.xhttp
-        assert "path=%2Fmyxhttp" in urls.xhttp
-        assert "#alice-XHTTP" in urls.xhttp
+        xhttp = _find_url(urls, "xhttp")
+        assert xhttp.startswith("vless://uuid-1@1.2.3.4:443")
+        assert "type=xhttp" in xhttp
+        assert "path=%2Fmyxhttp" in xhttp
+        assert "#alice-XHTTP" in xhttp
         # XHTTP now uses TLS (via Caddy), not Reality
-        assert "security=tls" in urls.xhttp
+        assert "security=tls" in xhttp
         # XHTTP must NOT have flow (empty)
-        assert "flow=" not in urls.xhttp
+        assert "flow=" not in xhttp
 
     def test_no_wss_without_domain(self) -> None:
         creds = _make_creds()
-        urls = build_vless_urls("alice", "uuid-1", "", creds)
-        assert urls.wss == ""
+        urls = build_protocol_urls("alice", "uuid-1", "", creds)
+        assert _find_url(urls, "wss") == ""
 
     def test_no_wss_without_wss_uuid(self) -> None:
         creds = _make_creds(domain="example.com", ws_path="ws789")
-        urls = build_vless_urls("alice", "uuid-1", "", creds)
-        assert urls.wss == ""
+        urls = build_protocol_urls("alice", "uuid-1", "", creds)
+        assert _find_url(urls, "wss") == ""
 
     def test_wss_url_with_domain(self) -> None:
         creds = _make_creds(domain="example.com", ws_path="ws789")
-        urls = build_vless_urls("alice", "uuid-1", "wss-uuid", creds)
+        urls = build_protocol_urls("alice", "uuid-1", "wss-uuid", creds)
 
-        assert urls.wss.startswith("vless://wss-uuid@example.com:443")
-        assert "security=tls" in urls.wss
-        assert "type=ws" in urls.wss
-        assert "path=%2Fws789" in urls.wss
-        assert "#alice-WSS" in urls.wss
+        wss = _find_url(urls, "wss")
+        assert wss.startswith("vless://wss-uuid@example.com:443")
+        assert "security=tls" in wss
+        assert "type=ws" in wss
+        assert "path=%2Fws789" in wss
+        assert "#alice-WSS" in wss
 
     def test_reality_uuid_used_for_xhttp(self) -> None:
         """XHTTP shares the Reality UUID, not a separate one."""
         creds = _make_creds(xhttp_path="xp")
-        urls = build_vless_urls("alice", "reality-uuid", "wss-uuid", creds)
-        assert urls.xhttp.startswith("vless://reality-uuid@")
+        urls = build_protocol_urls("alice", "reality-uuid", "wss-uuid", creds)
+        xhttp = _find_url(urls, "xhttp")
+        assert xhttp.startswith("vless://reality-uuid@")
 
     def test_different_sni(self) -> None:
         creds = _make_creds(sni="dl.google.com")
-        urls = build_vless_urls("alice", "uuid-1", "", creds)
-        assert "sni=dl.google.com" in urls.reality
+        urls = build_protocol_urls("alice", "uuid-1", "", creds)
+        reality = _find_url(urls, "reality")
+        assert "sni=dl.google.com" in reality
 
     def test_url_fragment_encoding(self) -> None:
         """Client name with special chars should work in URL fragment."""
         creds = _make_creds()
-        urls = build_vless_urls("my-client_1", "uuid-1", "", creds)
-        assert "#my-client_1" in urls.reality
+        urls = build_protocol_urls("my-client_1", "uuid-1", "", creds)
+        reality = _find_url(urls, "reality")
+        assert "#my-client_1" in reality
 
-
-class TestClientURLs:
-    def test_frozen_dataclass(self) -> None:
-        urls = ClientURLs(name="test", reality="r", xhttp="x", wss="w")
-        assert urls.name == "test"
-        assert urls.reality == "r"
-        assert urls.xhttp == "x"
-        assert urls.wss == "w"
+    def test_returns_protocol_url_list(self) -> None:
+        """build_protocol_urls returns list[ProtocolURL]."""
+        creds = _make_creds()
+        urls = build_protocol_urls("alice", "uuid-1", "", creds)
+        assert isinstance(urls, list)
+        assert all(isinstance(u, ProtocolURL) for u in urls)
 
 
 class TestSaveConnectionText:
     def test_creates_file(self, tmp_path: Path) -> None:
-        urls = ClientURLs(
-            name="alice",
-            reality="vless://uuid@1.2.3.4:443?test",
-            xhttp="",
-            wss="",
-        )
+        urls = [ProtocolURL(key="reality", label="Primary", url="vless://uuid@1.2.3.4:443?test")]
         dest = tmp_path / "creds" / "1.2.3.4-alice-connection-info.txt"
-        save_connection_text(urls, dest, "1.2.3.4")
+        save_connection_text(urls, dest, "1.2.3.4", client_name="alice")
 
         assert dest.exists()
         content = dest.read_text()
@@ -151,59 +149,59 @@ class TestSaveConnectionText:
         assert "1.2.3.4" in content
 
     def test_includes_xhttp_when_present(self, tmp_path: Path) -> None:
-        urls = ClientURLs(
-            name="alice",
-            reality="vless://reality",
-            xhttp="vless://xhttp",
-            wss="",
-        )
+        urls = [
+            ProtocolURL(key="reality", label="Primary", url="vless://reality"),
+            ProtocolURL(key="xhttp", label="XHTTP", url="vless://xhttp"),
+        ]
         dest = tmp_path / "out.txt"
-        save_connection_text(urls, dest, "1.2.3.4")
+        save_connection_text(urls, dest, "1.2.3.4", client_name="alice")
 
         content = dest.read_text()
         assert "XHTTP" in content
         assert "vless://xhttp" in content
 
     def test_includes_wss_when_present(self, tmp_path: Path) -> None:
-        urls = ClientURLs(
-            name="alice",
-            reality="vless://reality",
-            xhttp="",
-            wss="vless://wss",
-        )
+        urls = [
+            ProtocolURL(key="reality", label="Primary", url="vless://reality"),
+            ProtocolURL(key="wss", label="CDN Backup", url="vless://wss"),
+        ]
         dest = tmp_path / "out.txt"
-        save_connection_text(urls, dest, "1.2.3.4")
+        save_connection_text(urls, dest, "1.2.3.4", client_name="alice")
 
         content = dest.read_text()
-        assert "WSS" in content
+        assert "WSS" in content or "CDN" in content
         assert "vless://wss" in content
 
     def test_file_permissions(self, tmp_path: Path) -> None:
-        urls = ClientURLs(name="test", reality="vless://x", xhttp="", wss="")
+        urls = [ProtocolURL(key="reality", label="Primary", url="vless://x")]
         dest = tmp_path / "out.txt"
         save_connection_text(urls, dest, "1.2.3.4")
         assert oct(dest.stat().st_mode)[-3:] == "600"
 
 
-class TestBuildVlessURLsEdgeCases:
+class TestBuildProtocolURLsEdgeCases:
     """Additional URL building edge case tests."""
 
     def test_sni_with_subdomain(self) -> None:
         creds = _make_creds(sni="sub.domain.example.com")
-        urls = build_vless_urls("test", "uuid-1", "", creds)
-        assert "sni=sub.domain.example.com" in urls.reality
+        urls = build_protocol_urls("test", "uuid-1", "", creds)
+        reality = _find_url(urls, "reality")
+        assert "sni=sub.domain.example.com" in reality
 
     def test_all_protocols_together(self) -> None:
         """Test building URLs with all three protocols enabled."""
         creds = _make_creds(domain="example.com", ws_path="myws", xhttp_path="xp")
-        urls = build_vless_urls("alice", "r-uuid", "w-uuid", creds)
-        assert urls.reality.startswith("vless://r-uuid@1.2.3.4:443")
-        assert urls.xhttp.startswith("vless://r-uuid@example.com:443")
-        assert "path=%2Fxp" in urls.xhttp
-        assert urls.wss.startswith("vless://w-uuid@example.com:443")
-        assert "#alice" in urls.reality
-        assert "#alice-XHTTP" in urls.xhttp
-        assert "#alice-WSS" in urls.wss
+        urls = build_protocol_urls("alice", "r-uuid", "w-uuid", creds)
+        reality = _find_url(urls, "reality")
+        xhttp = _find_url(urls, "xhttp")
+        wss = _find_url(urls, "wss")
+        assert reality.startswith("vless://r-uuid@1.2.3.4:443")
+        assert xhttp.startswith("vless://r-uuid@example.com:443")
+        assert "path=%2Fxp" in xhttp
+        assert wss.startswith("vless://w-uuid@example.com:443")
+        assert "#alice" in reality
+        assert "#alice-XHTTP" in xhttp
+        assert "#alice-WSS" in wss
 
     def test_empty_sni_defaults(self) -> None:
         """When SNI is None, should default to www.microsoft.com."""
@@ -219,39 +217,46 @@ class TestBuildVlessURLsEdgeCases:
                 ),
             },
         )
-        urls = build_vless_urls("test", "uuid-1", "", creds)
-        assert "sni=www.microsoft.com" in urls.reality
+        urls = build_protocol_urls("test", "uuid-1", "", creds)
+        reality = _find_url(urls, "reality")
+        assert "sni=www.microsoft.com" in reality
 
     def test_url_contains_encryption_none(self) -> None:
         creds = _make_creds()
-        urls = build_vless_urls("test", "uuid-1", "", creds)
-        assert "encryption=none" in urls.reality
+        urls = build_protocol_urls("test", "uuid-1", "", creds)
+        reality = _find_url(urls, "reality")
+        assert "encryption=none" in reality
 
     def test_xhttp_no_flow_parameter(self) -> None:
         """XHTTP must NOT include flow parameter (xtls-rprx-vision is incompatible)."""
         creds = _make_creds(xhttp_path="xp")
-        urls = build_vless_urls("test", "uuid-1", "", creds)
+        urls = build_protocol_urls("test", "uuid-1", "", creds)
+        xhttp = _find_url(urls, "xhttp")
         # XHTTP URL should not have flow= at all
-        assert "flow=" not in urls.xhttp
+        assert "flow=" not in xhttp
         # But reality URL should have it
-        assert "flow=xtls-rprx-vision" in urls.reality
+        reality = _find_url(urls, "reality")
+        assert "flow=xtls-rprx-vision" in reality
 
     def test_wss_url_has_host_header(self) -> None:
         """WSS URL should include host= parameter matching domain."""
         creds = _make_creds(domain="cdn.example.com", ws_path="ws")
-        urls = build_vless_urls("test", "r-uuid", "w-uuid", creds)
-        assert "host=cdn.example.com" in urls.wss
+        urls = build_protocol_urls("test", "r-uuid", "w-uuid", creds)
+        wss = _find_url(urls, "wss")
+        assert "host=cdn.example.com" in wss
 
     def test_xhttp_path_in_url(self) -> None:
         """XHTTP path should be included in the URL."""
         creds = _make_creds(xhttp_path="myxhttppath")
-        urls = build_vless_urls("test", "uuid", "", creds)
-        assert "path=%2Fmyxhttppath" in urls.xhttp
+        urls = build_protocol_urls("test", "uuid", "", creds)
+        xhttp = _find_url(urls, "xhttp")
+        assert "path=%2Fmyxhttppath" in xhttp
 
     def test_client_name_with_numbers(self) -> None:
         creds = _make_creds()
-        urls = build_vless_urls("user123", "uuid-1", "", creds)
-        assert "#user123" in urls.reality
+        urls = build_protocol_urls("user123", "uuid-1", "", creds)
+        reality = _find_url(urls, "reality")
+        assert "#user123" in reality
 
 
 class TestQRCodeGeneration:
@@ -303,12 +308,7 @@ class TestSaveConnectionHtml:
     """Test HTML connection page generation."""
 
     def test_creates_file(self, tmp_path: Path) -> None:
-        urls = ClientURLs(
-            name="alice",
-            reality="vless://uuid@1.2.3.4:443?test",
-            xhttp="",
-            wss="",
-        )
+        urls = [ProtocolURL(key="reality", label="Primary", url="vless://uuid@1.2.3.4:443?test")]
         dest = tmp_path / "alice.html"
         with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
@@ -316,26 +316,15 @@ class TestSaveConnectionHtml:
 
     def test_html_contains_client_name_in_url(self, tmp_path: Path) -> None:
         """Client name appears in the VLESS URL fragment within the HTML."""
-        urls = ClientURLs(
-            name="bob",
-            reality="vless://uuid@1.2.3.4:443?test#bob",
-            xhttp="",
-            wss="",
-        )
+        urls = [ProtocolURL(key="reality", label="Primary", url="vless://uuid@1.2.3.4:443?test#bob")]
         dest = tmp_path / "bob.html"
         with patch("meridian.render.generate_qr_base64", return_value=""):
-            save_connection_html(urls, dest, "1.2.3.4")
+            save_connection_html(urls, dest, "1.2.3.4", client_name="bob")
         content = dest.read_text()
-        # The client name appears in the VLESS URL embedded in the HTML
         assert "vless://uuid@1.2.3.4:443?test#bob" in content
 
     def test_html_contains_reality_url(self, tmp_path: Path) -> None:
-        urls = ClientURLs(
-            name="test",
-            reality="vless://unique-reality-url@1.2.3.4:443",
-            xhttp="",
-            wss="",
-        )
+        urls = [ProtocolURL(key="reality", label="Primary", url="vless://unique-reality-url@1.2.3.4:443")]
         dest = tmp_path / "test.html"
         with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
@@ -343,7 +332,7 @@ class TestSaveConnectionHtml:
         assert "unique-reality-url" in content
 
     def test_html_file_permissions(self, tmp_path: Path) -> None:
-        urls = ClientURLs(name="test", reality="vless://x", xhttp="", wss="")
+        urls = [ProtocolURL(key="reality", label="Primary", url="vless://x")]
         dest = tmp_path / "test.html"
         with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
@@ -351,12 +340,7 @@ class TestSaveConnectionHtml:
 
     def test_html_is_valid_structure(self, tmp_path: Path) -> None:
         """Generated HTML should have basic structure."""
-        urls = ClientURLs(
-            name="alice",
-            reality="vless://uuid@1.2.3.4:443",
-            xhttp="",
-            wss="",
-        )
+        urls = [ProtocolURL(key="reality", label="Primary", url="vless://uuid@1.2.3.4:443")]
         dest = tmp_path / "alice.html"
         with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
@@ -366,12 +350,7 @@ class TestSaveConnectionHtml:
 
     def test_html_includes_ping_url(self, tmp_path: Path) -> None:
         """Generated HTML should include a ping URL for troubleshooting."""
-        urls = ClientURLs(
-            name="alice",
-            reality="vless://uuid@1.2.3.4:443",
-            xhttp="",
-            wss="",
-        )
+        urls = [ProtocolURL(key="reality", label="Primary", url="vless://uuid@1.2.3.4:443")]
         dest = tmp_path / "alice.html"
         with patch("meridian.render.generate_qr_base64", return_value=""):
             save_connection_html(urls, dest, "1.2.3.4")
@@ -383,24 +362,23 @@ class TestSaveConnectionTextAllProtocols:
     """Test text output with all combinations of protocols."""
 
     def test_all_protocols(self, tmp_path: Path) -> None:
-        urls = ClientURLs(
-            name="alice",
-            reality="vless://reality-url",
-            xhttp="vless://xhttp-url",
-            wss="vless://wss-url",
-        )
+        urls = [
+            ProtocolURL(key="reality", label="Primary", url="vless://reality-url"),
+            ProtocolURL(key="xhttp", label="XHTTP", url="vless://xhttp-url"),
+            ProtocolURL(key="wss", label="CDN Backup", url="vless://wss-url"),
+        ]
         dest = tmp_path / "out.txt"
-        save_connection_text(urls, dest, "1.2.3.4")
+        save_connection_text(urls, dest, "1.2.3.4", client_name="alice")
         content = dest.read_text()
         assert "vless://reality-url" in content
         assert "vless://xhttp-url" in content
         assert "vless://wss-url" in content
         assert "XHTTP" in content
-        assert "WSS" in content
-        assert "Reality" in content
+        assert "CDN" in content or "WSS" in content
+        assert "Primary" in content or "Reality" in content
 
     def test_text_includes_client_apps(self, tmp_path: Path) -> None:
-        urls = ClientURLs(name="test", reality="vless://x", xhttp="", wss="")
+        urls = [ProtocolURL(key="reality", label="Primary", url="vless://x")]
         dest = tmp_path / "out.txt"
         save_connection_text(urls, dest, "1.2.3.4")
         content = dest.read_text()
@@ -408,14 +386,14 @@ class TestSaveConnectionTextAllProtocols:
         assert "v2RayTun" in content or "Hiddify" in content
 
     def test_text_includes_time_sync_warning(self, tmp_path: Path) -> None:
-        urls = ClientURLs(name="test", reality="vless://x", xhttp="", wss="")
+        urls = [ProtocolURL(key="reality", label="Primary", url="vless://x")]
         dest = tmp_path / "out.txt"
         save_connection_text(urls, dest, "1.2.3.4")
         content = dest.read_text()
         assert "TIME SYNC" in content or "time" in content.lower()
 
     def test_creates_parent_directories(self, tmp_path: Path) -> None:
-        urls = ClientURLs(name="test", reality="vless://x", xhttp="", wss="")
+        urls = [ProtocolURL(key="reality", label="Primary", url="vless://x")]
         dest = tmp_path / "deep" / "nested" / "dir" / "out.txt"
         save_connection_text(urls, dest, "1.2.3.4")
         assert dest.exists()

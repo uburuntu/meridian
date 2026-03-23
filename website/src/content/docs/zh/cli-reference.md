@@ -45,6 +45,27 @@ meridian server list
 meridian server remove NAME
 ```
 
+### meridian relay
+
+管理中继节点——轻量级 TCP 转发器，通过国内服务器将流量路由到国外的出口服务器。
+
+```
+meridian relay deploy RELAY_IP --exit EXIT [flags]
+meridian relay list [--exit EXIT]
+meridian relay remove RELAY_IP [--exit EXIT] [--yes]
+meridian relay check RELAY_IP [--exit EXIT]
+```
+
+| 标志 | 默认值 | 描述 |
+|------|---------|-------------|
+| `--exit/-e EXIT` | (deploy 时必需) | 出口服务器 IP 或名称 |
+| `--name NAME` | (自动) | 中继的友好名称 (如 "ru-moscow") |
+| `--port/-p PORT` | 443 | 中继服务器的监听端口 |
+| `--user/-u USER` | root | 中继上的 SSH 用户 |
+| `--yes/-y` | | 跳过确认提示 |
+
+**中继如何工作**：客户端连接到中继的国内 IP。中继将原始 TCP 转发到国外的出口服务器。所有加密都是端到端的，在客户端和出口之间——中继永远看不到明文。所有协议（Reality、XHTTP、WSS）都通过中继工作。
+
 ### meridian preflight
 
 预检查服务器验证。测试 SNI、端口、DNS、OS、磁盘、ASN，无需安装任何内容。

@@ -9,12 +9,6 @@ from pathlib import Path
 
 from meridian.console import err_console, fail, info, ok, warn
 
-
-def _shell_quote(s: str) -> str:
-    """Quote a string for safe embedding inside bash -c '...'."""
-    return shlex.quote(s)
-
-
 SSH_OPTS: list[str] = [
     "-o",
     "BatchMode=yes",
@@ -152,15 +146,12 @@ class ServerConnection:
     def _ssh_opts(self) -> list[str]:
         return SSH_OPTS
 
-    def run(
-        self, command: str, timeout: int = 30, check: bool = False, *, sudo: bool | None = None
-    ) -> subprocess.CompletedProcess[str]:
+    def run(self, command: str, timeout: int = 30, *, sudo: bool | None = None) -> subprocess.CompletedProcess[str]:
         """Run a command on the remote server via SSH.
 
         Args:
             command: Shell command to execute.
             timeout: Timeout in seconds.
-            check: Not used (kept for API compatibility).
             sudo: Force sudo wrapping. None = auto (sudo when user != root).
         """
         use_sudo = sudo if sudo is not None else (self.user != "root")
@@ -182,7 +173,7 @@ class ServerConnection:
             # Non-root remote user: wrap in sudo via SSH
             # SSH passes the command string to the remote shell, which handles
             # the first layer of quoting. sudo -n sh -c adds a second layer.
-            command = f"sudo -n sh -c {_shell_quote(command)}"
+            command = f"sudo -n sh -c {shlex.quote(command)}"
         cmd = ["ssh", *self._ssh_opts, f"{self.user}@{self.ip}", command]
         return subprocess.run(
             cmd,

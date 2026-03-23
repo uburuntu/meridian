@@ -8,11 +8,7 @@ VLESS+Reality encryption between the client and the exit.
 from __future__ import annotations
 
 import shlex
-import time
-from dataclasses import dataclass
-
-from rich.console import Console
-from rich.status import Status
+from dataclasses import dataclass, field
 
 from meridian.config import (
     REALM_GITHUB_URL,
@@ -60,6 +56,7 @@ class RelayContext:
     listen_port: int = 443
     user: str = "root"
     realm_version: str = REALM_VERSION
+    results: list[StepResult] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         import ipaddress
@@ -378,32 +375,3 @@ def build_relay_steps(ctx: RelayContext) -> list:
         ConfigureRealm(),
         VerifyRelay(),
     ]
-
-
-def run_relay_pipeline(conn: ServerConnection, ctx: RelayContext) -> list[StepResult]:
-    """Execute relay provisioning steps with Rich progress output."""
-    console = Console(stderr=True, highlight=False)
-    steps = build_relay_steps(ctx)
-    results: list[StepResult] = []
-
-    total = len(steps)
-    for i, step in enumerate(steps):
-        start = time.monotonic()
-        prefix = f"[{i + 1}/{total}]"
-        with Status(f"  [cyan]{prefix} {step.name}[/cyan]", console=console, spinner="dots"):
-            result = step.run(conn, ctx)
-        result.duration_ms = int((time.monotonic() - start) * 1000)
-        results.append(result)
-
-        if result.status == "failed":
-            detail = f" ({result.detail})" if result.detail else ""
-            console.print(f"  [red bold]\u2717[/red bold] {result.name}{detail}")
-            break
-        elif result.status == "skipped":
-            detail = f" ({result.detail})" if result.detail else ""
-            console.print(f"  [dim]\u2013 {result.name}{detail}[/dim]")
-        else:
-            detail = f" [dim]({result.detail})[/dim]" if result.detail else ""
-            console.print(f"  [green]\u2713[/green] {result.name}{detail}")
-
-    return results

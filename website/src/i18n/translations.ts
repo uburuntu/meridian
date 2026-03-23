@@ -61,7 +61,6 @@ export const translations: Record<string, Record<string, string>> = {
     'connect.title': 'Сканируй и подключайся',
     'connect.desc': 'После развёртывания вы получаете страницу с QR-кодами. Отправьте её кому нужно — одно нажатие и подключение готово.',
     'connect.clock': 'Часы устройства должны быть точными с отклонением не более 30 секунд. Включите автоматическую установку даты/времени.',
-    'app.all': 'Все платформы',
 
     // Architecture
     'arch.label': 'Архитектура',
@@ -158,7 +157,6 @@ export const translations: Record<string, Record<string, string>> = {
     'connect.title': 'اسکن کن و وصل شو',
     'connect.desc': 'پس از راه‌اندازی، صفحه‌ای با کدهای QR دریافت می‌کنید. به هر کسی که نیاز دارد بفرستید — یک ضربه و متصل می‌شوند.',
     'connect.clock': 'ساعت دستگاه باید با دقت ۳۰ ثانیه تنظیم باشد. تاریخ/ساعت خودکار را فعال کنید.',
-    'app.all': 'همه پلتفرم‌ها',
 
     'arch.label': 'معماری',
     'arch.title': 'زیر کاپوت',
@@ -252,7 +250,6 @@ export const translations: Record<string, Record<string, string>> = {
     'connect.title': '扫描即连',
     'connect.desc': '部署后，你会得到一个带二维码的连接页面。发送给需要的人——一键连接。',
     'connect.clock': '设备时钟必须精确到 30 秒以内。请启用自动日期/时间。',
-    'app.all': '全平台',
 
     'arch.label': '架构',
     'arch.title': '工作原理',

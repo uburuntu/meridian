@@ -17,7 +17,7 @@ from pathlib import Path
 from meridian.config import DEFAULT_PANEL_PORT, DEFAULT_SNI
 from meridian.credentials import ServerCredentials
 from meridian.panel import PanelClient, PanelError
-from meridian.provision.steps import ProvisionContext, StepResult, timed
+from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
 # ---------------------------------------------------------------------------
@@ -82,7 +82,6 @@ class ConfigurePanel:
         self.panel_port = panel_port
         self.xhttp_enabled = xhttp_enabled
 
-    @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         # Check if already configured
         creds = ctx.get("credentials")
@@ -207,7 +206,6 @@ class LoginToPanel:
 
     name = "Log in to panel"
 
-    @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         creds: ServerCredentials | None = ctx.get("credentials")
         if creds is None or not creds.has_credentials:

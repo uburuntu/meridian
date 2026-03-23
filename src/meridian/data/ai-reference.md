@@ -65,6 +65,15 @@ meridian deploy [IP] [flags]     Deploy proxy server
 
 meridian client add|list|remove NAME    Manage client access keys (--server NAME)
 meridian server add|list|remove         Manage known servers
+
+meridian relay deploy RELAY_IP --exit EXIT [flags]  Deploy relay node (TCP forwarder)
+meridian relay list [--exit EXIT]                   List relay nodes
+meridian relay remove RELAY_IP [--exit EXIT]        Remove relay node
+meridian relay check RELAY_IP [--exit EXIT]         Check relay health
+  --exit/-e EXIT                Exit server IP or name (required for deploy)
+  --name NAME                   Friendly name for the relay
+  --port/-p PORT                Listen port on relay (default: 443)
+
 meridian preflight [IP] [--ai] [--server NAME]      Pre-flight server validation + ASN check
 meridian scan [IP] [--server NAME]               Find optimal SNI targets on server's network
 meridian test [IP] [--server NAME]               Test proxy reachability from client device

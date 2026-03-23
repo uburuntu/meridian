@@ -118,6 +118,10 @@ cd website && npm run build  # Astro + Pagefind
 - **Relay credentials** stored on exit server's `proxy.yml` (relays section) + `/etc/meridian/relay.yml` on relay
 - **Connection pages auto-regenerated** when relay topology changes (deploy/remove)
 
+### install.sh
+- `install.sh` lives in the repo root and is deployed to `getmeridian.org/install.sh` by CI (`release.yml`).
+- References to `https://getmeridian.org/install.sh` in docs are correct and NOT dangling references.
+
 ### Security conventions
 - **Shell injection**: ALL `conn.run()` interpolated values MUST use `shlex.quote()`
 - **Referrer policy**: `<meta name="referrer" content="no-referrer">` on all website pages

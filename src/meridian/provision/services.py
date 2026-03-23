@@ -10,7 +10,7 @@ import shlex
 import textwrap
 
 from meridian.config import DEFAULT_FINGERPRINT, DEFAULT_PANEL_PORT
-from meridian.provision.steps import ProvisionContext, StepResult, timed
+from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
 # ---------------------------------------------------------------------------
@@ -420,7 +420,6 @@ class InstallHAProxy:
         self.haproxy_reality_backend_port = haproxy_reality_backend_port
         self.caddy_internal_port = caddy_internal_port
 
-    @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         # Check if already installed and configured
         check = conn.run("dpkg -l haproxy 2>/dev/null | grep -q '^ii'", timeout=10)
@@ -532,7 +531,6 @@ class InstallCaddy:
         self.xhttp_path = xhttp_path
         self.xhttp_internal_port = xhttp_internal_port
 
-    @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         # Resolve runtime values from context (populated by ConfigurePanel)
         panel_web_base_path = self.panel_web_base_path or ctx.get("web_base_path", "")
@@ -722,7 +720,6 @@ class DeployConnectionPage:
         self.server_ip = server_ip
         self.fingerprint = fingerprint
 
-    @timed
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         # Read credentials from context (populated by ConfigurePanel)
         creds = ctx["credentials"]
@@ -841,17 +838,21 @@ class DeployConnectionPage:
             timeout=10,
         )
 
+        # Build ProtocolURL list with QR data for connection page
+        from meridian.models import ProtocolURL as _PU
+
+        page_urls: list[_PU] = [_PU(key="reality", label="Primary", url=reality_url, qr_b64=reality_qr_b64)]
+        if xhttp_url:
+            page_urls.append(_PU(key="xhttp", label="XHTTP", url=xhttp_url, qr_b64=xhttp_qr_b64))
+        if wss_url:
+            page_urls.append(_PU(key="wss", label="CDN Backup", url=wss_url, qr_b64=wss_qr_b64))
+
         # Render and upload connection info HTML for default client
         html = _render_connection_page(
-            reality_url=reality_url,
-            xhttp_url=xhttp_url,
-            wss_url=wss_url,
+            page_urls,
             server_ip=self.server_ip,
             domain=domain,
             client_name=first_client_name,
-            reality_qr_b64=reality_qr_b64,
-            xhttp_qr_b64=xhttp_qr_b64,
-            wss_qr_b64=wss_qr_b64,
         )
 
         q_uuid = shlex.quote(reality_uuid)
@@ -889,33 +890,26 @@ class DeployConnectionPage:
 
 
 def _render_connection_page(
-    reality_url: str,
-    xhttp_url: str,
-    wss_url: str,
+    protocol_urls: list,
     server_ip: str,
     domain: str,
     client_name: str,
-    reality_qr_b64: str,
-    xhttp_qr_b64: str,
-    wss_qr_b64: str,
 ) -> str:
     """Render the connection info HTML with is_server_hosted=True.
 
     Uses the bundled Jinja2 template when available, falls back to
     render.py's minimal HTML generator.
+
+    Args:
+        protocol_urls: list[ProtocolURL] with qr_b64 populated.
     """
     from meridian.render import render_hosted_html
 
     return render_hosted_html(
-        reality_url=reality_url,
-        xhttp_url=xhttp_url,
-        wss_url=wss_url,
+        protocol_urls,
         server_ip=server_ip,
         domain=domain,
         client_name=client_name,
-        reality_qr_b64=reality_qr_b64,
-        xhttp_qr_b64=xhttp_qr_b64,
-        wss_qr_b64=wss_qr_b64,
     )
 
 

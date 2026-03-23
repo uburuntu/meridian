@@ -9,34 +9,15 @@ section: reference
 
 ### حالت Standalone (بدون دامنه)
 
-```
-Internet
-  │
-  ▼
-┌──────────────────────────────────────┐
-│ Server                               │
-│                                      │
-│  Port 443: HAProxy (SNI router)      │
-│  ┌──────────────────────────────┐    │
-│  │ SNI = reality_sni            │    │
-│  │  → Port 10443: Xray (Reality)│    │
-│  │                              │    │
-│  │ SNI = server IP              │    │
-│  │  → Port 8443: Caddy (TLS)   │    │
-│  │     ├─ /info-path → page    │    │
-│  │     ├─ /panel-path → 3x-ui  │    │
-│  │     └─ /xhttp-path → Xray   │    │
-│  └──────────────────────────────┘    │
-│                                      │
-│  Port 80: Caddy (ACME challenges)    │
-│                                      │
-│  Docker: 3x-ui                       │
-│  ├─ Reality inbound (port 10443)     │
-│  └─ XHTTP inbound (localhost port)   │
-│                                      │
-│  Caddy: IP cert (ACME shortlived)    │
-│  HAProxy: TCP SNI, no TLS terminate  │
-└──────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Internet((Internet)) -->|Port 443| HAProxy[HAProxy<br>SNI Router]
+    HAProxy -->|"SNI = reality_sni"| Xray["Xray Reality<br>:10443"]
+    HAProxy -->|"SNI = server IP"| Caddy["Caddy TLS<br>:8443"]
+    Caddy -->|/info-path| Page[Connection Page]
+    Caddy -->|/panel-path| Panel[3x-ui Panel]
+    Caddy -->|/xhttp-path| XrayXHTTP["Xray XHTTP<br>localhost"]
+    Internet -->|Port 80| CaddyACME["Caddy<br>ACME challenges"]
 ```
 
 HAProxy TLS را تعریف نمی‌کند. آن SNI hostname را از TLS Client Hello می‌خواند و جریان TCP خام را به backend مناسب منتقل می‌کند.
@@ -47,37 +28,31 @@ XHTTP روی یک پورت localhost-only اجرا می‌شود و توسط Cad
 
 ### حالت Domain
 
-```
-Internet
-  │
-  ▼
-┌──────────────────────────────────────┐
-│ Server                               │
-│                                      │
-│  Port 443: HAProxy (SNI router)      │
-│  ┌──────────────────────────────┐    │
-│  │ SNI = reality_sni            │    │
-│  │  → Port 10443: Xray (Reality)│    │
-│  │                              │    │
-│  │ SNI = domain                 │    │
-│  │  → Port 8443: Caddy (TLS)   │    │
-│  │     ├─ /info-path → page    │    │
-│  │     ├─ /panel-path → 3x-ui  │    │
-│  │     ├─ /xhttp-path → Xray   │    │
-│  │     └─ /ws-path → Xray WSS  │    │
-│  └──────────────────────────────┘    │
-│                                      │
-│  Docker: 3x-ui                       │
-│  ├─ Reality inbound (port 10443)     │
-│  ├─ XHTTP inbound (localhost port)   │
-│  └─ WSS inbound (localhost port)     │
-│                                      │
-│  Caddy: domain cert (Let's Encrypt)  │
-│  HAProxy: TCP SNI, no TLS terminate  │
-└──────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Internet((Internet)) -->|Port 443| HAProxy[HAProxy<br>SNI Router]
+    HAProxy -->|"SNI = reality_sni"| Xray["Xray Reality<br>:10443"]
+    HAProxy -->|"SNI = domain"| Caddy["Caddy TLS<br>:8443"]
+    Caddy -->|/info-path| Page[Connection Page]
+    Caddy -->|/panel-path| Panel[3x-ui Panel]
+    Caddy -->|/xhttp-path| XrayXHTTP["Xray XHTTP<br>localhost"]
+    Caddy -->|/ws-path| XrayWSS["Xray WSS<br>localhost"]
+    Internet -->|Port 80| CaddyACME["Caddy<br>ACME challenges"]
+    Internet -.->|"CDN (Cloudflare)"| Caddy
 ```
 
 حالت دامنه VLESS+WSS را به عنوان مسیر fallback CDN اضافه می‌کند. ترافیک از طریق CDN Cloudflare با WebSocket جریان می‌یابد، که اتصال حتی اگر IP سرور مسدود شود کار می‌کند.
+
+### توپولوژی Relay
+
+```mermaid
+flowchart LR
+    Client([Client]) -->|Port 443| Relay["Relay<br>(Realm TCP)"]
+    Relay -->|Port 443| Exit["Exit Server<br>(abroad)"]
+    Exit --> Internet((Internet))
+```
+
+Relay یک دستگاه ارسال TCP سطح ۴ است که ترافیک خام را از کلاینت به سرور خروجی منتقل می‌کند. تمامی رمزگذاری بین کلاینت و سرور خروجی انجام می‌شود، relay هرگز plaintext را نمی‌بیند. این معماری امکان استفاده از نقاط ورودی داخلی (عادی‌تر، کمتر محدود) را فراهم می‌کند و سرور خروجی را در خارج از کشور قرار می‌دهد.
 
 ## نحوه کار پروتکل Reality
 

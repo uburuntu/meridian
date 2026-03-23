@@ -32,6 +32,7 @@ class ProtocolURL:
     key: str  # Protocol key: "reality", "xhttp", "wss"
     label: str  # Human-readable label: "Primary", "XHTTP", "CDN Backup"
     url: str  # Full connection URL (e.g., vless://...)
+    qr_b64: str = ""  # Base64-encoded QR PNG (empty if not generated)
 
 
 @dataclass(frozen=True)

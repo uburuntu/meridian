@@ -48,6 +48,7 @@ const detailSteps = [
           </div>
 
           <div class="setup-aside">
+            <img src="/img/deploy-terminal.svg" alt="Meridian deploy output" class="deploy-terminal" loading="lazy" width="720" height="780" />
             <h3 data-t="setup.details">What happens behind the scenes</h3>
             <Timeline steps={detailSteps} />
             <Callout variant="tip" icon="⏱" data-t="setup.idempotent">
@@ -321,6 +322,14 @@ const detailSteps = [
       grid-template-columns: 1fr 1fr;
       gap: 48px;
     }
+  }
+
+  .deploy-terminal {
+    width: 100%;
+    max-width: 480px;
+    height: auto;
+    border-radius: var(--r2);
+    margin-bottom: 24px;
   }
 
   .setup-aside h3 {

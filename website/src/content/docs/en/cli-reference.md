@@ -45,6 +45,27 @@ meridian server list
 meridian server remove NAME
 ```
 
+### meridian relay
+
+Manage relay nodes — lightweight TCP forwarders that route traffic through a domestic server to an exit server abroad.
+
+```
+meridian relay deploy RELAY_IP --exit EXIT [flags]
+meridian relay list [--exit EXIT]
+meridian relay remove RELAY_IP [--exit EXIT] [--yes]
+meridian relay check RELAY_IP [--exit EXIT]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--exit/-e EXIT` | (required for deploy) | Exit server IP or name |
+| `--name NAME` | (auto) | Friendly name for the relay (e.g., "ru-moscow") |
+| `--port/-p PORT` | 443 | Listen port on relay server |
+| `--user/-u USER` | root | SSH user on relay |
+| `--yes/-y` | | Skip confirmation prompts |
+
+**How relays work**: Client connects to the relay's domestic IP. Relay forwards raw TCP to the exit server abroad. All encryption is end-to-end between client and exit — the relay never sees plaintext. All protocols (Reality, XHTTP, WSS) work through the relay.
+
 ### meridian preflight
 
 Pre-flight server validation. Tests SNI, ports, DNS, OS, disk, ASN without installing anything.

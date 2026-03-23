@@ -170,25 +170,15 @@ def _regenerate_client_pages(
         # Regenerate server-hosted page (if enabled)
         if creds.server.hosted_page and creds.panel.info_page_path and client.reality_uuid:
             import shlex
+            from dataclasses import replace as dc_replace
 
-            reality_url = next((p.url for p in protocol_urls if p.key == "reality"), "")
-            xhttp_url = next((p.url for p in protocol_urls if p.key == "xhttp"), "")
-            wss_url = next((p.url for p in protocol_urls if p.key == "wss"), "")
-
-            reality_qr = generate_qr_base64(reality_url) if reality_url else ""
-            xhttp_qr = generate_qr_base64(xhttp_url) if xhttp_url else ""
-            wss_qr = generate_qr_base64(wss_url) if wss_url else ""
+            urls_with_qr = [dc_replace(p, qr_b64=generate_qr_base64(p.url)) if p.url else p for p in protocol_urls]
 
             html = render_hosted_html(
-                reality_url=reality_url,
-                xhttp_url=xhttp_url,
-                wss_url=wss_url,
+                urls_with_qr,
                 server_ip=server_ip,
                 domain=domain,
                 client_name=client.name,
-                reality_qr_b64=reality_qr,
-                xhttp_qr_b64=xhttp_qr,
-                wss_qr_b64=wss_qr,
                 relay_entries=relay_url_sets,
             )
 
@@ -332,7 +322,8 @@ def run_deploy(
     err_console.print()
 
     # Run relay provisioner
-    from meridian.provision.relay import RelayContext, run_relay_pipeline
+    from meridian.provision.relay import RelayContext, build_relay_steps
+    from meridian.provision.steps import Provisioner
 
     ctx = RelayContext(
         relay_ip=relay_ip,
@@ -345,7 +336,8 @@ def run_deploy(
     info(f"Configuring relay at {relay_ip}...")
     err_console.print()
 
-    results = run_relay_pipeline(relay_conn, ctx)
+    provisioner = Provisioner(build_relay_steps(ctx))
+    results = provisioner.run(relay_conn, ctx)
 
     # Check for failures
     failed = [r for r in results if r.status == "failed"]

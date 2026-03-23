@@ -18,10 +18,10 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [ ] **CSS sync activation** — add `/* SYNC:START */` / `/* SYNC:END */` markers to `connection-info.html.j2`, run `sync-template-css.mjs` in CI
 - [ ] **Accordion body translations** — Reference section content inside accordions is hardcoded EN (~50 keys needed)
 - [ ] **CommandBuilder status messages i18n** — interactive hint text is hardcoded EN
-- [ ] **GenAI images** — replace old screenshots with fresh OG, logo, favicon, connection page, architecture diagram (prompts in session notes)
+- [ ] **GenAI images** — replace old screenshots with fresh OG, logo, favicon, connection page
 - [ ] **Docs sidebar on mobile** — sidebar `display: none` below 860px with no alternative navigation
-- [ ] **Clean up unused assets** — `deploy-terminal.svg`, `logo-512.png` not referenced; unused `app.all` translation key
 - [ ] **`og:locale` meta tag** — add `<meta property="og:locale">` for non-English pages
+- [ ] **Footer `/version` endpoint** — fetch always fails silently; either generate `/version` file during build or remove the fetch
 
 ### Provisioner hardening
 
@@ -33,17 +33,46 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [ ] Provisioner unit tests (mock `conn.run()`, test idempotency) — priority: `ConfigurePanel`, `CreateRealityInbound`, `LoginToPanel`
 - [ ] Credential file corruption test (truncated/malformed YAML)
 
+### Code duplication
+
+- [ ] **BBR/firewall helpers** — extract shared `_configure_bbr(conn)` and `_configure_ufw(conn, ports)` from `provision/common.py` + `provision/relay.py`
+- [ ] **Credential sync** — extract shared `sync_credentials_to_server()` from `commands/client.py:77` + `commands/relay.py:110`
+- [ ] **Connection page deploy** — extract shared `deploy_hosted_page()` from `commands/client.py:101` + `commands/relay.py:170`
+- [ ] **Client name validation** — extract shared validator from `client.py:35`, `setup.py:111`, `relay.py:224`, `server.py:73`
+- [ ] **UUID generation** — consolidate `panel.py:178` + `provision/panel.py:299`
+- [ ] **Public IP detection** — consolidate `setup.py:424` + `ssh.py:347`
+
 ### Architecture debt
 
 - [ ] Type `ProvisionContext` inter-step state — promote dict keys to typed Optional fields
+- [ ] **`StepResult.status` type safety** — use `Literal["ok", "changed", "skipped", "failed"]`
+- [ ] **`console.fail()` hint_type type safety** — use `Literal["user", "system", "bug"]`
 - [ ] **`PROTOCOL_ORDER` consistency** — some code iterates `PROTOCOLS.values()` directly, others use `PROTOCOL_ORDER`; pick one
 - [ ] **`urls.py`/`render.py` hardcoded protocol keys** — `if key == "reality"` branches instead of generic protocol dispatch
 - [ ] Make protocol abstraction honest — rename to "VLESS transport registry" (not truly protocol-agnostic)
 - [ ] Extract `PanelTransport` protocol — separate SSH+curl transport from 3x-ui API semantics
 - [ ] `console.fail()` → domain exceptions — `MeridianError` hierarchy, catch at CLI boundary
 - [ ] Partial client add rollback (if Reality succeeds but WSS fails, clean up)
-- [ ] Delete stale `output.py` legacy facade
-- [ ] **Broad `except Exception`** — in `scan.py`, `render.py:254` (`_load_template_text`), `update.py`; could mask real bugs
+- [ ] **SimpleNamespace QR hack** — `render.py` wraps QR in `SimpleNamespace(stdout=...)` for template compat; update template instead
+- [ ] **Broad `except Exception`** — in `scan.py`, `render.py` (`_load_template_text`), `update.py`; could mask real bugs
+
+### Error handling
+
+- [ ] **ValueError instead of fail()** — `client.py:218,411,485` raise ValueError instead of `console.fail(..., hint_type="bug")`
+- [ ] **Panel context manager** — `provision/panel.py:313` doesn't use `with panel:`, cookie leaks on failure
+- [ ] **Subprocess timeout** — `update.py:83-110` upgrade calls have no timeout
+
+### Performance
+
+- [ ] **Jinja2 template caching** — `render.py` re-reads template and re-creates Environment per render call
+- [ ] **N+1 panel calls** — `panel.find_inbound()` calls `list_inbounds()` per protocol instead of sharing cached result
+
+### Test coverage
+
+- [ ] **14 untested modules** — display.py, ai.py, commands/{check,diagnostics,scan,ping,server,uninstall}.py, provision/{steps,common,docker,panel,xray,services}.py
+- [ ] **Test `build_protocol_urls()` directly** — currently only tested via deprecated wrapper
+- [ ] **Test `ServerConnection.fetch_credentials()`** — critical credential sync path
+- [ ] **MockUndefined swallows errors** — `test_render_templates.py` can't catch missing template variables
 
 ### Security hardening
 

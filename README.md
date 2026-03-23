@@ -14,7 +14,7 @@
 <p align="center">Deploy a censorship-resistant proxy server in one command.<br>Invisible to DPI, active probing, and TLS fingerprinting.</p>
 
 <p align="center">
-  <img src="website/public/img/connection-page.png" width="720" alt="Connection page with QR codes">
+  <img src="website/public/img/deploy-terminal.svg" width="720" alt="Meridian deploy terminal output">
 </p>
 
 ## What is this
@@ -58,6 +58,10 @@ meridian client remove alice         # revoke access
 
 Each client gets a connection page hosted on the server with QR codes, one-tap deep links, and [live usage stats](https://getmeridian.org/demo). Share the URL directly — no file transfer needed.
 
+<p align="center">
+  <img src="website/public/img/connection-page.png" width="360" alt="Connection page with QR codes">
+</p>
+
 ## How it works
 
 Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protocol that makes your server indistinguishable from a legitimate website:
@@ -86,6 +90,10 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 | `meridian server list` | List managed servers |
 | `meridian server add IP` | Add an existing server (fetches credentials via SSH) |
 | `meridian server remove NAME` | Remove a server from the registry |
+| `meridian relay deploy RELAY_IP` | Deploy a relay node (TCP forwarder) |
+| `meridian relay list` | List relay nodes |
+| `meridian relay remove RELAY_IP` | Remove a relay node |
+| `meridian relay check RELAY_IP` | Check relay health |
 | `meridian preflight [IP]` | Pre-flight validation (ports, SNI, ASN, DNS) |
 | `meridian scan [IP]` | Find optimal SNI targets on server's network |
 | `meridian test [IP]` | Test proxy reachability from this device |
@@ -100,11 +108,23 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 
 ## Architecture
 
-<img src="website/public/img/architecture.png" width="720" alt="Meridian architecture">
+```mermaid
+flowchart TD
+    Internet((Internet)) -->|Port 443| HAProxy[HAProxy — SNI Router]
+    HAProxy -->|"SNI = camouflage host"| Xray["Xray Reality :10443"]
+    HAProxy -->|"SNI = server IP/domain"| Caddy["Caddy TLS :8443"]
+    Caddy --> Page[Connection Page]
+    Caddy --> Panel[3x-ui Panel]
+    Caddy --> XrayXHTTP["Xray XHTTP"]
+    Caddy -.->|domain mode| XrayWSS["Xray WSS"]
+    Internet -->|Port 80| CaddyACME["Caddy ACME"]
+```
 
 **Standalone mode** — HAProxy on port 443 routes Reality traffic to Xray. Caddy provides auto-TLS (Let's Encrypt IP certificate) for hosted connection pages, panel access, and XHTTP transport. No domain needed.
 
 **Domain mode** — Same architecture, plus Caddy handles VLESS+WSS through Cloudflare CDN as a fallback when the server IP is blocked.
+
+**Relay mode** — A lightweight TCP forwarder (Realm) on a domestic server forwards port 443 to the exit server abroad. All protocols work through the relay with end-to-end encryption.
 
 ## Client apps
 

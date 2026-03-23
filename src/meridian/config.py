@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import platform
 from pathlib import Path
 
 MERIDIAN_HOME = Path(os.environ.get("MERIDIAN_HOME", Path.home() / ".meridian"))
@@ -32,20 +31,9 @@ RELAY_SERVICE_NAME = "meridian-relay"
 RELAY_CONFIG_PATH = "/etc/meridian/realm.toml"
 
 
-def is_macos() -> bool:
-    return platform.system() == "Darwin"
-
-
 def is_ipv4(s: str) -> bool:
     """Check if string looks like an IPv4 address."""
     parts = s.split(".")
     if len(parts) != 4:
         return False
     return all(p.isdigit() and 0 <= int(p) <= 255 for p in parts)
-
-
-def ensure_dirs() -> None:
-    """Create standard directories with proper permissions."""
-    MERIDIAN_HOME.mkdir(parents=True, exist_ok=True)
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    CREDS_BASE.mkdir(parents=True, exist_ok=True, mode=0o700)

@@ -142,48 +142,31 @@ def save_connection_html(
     # Derive client name.
     name = client_name or derive_client_name(protocol_urls)
 
-    # Build per-protocol QR data.
-    qr_map: dict[str, str] = {}
-    for purl in protocol_urls:
-        if purl.url:
-            qr_map[purl.key] = generate_qr_base64(purl.url)
+    # Attach QR codes to protocol URLs (ProtocolURL is frozen, so use replace).
+    from dataclasses import replace
 
-    reality_url = next((p.url for p in protocol_urls if p.key == "reality"), "")
-    xhttp_url = next((p.url for p in protocol_urls if p.key == "xhttp"), "")
-    wss_url = next((p.url for p in protocol_urls if p.key == "wss"), "")
-
-    reality_qr = qr_map.get("reality", "")
-    xhttp_qr = qr_map.get("xhttp", "")
-    wss_qr = qr_map.get("wss", "")
+    urls_with_qr = [
+        replace(p, qr_b64=generate_qr_base64(p.url)) if p.url and not p.qr_b64 else p for p in protocol_urls
+    ]
 
     # Build template variables — local-save uses *_local QR variable names.
     variables = _build_template_variables(
-        client_name=name,
-        reality_url=reality_url,
-        xhttp_url=xhttp_url,
-        wss_url=wss_url,
+        protocol_urls=urls_with_qr,
         server_ip=server_ip,
         domain=domain,
         now=now,
         is_server_hosted=False,
-        reality_qr_b64=reality_qr,
-        xhttp_qr_b64=xhttp_qr,
-        wss_qr_b64=wss_qr,
+        client_name=name,
         relay_entries=relay_entries,
     )
 
     result_html = _render_template(
         template_text=_load_template_text(),
         variables=variables,
-        client_name=name,
-        reality_url=reality_url,
-        xhttp_url=xhttp_url,
-        wss_url=wss_url,
-        reality_qr=reality_qr,
-        xhttp_qr=xhttp_qr,
-        wss_qr=wss_qr,
+        protocol_urls=urls_with_qr,
         server_ip=server_ip,
         domain=domain,
+        client_name=name,
         now=now,
     )
 
@@ -193,16 +176,11 @@ def save_connection_html(
 
 
 def render_hosted_html(
-    reality_url: str,
+    protocol_urls: list[ProtocolURL],
     server_ip: str,
     domain: str = "",
     *,
-    xhttp_url: str = "",
-    wss_url: str = "",
     client_name: str = "",
-    reality_qr_b64: str = "",
-    xhttp_qr_b64: str = "",
-    wss_qr_b64: str = "",
     relay_entries: list[RelayURLSet] | None = None,
 ) -> str:
     """Render connection info HTML for server hosting (is_server_hosted=True).
@@ -210,48 +188,35 @@ def render_hosted_html(
     Returns the rendered HTML string. Used by the provisioner's
     DeployConnectionPage step and by ``client add`` for server-hosted pages.
 
+    Each ``ProtocolURL`` should have its ``qr_b64`` field populated
+    before calling this function.
+
     Args:
-        reality_url: VLESS Reality connection URL.
+        protocol_urls: Ordered list of active protocol URLs with QR data.
         server_ip: Server IP address.
         domain: Optional domain (enables WSS card).
-        xhttp_url: Optional XHTTP connection URL.
-        wss_url: Optional WSS connection URL.
         client_name: Client name for page title.
-        reality_qr_b64: Base64-encoded QR PNG for Reality URL.
-        xhttp_qr_b64: Base64-encoded QR PNG for XHTTP URL.
-        wss_qr_b64: Base64-encoded QR PNG for WSS URL.
         relay_entries: Optional relay URL sets for relay-aware rendering.
     """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Build template variables — server-hosted uses non-_local QR variable names.
     variables = _build_template_variables(
-        client_name=client_name,
-        reality_url=reality_url,
-        xhttp_url=xhttp_url,
-        wss_url=wss_url,
+        protocol_urls=protocol_urls,
         server_ip=server_ip,
         domain=domain,
         now=now,
         is_server_hosted=True,
-        reality_qr_b64=reality_qr_b64,
-        xhttp_qr_b64=xhttp_qr_b64,
-        wss_qr_b64=wss_qr_b64,
+        client_name=client_name,
         relay_entries=relay_entries,
     )
 
     return _render_template(
         template_text=_load_template_text(),
         variables=variables,
-        client_name=client_name,
-        reality_url=reality_url,
-        xhttp_url=xhttp_url,
-        wss_url=wss_url,
-        reality_qr=reality_qr_b64,
-        xhttp_qr=xhttp_qr_b64,
-        wss_qr=wss_qr_b64,
+        protocol_urls=protocol_urls,
         server_ip=server_ip,
         domain=domain,
+        client_name=client_name,
         now=now,
     )
 
@@ -275,19 +240,24 @@ def _load_template_text() -> str | None:
         return None
 
 
+def _url_by_key(protocol_urls: list[ProtocolURL], key: str) -> str:
+    """Get URL string for a protocol key, or empty string."""
+    return next((p.url for p in protocol_urls if p.key == key), "")
+
+
+def _qr_by_key(protocol_urls: list[ProtocolURL], key: str) -> str:
+    """Get QR base64 for a protocol key, or empty string."""
+    return next((p.qr_b64 for p in protocol_urls if p.key == key), "")
+
+
 def _build_template_variables(
     *,
-    client_name: str,
-    reality_url: str,
-    xhttp_url: str,
-    wss_url: str,
+    protocol_urls: list[ProtocolURL],
     server_ip: str,
     domain: str,
     now: str,
     is_server_hosted: bool,
-    reality_qr_b64: str,
-    xhttp_qr_b64: str,
-    wss_qr_b64: str,
+    client_name: str = "",
     relay_entries: list[RelayURLSet] | None = None,
 ) -> dict[str, object]:
     """Build the Jinja2 template variable dict.
@@ -297,6 +267,13 @@ def _build_template_variables(
     in a SimpleNamespace with a ``.stdout`` attribute (matching the template's
     ``{{ var.stdout }}`` access pattern).
     """
+    reality_url = _url_by_key(protocol_urls, "reality")
+    xhttp_url = _url_by_key(protocol_urls, "xhttp")
+    wss_url = _url_by_key(protocol_urls, "wss")
+    reality_qr = _qr_by_key(protocol_urls, "reality")
+    xhttp_qr = _qr_by_key(protocol_urls, "xhttp")
+    wss_qr = _qr_by_key(protocol_urls, "wss")
+
     variables: dict[str, object] = {
         "vless_reality_url": reality_url,
         "vless_xhttp_url": xhttp_url,
@@ -311,13 +288,13 @@ def _build_template_variables(
     }
 
     if is_server_hosted:
-        variables["reality_qr_b64"] = types.SimpleNamespace(stdout=reality_qr_b64)
-        variables["xhttp_qr_b64"] = types.SimpleNamespace(stdout=xhttp_qr_b64)
-        variables["wss_qr_b64"] = types.SimpleNamespace(stdout=wss_qr_b64)
+        variables["reality_qr_b64"] = types.SimpleNamespace(stdout=reality_qr)
+        variables["xhttp_qr_b64"] = types.SimpleNamespace(stdout=xhttp_qr)
+        variables["wss_qr_b64"] = types.SimpleNamespace(stdout=wss_qr)
     else:
-        variables["reality_qr_b64_local"] = types.SimpleNamespace(stdout=reality_qr_b64)
-        variables["xhttp_qr_b64_local"] = types.SimpleNamespace(stdout=xhttp_qr_b64)
-        variables["wss_qr_b64_local"] = types.SimpleNamespace(stdout=wss_qr_b64)
+        variables["reality_qr_b64_local"] = types.SimpleNamespace(stdout=reality_qr)
+        variables["xhttp_qr_b64_local"] = types.SimpleNamespace(stdout=xhttp_qr)
+        variables["wss_qr_b64_local"] = types.SimpleNamespace(stdout=wss_qr)
 
     # Relay entries (if any)
     if relay_entries:
@@ -326,12 +303,13 @@ def _build_template_variables(
             relay_urls_data = []
             for purl in relay_set.urls:
                 if purl.url:
+                    qr = purl.qr_b64 or generate_qr_base64(purl.url)
                     relay_urls_data.append(
                         {
                             "key": purl.key,
                             "label": purl.label,
                             "url": purl.url,
-                            "qr_b64": generate_qr_base64(purl.url),
+                            "qr_b64": qr,
                         }
                     )
             if not relay_urls_data:
@@ -359,15 +337,10 @@ def _render_template(
     template_text: str | None,
     variables: dict[str, object],
     *,
-    client_name: str,
-    reality_url: str,
-    xhttp_url: str,
-    wss_url: str,
-    reality_qr: str,
-    xhttp_qr: str,
-    wss_qr: str,
+    protocol_urls: list[ProtocolURL],
     server_ip: str,
     domain: str,
+    client_name: str,
     now: str,
 ) -> str:
     """Render the Jinja2 template with variables, falling back to minimal HTML.
@@ -375,15 +348,10 @@ def _render_template(
     Args:
         template_text: The Jinja2 template source, or None if unavailable.
         variables: Template variable dict (from ``_build_template_variables``).
-        client_name: Client name (for fallback).
-        reality_url: Reality URL (for fallback).
-        xhttp_url: XHTTP URL (for fallback).
-        wss_url: WSS URL (for fallback).
-        reality_qr: Base64 QR for Reality (for fallback).
-        xhttp_qr: Base64 QR for XHTTP (for fallback).
-        wss_qr: Base64 QR for WSS (for fallback).
+        protocol_urls: Protocol URLs with QR data (for fallback rendering).
         server_ip: Server IP (for fallback).
         domain: Domain (for fallback).
+        client_name: Client name (for fallback).
         now: ISO 8601 timestamp (for fallback).
     """
     if template_text:
@@ -410,16 +378,9 @@ def _render_template(
         except (TemplateError, ImportError, FileNotFoundError, OSError):
             pass
 
-    # Fallback: minimal HTML
-    purls = []
-    if reality_url:
-        purls.append(ProtocolURL(key="reality", label="Primary", url=reality_url))
-    if xhttp_url:
-        purls.append(ProtocolURL(key="xhttp", label="XHTTP", url=xhttp_url))
-    if wss_url:
-        purls.append(ProtocolURL(key="wss", label="CDN Backup", url=wss_url))
+    # Fallback: minimal HTML — use protocol_urls directly
+    qr_map = {p.key: p.qr_b64 for p in protocol_urls if p.qr_b64}
 
-    qr_map = {"reality": reality_qr, "xhttp": xhttp_qr, "wss": wss_qr}
     # Extract relay entries from variables for fallback rendering
     relay_data_raw = variables.get("relays")
     fallback_relays: list[RelayURLSet] | None = None
@@ -434,7 +395,9 @@ def _render_template(
                         urls=[ProtocolURL(key="reality", label="Primary (via relay)", url=rd["url"])],
                     )
                 )
-    return _generate_minimal_html(client_name, purls, qr_map, server_ip, domain, now, relay_entries=fallback_relays)
+    return _generate_minimal_html(
+        client_name, protocol_urls, qr_map, server_ip, domain, now, relay_entries=fallback_relays
+    )
 
 
 def _generate_minimal_html(

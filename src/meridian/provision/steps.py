@@ -14,18 +14,6 @@ from meridian.config import DEFAULT_PANEL_PORT, DEFAULT_SNI
 from meridian.ssh import ServerConnection
 
 
-def timed(fn):  # noqa: ANN001, ANN202
-    """Decorator that adds duration_ms to the returned StepResult."""
-
-    def wrapper(*args: Any, **kwargs: Any) -> StepResult:
-        t0 = time.monotonic()
-        result = fn(*args, **kwargs)
-        result.duration_ms = int((time.monotonic() - t0) * 1000)
-        return result
-
-    return wrapper
-
-
 @dataclass
 class StepResult:
     """Result of a provisioning step."""
@@ -103,9 +91,15 @@ class Provisioner:
     def __init__(self, steps: list[Step]) -> None:
         self.steps = steps
 
-    def run(self, conn: ServerConnection, ctx: ProvisionContext) -> list[StepResult]:
-        """Execute all steps, collecting results. Shows Rich spinner per step."""
+    def run(self, conn: ServerConnection, ctx: Any) -> list[StepResult]:
+        """Execute all steps, collecting results. Shows Rich spinner per step.
+
+        Accepts any context type (ProvisionContext, RelayContext, etc.)
+        as long as steps can consume it.  If ``ctx`` has a ``results``
+        attribute, each result is appended there too.
+        """
         console = Console(stderr=True, highlight=False)
+        results: list[StepResult] = []
 
         total = len(self.steps)
         for i, step in enumerate(self.steps):
@@ -116,7 +110,9 @@ class Provisioner:
             elapsed_ms = int((time.monotonic() - start) * 1000)
             result.duration_ms = elapsed_ms
 
-            ctx.results.append(result)
+            results.append(result)
+            if hasattr(ctx, "results"):
+                ctx.results.append(result)
 
             if result.status == "failed":
                 detail = f" ({result.detail})" if result.detail else ""
@@ -131,4 +127,4 @@ class Provisioner:
                 detail = f" [dim]({result.detail})[/dim]" if result.detail else ""
                 console.print(f"  [green]{marker}[/green] {result.name}{detail}")
 
-        return ctx.results
+        return results

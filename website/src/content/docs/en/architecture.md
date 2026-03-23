@@ -9,34 +9,15 @@ section: reference
 
 ### Standalone mode (no domain)
 
-```
-Internet
-  │
-  ▼
-┌──────────────────────────────────────┐
-│ Server                               │
-│                                      │
-│  Port 443: HAProxy (SNI router)      │
-│  ┌──────────────────────────────┐    │
-│  │ SNI = reality_sni            │    │
-│  │  → Port 10443: Xray (Reality)│    │
-│  │                              │    │
-│  │ SNI = server IP              │    │
-│  │  → Port 8443: Caddy (TLS)   │    │
-│  │     ├─ /info-path → page    │    │
-│  │     ├─ /panel-path → 3x-ui  │    │
-│  │     └─ /xhttp-path → Xray   │    │
-│  └──────────────────────────────┘    │
-│                                      │
-│  Port 80: Caddy (ACME challenges)    │
-│                                      │
-│  Docker: 3x-ui                       │
-│  ├─ Reality inbound (port 10443)     │
-│  └─ XHTTP inbound (localhost port)   │
-│                                      │
-│  Caddy: IP cert (ACME shortlived)    │
-│  HAProxy: TCP SNI, no TLS terminate  │
-└──────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Internet((Internet)) -->|Port 443| HAProxy[HAProxy<br>SNI Router]
+    HAProxy -->|"SNI = reality_sni"| Xray["Xray Reality<br>:10443"]
+    HAProxy -->|"SNI = server IP"| Caddy["Caddy TLS<br>:8443"]
+    Caddy -->|/info-path| Page[Connection Page]
+    Caddy -->|/panel-path| Panel[3x-ui Panel]
+    Caddy -->|/xhttp-path| XrayXHTTP["Xray XHTTP<br>localhost"]
+    Internet -->|Port 80| CaddyACME["Caddy<br>ACME challenges"]
 ```
 
 HAProxy does **not** terminate TLS. It reads the SNI hostname from the TLS Client Hello and forwards the raw TCP stream to the appropriate backend.
@@ -47,37 +28,31 @@ XHTTP runs on a localhost-only port and is reverse-proxied by Caddy — no extra
 
 ### Domain mode
 
-```
-Internet
-  │
-  ▼
-┌──────────────────────────────────────┐
-│ Server                               │
-│                                      │
-│  Port 443: HAProxy (SNI router)      │
-│  ┌──────────────────────────────┐    │
-│  │ SNI = reality_sni            │    │
-│  │  → Port 10443: Xray (Reality)│    │
-│  │                              │    │
-│  │ SNI = domain                 │    │
-│  │  → Port 8443: Caddy (TLS)   │    │
-│  │     ├─ /info-path → page    │    │
-│  │     ├─ /panel-path → 3x-ui  │    │
-│  │     ├─ /xhttp-path → Xray   │    │
-│  │     └─ /ws-path → Xray WSS  │    │
-│  └──────────────────────────────┘    │
-│                                      │
-│  Docker: 3x-ui                       │
-│  ├─ Reality inbound (port 10443)     │
-│  ├─ XHTTP inbound (localhost port)   │
-│  └─ WSS inbound (localhost port)     │
-│                                      │
-│  Caddy: domain cert (Let's Encrypt)  │
-│  HAProxy: TCP SNI, no TLS terminate  │
-└──────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Internet((Internet)) -->|Port 443| HAProxy[HAProxy<br>SNI Router]
+    HAProxy -->|"SNI = reality_sni"| Xray["Xray Reality<br>:10443"]
+    HAProxy -->|"SNI = domain"| Caddy["Caddy TLS<br>:8443"]
+    Caddy -->|/info-path| Page[Connection Page]
+    Caddy -->|/panel-path| Panel[3x-ui Panel]
+    Caddy -->|/xhttp-path| XrayXHTTP["Xray XHTTP<br>localhost"]
+    Caddy -->|/ws-path| XrayWSS["Xray WSS<br>localhost"]
+    Internet -->|Port 80| CaddyACME["Caddy<br>ACME challenges"]
+    Internet -.->|"CDN (Cloudflare)"| Caddy
 ```
 
 Domain mode adds VLESS+WSS as a CDN fallback path. Traffic flows through Cloudflare's CDN via WebSocket, making the connection work even if the server's IP is blocked.
+
+### Relay topology
+
+```mermaid
+flowchart LR
+    Client([Client]) -->|Port 443| Relay["Relay<br>(Realm TCP)"]
+    Relay -->|Port 443| Exit["Exit Server<br>(abroad)"]
+    Exit --> Internet((Internet))
+```
+
+A relay node is a lightweight TCP forwarder running [Realm](https://github.com/zhboner/realm). The client connects to the relay's domestic IP, which forwards raw TCP to the exit server abroad. All encryption is end-to-end between client and exit — the relay never sees plaintext.
 
 ## How Reality protocol works
 

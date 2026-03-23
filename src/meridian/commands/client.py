@@ -111,6 +111,7 @@ def _deploy_client_page(
     Returns the hosted page URL, or empty string on failure.
     """
     import shlex
+    from dataclasses import replace as dc_replace
 
     from meridian.urls import generate_qr_base64
 
@@ -118,25 +119,14 @@ def _deploy_client_page(
     server_ip = creds.server.ip or resolved.ip
     domain = creds.server.domain or ""
 
-    # Generate QR codes locally
-    reality_url = next((p.url for p in protocol_urls if p.key == "reality"), "")
-    xhttp_url = next((p.url for p in protocol_urls if p.key == "xhttp"), "")
-    wss_url = next((p.url for p in protocol_urls if p.key == "wss"), "")
-
-    reality_qr = generate_qr_base64(reality_url) if reality_url else ""
-    xhttp_qr = generate_qr_base64(xhttp_url) if xhttp_url else ""
-    wss_qr = generate_qr_base64(wss_url) if wss_url else ""
+    # Attach QR codes to protocol URLs
+    urls_with_qr = [dc_replace(p, qr_b64=generate_qr_base64(p.url)) if p.url else p for p in protocol_urls]
 
     html = render_hosted_html(
-        reality_url=reality_url,
-        xhttp_url=xhttp_url,
-        wss_url=wss_url,
+        urls_with_qr,
         server_ip=server_ip,
         domain=domain,
         client_name=client_name,
-        reality_qr_b64=reality_qr,
-        xhttp_qr_b64=xhttp_qr,
-        wss_qr_b64=wss_qr,
         relay_entries=relay_entries,
     )
 
