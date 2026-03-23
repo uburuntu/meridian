@@ -86,13 +86,24 @@ tests/                     pytest tests (292 tests)
 - AI docs: `website/src/content/ai/` → `make ai-docs` → `src/meridian/data/ai-reference.md`
 - i18n: landing page uses client-side `data-t` + JS swap; docs are server-rendered per-locale files
 
-## Build and test
+## Local development
 
 ```bash
-make install               # uv sync --extra dev
+make install               # uv sync --extra dev --reinstall-package meridian-vpn
+uv run meridian --version  # verify you're running the local code
+uv run meridian deploy     # run any command via uv run
+```
+
+**Why `uv run`?** It ensures you use the local editable install from the repo, not a system-wide `meridian` (e.g., from `uv tool install` or `pipx`). Always use `uv run meridian` during development.
+
+**Why `--reinstall-package`?** The `VERSION` file is the version source of truth, but `uv sync` caches package metadata. After bumping `VERSION`, run `make install` (or `uv sync --extra dev --reinstall-package meridian-vpn`) to refresh. Without this, `meridian --version` shows the stale cached version.
+
+**Quick reference:**
+```bash
+make install               # install/refresh local dev build
 make ci                    # lint + format + test + templates
-make test                  # pytest
-cd website && npm run build  # Astro + Pagefind
+make test                  # pytest only
+cd website && npm install && npm run build  # Astro + Pagefind
 ```
 
 ## Key API patterns
