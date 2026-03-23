@@ -145,7 +145,6 @@ def _interactive_wizard(
     """Interactive deployment wizard. Returns (ip, user, sni, domain, email, xhttp, harden)."""
     import os
 
-
     # --- Protocol explanation ---
     err_console.print()
     info("Protocol: VLESS + Reality")
@@ -323,8 +322,10 @@ def _interactive_wizard(
 
     # --- Confirm ---
     if not yes:
-        confirm_label = f"Deploy locally on this server ({detected_ip})?" if is_local else f"Deploy to {ssh_user}@{server_ip}?"
-        confirm(confirm_label)
+        if is_local:
+            confirm(f"Deploy locally on this server ({detected_ip})?")
+        else:
+            confirm(f"Deploy to {ssh_user}@{server_ip}?")
     err_console.print()
 
     return server_ip, ssh_user, sni, domain, email, xhttp, harden
@@ -552,5 +553,3 @@ def _offer_relay(resolved: ResolvedServer, yes: bool) -> None:
         listen_port=443,
         yes=False,
     )
-
-
