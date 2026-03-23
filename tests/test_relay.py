@@ -183,6 +183,20 @@ class TestBuildRelayUrls:
         result = build_relay_urls("bob", uuid, wss_uuid, creds, "9.9.9.9")
         assert "via-9.9.9.9" in result.urls[0].url
 
+    def test_build_relay_urls_custom_port(self, sample_proxy_with_relays: Path) -> None:
+        from meridian.urls import build_relay_urls
+
+        creds = ServerCredentials.load(sample_proxy_with_relays)
+        uuid = "550e8400-e29b-41d4-a716-446655440000"
+        wss_uuid = "660e8400-e29b-41d4-a716-446655440001"
+
+        result = build_relay_urls("alice", uuid, wss_uuid, creds, "1.2.3.4", "test", relay_port=9443)
+
+        # All URLs must use port 9443, not 443
+        for purl in result.urls:
+            assert "@1.2.3.4:9443" in purl.url, f"{purl.key} URL has wrong port: {purl.url}"
+            assert ":443" not in purl.url.split("@")[1].split("?")[0], f"{purl.key} URL still has :443"
+
     def test_build_all_relay_urls(self, sample_proxy_with_relays: Path) -> None:
         from meridian.urls import build_all_relay_urls
 

@@ -72,6 +72,7 @@ def _find_exit_for_relay(relay_ip: str) -> tuple[ServerRegistry, ResolvedServer]
             if relay.ip == relay_ip:
                 resolved = resolve_server(registry, explicit_ip=entry.host, user=entry.user)
                 resolved = ensure_server_connection(resolved)
+                fetch_credentials(resolved)
                 return registry, resolved
     return None
 
