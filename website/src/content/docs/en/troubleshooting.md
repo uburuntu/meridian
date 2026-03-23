@@ -121,3 +121,16 @@ Or collect diagnostics for a [GitHub issue](https://github.com/uburuntu/meridian
 ```
 meridian doctor
 ```
+
+## Relay not working
+
+**Check relay health:**
+```bash
+meridian relay check RELAY_IP
+```
+
+**Common issues:**
+- **Port conflict** — Another service is using port 443 on the relay server. Check with `ss -tlnp sport = :443` and stop the conflicting service.
+- **Firewall blocking** — Ensure port 443 is open on the relay's cloud provider firewall / security group.
+- **Exit server unreachable** — The relay must be able to reach the exit server on port 443. Test with `curl -I https://EXIT_IP`.
+- **Relay not started** — Check the Realm service: `systemctl status meridian-relay`.

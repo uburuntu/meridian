@@ -82,6 +82,11 @@ def deploy_cmd(
     name: str = typer.Option("", "--name", help="Name for the first client (default: 'default')"),
     user: str = typer.Option("root", "--user", "-u", help="SSH user on the server"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip all prompts (use defaults)"),
+    harden: bool = typer.Option(
+        True,
+        "--harden/--no-harden",
+        help="Server hardening: SSH key-only + firewall (skip if other services run on server)",
+    ),
     server: str = typer.Option("", "--server", help="Target server name or IP (for re-deploys)"),
 ) -> None:
     """Deploy a VLESS+Reality proxy server. Interactive wizard if no IP provided.
@@ -90,11 +95,11 @@ def deploy_cmd(
       [cyan]meridian deploy[/cyan]                          Interactive wizard
       [cyan]meridian deploy 1.2.3.4[/cyan]                  Deploy with defaults
       [cyan]meridian deploy 1.2.3.4 --domain d.io[/cyan]    CDN fallback via Cloudflare
-      [cyan]meridian deploy 1.2.3.4 --no-xhttp[/cyan]       Reality only, no XHTTP
+      [cyan]meridian deploy 1.2.3.4 --no-harden[/cyan]      Skip SSH + firewall hardening
     """
     from meridian.commands.setup import run
 
-    run(ip, domain, email, sni, xhttp, name, user, yes, server)
+    run(ip, domain, email, sni, xhttp, name, user, yes, harden, server)
 
 
 # =============================================================================

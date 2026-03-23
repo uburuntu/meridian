@@ -49,25 +49,40 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
         InstallPackages(),
         EnableAutoUpgrades(),
         SetTimezone(),
-        HardenSSH(),
-        ConfigureBBR(),
-        ConfigureFirewall(),
-        # -- Docker --
-        InstallDocker(),
-        Deploy3xui(),
-        # -- Panel + Xray --
-        ConfigurePanel(
-            creds_path=creds_path,
-            server_ip=ctx.ip,
-            domain=ctx.domain,
-            sni=ctx.sni,
-            first_client_name=first_client,
-            panel_port=ctx.panel_port,
-            xhttp_enabled=ctx.xhttp_enabled,
-        ),
-        LoginToPanel(),
-        CreateRealityInbound(port=ctx.reality_port, first_client_name=first_client),
     ]
+
+    # Server hardening (optional — skip for shared servers with existing services)
+    if ctx.harden:
+        steps.append(HardenSSH())
+
+    steps.extend(
+        [
+            ConfigureBBR(),
+        ]
+    )
+
+    if ctx.harden:
+        steps.append(ConfigureFirewall())
+
+    steps.extend(
+        [
+            # -- Docker --
+            InstallDocker(),
+            Deploy3xui(),
+            # -- Panel + Xray --
+            ConfigurePanel(
+                creds_path=creds_path,
+                server_ip=ctx.ip,
+                domain=ctx.domain,
+                sni=ctx.sni,
+                first_client_name=first_client,
+                panel_port=ctx.panel_port,
+                xhttp_enabled=ctx.xhttp_enabled,
+            ),
+            LoginToPanel(),
+            CreateRealityInbound(port=ctx.reality_port, first_client_name=first_client),
+        ]
+    )
 
     # XHTTP inbound (enabled by default)
     if ctx.xhttp_enabled:

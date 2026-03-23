@@ -71,3 +71,13 @@ meridian deploy 1.2.3.4 --user ubuntu
 ```
 
 Non-root users get `sudo` automatically. The user must have passwordless sudo access.
+
+## Adding a relay node
+
+After deploying your exit server, you can add a relay node for resilience. A relay is a lightweight TCP forwarder on a domestic server that routes traffic to your exit server abroad — useful when the exit IP gets blocked.
+
+```bash
+meridian relay deploy RELAY_IP --exit YOUR_EXIT_IP
+```
+
+Clients automatically receive relay URLs when you add or update their connection pages. See the [CLI reference](/docs/en/cli-reference/) for all relay commands.

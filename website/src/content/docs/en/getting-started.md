@@ -69,5 +69,6 @@ Each client gets their own key and connection page. List clients with `meridian 
 ## Next steps
 
 - [Deploy guide](/docs/en/deploy/) — full deployment walkthrough with all options
+- **Add a relay** — Route through a domestic IP for resilience when the exit server gets blocked: `meridian relay deploy RELAY_IP --exit EXIT_IP`
 - [Domain mode](/docs/en/domain-mode/) — add CDN fallback via Cloudflare
 - [Troubleshooting](/docs/en/troubleshooting/) — common issues and fixes

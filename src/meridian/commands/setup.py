@@ -28,6 +28,7 @@ def run(
     name: str = "",
     user: str = "root",
     yes: bool = False,
+    harden: bool = True,
     requested_server: str = "",
 ) -> None:
     """Deploy a VLESS+Reality proxy server."""
@@ -60,11 +61,12 @@ def run(
 
     # Interactive wizard if no IP given
     if not server_ip:
-        server_ip, ssh_user, sni, domain, email, xhttp = _interactive_wizard(
+        server_ip, ssh_user, sni, domain, email, xhttp, harden = _interactive_wizard(
             sni=sni,
             xhttp=xhttp,
             domain=domain,
             email=email,
+            harden=harden,
             yes=yes,
         )
 
@@ -84,6 +86,7 @@ def run(
     )
 
     resolved = ensure_server_connection(resolved)
+    _check_ports(resolved.conn, resolved.ip, yes)
     fetch_credentials(resolved)
 
     # Migrate v1 credentials to v2
@@ -114,7 +117,7 @@ def run(
             hint="Use letters, numbers, hyphens, and underscores.",
             hint_type="user",
         )
-    _run_provisioner(resolved, domain, sni, name, xhttp)
+    _run_provisioner(resolved, domain, sni, name, xhttp, harden)
 
     # Register server
     registry.add(ServerEntry(host=resolved.ip, user=resolved.user))
@@ -122,15 +125,19 @@ def run(
     # Success output
     _print_success(resolved, name, domain)
 
+    # Offer relay setup
+    _offer_relay(resolved, yes)
+
 
 def _interactive_wizard(
     sni: str,
     xhttp: bool,
     domain: str,
     email: str,
+    harden: bool,
     yes: bool,
-) -> tuple[str, str, str, str, str, bool]:
-    """Interactive deployment wizard. Returns (ip, user, sni, domain, email, xhttp)."""
+) -> tuple[str, str, str, str, str, bool, bool]:
+    """Interactive deployment wizard. Returns (ip, user, sni, domain, email, xhttp, harden)."""
     from meridian.ssh import ServerConnection
 
     # --- Protocol explanation ---
@@ -153,6 +160,21 @@ def _interactive_wizard(
     ssh_user = prompt("SSH user", default="root")
     if ssh_user != "root":
         err_console.print("  [dim](sudo will be used for privileged operations)[/dim]")
+
+    # --- Server hardening ---
+    if not yes:
+        err_console.print()
+        err_console.print("  [bold]Server hardening[/bold] [dim][Y/n][/dim]")
+        err_console.print("  [dim]Disables password SSH login and enables firewall[/dim]")
+        err_console.print("  [dim](allows ports 22, 80, 443 only). Skip if you have[/dim]")
+        err_console.print("  [dim]other services running on this server.[/dim]")
+        err_console.print()
+        answer = prompt("Harden server? [Y/n]")
+        if answer.lower() == "n":
+            harden = False
+            warn("Skipping SSH hardening and firewall")
+        else:
+            harden = True
 
     # --- Offer scan for SNI ---
     if not sni:
@@ -270,7 +292,7 @@ def _interactive_wizard(
         confirm(f"Deploy to {ssh_user}@{server_ip}?")
     err_console.print()
 
-    return server_ip, ssh_user, sni, domain, email, xhttp
+    return server_ip, ssh_user, sni, domain, email, xhttp, harden
 
 
 def _confirm_scan() -> bool:
@@ -290,6 +312,7 @@ def _run_provisioner(
     sni: str,
     name: str,
     xhttp: bool,
+    harden: bool = True,
 ) -> None:
     """Run the Python provisioner pipeline."""
     from meridian.provision import ProvisionContext, Provisioner, build_setup_steps
@@ -301,6 +324,7 @@ def _run_provisioner(
         sni=sni or DEFAULT_SNI,
         xhttp_enabled=xhttp,
         hosted_page=True,  # always serve connection pages on server
+        harden=harden,
         creds_dir=str(resolved.creds_dir),
     )
 
@@ -416,9 +440,85 @@ def _print_success(resolved: ResolvedServer, name: str, domain: str) -> None:
     err_console.print("     [info]meridian client add alice[/info]")
     err_console.print("     [info]meridian client list[/info]\n")
 
+    server_ip = resolved.ip
+    err_console.print("  [ok]5.[/ok] Add a relay for resilience (optional):")
+    err_console.print(f"     [info]meridian relay deploy RELAY_IP --exit {server_ip}[/info]")
+    err_console.print("     [dim]Routes through a domestic IP when the exit gets blocked[/dim]\n")
+
     err_console.print()
     line()
     err_console.print("\n  [dim]Feedback & issues: https://github.com/uburuntu/meridian/issues[/dim]\n")
+
+
+def _check_ports(conn: object, ip: str, yes: bool) -> None:
+    """Check that ports 443 and 80 are available before deploying.
+
+    Allows re-deploy over existing Meridian processes.
+    Loops with retry prompt if a non-Meridian process holds a port.
+    """
+    allowed = {"haproxy", "3x-ui", "xray", "caddy"}
+
+    for port in (443, 80):
+        while True:
+            result = conn.run(f"ss -tlnp sport = :{port} 2>/dev/null | grep LISTEN", timeout=10)
+            if not result.stdout.strip():
+                break  # port free
+
+            match = re.search(r'users:\(\("([^"]*)"', result.stdout)
+            proc = match.group(1) if match else "unknown"
+            if proc in allowed:
+                break  # Meridian's own process — OK for re-deploy
+
+            warn(f"Port {port} is in use by {proc}")
+            err_console.print(f"  [dim]Port {port} must be free for Meridian.[/dim]")
+            err_console.print(f"  [dim]Stop {proc} and retry, or press Ctrl+C to abort.[/dim]")
+            err_console.print()
+
+            if yes:
+                fail(
+                    f"Port {port} is occupied by {proc}",
+                    hint=f"Stop {proc} first: sudo systemctl stop {proc}",
+                    hint_type="user",
+                )
+
+            answer = prompt("Retry? [Y/n]")
+            if answer.lower() == "n":
+                fail("Aborted — port conflict", hint_type="user")
+
+
+def _offer_relay(resolved: ResolvedServer, yes: bool) -> None:
+    """Offer to deploy a relay node after successful exit server deploy."""
+    if yes:
+        return  # Don't prompt in non-interactive mode
+
+    err_console.print()
+    err_console.print("  [bold]Add a relay node?[/bold] [dim](optional)[/dim]")
+    err_console.print("  [dim]A relay is a domestic server that forwards traffic to[/dim]")
+    err_console.print("  [dim]this exit server. Useful when the IP gets blocked.[/dim]")
+    err_console.print()
+
+    answer = prompt("Set up a relay? [y/N]")
+    if answer.lower() not in ("y", "yes"):
+        err_console.print(f"  [dim]You can add one later: meridian relay deploy RELAY_IP --exit {resolved.ip}[/dim]")
+        return
+
+    relay_ip = prompt("Relay server IP")
+    if not is_ipv4(relay_ip):
+        warn(f"Invalid IP. Set up later: meridian relay deploy RELAY_IP --exit {resolved.ip}")
+        return
+
+    relay_name = prompt("Relay name (optional, e.g. ru-moscow)", default="")
+
+    from meridian.commands.relay import run_deploy
+
+    run_deploy(
+        relay_ip=relay_ip,
+        exit_arg=resolved.ip,
+        user="root",
+        relay_name=relay_name,
+        listen_port=443,
+        yes=False,
+    )
 
 
 def _detect_public_ip() -> str:

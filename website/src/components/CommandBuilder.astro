@@ -1,11 +1,12 @@
 ---
 /**
- * CommandBuilder — 5-tab interactive CLI command builder.
- * Ported from docs/index.html. Pure vanilla JS, no framework.
+ * CommandBuilder — 6-tab interactive CLI command builder.
+ * Pure vanilla JS, no framework.
  */
 
 const tabs = [
   { key: 'install', label: 'Deploy', i18n: 'builder.tab.deploy' },
+  { key: 'relay', label: 'Relay', i18n: 'builder.tab.relay' },
   { key: 'check', label: 'Preflight', i18n: 'builder.tab.preflight' },
   { key: 'scan', label: 'SNI Scan', i18n: 'builder.tab.scan' },
   { key: 'diag', label: 'Doctor', i18n: 'builder.tab.doctor' },
@@ -49,6 +50,12 @@ const tabs = [
         <span class="builder__hint" data-t="builder.field.user.hint">Default: root. Non-root users get sudo automatically.</span>
       </div>
 
+      <div class="builder__field" id="row-exit">
+        <label class="builder__label" for="f-exit" data-t="builder.field.exit">Exit server</label>
+        <input id="f-exit" type="text" placeholder="1.2.3.4 or server-name" class="builder__input" />
+        <span class="builder__hint" data-t="builder.field.exit.hint">IP or name of the exit server this relay forwards to. Must be deployed first.</span>
+      </div>
+
       <div class="builder__field" id="row-domain">
         <label class="builder__label builder__label--check">
           <input id="f-domain-on" type="checkbox" class="builder__checkbox" />
@@ -73,6 +80,32 @@ const tabs = [
           <span data-t="builder.field.xhttp">XHTTP transport</span>
         </label>
         <span class="builder__hint" data-t="builder.field.xhttp.hint">Enabled by default. Routed through port 443 via Caddy. Requires v2rayNG 1.9+ or Hiddify.</span>
+      </div>
+
+      <div class="builder__field" id="row-name">
+        <label class="builder__label" for="f-name" data-t="builder.field.name">Client name</label>
+        <input id="f-name" type="text" placeholder="default" class="builder__input builder__input--short" />
+        <span class="builder__hint" data-t="builder.field.name.hint">Name for the first client. Default: "default".</span>
+      </div>
+
+      <div class="builder__field" id="row-relay-name">
+        <label class="builder__label" for="f-relay-name" data-t="builder.field.relay-name">Relay name</label>
+        <input id="f-relay-name" type="text" placeholder="ru-moscow" class="builder__input builder__input--short" />
+        <span class="builder__hint" data-t="builder.field.relay-name.hint">Optional friendly name for the relay (e.g. "ru-moscow").</span>
+      </div>
+
+      <div class="builder__field" id="row-port">
+        <label class="builder__label" for="f-port" data-t="builder.field.port">Listen port</label>
+        <input id="f-port" type="text" value="443" placeholder="443" class="builder__input builder__input--short" />
+        <span class="builder__hint" data-t="builder.field.port.hint">Port on the relay server. Default: 443.</span>
+      </div>
+
+      <div class="builder__field" id="row-ai">
+        <label class="builder__label builder__label--check">
+          <input id="f-ai" type="checkbox" class="builder__checkbox" />
+          <span data-t="builder.field.ai">AI-ready output</span>
+        </label>
+        <span class="builder__hint" data-t="builder.field.ai.hint">Copies an AI-ready prompt to clipboard for ChatGPT/Claude troubleshooting.</span>
       </div>
 
       <div class="builder__field" id="row-yes">
@@ -103,9 +136,15 @@ const tabs = [
   const TAB_CONFIG: Record<string, { desc: string; show: string[]; cmd: string; descKey: string }> = {
     install: {
       desc: 'Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.',
-      show: ['ip', 'user', 'domain', 'sni', 'xhttp', 'yes'],
+      show: ['ip', 'user', 'domain', 'sni', 'xhttp', 'name', 'yes'],
       cmd: 'deploy',
       descKey: 'builder.desc.deploy',
+    },
+    relay: {
+      desc: 'Deploy a TCP relay — forwards traffic through a domestic server to your exit server abroad.',
+      show: ['ip', 'user', 'exit', 'relay-name', 'port', 'yes'],
+      cmd: 'relay deploy',
+      descKey: 'builder.desc.relay',
     },
     check: {
       desc: 'Test if your server is compatible — checks SNI, ports, DNS, OS, disk, ASN match.',
@@ -121,7 +160,7 @@ const tabs = [
     },
     diag: {
       desc: 'Collect system diagnostics for bug reports. Secrets are auto-redacted.',
-      show: ['ip', 'user'],
+      show: ['ip', 'user', 'ai'],
       cmd: 'doctor',
       descKey: 'builder.desc.doctor',
     },
@@ -133,7 +172,7 @@ const tabs = [
     },
   };
 
-  const ALL_FIELDS = ['ip', 'user', 'domain', 'sni', 'xhttp', 'yes'];
+  const ALL_FIELDS = ['ip', 'user', 'exit', 'domain', 'sni', 'xhttp', 'name', 'relay-name', 'port', 'ai', 'yes'];
   let curTab = 'install';
 
   function $(id: string) {
@@ -171,6 +210,11 @@ const tabs = [
     const sniOn = ($('f-sni-on') as HTMLInputElement).checked;
     const sni = ($('f-sni') as HTMLInputElement).value.trim();
     const xhttp = ($('f-xhttp') as HTMLInputElement).checked;
+    const clientName = ($('f-name') as HTMLInputElement).value.trim();
+    const exitServer = ($('f-exit') as HTMLInputElement).value.trim();
+    const relayName = ($('f-relay-name') as HTMLInputElement).value.trim();
+    const port = ($('f-port') as HTMLInputElement).value.trim();
+    const ai = ($('f-ai') as HTMLInputElement).checked;
     const yes = ($('f-yes') as HTMLInputElement).checked;
     const status = $('builder-status')!;
     const cfg = TAB_CONFIG[curTab];
@@ -193,9 +237,14 @@ const tabs = [
     }
 
     if (user && user !== 'root') args.push('--user ' + user);
+    if (cfg.show.includes('exit') && exitServer) args.push('--exit ' + exitServer);
     if (cfg.show.includes('domain') && domOn && dom) args.push('--domain ' + dom);
     if (cfg.show.includes('sni') && sniOn && sni && sni !== 'www.microsoft.com') args.push('--sni ' + sni);
     if (cfg.show.includes('xhttp') && !xhttp) args.push('--no-xhttp');
+    if (cfg.show.includes('name') && clientName && clientName !== 'default') args.push('--name ' + clientName);
+    if (cfg.show.includes('relay-name') && relayName) args.push('--name ' + relayName);
+    if (cfg.show.includes('port') && port && port !== '443') args.push('--port ' + port);
+    if (cfg.show.includes('ai') && ai) args.push('--ai');
     if (cfg.show.includes('yes') && yes) args.push('--yes');
 
     let cmd = 'meridian ' + cfg.cmd;
@@ -205,7 +254,7 @@ const tabs = [
     // Status hints
     if (curTab === 'install') {
       if (!ip) {
-        status.textContent = 'Enter your server IP, or just run the base command — the wizard will ask.';
+        status.textContent = 'Run without IP for the interactive wizard (recommended for first-time setup).';
         status.className = 'builder__status';
       } else if (domOn && !dom) {
         status.textContent = 'Enter a domain or uncheck to skip.';
@@ -215,6 +264,14 @@ const tabs = [
         status.textContent = 'Deploys ' + mode + (xhttp ? '' : ' (XHTTP disabled)') + '.';
         status.className = 'builder__status builder__status--ok';
       }
+    } else if (curTab === 'relay') {
+      if (!ip || !exitServer) {
+        status.textContent = 'Enter the relay IP and exit server. The exit server must be deployed first.';
+        status.className = 'builder__status';
+      } else {
+        status.textContent = 'Routes traffic through the relay to your exit server.';
+        status.className = 'builder__status builder__status--ok';
+      }
     } else if (curTab === 'check') {
       status.textContent = ip ? 'Runs preflight checks without installing anything.' : 'Enter your server IP to run the preflight.';
       status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
@@ -222,7 +279,9 @@ const tabs = [
       status.textContent = ip ? "Scans server's /24 subnet for same-network TLS targets." : 'Enter your server IP to find optimal SNI targets.';
       status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
     } else if (curTab === 'diag') {
-      status.textContent = ip ? 'Collects diagnostics. Add --ai for AI-ready help prompt.' : 'Enter your server IP to collect diagnostics.';
+      status.textContent = ip
+        ? (ai ? 'Collects diagnostics and copies AI-ready prompt to clipboard.' : 'Collects diagnostics. Enable AI-ready output for instant help.')
+        : 'Enter your server IP to collect diagnostics.';
       status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
     } else {
       status.textContent = ip ? 'Removes Meridian. Docker and system packages are kept.' : 'IP is auto-detected from saved credentials if omitted.';
@@ -239,11 +298,16 @@ const tabs = [
         JSON.stringify({
           ip: ($('f-ip') as HTMLInputElement).value.trim(),
           user: ($('f-user') as HTMLInputElement).value.trim(),
+          exit: ($('f-exit') as HTMLInputElement).value.trim(),
           domOn: ($('f-domain-on') as HTMLInputElement).checked,
           dom: ($('f-domain') as HTMLInputElement).value.trim(),
           sniOn: ($('f-sni-on') as HTMLInputElement).checked,
           sni: ($('f-sni') as HTMLInputElement).value.trim(),
           xhttp: ($('f-xhttp') as HTMLInputElement).checked,
+          name: ($('f-name') as HTMLInputElement).value.trim(),
+          relayName: ($('f-relay-name') as HTMLInputElement).value.trim(),
+          port: ($('f-port') as HTMLInputElement).value.trim(),
+          ai: ($('f-ai') as HTMLInputElement).checked,
           yes: ($('f-yes') as HTMLInputElement).checked,
           tab: curTab,
         }),
@@ -256,11 +320,16 @@ const tabs = [
       const saved = JSON.parse(localStorage.getItem('meridian-builder') || '{}');
       if (saved.ip) ($('f-ip') as HTMLInputElement).value = saved.ip;
       if (saved.user) ($('f-user') as HTMLInputElement).value = saved.user;
+      if (saved.exit) ($('f-exit') as HTMLInputElement).value = saved.exit;
       if (saved.domOn) ($('f-domain-on') as HTMLInputElement).checked = true;
       if (saved.dom) ($('f-domain') as HTMLInputElement).value = saved.dom;
       if (saved.sniOn) ($('f-sni-on') as HTMLInputElement).checked = true;
       if (saved.sni) ($('f-sni') as HTMLInputElement).value = saved.sni;
       if (saved.xhttp === false) ($('f-xhttp') as HTMLInputElement).checked = false;
+      if (saved.name) ($('f-name') as HTMLInputElement).value = saved.name;
+      if (saved.relayName) ($('f-relay-name') as HTMLInputElement).value = saved.relayName;
+      if (saved.port && saved.port !== '443') ($('f-port') as HTMLInputElement).value = saved.port;
+      if (saved.ai) ($('f-ai') as HTMLInputElement).checked = true;
       if (saved.yes) ($('f-yes') as HTMLInputElement).checked = true;
       if (saved.tab && TAB_CONFIG[saved.tab]) setTab(saved.tab);
       else buildCmd();

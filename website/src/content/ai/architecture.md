@@ -161,3 +161,11 @@ Steps execute sequentially via `build_setup_steps()`. Each step gets `(conn, ctx
 - `~/.meridian/servers` — server registry
 - `~/.meridian/cache/` — update check throttle cache
 - `~/.local/bin/meridian` — CLI entry point (installed via uv/pipx)
+
+## Relay topology
+
+A relay node is a lightweight TCP forwarder (Realm binary) that runs on a domestic server. Client connects to relay IP, relay forwards raw TCP to exit server on port 443. All encryption is end-to-end between client and exit — relay never sees plaintext. All protocols (Reality, XHTTP, WSS) work through the relay.
+
+Deploy: `meridian relay deploy RELAY_IP --exit EXIT_IP`
+Health check: `meridian relay check RELAY_IP`
+Remove: `meridian relay remove RELAY_IP`
