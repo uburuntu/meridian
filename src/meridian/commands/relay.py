@@ -271,6 +271,26 @@ def run_deploy(
     relay_conn.check_ssh()
     ok("SSH connection to relay established")
 
+    # Check if relay port is already in use
+    port_check = relay_conn.run(f"ss -tlnp sport = :{listen_port} 2>/dev/null", timeout=10)
+    if port_check.returncode == 0 and f":{listen_port}" in port_check.stdout:
+        # Extract process name from ss output for a helpful message
+        ss_lines = port_check.stdout.strip().splitlines()
+        process_info = ""
+        for ss_line in ss_lines[1:]:  # skip header
+            if f":{listen_port}" in ss_line:
+                if "users:" in ss_line:
+                    process_info = ss_line.split("users:")[1].strip().strip("()")
+                break
+        msg = f"Port {listen_port} is already in use"
+        if process_info:
+            msg += f" by {process_info}"
+        fail(
+            msg,
+            hint=f"Choose a different port: meridian relay deploy {relay_ip} --exit {exit_arg} --port <OTHER_PORT>",
+            hint_type="system",
+        )
+
     # Test relay -> exit connectivity (exit always listens on 443)
     import shlex
 
