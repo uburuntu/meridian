@@ -352,7 +352,13 @@ class TestRenderingWithRelays:
             RelayURLSet(
                 relay_ip="1.2.3.4",
                 relay_name="ru-moscow",
-                urls=[ProtocolURL(key="reality", label="Primary (via relay)", url="vless://uuid@1.2.3.4:443?security=reality#alice-via-ru-moscow")],
+                urls=[
+                    ProtocolURL(
+                        key="reality",
+                        label="Primary (via relay)",
+                        url="vless://uuid@1.2.3.4:443?security=reality#alice-via-ru-moscow",
+                    )
+                ],
             ),
         ]
 
@@ -390,7 +396,13 @@ class TestRenderingWithRelays:
             RelayURLSet(
                 relay_ip="1.2.3.4",
                 relay_name="ru-moscow",
-                urls=[ProtocolURL(key="reality", label="Primary (via relay)", url="vless://uuid@1.2.3.4:443?security=reality#alice-via-ru-moscow")],
+                urls=[
+                    ProtocolURL(
+                        key="reality",
+                        label="Primary (via relay)",
+                        url="vless://uuid@1.2.3.4:443?security=reality#alice-via-ru-moscow",
+                    )
+                ],
             ),
         ]
 

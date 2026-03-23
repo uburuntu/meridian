@@ -277,8 +277,7 @@ class ConfigureRealm:
 
         q_config = shlex.quote(config_content)
         write_config = conn.run(
-            f"printf '%s' {q_config} > {RELAY_CONFIG_PATH}.tmp && "
-            f"mv {RELAY_CONFIG_PATH}.tmp {RELAY_CONFIG_PATH}",
+            f"printf '%s' {q_config} > {RELAY_CONFIG_PATH}.tmp && mv {RELAY_CONFIG_PATH}.tmp {RELAY_CONFIG_PATH}",
             timeout=10,
         )
         if write_config.returncode != 0:
@@ -291,10 +290,7 @@ class ConfigureRealm:
 
         # Write relay metadata
         relay_meta = (
-            "role: relay\n"
-            f"exit_ip: {ctx.exit_ip}\n"
-            f"exit_port: {ctx.exit_port}\n"
-            f"listen_port: {ctx.listen_port}\n"
+            f"role: relay\nexit_ip: {ctx.exit_ip}\nexit_port: {ctx.exit_port}\nlisten_port: {ctx.listen_port}\n"
         )
         q_meta = shlex.quote(relay_meta)
         conn.run(

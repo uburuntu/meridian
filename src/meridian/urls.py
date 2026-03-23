@@ -178,10 +178,7 @@ def build_all_relay_urls(
 
     Returns an empty list if no relays are configured.
     """
-    return [
-        build_relay_urls(name, reality_uuid, wss_uuid, creds, relay.ip, relay.name)
-        for relay in creds.relays
-    ]
+    return [build_relay_urls(name, reality_uuid, wss_uuid, creds, relay.ip, relay.name) for relay in creds.relays]
 
 
 def generate_qr_terminal(url: str) -> str:

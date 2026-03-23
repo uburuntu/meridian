@@ -244,8 +244,7 @@ def run_deploy(
         if relay.ip == relay_ip:
             fail(
                 f"Relay {relay_ip} is already attached to exit {resolved_exit.ip}",
-                hint="To re-deploy, remove first: meridian relay remove "
-                f"{relay_ip} --exit {resolved_exit.ip}",
+                hint=f"To re-deploy, remove first: meridian relay remove {relay_ip} --exit {resolved_exit.ip}",
                 hint_type="user",
             )
 
@@ -373,8 +372,7 @@ def run_deploy(
 
     err_console.print("  [bold]How clients connect now:[/bold]")
     err_console.print(
-        f"  [dim]Client -> {relay_ip}:{listen_port} (domestic) -> "
-        f"{resolved_exit.ip}:443 (abroad) -> Internet[/dim]"
+        f"  [dim]Client -> {relay_ip}:{listen_port} (domestic) -> {resolved_exit.ip}:443 (abroad) -> Internet[/dim]"
     )
     err_console.print(f"  [dim]Censors only see traffic to {relay_ip} — a domestic IP.[/dim]")
     err_console.print()
@@ -382,9 +380,7 @@ def run_deploy(
     err_console.print("  [bold]What changed for existing clients:[/bold]")
     if exit_creds.clients:
         n = len(exit_creds.clients)
-        err_console.print(
-            f"  [dim]All {n} client page(s) now show relay connection as recommended.[/dim]"
-        )
+        err_console.print(f"  [dim]All {n} client page(s) now show relay connection as recommended.[/dim]")
         err_console.print("  [dim]Direct connection URLs are still available as backup.[/dim]")
     else:
         err_console.print("  [dim]No clients yet. When you add them, relay URLs will be included automatically.[/dim]")

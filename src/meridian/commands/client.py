@@ -333,7 +333,11 @@ def run_add(
         hosted_page_url = ""
         if creds.server.hosted_page and creds.panel.info_page_path:
             hosted_page_url = _deploy_client_page(
-                resolved, creds, protocol_urls, name, reality_uuid,
+                resolved,
+                creds,
+                protocol_urls,
+                name,
+                reality_uuid,
                 relay_entries=relay_url_sets or None,
             )
 
