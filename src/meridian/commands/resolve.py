@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,32 @@ from meridian.console import err_console, fail, info
 from meridian.credentials import ServerCredentials
 from meridian.servers import ServerRegistry
 from meridian.ssh import ServerConnection
+
+LOCAL_KEYWORDS = ("local", "locally")
+
+
+def is_local_keyword(value: str) -> bool:
+    """Check if a value is the 'local' keyword for on-server deployment."""
+    return value.lower() in LOCAL_KEYWORDS
+
+
+def detect_public_ip() -> str:
+    """Detect the machine's public IPv4 address."""
+    for url in ("https://ifconfig.me", "https://api.ipify.org"):
+        try:
+            result = subprocess.run(
+                ["curl", "-4", "-s", "--max-time", "3", url],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                stdin=subprocess.DEVNULL,
+            )
+            ip = result.stdout.strip()
+            if is_ipv4(ip):
+                return ip
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+    return ""
 
 
 @dataclass(frozen=True)
@@ -52,7 +79,9 @@ def resolve_server(
 ) -> ResolvedServer:
     """Resolve which server to target.
 
-    Priority: explicit IP > --server flag > local mode (root) > single registered > fail.
+    Priority: explicit IP / 'local' keyword > --server flag > local mode (root) > single registered > fail.
+
+    The 'local' keyword (or 'locally') triggers on-server deployment without SSH.
 
     If user is empty, it's auto-resolved from the server registry.
     If user is explicitly set, it overrides the registry value.
@@ -61,28 +90,52 @@ def resolve_server(
     registry_user = ""
     local_mode = False
 
-    # 1. Explicit IP argument takes highest priority
+    # 1. Explicit IP argument or 'local' keyword takes highest priority
     if explicit_ip:
-        ip = explicit_ip
-        # Check registry for saved user
-        entry = registry.find(explicit_ip)
-        if entry:
-            registry_user = entry.user
-
-    # 2. --server flag (resolve via registry)
-    elif requested_server:
-        entry = registry.find(requested_server)
-        if entry:
-            ip = entry.host
-            registry_user = entry.user
-        elif is_ipv4(requested_server):
-            ip = requested_server
+        if is_local_keyword(explicit_ip):
+            detected_ip = detect_public_ip()
+            if not detected_ip:
+                fail(
+                    "Could not detect this server's public IP",
+                    hint="Provide the IP explicitly: meridian deploy 1.2.3.4",
+                    hint_type="system",
+                )
+            ip = detected_ip
+            local_mode = True
+            info(f"Local mode: deploying on this server ({ip})")
         else:
-            fail(
-                f"Server '{requested_server}' not found",
-                hint="See registered servers: meridian server list",
-                hint_type="user",
-            )
+            ip = explicit_ip
+            # Check registry for saved user
+            entry = registry.find(explicit_ip)
+            if entry:
+                registry_user = entry.user
+
+    # 2. --server flag (resolve via registry, or 'local' keyword)
+    elif requested_server:
+        if is_local_keyword(requested_server):
+            detected_ip = detect_public_ip()
+            if not detected_ip:
+                fail(
+                    "Could not detect this server's public IP",
+                    hint="Provide the IP explicitly: meridian <command> 1.2.3.4",
+                    hint_type="system",
+                )
+            ip = detected_ip
+            local_mode = True
+            info(f"Local mode: using this server ({ip})")
+        else:
+            entry = registry.find(requested_server)
+            if entry:
+                ip = entry.host
+                registry_user = entry.user
+            elif is_ipv4(requested_server):
+                ip = requested_server
+            else:
+                fail(
+                    f"Server '{requested_server}' not found",
+                    hint="See registered servers: meridian server list",
+                    hint_type="user",
+                )
 
     # 3. Running on the server itself as root — /etc/meridian/ readable
     else:

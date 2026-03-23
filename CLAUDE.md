@@ -129,6 +129,14 @@ cd website && npm install && npm run build  # Astro + Pagefind
 - **Relay credentials** stored on exit server's `proxy.yml` (relays section) + `/etc/meridian/relay.yml` on relay
 - **Connection pages auto-regenerated** when relay topology changes (deploy/remove)
 
+### Local deployment conventions
+- **`local` keyword** — accepted wherever an IP is expected: `meridian deploy local`, `meridian check local`, `--server local`
+- **Also accepts `locally`** — case-insensitive (`Local`, `LOCAL`, `Locally` all work)
+- Handled in `resolve.py`: `is_local_keyword()` + `detect_public_ip()` for IP detection
+- Sets `local_mode=True` on `ServerConnection` — all commands execute via `bash -c` instead of SSH
+- Interactive wizard auto-detects root on server and offers local deployment
+- `LOCAL_KEYWORDS = ("local", "locally")` is the canonical tuple in `resolve.py`
+
 ### install.sh
 - `install.sh` lives in the repo root and is deployed to `getmeridian.org/install.sh` by CI (`release.yml`).
 - References to `https://getmeridian.org/install.sh` in docs are correct and NOT dangling references.
@@ -145,11 +153,16 @@ cd website && npm install && npm run build  # Astro + Pagefind
 - AI docs source: `website/src/content/ai/`. Edit sources, run `make ai-docs`
 - Pre-push hook: `.githooks/pre-push` runs 11 checks. Install with `make hooks`
 - **Always use context7 MCP** before writing code depending on external libraries
+- **Translations**: use Haiku model agents (`model: "haiku"`) for fast i18n translations
+- **GitHub CLI**: use `GH_CONFIG_DIR=~/.cc-gh-config gh` for all `gh` commands
 
 ### CLI conventions
 - `console.fail()` raises `typer.Exit(1)`. Always include `hint_type` and action items.
 - `VERSION` file is single source of truth. CI validates format.
 - Auto-update: auto-patches, prompts for minor/major.
+
+### Workflow conventions
+- **Commit after each substantive change** — don't batch unrelated changes into one big commit. Each logical change (feature, bugfix, refactor) gets its own commit.
 
 ### When the user says "remember"
 Save the instruction to this CLAUDE.md file. Don't use auto-memory.

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from meridian.commands.resolve import resolve_server
+from meridian.commands.resolve import is_local_keyword, resolve_server
 from meridian.config import CREDS_BASE, SERVER_CREDS_DIR
 from meridian.servers import ServerEntry, ServerRegistry
 
@@ -141,6 +141,70 @@ class TestLocalMode:
         assert result.ip == "10.0.0.1"
         assert result.local_mode is True
         assert result.creds_dir == SERVER_CREDS_DIR
+
+
+class TestLocalKeyword:
+    """'local'/'locally' keyword triggers on-server deployment."""
+
+    def test_is_local_keyword(self) -> None:
+        assert is_local_keyword("local")
+        assert is_local_keyword("Local")
+        assert is_local_keyword("LOCAL")
+        assert is_local_keyword("locally")
+        assert is_local_keyword("Locally")
+        assert not is_local_keyword("localhost")
+        assert not is_local_keyword("1.2.3.4")
+
+    def test_explicit_ip_local_keyword(self, servers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "meridian.commands.resolve.detect_public_ip",
+            lambda: "203.0.113.10",
+        )
+        reg = ServerRegistry(servers_file)
+        result = resolve_server(reg, explicit_ip="local")
+        assert result.ip == "203.0.113.10"
+        assert result.local_mode is True
+        assert result.creds_dir == SERVER_CREDS_DIR
+
+    def test_explicit_ip_locally_keyword(self, servers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "meridian.commands.resolve.detect_public_ip",
+            lambda: "203.0.113.10",
+        )
+        reg = ServerRegistry(servers_file)
+        result = resolve_server(reg, explicit_ip="locally")
+        assert result.ip == "203.0.113.10"
+        assert result.local_mode is True
+
+    def test_server_flag_local_keyword(self, servers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "meridian.commands.resolve.detect_public_ip",
+            lambda: "203.0.113.20",
+        )
+        reg = ServerRegistry(servers_file)
+        result = resolve_server(reg, requested_server="local")
+        assert result.ip == "203.0.113.20"
+        assert result.local_mode is True
+
+    def test_local_keyword_fails_without_public_ip(self, servers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "meridian.commands.resolve.detect_public_ip",
+            lambda: "",
+        )
+        reg = ServerRegistry(servers_file)
+        with pytest.raises(typer.Exit) as exc_info:
+            resolve_server(reg, explicit_ip="local")
+        assert exc_info.value.exit_code == 1
+
+    def test_local_keyword_conn_has_local_mode(self, servers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "meridian.commands.resolve.detect_public_ip",
+            lambda: "203.0.113.30",
+        )
+        reg = ServerRegistry(servers_file)
+        result = resolve_server(reg, explicit_ip="local")
+        assert result.conn.local_mode is True
+        assert result.conn.ip == "203.0.113.30"
 
 
 class TestResolvedServer:

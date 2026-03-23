@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import re
-import subprocess
 from pathlib import Path
 
 from meridian.commands.resolve import (
     ResolvedServer,
+    detect_public_ip,
     ensure_server_connection,
     fetch_credentials,
+    is_local_keyword,
     resolve_server,
 )
-from meridian.config import CREDS_BASE, DEFAULT_PANEL_PORT, DEFAULT_SNI, SERVERS_FILE, is_ipv4
+from meridian.config import CREDS_BASE, DEFAULT_PANEL_PORT, DEFAULT_SNI, SERVER_CREDS_DIR, SERVERS_FILE, is_ipv4
 from meridian.console import confirm, err_console, fail, info, line, ok, prompt, warn
 from meridian.credentials import ServerCredentials
 from meridian.servers import ServerEntry, ServerRegistry
+from meridian.ssh import ServerConnection
 
 
 def run(
@@ -36,7 +38,7 @@ def run(
     server_ip = ip
     ssh_user = user
 
-    # --server flag: resolve from registry
+    # --server flag: resolve from registry (or 'local' keyword)
     if requested_server:
         if server_ip:
             fail(
@@ -44,20 +46,23 @@ def run(
                 "  Example: meridian deploy 1.2.3.4  OR  meridian deploy --server mybox",
                 hint_type="user",
             )
-        entry = registry.find(requested_server)
-        if not entry:
-            if is_ipv4(requested_server):
-                server_ip = requested_server
-            else:
-                fail(
-                    f"Server '{requested_server}' not found",
-                    hint="See registered servers: meridian server list",
-                    hint_type="user",
-                )
+        if is_local_keyword(requested_server):
+            server_ip = requested_server
         else:
-            server_ip = entry.host
-            if user == "root" and entry.user:
-                ssh_user = entry.user
+            entry = registry.find(requested_server)
+            if not entry:
+                if is_ipv4(requested_server):
+                    server_ip = requested_server
+                else:
+                    fail(
+                        f"Server '{requested_server}' not found",
+                        hint="See registered servers: meridian server list",
+                        hint_type="user",
+                    )
+            else:
+                server_ip = entry.host
+                if user == "root" and entry.user:
+                    ssh_user = entry.user
 
     # Interactive wizard if no IP given
     if not server_ip:
@@ -70,8 +75,8 @@ def run(
             yes=yes,
         )
 
-    # Validate IP
-    if not is_ipv4(server_ip):
+    # Validate IP (skip for 'local' keyword — resolve_server handles it)
+    if not is_local_keyword(server_ip) and not is_ipv4(server_ip):
         fail(
             f"Invalid IP address: {server_ip}",
             hint="Enter a valid IPv4 address (e.g. meridian deploy 123.45.67.89)",
@@ -138,7 +143,8 @@ def _interactive_wizard(
     yes: bool,
 ) -> tuple[str, str, str, str, str, bool, bool]:
     """Interactive deployment wizard. Returns (ip, user, sni, domain, email, xhttp, harden)."""
-    from meridian.ssh import ServerConnection
+    import os
+
 
     # --- Protocol explanation ---
     err_console.print()
@@ -148,18 +154,35 @@ def _interactive_wizard(
     err_console.print()
 
     # --- Server IP ---
-    detected_ip = _detect_public_ip()
+    detected_ip = detect_public_ip()
+    is_local = False
 
-    while True:
-        server_ip = prompt("Server IP address", default=detected_ip)
-        if is_ipv4(server_ip):
-            break
-        err_console.print("  [error]Enter a valid IPv4 address (e.g. 123.45.67.89)[/error]")
+    # Offer local deployment if running as root with a public IP
+    if detected_ip and os.getuid() == 0:
+        info(f"Detected: running as root on this server ({detected_ip})")
+        answer = prompt("Deploy locally on this server? [Y/n]")
+        if answer.lower() != "n":
+            server_ip = "local"
+            ssh_user = "root"
+            is_local = True
+        else:
+            is_local = False
 
-    # --- SSH user ---
-    ssh_user = prompt("SSH user", default="root")
-    if ssh_user != "root":
-        err_console.print("  [dim](sudo will be used for privileged operations)[/dim]")
+    if not is_local:
+        while True:
+            server_ip = prompt("Server IP address", default=detected_ip)
+            if is_ipv4(server_ip) or is_local_keyword(server_ip):
+                break
+            err_console.print("  [error]Enter a valid IPv4 address (e.g. 123.45.67.89)[/error]")
+
+        if is_local_keyword(server_ip):
+            is_local = True
+            ssh_user = "root"
+        else:
+            # --- SSH user ---
+            ssh_user = prompt("SSH user", default="root")
+            if ssh_user != "root":
+                err_console.print("  [dim](sudo will be used for privileged operations)[/dim]")
 
     # --- Server hardening ---
     if not yes:
@@ -186,7 +209,10 @@ def _interactive_wizard(
 
         # Check for previously scanned SNI
         saved_scanned_sni = ""
-        creds_dir = CREDS_BASE / server_ip
+        if is_local:
+            creds_dir = SERVER_CREDS_DIR
+        else:
+            creds_dir = CREDS_BASE / server_ip
         if (creds_dir / "proxy.yml").exists():
             saved_creds = ServerCredentials.load(creds_dir / "proxy.yml")
             saved_scanned_sni = saved_creds.server.scanned_sni or ""
@@ -202,14 +228,18 @@ def _interactive_wizard(
 
         if not sni and not yes:
             if _confirm_scan():
-                # Establish SSH for scan
+                # Establish connection for scan
                 try:
-                    conn = ServerConnection(ip=server_ip, user=ssh_user)
-                    conn.check_ssh()
+                    scan_ip = detected_ip if is_local else server_ip
+                    conn = ServerConnection(ip=scan_ip, user=ssh_user, local_mode=is_local)
+                    if not is_local:
+                        conn.detect_local_mode()
+                        if not conn.local_mode:
+                            conn.check_ssh()
 
                     from meridian.commands.scan import scan_for_sni
 
-                    candidates = scan_for_sni(conn, server_ip)
+                    candidates = scan_for_sni(conn, scan_ip)
 
                     if candidates:
                         err_console.print()
@@ -250,9 +280,12 @@ def _interactive_wizard(
     # Suggest domain from saved credentials
     suggested_domain = domain
     if not suggested_domain:
-        creds_dir = CREDS_BASE / server_ip
-        if (creds_dir / "proxy.yml").exists():
-            saved_creds = ServerCredentials.load(creds_dir / "proxy.yml")
+        if is_local:
+            domain_creds_dir = SERVER_CREDS_DIR
+        else:
+            domain_creds_dir = CREDS_BASE / server_ip
+        if (domain_creds_dir / "proxy.yml").exists():
+            saved_creds = ServerCredentials.load(domain_creds_dir / "proxy.yml")
             suggested_domain = saved_creds.server.domain or ""
 
     if suggested_domain:
@@ -276,8 +309,9 @@ def _interactive_wizard(
     if domain:
         protocol_line += f"\n           + CDN fallback ({domain})"
 
+    server_label = f"this server ({detected_ip}) \u2014 local mode" if is_local else f"{ssh_user}@{server_ip}"
     summary = (
-        f"Server:     {ssh_user}@{server_ip}\n"
+        f"Server:     {server_label}\n"
         f"Protocol:   {protocol_line}\n"
         f"Camouflage: {sni}\n"
         f"Mode:       {'CDN fallback' if domain else 'Standalone (IP certificate)'}"
@@ -289,7 +323,8 @@ def _interactive_wizard(
 
     # --- Confirm ---
     if not yes:
-        confirm(f"Deploy to {ssh_user}@{server_ip}?")
+        confirm_label = f"Deploy locally on this server ({detected_ip})?" if is_local else f"Deploy to {ssh_user}@{server_ip}?"
+        confirm(confirm_label)
     err_console.print()
 
     return server_ip, ssh_user, sni, domain, email, xhttp, harden
@@ -373,8 +408,6 @@ def _run_provisioner(
     steps = build_setup_steps(ctx)
     provisioner = Provisioner(steps)
 
-    from meridian.ssh import ServerConnection
-
     conn = resolved.conn
     if not isinstance(conn, ServerConnection):
         fail("No SSH connection available", hint_type="bug")
@@ -450,7 +483,7 @@ def _print_success(resolved: ResolvedServer, name: str, domain: str) -> None:
     err_console.print("\n  [dim]Feedback & issues: https://github.com/uburuntu/meridian/issues[/dim]\n")
 
 
-def _check_ports(conn: object, ip: str, yes: bool) -> None:
+def _check_ports(conn: ServerConnection, ip: str, yes: bool) -> None:
     """Check that ports 443 and 80 are available before deploying.
 
     Allows re-deploy over existing Meridian processes.
@@ -521,20 +554,3 @@ def _offer_relay(resolved: ResolvedServer, yes: bool) -> None:
     )
 
 
-def _detect_public_ip() -> str:
-    """Detect the machine's public IPv4 address."""
-    for url in ("https://ifconfig.me", "https://api.ipify.org"):
-        try:
-            result = subprocess.run(
-                ["curl", "-4", "-s", "--max-time", "3", url],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                stdin=subprocess.DEVNULL,
-            )
-            ip = result.stdout.strip()
-            if is_ipv4(ip):
-                return ip
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            continue
-    return ""

@@ -45,6 +45,7 @@ pipx install meridian-vpn       # alternative
 ```bash
 meridian deploy                       # interactive wizard
 meridian deploy 1.2.3.4               # deploy to server
+meridian deploy local                 # deploy on this server (no SSH needed)
 meridian deploy 1.2.3.4 --domain d.io # with CDN fallback
 ```
 
@@ -83,7 +84,7 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 
 | Command | Description |
 |---------|-------------|
-| `meridian deploy [IP]` | Deploy proxy server (interactive wizard if no IP) |
+| `meridian deploy [IP\|local]` | Deploy proxy server (interactive wizard if no IP) |
 | `meridian client add NAME` | Add a named client key |
 | `meridian client list` | List all clients |
 | `meridian client remove NAME` | Remove a client key |

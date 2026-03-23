@@ -60,7 +60,7 @@ def main_callback(
 
 @app.command("deploy")
 def deploy_cmd(
-    ip: str = typer.Argument("", help="Server IP address"),
+    ip: str = typer.Argument("", help="Server IP address (or 'local' to deploy on this server)"),
     domain: str = typer.Option(
         "",
         "--domain",

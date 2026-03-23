@@ -33,6 +33,12 @@ Or specify everything upfront:
 meridian deploy 1.2.3.4 --sni www.microsoft.com
 ```
 
+If you're running directly on the VPS as root, skip SSH entirely:
+
+```
+meridian deploy local
+```
+
 ## What happens
 
 1. **Installs Docker** and deploys Xray via the 3x-ui management panel

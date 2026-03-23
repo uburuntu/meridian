@@ -72,6 +72,24 @@ meridian deploy 1.2.3.4 --user ubuntu
 
 Non-root users get `sudo` automatically. The user must have passwordless sudo access.
 
+## Local deployment
+
+If you're running Meridian directly on the server (e.g. logged in via SSH as root):
+
+```
+meridian deploy local
+```
+
+This skips SSH entirely and runs all commands locally. The `local` keyword works with all commands:
+
+```
+meridian client add alice local
+meridian check local
+meridian scan local
+```
+
+Useful when SSH to self doesn't work (missing keys, firewall rules), for re-deploying on the same server, or in cloud-init startup scripts.
+
 ## Adding a relay node
 
 After deploying your exit server, you can add a relay node for resilience. A relay is a lightweight TCP forwarder on a domestic server that routes traffic to your exit server abroad — useful when the exit IP gets blocked.

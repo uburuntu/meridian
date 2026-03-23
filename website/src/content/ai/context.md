@@ -54,7 +54,7 @@ User → Server:443 (HAProxy)
 ## CLI Commands
 
 ```
-meridian deploy [IP] [flags]     Deploy proxy server
+meridian deploy [IP|local] [flags]     Deploy proxy server ('local' = on this server, no SSH)
   --domain DOMAIN               Enable domain mode with CDN fallback
   --email EMAIL                 Email for TLS certificates (optional)
   --sni HOST                    Reality SNI target (default: www.microsoft.com)

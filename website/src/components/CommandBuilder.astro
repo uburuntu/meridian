@@ -40,8 +40,8 @@ const tabs = [
     <div class="builder__fields">
       <div class="builder__field" id="row-ip">
         <label class="builder__label" for="f-ip" data-t="builder.field.ip">Server IP</label>
-        <input id="f-ip" type="text" placeholder="123.45.67.89" class="builder__input" />
-        <span class="builder__hint" data-t="builder.field.ip.hint">Your VPS public IPv4 address. Leave empty for interactive mode.</span>
+        <input id="f-ip" type="text" placeholder="123.45.67.89 or local" class="builder__input" />
+        <span class="builder__hint" data-t="builder.field.ip.hint">Your VPS public IPv4 address, or "local" to deploy on this server. Leave empty for interactive mode.</span>
       </div>
 
       <div class="builder__field" id="row-user">
@@ -223,11 +223,18 @@ const tabs = [
     ($('f-domain') as HTMLElement).style.display = domOn ? '' : 'none';
     ($('f-sni') as HTMLElement).style.display = sniOn ? '' : 'none';
 
+    // Hide SSH user when deploying locally
+    const isLocal = /^locally?$/i.test(ip);
+    const userRow = $('row-user');
+    if (userRow && cfg.show.includes('user')) {
+      userRow.style.display = isLocal ? 'none' : '';
+    }
+
     const args: string[] = [];
 
     if (ip) {
-      if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
-        status.textContent = 'Enter a valid IPv4 address';
+      if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip) && !/^locally?$/i.test(ip)) {
+        status.textContent = 'Enter a valid IPv4 address or "local"';
         status.className = 'builder__status builder__status--error';
         ($('builder-cmd') as HTMLElement).textContent = 'meridian ' + cfg.cmd;
         persist();
@@ -256,6 +263,9 @@ const tabs = [
       if (!ip) {
         status.textContent = 'Run without IP for the interactive wizard (recommended for first-time setup).';
         status.className = 'builder__status';
+      } else if (/^locally?$/i.test(ip)) {
+        status.textContent = 'Deploys on this server without SSH. Must run as root on the VPS.';
+        status.className = 'builder__status builder__status--ok';
       } else if (domOn && !dom) {
         status.textContent = 'Enter a domain or uncheck to skip.';
         status.className = 'builder__status';

@@ -132,8 +132,8 @@ meridian -v
 ## Server resolution
 
 Commands that need a server follow this priority:
-1. Explicit IP argument
-2. `--server NAME` flag
+1. Explicit IP argument or `local` keyword (deploy on this server without SSH)
+2. `--server NAME` flag (also accepts `--server local`)
 3. Local mode detection (running on the server itself)
 4. Single server auto-select (if only one saved)
 5. Interactive prompt
