@@ -109,19 +109,21 @@ def _verify_host_key(ip: str) -> bool:
             err_console.print("\n  [info]\u2192[/info] Trust this host key? [dim][Y/n][/dim] ", end="")
             answer = tty.readline().strip().lower()
     except OSError:
-        # No TTY — fall back to accept-new behavior for non-interactive use
-        warn("No terminal available — accepting host key automatically")
-        answer = "y"
+        # No TTY — refuse to accept host key silently (MitM risk)
+        fail(
+            f"Cannot verify host key for {ip} (no terminal available)",
+            hint="Run interactively, or pre-add the key: ssh-keyscan IP >> ~/.ssh/known_hosts",
+            hint_type="user",
+        )
 
     if answer not in ("", "y", "yes"):
         return False
 
-    # Add all scanned keys to known_hosts
+    # Add only the verified key to known_hosts (user only saw this fingerprint)
     known_hosts = Path.home() / ".ssh" / "known_hosts"
     known_hosts.parent.mkdir(mode=0o700, exist_ok=True)
     with open(known_hosts, "a") as f:
-        for line in key_lines:
-            f.write(line + "\n")
+        f.write(preferred + "\n")
 
     ok("Host key saved")
     return True
