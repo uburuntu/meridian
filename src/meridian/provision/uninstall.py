@@ -27,19 +27,28 @@ class Uninstall:
             # 3x-ui container and data
             "cd /opt/3x-ui && docker compose down --rmi all 2>/dev/null; true",
             "rm -rf /opt/3x-ui",
-            # HAProxy
+            # HAProxy (+ systemd restart override)
             "systemctl stop haproxy 2>/dev/null; systemctl disable haproxy 2>/dev/null; true",
             "rm -f /etc/haproxy/haproxy.cfg",
-            # Caddy
+            "rm -rf /etc/systemd/system/haproxy.service.d",
+            # Caddy (+ systemd restart override)
             "systemctl stop caddy 2>/dev/null; systemctl disable caddy 2>/dev/null; true",
             "rm -f /etc/caddy/conf.d/meridian.caddy",
+            "rm -rf /etc/systemd/system/caddy.service.d",
             "rm -rf /var/www/private",
-            # Cron jobs
-            "crontab -l 2>/dev/null | grep -v 'update-stats.py' | crontab - 2>/dev/null; true",
-            # Server credentials
+            # Cron jobs (stats + health watchdog)
+            (
+                "crontab -l 2>/dev/null"
+                " | grep -v 'update-stats.py'"
+                " | grep -v 'health-check.sh'"
+                " | crontab - 2>/dev/null; true"
+            ),
+            # Server credentials and scripts
             "rm -rf /etc/meridian /root/meridian",
             # CLI symlink
             "rm -f /usr/local/bin/meridian",
+            # Systemd daemon-reload after removing overrides
+            "systemctl daemon-reload 2>/dev/null; true",
             # UFW rules
             "ufw delete allow 443/tcp 2>/dev/null; true",
             "ufw delete allow 80/tcp 2>/dev/null; true",

@@ -7,6 +7,9 @@ import shlex
 from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
+# Minimum disk space required (in MB)
+MIN_DISK_SPACE_MB = 2048
+
 # Packages required by the deployment stack
 REQUIRED_PACKAGES = [
     "curl",
@@ -37,6 +40,31 @@ _BBR_SETTINGS = {
     "net.core.default_qdisc": "fq",
     "net.ipv4.tcp_congestion_control": "bbr",
 }
+
+
+class CheckDiskSpace:
+    """Verify sufficient disk space before deployment."""
+
+    name = "Check disk space"
+
+    def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
+        result = conn.run("df -BM --output=avail / | tail -1", timeout=10)
+        if result.returncode != 0:
+            return StepResult(name=self.name, status="skipped", detail="could not check disk space")
+
+        try:
+            avail_mb = int(result.stdout.strip().rstrip("M"))
+        except (ValueError, AttributeError):
+            return StepResult(name=self.name, status="skipped", detail="could not parse df output")
+
+        if avail_mb < MIN_DISK_SPACE_MB:
+            return StepResult(
+                name=self.name,
+                status="failed",
+                detail=f"only {avail_mb}MB free, need {MIN_DISK_SPACE_MB}MB. Run: df -h",
+            )
+
+        return StepResult(name=self.name, status="ok", detail=f"{avail_mb}MB available")
 
 
 class InstallPackages:

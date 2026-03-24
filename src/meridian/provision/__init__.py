@@ -25,6 +25,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     6. connection page: QR codes, stats, HTML (domain mode or hosted page)
     """
     from meridian.provision.common import (
+        CheckDiskSpace,
         ConfigureBBR,
         ConfigureFirewall,
         EnableAutoUpgrades,
@@ -45,6 +46,8 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     creds_path = Path(ctx.creds_dir) / "proxy.yml"
 
     steps: list[Step] = [
+        # -- Pre-flight --
+        CheckDiskSpace(),
         # -- Common (OS-level setup) --
         InstallPackages(),
         EnableAutoUpgrades(),
@@ -98,6 +101,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     if ctx.needs_web_server:
         from meridian.provision.services import (
             DeployConnectionPage,
+            DeployPWAAssets,
             InstallCaddy,
             InstallHAProxy,
         )
@@ -120,6 +124,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
                 )
             )
 
+        steps.append(DeployPWAAssets())
         steps.append(DeployConnectionPage(server_ip=ctx.ip))
 
     return steps

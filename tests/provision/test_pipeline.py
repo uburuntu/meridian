@@ -57,11 +57,11 @@ def domain_ctx(tmp_path: Path) -> ProvisionContext:
 
 class TestMinimalPipeline:
     def test_minimal_step_count(self, base_ctx: ProvisionContext):
-        """Minimal config: packages, auto-upgrades, timezone, BBR, docker,
-        deploy 3xui, configure panel, login, reality, verify xray = 10 steps."""
+        """Minimal config: disk check, packages, auto-upgrades, timezone, BBR, docker,
+        deploy 3xui, configure panel, login, reality, verify xray = 11 steps."""
         steps = build_setup_steps(base_ctx)
         names = [s.name for s in steps]
-        assert len(steps) == 10, f"Expected 10 minimal steps, got {len(steps)}: {names}"
+        assert len(steps) == 11, f"Expected 11 minimal steps, got {len(steps)}: {names}"
 
     def test_no_services_without_domain_or_hosted_page(self, base_ctx: ProvisionContext):
         names = step_names(base_ctx)
@@ -104,6 +104,7 @@ class TestDomainMode:
         assert "Create WSS inbound" in names
         assert "Install HAProxy" in names
         assert "Install Caddy" in names
+        assert "Deploy PWA assets" in names
         assert "Deploy connection page" in names
 
 
@@ -113,16 +114,17 @@ class TestHostedPage:
         names = step_names(base_ctx)
         assert "Install HAProxy" in names
         assert "Install Caddy" in names
+        assert "Deploy PWA assets" in names
         assert "Deploy connection page" in names
 
 
 class TestFullPipeline:
     def test_full_pipeline_step_count(self, domain_ctx: ProvisionContext):
-        """All flags on: common(3) + harden(2) + BBR + docker(2) + panel(2)
-        + reality + xhttp + wss + verify + haproxy + caddy + connection page = 17."""
+        """All flags on: disk check + common(3) + harden(2) + BBR + docker(2) + panel(2)
+        + reality + xhttp + wss + verify + haproxy + caddy + pwa assets + connection page = 19."""
         steps = build_setup_steps(domain_ctx)
         names = [s.name for s in steps]
-        assert len(steps) == 17, f"Expected 17 full steps, got {len(steps)}: {names}"
+        assert len(steps) == 19, f"Expected 19 full steps, got {len(steps)}: {names}"
 
 
 class TestStepOrdering:
@@ -146,4 +148,5 @@ class TestStepOrdering:
         # Verify before services
         assert_before("Verify Xray configuration", "Install HAProxy")
         assert_before("Install HAProxy", "Install Caddy")
-        assert_before("Install Caddy", "Deploy connection page")
+        assert_before("Install Caddy", "Deploy PWA assets")
+        assert_before("Deploy PWA assets", "Deploy connection page")
