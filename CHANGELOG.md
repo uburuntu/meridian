@@ -4,6 +4,12 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.7.3] - 2026-03-24
+
+### Fixed
+- **Mypy type errors in dev.py** — fix bytes/str variable shadowing and SimpleHTTPRequestHandler init typing
+- **Ruff formatting** — fix import order in dev.py, formatting in services.py
+
 ## [3.7.2] - 2026-03-24
 
 ### Added
