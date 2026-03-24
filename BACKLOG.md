@@ -9,6 +9,9 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Security
 
+- [ ] **XSS in inline `onclick` handlers** — `app.js:607,613,651,657` build inline JS strings from URL data with incomplete sanitization (`.replace(/'/g,'')` doesn't handle backslash escapes). Fix: use `data-url` attributes + event delegation, matching the pattern already used for iOS deep links. Affects `shareUrl()` and `copyToClipboard()` calls
+- [ ] **No Content-Security-Policy on PWA pages** — pages construct HTML via `innerHTML` with no CSP fallback. Add CSP header to Caddy config: `default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'`
+- [ ] **`navigator.share()` titles say "VPN"** — `shareUrl()` uses `title:'VPN Config'`, `sharePageUrl()` uses `title:'VPN Connection'`. Stored in OS share-sheet history, iCloud/Google backup, messaging previews. Incriminating in Iran/China/Russia. Use neutral titles (`app.js:301,309`)
 - [ ] **Ping link leaks server IP to third party** — connection page links to `getmeridian.org/ping?ip=SERVER_IP`, exposing the real IP in URL params and server logs. Fix: route through local endpoint or use fragment `#ip=...` (`templates/connection-info.html.j2:270`, `render.py:432`)
 - [x] ~~**Realm binary no checksum verification**~~ — SHA256 digests pinned in `config.py`, verified after download
 - [x] ~~**Silent host key acceptance in non-interactive mode**~~ — now `fail()`s with hint about `ssh-keyscan`
@@ -26,11 +29,14 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [ ] **`meridian client show NAME`** — regenerate/re-display connection info without recreating the client (different UUID = revoked). Most common support need for tech friends
 - [x] ~~**Subscription URL support** — `subEnable` in 3x-ui for auto-config refresh on IP change~~ (implemented via PWA `sub.txt` subscription endpoint)
 - [ ] **Client migration for rebuilds** — `meridian rebuild NEW_IP --from OLD_IP` or `meridian client migrate` to re-add all clients from old server credentials. The IP-blocked rebuild workflow is the most painful moment and has no tooling
+- [ ] **config.json error state is a dead-end** — no retry button, no translation, hardcoded English. Users in censored regions with spotty connectivity hit a wall. Add retry button + translated error message (`app.js:834-840`)
+- [ ] **SW `networkFirst` returns `undefined` on cache miss** — unlike `cacheFirst` which returns 503, `networkFirst` returns undefined causing silent browser failure (`sw.js:53-54`)
 
 ### Reliability
 
 - [x] ~~**No service health monitoring after deploy**~~ — added 5-min health watchdog cron (checks Xray/Caddy/HAProxy, restarts on failure, logs to syslog)
 - [x] ~~**IP cert renewal depends on Caddy staying alive**~~ — added systemd `Restart=on-failure` drop-in overrides for both HAProxy and Caddy
+- [ ] **Stats files owned by root:600, Caddy can't serve** — `update-stats.py` runs as root via cron, writes files with `0o600` owned by root. Caddy (user `caddy`) can't read them. Stats feature is broken. Fix: `chown caddy:caddy` after write or run cron as caddy (`provision/services.py:430`)
 
 ### Code quality
 
@@ -43,6 +49,11 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Security
 
+- [ ] **`connection-info.html.j2` missing `<meta referrer="no-referrer">`** — local-save template has no referrer meta. When opened as local file and user clicks app download links, Referer leaks `file://` path
+- [ ] **QR base64 not validated server-side** — `connection-info.html.j2` injects QR data into `<img src>` without regex validation. PWA `app.js` correctly uses `isValidBase64()` — apply same check server-side in `render.py`
+- [ ] **`manifest.webmanifest.j2` rendered without autoescape** — `render.py:377` only autoescapes `.html.j2`. Client name with `"` could break JSON structure. Add JSON escaping or autoescape for `.webmanifest.j2`
+- [ ] **SW cache never invalidates** — `CACHE_VERSION = 'meridian-pwa-v1'` is hardcoded. Updated `app.js`/`styles.css` never reach existing users. Embed hash or version in cache key during deployment (`sw.js:2`)
+- [ ] **`window._meridianConfig` exposes credentials globally** — `app.js:831` stores complete config.json on `window`. Any extension/injected script can read all UUIDs and URLs. Use module-scoped variable instead
 - [x] ~~**Stats script credential URL-encoding**~~ — added `urllib.parse.quote()` in generated stats script
 - [x] ~~**Wildcard CORS on connection pages**~~ — removed `Access-Control-Allow-Origin: *` from private page Caddy config
 - [x] ~~**Stats files world-readable**~~ — changed to `chmod 600`
@@ -52,11 +63,12 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Anti-censorship
 
+- [ ] **Page title / manifest name "Meridian" identifiable** — `<title>Connection Setup</title>`, manifest `short_name: "Meridian"`, SW cache `meridian-pwa-v1`. If PWA installed on inspected device, immediately identifies circumvention tool. Make naming neutral/configurable
+- [ ] **"Powered by Meridian" + GitHub link on connection pages** — identifies the tool to anyone viewing the page, appears in browser history. Add `--no-branding` deploy option or remove entirely (`app.js:526-529`, `connection-info.html.j2:276`)
 - [ ] **Default SNI `www.microsoft.com` is heavily monitored** — most popular Reality target, GFW actively fingerprints it. ASN mismatch with VPS providers is instant detection signal. Make `meridian scan` the strongly recommended default, not a secondary option
 - [ ] **Docker pull during deploy is a fingerprinting signal** — `ghcr.io/mhsanaei/3x-ui` pull from GitHub CR within hours of VPS provisioning is a strong proxy-setup indicator. Consider pre-caching or using a less distinctive registry
 - [ ] **`spiderX: "/"` hardcoded** — universal default across all Xray deployments, GFW can fingerprint. Randomize or derive from camouflage target (`provision/xray.py:103,144`)
 - [ ] **`generated_at` timestamp in connection page footer** — reveals exact deployment time, aids timeline correlation (`connection-info.html.j2:280`)
-- [ ] **"Powered by Meridian" + GitHub link on connection pages** — identifies the tool to anyone viewing the page. Add `--no-branding` deploy option
 
 ### Product
 
@@ -78,10 +90,16 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### UX / Accessibility
 
+- [ ] **No RTL CSS support for Farsi** — `dir=rtl` is set in JS but CSS uses `margin-left/right`, `text-align:left/right` everywhere. All directional properties need logical equivalents (`margin-inline-start/end`, `text-align:start/end`) or `[dir=rtl]` overrides (`styles.css`)
+- [ ] **Toast "Copied" never translated** — hardcoded in `index.html.j2:25`, outside `#app` container, `applyI18n()` never touches it
+- [ ] **CSS "Click to copy" tooltip hardcoded English** — `styles.css:429` uses CSS pseudo-element `content:'Click to copy'`, untranslatable via `data-t`
+- [ ] **iOS deep link hardcodes v2RayTun, Android hardcodes Hiddify** — inconsistent, confusing if user installed different app. "Open in App" should use `vless://` scheme (both apps register) or let user choose (`app.js:148-171`)
+- [ ] **Toast invisible to screen readers** — no `role="alert"` or `aria-live` on toast element (`index.html.j2:25`)
 - [ ] **Connection page has no ARIA landmarks or keyboard support** — all-div structure, clickable URLs use `onclick` on non-interactive elements, invisible to screen readers. Add landmarks, `role="button"`, `tabindex`, `keydown` handlers
-- [ ] **Connection page QR alt text is generic** — `alt="QR code for connection"` doesn't distinguish protocols. Use `alt="QR code — VLESS Reality, client alice"`
+- [ ] **Connection page QR alt text is generic** — `alt="QR code"` doesn't distinguish protocols. Use `alt="QR code — Primary connection"` with protocol label
 - [ ] **Connection page `<html lang="en">` hardcoded** — RTL for Farsi applied only after JS executes, causing LTR flash on slow connections. Set `lang`/`dir` server-side via template variable
 - [ ] **Connection page font sizes too small for mobile** — `.6rem`/`.65rem` (~10px) fails WCAG 1.4.4. Minimum `.75rem` (12px) for all visible text
+- [ ] **Language button touch targets too small** — `.lang-btn` has `padding:3px 8px` at `.68rem`, well under 44x44px minimum (WCAG 2.5.8) (`styles.css:97`)
 - [ ] **`prefers-reduced-motion` missing** — scroll-reveal animations on landing page, `scroll-behavior: smooth` — both need media query override
 - [ ] **CommandBuilder keyboard navigation** — ARIA `tablist` pattern missing arrow-key navigation between tabs
 - [ ] **Language picker has no `aria-pressed` state** — active language is visual-only, invisible to screen readers
@@ -90,6 +108,17 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Code quality
 
+- [ ] **Silent template failures return empty string** — `render.py:370,390` catches bare `Exception` and returns `""`. User gets empty `index.html` deployed with no error. Add logging, re-raise, or return sentinel
+- [ ] **`upload_client_files()` should use base64 transport** — uses raw `printf '%s'` with `shlex.quote()` for multi-KB content, could exceed `ARG_MAX`. Align with `upload_pwa_assets()` which uses base64 (`pwa.py:79`)
+- [ ] **`pwa.py` mkdir return codes unchecked** — `conn.run("mkdir -p ...")` at lines 74, 116 doesn't check `returncode`. Disk full or permission errors give confusing downstream failures
+- [ ] **Zero test coverage: upload pipeline** — `upload_client_files()`, `upload_pwa_assets()`, `_deploy_client_page()`, `_regenerate_client_pages()` have no tests. Security-sensitive shell command construction untested (`pwa.py`, `client.py:101-138`, `relay.py:132-188`)
+- [ ] **Zero test coverage: `DeployConnectionPage` success path** — ~80 lines of URL building, QR generation, stats setup, cron, PWA upload untested (`services.py:827-1003`)
+- [ ] **Zero test coverage: `_render_stats_script()`** — complex embedded Python script with YAML parsing, HTTP, file I/O. Not a single test (`services.py:311-440`)
+- [ ] **Caddy XHTTP block untested** — both IP and domain config tests never pass `xhttp_path`/`xhttp_internal_port` (`test_services.py`)
+- [ ] **No unit test syncing `_PWA_APPS` with `apps.json`** — CI validates template refs but no test catches Python constant drift (`render.py:231-236`)
+- [ ] **Manifest color mismatch** — `manifest.webmanifest.j2` uses `#0c0e14`, CSS and `index.html.j2` use `#14161E`. Causes visible PWA splash screen flash
+- [ ] **Massive Caddy config duplication** — `_render_caddy_config()` and `_render_caddy_ip_config()` are nearly identical (~100 lines each). Extract shared connection-page/headers/logging block (`services.py:92-303`)
+- [ ] **Protocol card hero/non-hero code duplication** — `renderProtocolCard()` has ~85 lines of identical HTML in both branches, only differ by CSS class (`app.js:545-677`)
 - [ ] **`protocols` field typed as `dict[str, Any]`** — forces runtime isinstance guards. Use `dict[str, ProtocolConfig]` union type (`credentials.py:98`)
 - [ ] **ValueError instead of fail()** — `client.py:208,401,475` raise ValueError for internal bugs instead of styled error output. Extract `_get_reality_protocol()` helper
 - [ ] **URL construction duplicated** — `DeployConnectionPage` hand-builds VLESS URLs duplicating `protocols.py` logic. Use `build_protocol_urls()` from `urls.py` (`provision/services.py:759-810`)
@@ -136,6 +165,16 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 - [x] ~~**Connection page `<noscript>` fallback missing**~~ (added in PWA shell template)
 - [x] ~~**"BACKUP (DIRECT)" label hardcoded English**~~ (added `data-t` key in PWA `app.js`)
+- [ ] **Farsi question mark uses ASCII `?` instead of `؟`** — undermines trust with native Farsi speakers (`app.js:73`)
+- [ ] **Multi-protocol labels use jargon** — "XHTTP", "via relay", "Routes through CDN" meaningless to non-tech users. Better: "Connection 1 (try first)", "Connection 2 (backup)"
+- [ ] **Clock sync warning shown even when clock is OK** — `clockStatus==='ok'` still renders "Clock Sync Required" heading. Confusing/scary for non-tech users. Only show when clock is bad, or soften to "Troubleshooting" (`app.js:501-507`)
+- [ ] **Subscription URL shown to all users** — non-tech users don't know what a subscription URL is. Hide behind "More options" expander
+- [ ] **`<title>` never updated on language switch** — stays English "Connection Setup" after switching to Russian/Farsi/Chinese
+- [ ] **"via {name}" hardcoded English preposition** — should be "через" (RU), "از طریق" (FA). Add to translation dict (`app.js:425-426`)
+- [ ] **`index.html` not in SW precache list** — first offline visit after SW install fails because HTML isn't cached (`sw.js:3-7`)
+- [ ] **Click-to-copy URL divs have no keyboard support** — `.url` and `.sub-url-value` use `onclick` on `<div>` with no `tabindex`, `role`, or `keydown` handler
+- [ ] **`apple-touch-icon` uses SVG** — iOS doesn't support SVG for touch icons, requires PNG. Icon won't appear on iOS home screen (`index.html.j2:15`)
+- [ ] **Flag emoji in language selector** — Iran flag may be unwelcome for diaspora/Afghan users; renders as letter codes on Windows. Use language names only
 - [ ] **QR images 200x200px marginal on high-DPI** — generate 400x400px minimum for Retina displays
 - [ ] **Connection page stats strings English-only** — "Active now", "Active Xm ago" not in translation object
 - [ ] **Wizard `_confirm_scan()` silently fails on WSL** — `/dev/tty` read catches `OSError` with no user feedback
@@ -148,6 +187,8 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Code quality
 
+- [ ] **`config.json` schema not validated in tests** — no test checks required fields (`key`, `label`, `url`, `qr_b64`, `recommended`) or relay sub-fields
+- [ ] **Unicode/non-ASCII client names never tested** — given target audience (Iran/China/Russia), Cyrillic/Farsi/CJK names are real-world scenarios
 - [ ] **`confirm()` raises Exit(1) on "n"** — can't distinguish rejection from failure, can't do cleanup. Should return bool (`console.py:82-97`)
 - [ ] **`_sync_credentials_to_server()` silently ignores SCP failures** — stale server credentials on sync failure. Return bool, retry once (`client.py:77-98`, `relay.py:110-129`)
 - [ ] **Global `_qrencode_warned` flag poisons test isolation** — module-level mutable state makes tests order-dependent (`urls.py:14`)
@@ -257,6 +298,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 Items shipped in releases. See [CHANGELOG.md](CHANGELOG.md) for details.
 
+**3.7.4** — Caddy `handle_path` fix for PWA cache headers, mypy/lint fixes
 **3.7.2** — local mode, security hardening, reliability (19 items)
 **3.7.1** — HAProxy port fix
 **3.7.0** — website, provisioner hardening (9 items)
