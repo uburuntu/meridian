@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import http.server
-from typing import Any
 import shutil
 import tempfile
 import threading
@@ -11,6 +10,7 @@ import time
 import uuid
 import webbrowser
 from pathlib import Path
+from typing import Any
 
 from meridian.console import info, ok, warn
 from meridian.models import ProtocolURL

@@ -942,17 +942,17 @@ class DeployConnectionPage:
 
         # Deploy health watchdog cron (checks Xray, Caddy, HAProxy every 5 min)
         watchdog_script = (
-            '#!/bin/sh\n'
-            '# Meridian service health watchdog — restarts crashed services\n'
-            'docker exec 3x-ui pgrep -f xray >/dev/null 2>&1 || '
+            "#!/bin/sh\n"
+            "# Meridian service health watchdog — restarts crashed services\n"
+            "docker exec 3x-ui pgrep -f xray >/dev/null 2>&1 || "
             '{ logger -t meridian-health "Xray not running, restarting 3x-ui"; '
-            'docker restart 3x-ui; }\n'
-            'systemctl is-active --quiet caddy || '
+            "docker restart 3x-ui; }\n"
+            "systemctl is-active --quiet caddy || "
             '{ logger -t meridian-health "Caddy not running, restarting"; '
-            'systemctl restart caddy; }\n'
-            'systemctl is-active --quiet haproxy || '
+            "systemctl restart caddy; }\n"
+            "systemctl is-active --quiet haproxy || "
             '{ logger -t meridian-health "HAProxy not running, restarting"; '
-            'systemctl restart haproxy; }\n'
+            "systemctl restart haproxy; }\n"
         )
         q_watchdog = shlex.quote(watchdog_script)
         conn.run(f"printf '%s' {q_watchdog} > /etc/meridian/health-check.sh", timeout=10)
