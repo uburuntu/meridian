@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import html as html_mod
+import json
 import types
 from datetime import datetime, timezone
 from pathlib import Path
@@ -219,6 +221,174 @@ def render_hosted_html(
         client_name=client_name,
         now=now,
     )
+
+
+# ---------------------------------------------------------------------------
+# PWA rendering functions
+# ---------------------------------------------------------------------------
+
+# App download links — matches website/src/data/apps.json (single source of truth)
+_PWA_APPS = [
+    {"name": "v2RayTun", "platform": "iOS", "url": "https://apps.apple.com/app/v2raytun/id6476628951"},
+    {"name": "v2rayNG", "platform": "Android", "url": "https://github.com/2dust/v2rayNG/releases/latest"},
+    {"name": "Hiddify", "platform": "All platforms", "url": "https://github.com/hiddify/hiddify-app/releases/latest"},
+    {"name": "v2rayN", "platform": "Windows", "url": "https://github.com/2dust/v2rayN/releases/latest"},
+]
+
+
+def render_config_json(
+    protocol_urls: list[ProtocolURL],
+    server_ip: str,
+    domain: str = "",
+    *,
+    client_name: str = "",
+    relay_entries: list[RelayURLSet] | None = None,
+) -> str:
+    """Render per-client config.json for the PWA shell.
+
+    Returns a JSON string containing all connection data that the
+    PWA's app.js needs to populate the page at runtime.
+    """
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    name = client_name or derive_client_name(protocol_urls)
+
+    protocols = []
+    for i, p in enumerate(protocol_urls):
+        if not p.url:
+            continue
+        protocols.append(
+            {
+                "key": p.key,
+                "label": p.label,
+                "url": p.url,
+                "qr_b64": p.qr_b64,
+                "recommended": i == 0,
+            }
+        )
+
+    relays = []
+    if relay_entries:
+        for relay_set in relay_entries:
+            relay_urls = []
+            for purl in relay_set.urls:
+                if purl.url:
+                    relay_urls.append(
+                        {
+                            "key": purl.key,
+                            "label": purl.label,
+                            "url": purl.url,
+                            "qr_b64": purl.qr_b64,
+                        }
+                    )
+            if relay_urls:
+                relays.append(
+                    {
+                        "ip": relay_set.relay_ip,
+                        "name": relay_set.relay_name,
+                        "urls": relay_urls,
+                    }
+                )
+
+    config = {
+        "version": 1,
+        "client_name": name,
+        "server_ip": server_ip,
+        "domain": domain,
+        "protocols": protocols,
+        "relays": relays,
+        "apps": _PWA_APPS,
+        "generated_at": now,
+    }
+    return json.dumps(config, indent=2, ensure_ascii=False)
+
+
+def render_subscription(
+    protocol_urls: list[ProtocolURL],
+    *,
+    relay_entries: list[RelayURLSet] | None = None,
+) -> str:
+    """Render a V2Ray subscription file (base64-encoded URL list).
+
+    Standard format: base64(url1\\nurl2\\n...). Compatible with v2rayNG,
+    Hiddify, and other V2Ray clients that support subscription import.
+    """
+    urls: list[str] = []
+    # Relay URLs first (recommended)
+    if relay_entries:
+        for relay_set in relay_entries:
+            for purl in relay_set.urls:
+                if purl.url:
+                    urls.append(purl.url)
+    # Direct URLs
+    for p in protocol_urls:
+        if p.url:
+            urls.append(p.url)
+    if not urls:
+        return ""
+    return base64.b64encode("\n".join(urls).encode()).decode()
+
+
+def render_pwa_shell(
+    *,
+    client_name: str = "",
+    asset_path: str = "../pwa",
+) -> str:
+    """Render the PWA HTML shell from the index.html.j2 template.
+
+    The shell is lightweight — it loads config.json and shared assets
+    at runtime.  Only the client_name and asset_path are baked in.
+    """
+    return _render_pwa_template(
+        "index.html.j2",
+        client_name=client_name,
+        asset_path=asset_path,
+    )
+
+
+def render_manifest(
+    *,
+    client_name: str = "",
+    asset_path: str = "../pwa",
+) -> str:
+    """Render the per-client PWA manifest from manifest.webmanifest.j2."""
+    return _render_pwa_template(
+        "manifest.webmanifest.j2",
+        client_name=client_name,
+        asset_path=asset_path,
+    )
+
+
+def _render_pwa_template(
+    filename: str,
+    **variables: object,
+) -> str:
+    """Load and render a Jinja2 template from templates/pwa/."""
+    try:
+        from importlib.resources import files
+
+        template_text = (files("meridian") / "templates" / "pwa" / filename).read_text(encoding="utf-8")
+    except Exception:
+        return ""
+
+    try:
+        from jinja2 import BaseLoader, Environment
+
+        # HTML templates get autoescape; JSON manifests do not
+        use_autoescape = filename.endswith(".html.j2")
+        env = Environment(loader=BaseLoader(), autoescape=use_autoescape)
+
+        def default_filter(value: object, default_value: object = "") -> object:
+            if value is None or value == "":
+                return default_value
+            return value
+
+        env.filters["default"] = default_filter
+        env.filters["capitalize"] = lambda v: str(v).capitalize()
+
+        tmpl = env.from_string(template_text)
+        return tmpl.render(**variables)
+    except Exception:
+        return ""
 
 
 # ---------------------------------------------------------------------------

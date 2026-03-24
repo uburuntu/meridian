@@ -114,12 +114,13 @@ MOCK_VARS = {
     "client_name": "default",
     "first_client_name": "default",
     "is_server_hosted": True,
+    "asset_path": "../pwa",
 }
 
 # Auto-discover all Jinja2 templates in src/meridian/templates/
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "meridian", "templates")
-templates_pattern = os.path.join(TEMPLATES_DIR, "*.j2")
-TEMPLATES = [(os.path.dirname(f), os.path.basename(f)) for f in sorted(glob.glob(templates_pattern))]
+templates_pattern = os.path.join(TEMPLATES_DIR, "**", "*.j2")
+TEMPLATES = [(os.path.dirname(f), os.path.basename(f)) for f in sorted(glob.glob(templates_pattern, recursive=True))]
 if not TEMPLATES:
     print(f"FAIL: No templates found at {templates_pattern}")
     sys.exit(1)

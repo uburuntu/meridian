@@ -134,7 +134,7 @@ def _regenerate_client_pages(
     creds: ServerCredentials,
 ) -> None:
     """Regenerate connection pages for all clients after relay topology change."""
-    from meridian.render import render_hosted_html, save_connection_html, save_connection_text
+    from meridian.render import save_connection_html, save_connection_text
     from meridian.urls import build_all_relay_urls, build_protocol_urls, generate_qr_base64
 
     for client in creds.clients:
@@ -167,30 +167,25 @@ def _regenerate_client_pages(
             relay_entries=relay_url_sets,
         )
 
-        # Regenerate server-hosted page (if enabled)
+        # Regenerate server-hosted PWA page (if enabled)
         if creds.server.hosted_page and creds.panel.info_page_path and client.reality_uuid:
-            import shlex
             from dataclasses import replace as dc_replace
+
+            from meridian.pwa import generate_client_files, upload_client_files
 
             urls_with_qr = [dc_replace(p, qr_b64=generate_qr_base64(p.url)) if p.url else p for p in protocol_urls]
 
-            html = render_hosted_html(
+            client_files = generate_client_files(
                 urls_with_qr,
                 server_ip=server_ip,
                 domain=domain,
                 client_name=client.name,
                 relay_entries=relay_url_sets,
             )
+            if not upload_client_files(resolved_exit.conn, client.reality_uuid, client_files):
+                from meridian.console import warn
 
-            conn = resolved_exit.conn
-            q_uuid = shlex.quote(client.reality_uuid)
-            q_html = shlex.quote(html)
-            conn.run(
-                f"mkdir -p /var/www/private/{q_uuid} && "
-                f"printf '%s' {q_html} > /var/www/private/{q_uuid}/index.html && "
-                f"chown caddy:caddy /var/www/private/{q_uuid}/index.html",
-                timeout=15,
-            )
+                warn(f"Could not update connection page for client '{client.name}'")
 
 
 # ---------------------------------------------------------------------------

@@ -19,9 +19,11 @@ app = typer.Typer(
 client_app = typer.Typer(help="Manage proxy clients", no_args_is_help=True)
 server_app = typer.Typer(help="Manage known servers", no_args_is_help=True)
 relay_app = typer.Typer(help="Manage relay nodes", no_args_is_help=True)
+dev_app = typer.Typer(help="Developer tools for testing and debugging", no_args_is_help=True)
 app.add_typer(client_app, name="client")
 app.add_typer(server_app, name="server")
 app.add_typer(relay_app, name="relay")
+app.add_typer(dev_app, name="dev", hidden=True)
 
 
 @app.callback(invoke_without_command=True)
@@ -336,3 +338,35 @@ def relay_check_cmd(
     from meridian.commands.relay import run_check
 
     run_check(relay_ip, exit, user)
+
+
+# =============================================================================
+# Dev tools
+# =============================================================================
+
+
+@dev_app.command("preview")
+def dev_preview_cmd(
+    port: int = typer.Option(8787, "--port", "-p", help="Local server port"),
+    name: str = typer.Option("demo", "--name", help="Client name for preview"),
+    ip: str = typer.Option("198.51.100.1", "--ip", help="Demo server IP"),
+    no_open: bool = typer.Option(False, "--no-open", help="Don't open browser automatically"),
+    output: str = typer.Option("", "--output", "-o", help="Write files to directory instead of serving"),
+    watch: bool = typer.Option(False, "--watch", "-w", help="Watch source files and live-reload on change"),
+) -> None:
+    """Preview PWA connection page locally (no VPS required).
+
+    Generates a complete connection page with demo data and serves it
+    on localhost. All PWA features work: service worker, install prompt,
+    offline mode, platform detection.
+
+    [dim]Examples:[/dim]
+      [cyan]meridian dev preview[/cyan]                   Launch preview in browser
+      [cyan]meridian dev preview --watch[/cyan]            Live-reload on source changes
+      [cyan]meridian dev preview --port 9000[/cyan]       Use custom port
+      [cyan]meridian dev preview --name alice[/cyan]      Preview with client name
+      [cyan]meridian dev preview -o /tmp/pwa[/cyan]       Save files without serving
+    """
+    from meridian.commands.dev import run_preview
+
+    run_preview(port=port, client_name=name, server_ip=ip, no_open=no_open, output=output, watch=watch)

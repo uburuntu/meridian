@@ -128,6 +128,7 @@ MOCK_VARS: dict[str, object] = {
     "client_name": "default",
     "first_client_name": "default",
     "is_server_hosted": True,
+    "asset_path": "../pwa",
 }
 
 
@@ -162,12 +163,13 @@ def _make_env(template_dir: Path) -> Environment:
 # ---------------------------------------------------------------------------
 
 _TEMPLATES_DIR = Path(__file__).parent.parent / "src" / "meridian" / "templates"
-_TEMPLATES = list(_TEMPLATES_DIR.glob("*.j2"))
+_TEMPLATES = list(_TEMPLATES_DIR.glob("**/*.j2"))
 
 
 def _template_id(p: Path) -> str:
-    """Human-readable pytest ID: <filename>.j2"""
-    return p.name
+    """Human-readable pytest ID: pwa/index.html.j2 or connection-info.html.j2"""
+    rel = p.relative_to(_TEMPLATES_DIR)
+    return str(rel)
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#14161E" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F5F6F8" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Connection Setup{% if client_name and client_name != 'default' %} — {{ client_name|capitalize }}{% endif %}</title>
+<link rel="stylesheet" href="{{ asset_path }}/styles.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="{{ asset_path }}/icon.svg">
+<link rel="apple-touch-icon" href="{{ asset_path }}/icon.svg">
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="skeleton">
+    <div class="skel skel-title"></div>
+    <div class="skel skel-sub"></div>
+    <div class="skel skel-card"></div>
+  </div>
+</div>
+<div class="toast" id="toast"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Copied</div>
+<noscript>
+  <div class="wrap">
+    <div class="hdr">
+      <h1>Connection Setup</h1>
+      <p>JavaScript is required to display connection details. Please enable JavaScript or use the direct link shared with you.</p>
+    </div>
+  </div>
+</noscript>
+<script src="{{ asset_path }}/app.js"></script>
+</body>
+</html>

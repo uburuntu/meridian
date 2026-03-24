@@ -6,7 +6,9 @@ from pathlib import Path
 
 from meridian.provision.services import (
     DeployConnectionPage,
+    DeployPWAAssets,
     InstallHAProxy,
+    _render_caddy_config,
     _render_caddy_ip_config,
     _render_haproxy_cfg,
 )
@@ -111,3 +113,88 @@ class TestDeployConnectionPage:
         result = step.run(conn, ctx)
         assert result.status == "failed"
         assert "UUID" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# DeployPWAAssets step
+# ---------------------------------------------------------------------------
+
+
+class TestDeployPWAAssets:
+    def test_uploads_static_files(self, tmp_path: Path):
+        conn = MockConnection()
+        conn.when("mkdir", stdout="")
+        conn.when("printf", stdout="")
+        conn.when("chown", stdout="")
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = DeployPWAAssets()
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+        assert "PWA" in result.detail
+
+    def test_failure_returns_failed(self, tmp_path: Path):
+        conn = MockConnection()
+        conn.when("mkdir", stdout="")
+        # File upload fails
+        conn.when("printf", stdout="", rc=1)
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = DeployPWAAssets()
+        result = step.run(conn, ctx)
+        assert result.status == "failed"
+
+
+# ---------------------------------------------------------------------------
+# Caddy config: PWA headers
+# ---------------------------------------------------------------------------
+
+
+class TestCaddyPWAHeaders:
+    def _ip_config(self) -> str:
+        return _render_caddy_ip_config(
+            server_ip="198.51.100.1",
+            caddy_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+        )
+
+    def _domain_config(self) -> str:
+        return _render_caddy_config(
+            domain="example.com",
+            caddy_internal_port=8443,
+            ws_path="wspath",
+            wss_internal_port=28000,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+        )
+
+    def test_ip_config_has_manifest_content_type(self):
+        cfg = self._ip_config()
+        assert "application/manifest+json" in cfg
+
+    def test_ip_config_has_service_worker_allowed(self):
+        cfg = self._ip_config()
+        assert "Service-Worker-Allowed" in cfg
+
+    def test_ip_config_has_pwa_asset_cache(self):
+        cfg = self._ip_config()
+        assert "max-age=86400" in cfg
+
+    def test_ip_config_has_dynamic_no_cache(self):
+        cfg = self._ip_config()
+        assert "no-cache, must-revalidate" in cfg
+
+    def test_domain_config_has_manifest_content_type(self):
+        cfg = self._domain_config()
+        assert "application/manifest+json" in cfg
+
+    def test_domain_config_has_service_worker_allowed(self):
+        cfg = self._domain_config()
+        assert "Service-Worker-Allowed" in cfg
+
+    def test_domain_config_has_pwa_asset_cache(self):
+        cfg = self._domain_config()
+        assert "max-age=86400" in cfg

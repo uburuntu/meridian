@@ -20,7 +20,7 @@ from meridian.display import print_terminal_output
 from meridian.models import Inbound
 from meridian.panel import PanelClient, PanelError
 from meridian.protocols import PROTOCOLS, Protocol, get_protocol
-from meridian.render import render_hosted_html, save_connection_html, save_connection_text
+from meridian.render import save_connection_html, save_connection_text
 from meridian.servers import ServerRegistry
 from meridian.ssh import SSH_OPTS
 from meridian.urls import build_all_relay_urls, build_protocol_urls
@@ -106,13 +106,13 @@ def _deploy_client_page(
     reality_uuid: str,
     relay_entries: list | None = None,
 ) -> str:
-    """Render and upload a server-hosted connection page for a client.
+    """Render and upload PWA connection page files for a client.
 
     Returns the hosted page URL, or empty string on failure.
     """
-    import shlex
     from dataclasses import replace as dc_replace
 
+    from meridian.pwa import generate_client_files, upload_client_files
     from meridian.urls import generate_qr_base64
 
     info_page_path = creds.panel.info_page_path or ""
@@ -122,7 +122,7 @@ def _deploy_client_page(
     # Attach QR codes to protocol URLs
     urls_with_qr = [dc_replace(p, qr_b64=generate_qr_base64(p.url)) if p.url else p for p in protocol_urls]
 
-    html = render_hosted_html(
+    client_files = generate_client_files(
         urls_with_qr,
         server_ip=server_ip,
         domain=domain,
@@ -130,22 +130,8 @@ def _deploy_client_page(
         relay_entries=relay_entries,
     )
 
-    # Upload to server
     conn = resolved.conn
-    q_uuid = shlex.quote(reality_uuid)
-    conn.run(
-        f"mkdir -p /var/www/private/{q_uuid} && chown caddy:caddy /var/www/private/{q_uuid}",
-        timeout=10,
-    )
-
-    q_html = shlex.quote(html)
-    result = conn.run(
-        f"printf '%s' {q_html} > /var/www/private/{q_uuid}/index.html && "
-        f"chown caddy:caddy /var/www/private/{q_uuid}/index.html",
-        timeout=15,
-    )
-
-    if result.returncode != 0:
+    if not upload_client_files(conn, reality_uuid, client_files):
         warn("Could not deploy server-hosted connection page")
         return ""
 

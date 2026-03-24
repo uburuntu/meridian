@@ -1,0 +1,16 @@
+{
+  "name": "Meridian{% if client_name and client_name != 'default' %} — {{ client_name|capitalize }}{% endif %}",
+  "short_name": "Meridian",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0c0e14",
+  "theme_color": "#0c0e14",
+  "icons": [
+    {
+      "src": "{{ asset_path }}/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable any"
+    }
+  ]
+}
