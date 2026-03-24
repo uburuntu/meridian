@@ -186,9 +186,7 @@ class TestVerifyHostKey:
         known_hosts = ssh_dir / "known_hosts"
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        scan_result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout=self.SCAN_OUTPUT, stderr=""
-        )
+        scan_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=self.SCAN_OUTPUT, stderr="")
         fingerprint_result = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="256 SHA256:abc... 1.2.3.4 (ED25519)\n", stderr=""
         )
@@ -242,9 +240,7 @@ class TestVerifyHostKey:
         ssh_dir.mkdir(mode=0o700)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        scan_result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout=self.SCAN_OUTPUT, stderr=""
-        )
+        scan_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=self.SCAN_OUTPUT, stderr="")
         fp_result = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="256 SHA256:xyz... (ED25519)\n", stderr=""
         )

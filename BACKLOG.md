@@ -10,10 +10,10 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 ### Security
 
 - [ ] **Ping link leaks server IP to third party** — connection page links to `getmeridian.org/ping?ip=SERVER_IP`, exposing the real IP in URL params and server logs. Fix: route through local endpoint or use fragment `#ip=...` (`templates/connection-info.html.j2:270`, `render.py:432`)
-- [ ] **Realm binary no checksum verification** — downloaded from GitHub without integrity check. Pin SHA256 digests per version/arch in `config.py`, verify after download (`provision/relay.py:221-244`)
-- [ ] **Silent host key acceptance in non-interactive mode** — `_verify_host_key` falls back to auto-accept when no TTY (`ssh.py:111-114`). Should `fail()` instead; add `--trust-host-key` flag for explicit opt-in
-- [ ] **All scanned host key types trusted, only one shown to user** — `ssh-keyscan` returns multiple key types but user only verifies one fingerprint; all are written to `known_hosts` (`ssh.py:119-124`). Write only the verified key
-- [ ] **Connection page missing `<meta name="referrer">`** — unlike website pages, connection-info.html.j2 has no referrer policy. Footer/ping clicks leak server path in `Referer` header
+- [x] ~~**Realm binary no checksum verification**~~ — SHA256 digests pinned in `config.py`, verified after download
+- [x] ~~**Silent host key acceptance in non-interactive mode**~~ — now `fail()`s with hint about `ssh-keyscan`
+- [x] ~~**All scanned host key types trusted, only one shown to user**~~ — now writes only the preferred/verified key
+- [x] ~~**Connection page missing `<meta name="referrer">`**~~ (added in PWA shell template)
 
 ### Anti-censorship
 
@@ -24,7 +24,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 ### Product
 
 - [ ] **`meridian client show NAME`** — regenerate/re-display connection info without recreating the client (different UUID = revoked). Most common support need for tech friends
-- [ ] **Subscription URL support** — `subEnable` in 3x-ui for auto-config refresh on IP change. Without it, every rebuild requires manually resharing QR codes with every user. Core resilience gap vs Outline/Amnezia
+- [x] ~~**Subscription URL support** — `subEnable` in 3x-ui for auto-config refresh on IP change~~ (implemented via PWA `sub.txt` subscription endpoint)
 - [ ] **Client migration for rebuilds** — `meridian rebuild NEW_IP --from OLD_IP` or `meridian client migrate` to re-add all clients from old server credentials. The IP-blocked rebuild workflow is the most painful moment and has no tooling
 
 ### Reliability
@@ -43,12 +43,12 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Security
 
-- [ ] **Stats script credential URL-encoding** — panel password interpolated without `urllib.parse.quote()` in generated Python script. Latent auth bug if password alphabet changes (`provision/services.py:316`)
-- [ ] **Wildcard CORS on connection pages** — `Access-Control-Allow-Origin: *` lets any website `fetch()` private connection page content (`provision/services.py:158,240`). Remove or restrict to same-origin
-- [ ] **Stats files world-readable** — `chmod 644` on `/var/www/private/stats/{uuid}.json` reveals traffic patterns and last-online timestamps. Use `chmod 600` + authenticated endpoint (`provision/services.py:383`)
-- [ ] **Cookie file race window** — panel cookie created world-readable by curl, then `chmod 600` in separate SSH call. Pre-create with `umask 077` (`panel.py:51-60`)
+- [x] ~~**Stats script credential URL-encoding**~~ — added `urllib.parse.quote()` in generated stats script
+- [x] ~~**Wildcard CORS on connection pages**~~ — removed `Access-Control-Allow-Origin: *` from private page Caddy config
+- [x] ~~**Stats files world-readable**~~ — changed to `chmod 600`
+- [x] ~~**Cookie file race window**~~ — uses `umask 077` in subshell, no separate chmod
 - [ ] **`install.sh` double curl-pipe-bash** — pipes `uv` installer from `astral.sh` without checksum. Pin version + verify hash (`install.sh:49`)
-- [ ] **Realm config world-readable with exit IP** — `realm.toml` at `chmod 644` contains exit server IP in plaintext. Change to `chmod 600` (`provision/relay.py:286`)
+- [x] ~~**Realm config world-readable with exit IP**~~ — changed to `chmod 600`
 
 ### Anti-censorship
 
@@ -104,8 +104,8 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 ### Security
 
 - [ ] **`_is_on_server()` leaks IP-lookup activity** — `curl ifconfig.me` from client machine visible to ISP/DPI as VPN-setup fingerprint (`ssh.py:341`, `resolve.py:26`). Add self-hosted IP echo at `getmeridian.org/ip`
-- [ ] **Unquoted sysctl values in shell commands** — BBR `sed`/`echo` don't use `shlex.quote()`, violating project convention. Latent injection pattern (`provision/common.py:231-232`)
-- [ ] **`mkdir exist_ok` ignores mode on existing dir** — credential dir permissions not enforced if already exists with wrong mode (`credentials.py:169`). Explicitly `chmod 0o700` after mkdir
+- [x] ~~**Unquoted sysctl values in shell commands**~~ — now uses `shlex.quote()` + `printf` instead of `echo`
+- [x] ~~**`mkdir exist_ok` ignores mode on existing dir**~~ — explicitly `chmod 0o700` after mkdir
 - [ ] **Panel cookie at predictable non-temp path** — `$HOME/.meridian/.cookie` shared across concurrent processes. Use `tempfile.mkstemp` per session, namespaced by server IP (`panel.py:36`)
 
 ### Anti-censorship
@@ -134,8 +134,8 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### UX
 
-- [ ] **Connection page `<noscript>` fallback missing** — without JS: no translations, no copy buttons, no stats, broken for Farsi
-- [ ] **"BACKUP (DIRECT)" label hardcoded English** — not translatable, needs `data-t` key (`connection-info.html.j2:187`)
+- [x] ~~**Connection page `<noscript>` fallback missing**~~ (added in PWA shell template)
+- [x] ~~**"BACKUP (DIRECT)" label hardcoded English**~~ (added `data-t` key in PWA `app.js`)
 - [ ] **QR images 200x200px marginal on high-DPI** — generate 400x400px minimum for Retina displays
 - [ ] **Connection page stats strings English-only** — "Active now", "Active Xm ago" not in translation object
 - [ ] **Wizard `_confirm_scan()` silently fails on WSL** — `/dev/tty` read catches `OSError` with no user feedback
@@ -215,7 +215,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [ ] **Password-protected connection pages** — HTTP Basic Auth or client-specific token on hosted page. Prevents credential harvesting from intercepted links
 - [ ] **Multi-server client management** — client on servers A and B for redundancy. Architecturally deep but core gap for fleet management
 - [ ] **Connection page auto-test** — JS that tries each VLESS URL and highlights the working one, instead of manual "try Primary first"
-- [ ] **`meridian serve` local web UI** — `localhost:PORT` for client management via GUI. Bridges gap vs Outline Manager
+- [x] ~~**`meridian serve` local web UI**~~ (implemented as `meridian dev preview` — local PWA preview with demo data)
 - [ ] IPv6 support
 - [ ] Batch client add (`meridian client add alice bob charlie`)
 
@@ -264,3 +264,13 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [x] ~~RealiTLScanner checksum verification~~
 - [x] ~~`confirm()` defaults to yes without TTY~~
 - [x] ~~Public IP detection consolidation~~
+- [x] ~~Host key: write only verified key type~~
+- [x] ~~Host key: refuse in non-interactive mode~~
+- [x] ~~Cookie file race window (umask 077)~~
+- [x] ~~Realm binary SHA256 checksum verification~~
+- [x] ~~Realm config chmod 600~~
+- [x] ~~Stats files chmod 600~~
+- [x] ~~CORS removal from private pages~~
+- [x] ~~Credential dir chmod enforcement~~
+- [x] ~~Sysctl shlex.quote()~~
+- [x] ~~Stats script URL-encoding~~
