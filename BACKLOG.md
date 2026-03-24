@@ -100,10 +100,10 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [ ] **Connection page `<html lang="en">` hardcoded** — RTL for Farsi applied only after JS executes, causing LTR flash on slow connections. Set `lang`/`dir` server-side via template variable
 - [ ] **Connection page font sizes too small for mobile** — `.6rem`/`.65rem` (~10px) fails WCAG 1.4.4. Minimum `.75rem` (12px) for all visible text
 - [ ] **Language button touch targets too small** — `.lang-btn` has `padding:3px 8px` at `.68rem`, well under 44x44px minimum (WCAG 2.5.8) (`styles.css:97`)
-- [ ] **`prefers-reduced-motion` missing** — scroll-reveal animations on landing page, `scroll-behavior: smooth` — both need media query override
+- [x] ~~**`prefers-reduced-motion` missing**~~ — added media query for scroll-reveal and smooth scrolling
 - [ ] **CommandBuilder keyboard navigation** — ARIA `tablist` pattern missing arrow-key navigation between tabs
 - [ ] **Language picker has no `aria-pressed` state** — active language is visual-only, invisible to screen readers
-- [ ] **Farsi i18n gaps** — missing keys, English loanword "idempotent" used without explanation, docs links point to `/docs/en/` regardless of active language
+- [x] ~~**Farsi i18n gaps**~~ — fixed docs links to use locale-specific paths; `updateDocsLinks()` rewrites `/docs/en/` on language switch
 - [ ] **Connection page `document.execCommand('copy')` deprecated** — broken on iOS 16.4+. Replace fallback with visible input for manual copy
 
 ### Code quality
@@ -209,6 +209,15 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [x] ~~**README architecture diagram placement**~~ — moved above CLI reference for natural reading flow
 - [x] ~~**README CLI reference trimming**~~ — 8 essential commands, link to docs for full list
 - [x] ~~**GitHub topics stale**~~ — removed `ansible` (purged v3.3.0), added `anti-censorship`, `vpn`, `censorship-circumvention`, `python`, `cli`
+- [x] ~~**Landing page section order**~~ — moved Command Builder below Architecture (value proposition before power-user tools)
+- [x] ~~**install.sh deprecated command names**~~ — setup→deploy, check→preflight, ping→test, version→--version
+- [x] ~~**Architecture diagram 404**~~ — generated SVG from Mermaid source, replaced broken PNG reference
+- [x] ~~**Locale-aware docs links**~~ — `updateDocsLinks()` rewrites `/docs/en/` on language switch, fixed translation strings
+- [x] ~~**GitHub Discussions disabled**~~ — enabled with default categories
+- [ ] **OG image shows old domain** — `og.png` displays `getmeridian.com`; needs regeneration with `getmeridian.org`
+- [ ] **Connection page screenshot shows old domain** — `connection-page.png` shows stale domain in browser bar
+- [ ] **GitHub social preview** — no custom OG image set; depends on new og.png
+- [ ] **VPS setup guide** — ~300-word doc page for first-time VPS renters (Hetzner, DigitalOcean, SSH keys)
 - [ ] **Dark mode toggle** — system-preference only, no manual override
 - [ ] **CSS sync activation** — `connection-info.html.j2` markers + `sync-template-css.mjs` in CI
 - [ ] **Accordion body translations** — ~50 hardcoded EN keys
@@ -305,7 +314,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 Items shipped in releases. See [CHANGELOG.md](CHANGELOG.md) for details.
 
-**3.8.0** — PWA security/a11y/i18n (40 tests), landing page restructure, README positioning, GitHub topics
+**3.8.0** — PWA security/a11y/i18n (40 tests), landing page restructure, README positioning, install.sh fix, architecture SVG, locale links, reduced-motion, GitHub topics/discussions
 **3.7.4** — Caddy `handle_path` fix for PWA cache headers, mypy/lint fixes
 **3.7.2** — local mode, security hardening, reliability (19 items)
 **3.7.1** — HAProxy port fix

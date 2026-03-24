@@ -19,7 +19,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - **Keyboard accessibility** — `tabindex`, `role="button"`, Enter/Space handlers on clickable URL divs; `role="alert"` + `aria-live` on toast
 - **40 new tests** — upload pipeline, Caddy XHTTP block, `handle_path` structure, config.json schema, `_PWA_APPS`↔`apps.json` sync, Unicode client names, `_render_stats_script`
 
+### Changed
+- **Landing page restructured** — added trust bar (MIT, 290+ tests, 4 languages, open source), final CTA, removed redundant Reference section; reordered: Technology before Command Builder
+- **README improved** — "Why Meridian?" comparison table, architecture diagram promoted above CLI table, CLI reference trimmed to 8 essentials
+- **Architecture diagram** — hand-crafted SVG replacing missing PNG (was 404)
+- **Locale-aware docs links** — `updateDocsLinks()` rewrites `/docs/en/` to active locale on language switch
+- **GitHub Discussions** enabled
+- **GitHub topics** — removed stale `ansible`, added `anti-censorship`, `vpn`, `censorship-circumvention`, `python`, `cli`
+
 ### Fixed
+- **install.sh deprecated commands** — `setup`→`deploy`, `check`→`preflight`, `ping`→`test`, `version`→`--version`
+- **`prefers-reduced-motion`** — scroll-reveal animations and smooth scrolling now respect user preference
 - **Stats files unreadable by Caddy** — cron script wrote files as root with `0o600`; changed to `0o644` (directory is already access-controlled)
 - **Service worker `networkFirst` returned `undefined`** — now returns 503 Response on full cache+network miss
 - **Service worker stale assets** — replaced `cacheFirst` with stale-while-revalidate pattern (serve cached, refresh in background)
