@@ -81,21 +81,6 @@ const detailSteps = [
 
     <hr class="hr" />
 
-    <!-- COMMAND BUILDER -->
-    <section id="builder-section" class="reveal">
-      <div class="container">
-        <div class="section-label" data-t="builder.label">Command builder</div>
-        <h2 data-t="builder.title">Build your command</h2>
-        <p class="section-desc" data-t="builder.desc">
-          Configure flags interactively and copy the full command. Supports all Meridian CLI operations.
-        </p>
-
-        <CommandBuilder />
-      </div>
-    </section>
-
-    <hr class="hr" />
-
     <!-- WHY IT WORKS -->
     <section id="technology" class="reveal">
       <div class="container">
@@ -211,6 +196,21 @@ const detailSteps = [
             </p>
           </Accordion>
         </div>
+      </div>
+    </section>
+
+    <hr class="hr" />
+
+    <!-- COMMAND BUILDER -->
+    <section id="builder-section" class="reveal">
+      <div class="container">
+        <div class="section-label" data-t="builder.label">Command builder</div>
+        <h2 data-t="builder.title">Build your command</h2>
+        <p class="section-desc" data-t="builder.desc">
+          Configure flags interactively and copy the full command. Supports all Meridian CLI operations.
+        </p>
+
+        <CommandBuilder />
       </div>
     </section>
 
@@ -372,5 +372,14 @@ const detailSteps = [
   }
   .cta-actions {
     justify-content: center;
+  }
+
+  /* Accessibility: respect motion preferences */
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
   }
 </style>
