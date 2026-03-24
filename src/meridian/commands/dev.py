@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import http.server
+from typing import Any
 import shutil
 import tempfile
 import threading
@@ -121,11 +122,11 @@ def _write_preview_files(
     # Write per-client files
     client_dir = output_dir / client_uuid
     client_dir.mkdir(exist_ok=True)
-    for name, content in client_files.items():
+    for name, text in client_files.items():
         if watch and name == "index.html":
             # Inject live-reload script into HTML
-            content = content.replace("</body>", _LIVE_RELOAD_SCRIPT + "</body>")
-        (client_dir / name).write_text(content)
+            text = text.replace("</body>", _LIVE_RELOAD_SCRIPT + "</body>")
+        (client_dir / name).write_text(text)
 
     _write_mock_stats(output_dir, client_uuid)
 
@@ -195,7 +196,7 @@ def run_preview(
 
         # Custom handler with reload endpoint and watch-mode regeneration
         class PreviewHandler(http.server.SimpleHTTPRequestHandler):
-            def __init__(self, *args: object, **kwargs: object) -> None:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
                 kwargs["directory"] = str(output_dir)
                 super().__init__(*args, **kwargs)
 
