@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from meridian.config import REALM_VERSION
+from meridian.config import REALM_SHA256, REALM_VERSION
 from meridian.provision.relay import (
     ConfigureRealm,
     ConfigureRelayBBR,
@@ -118,6 +118,7 @@ class TestInstallRealm:
         conn.when("realm --version", stdout=f"realm {REALM_VERSION}")
         conn.when("uname -m", stdout="x86_64")
         conn.when("curl", stdout="")
+        conn.when("sha256sum", stdout=REALM_SHA256["x86_64-unknown-linux-gnu"])
         conn.when("tar xzf", stdout="")
         result = InstallRealm().run(conn, _make_ctx())
         assert result.status == "changed"

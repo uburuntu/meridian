@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 from meridian.config import (
     REALM_GITHUB_URL,
+    REALM_SHA256,
     REALM_VERSION,
     RELAY_CONFIG_PATH,
     RELAY_SERVICE_NAME,
@@ -230,6 +231,19 @@ class InstallRealm:
                 status="failed",
                 detail=f"download failed: {download.stderr.strip()[:200]}",
             )
+
+        # Verify SHA256 checksum (supply chain protection)
+        expected_hash = REALM_SHA256.get(target, "")
+        if expected_hash:
+            check = conn.run("sha256sum /tmp/realm.tar.gz | cut -d' ' -f1", timeout=10)
+            actual_hash = check.stdout.strip()
+            if actual_hash != expected_hash:
+                conn.run("rm -f /tmp/realm.tar.gz", timeout=5)
+                return StepResult(
+                    name=self.name,
+                    status="failed",
+                    detail=f"checksum mismatch: expected {expected_hash[:16]}..., got {actual_hash[:16]}...",
+                )
 
         # Extract and install
         extract = conn.run(

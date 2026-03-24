@@ -318,10 +318,76 @@ class TestRelayProvisioner:
         result = step.run(conn, ctx)
         assert result.status == "failed"
 
+    def test_install_realm_verifies_checksum(self) -> None:
+        """InstallRealm should reject a binary with mismatched SHA256."""
+        from meridian.provision.relay import InstallRealm, RelayContext
 
-# ---------------------------------------------------------------------------
-# CLI tests
-# ---------------------------------------------------------------------------
+        step = InstallRealm()
+        ctx = RelayContext(relay_ip="1.2.3.4", exit_ip="5.6.7.8")
+
+        conn = MagicMock()
+
+        def mock_run(cmd: str, timeout: int = 30, **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.returncode = 0
+            result.stderr = ""
+            if "uname -m" in cmd:
+                result.stdout = "x86_64\n"
+            elif "realm --version" in cmd:
+                # Not installed yet
+                result.returncode = 1
+                result.stdout = ""
+            elif "sha256sum" in cmd:
+                # Return a bad hash
+                result.stdout = "deadbeef00000000000000000000000000000000000000000000000000000000\n"
+            elif "rm -f" in cmd:
+                result.stdout = ""
+            else:
+                result.stdout = ""
+            return result
+
+        conn.run = MagicMock(side_effect=mock_run)
+        result = step.run(conn, ctx)
+        assert result.status == "failed"
+        assert "checksum mismatch" in result.detail
+
+    def test_install_realm_passes_correct_checksum(self) -> None:
+        """InstallRealm should succeed when SHA256 matches."""
+        from meridian.config import REALM_SHA256
+        from meridian.provision.relay import InstallRealm, RelayContext
+
+        step = InstallRealm()
+        ctx = RelayContext(relay_ip="1.2.3.4", exit_ip="5.6.7.8")
+        expected_hash = REALM_SHA256["x86_64-unknown-linux-gnu"]
+        version_calls = []
+
+        conn = MagicMock()
+
+        def mock_run(cmd: str, timeout: int = 30, **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.returncode = 0
+            result.stderr = ""
+            if "uname -m" in cmd:
+                result.stdout = "x86_64\n"
+            elif "realm --version" in cmd:
+                version_calls.append(cmd)
+                if len(version_calls) == 1:
+                    # First check: not installed yet
+                    result.returncode = 1
+                    result.stdout = ""
+                else:
+                    # Post-install verification
+                    result.stdout = f"realm {ctx.realm_version}\n"
+            elif "sha256sum" in cmd:
+                # Mock returns just the hash (as if cut -d' ' -f1 ran)
+                result.stdout = f"{expected_hash}\n"
+            else:
+                result.stdout = ""
+            return result
+
+        conn.run = MagicMock(side_effect=mock_run)
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
 
 
 class TestRelayCLI:
