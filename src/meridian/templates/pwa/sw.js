@@ -1,5 +1,5 @@
-/* Meridian PWA — Service Worker */
-var CACHE_VERSION = 'meridian-pwa-v1';
+/* PWA — Service Worker */
+var CACHE_VERSION = 'pwa-v1';
 var SHELL_ASSETS = [
   '../pwa/styles.css',
   '../pwa/app.js',
@@ -37,8 +37,8 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
-  /* Cache-first for shell assets and HTML */
-  event.respondWith(cacheFirst(event.request));
+  /* Stale-while-revalidate for shell assets and HTML */
+  event.respondWith(staleWhileRevalidate(event));
 });
 
 function networkFirst(request) {
@@ -51,14 +51,22 @@ function networkFirst(request) {
     }
     return response;
   }).catch(function() {
-    return caches.match(request);
+    return caches.match(request).then(function(cached) {
+      if (cached) return cached;
+      return new Response('Offline', {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    });
   });
 }
 
-function cacheFirst(request) {
+function staleWhileRevalidate(event) {
+  var request = event.request;
   return caches.match(request).then(function(cached) {
-    if (cached) return cached;
-    return fetch(request).then(function(response) {
+    /* Background fetch to refresh the cache */
+    var fetchPromise = fetch(request).then(function(response) {
       if (response.ok) {
         var clone = response.clone();
         caches.open(CACHE_VERSION).then(function(cache) {
@@ -66,8 +74,21 @@ function cacheFirst(request) {
         });
       }
       return response;
-    }).catch(function() {
-      return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+    });
+
+    if (cached) {
+      /* Serve stale from cache; keep SW alive until revalidation completes */
+      event.waitUntil(fetchPromise.catch(function() {}));
+      return cached;
+    }
+
+    /* No cache entry yet — wait for network */
+    return fetchPromise.catch(function() {
+      return new Response('Offline', {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: { 'Content-Type': 'text/plain' },
+      });
     });
   });
 }
