@@ -201,7 +201,14 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 - [ ] **CLI docs missing flags** — `--domain`, `--sni`, `--user` for `preflight`/`test`/`doctor`; `--server` for `deploy`; `--name`/`--user` for `server add` — update `cli-reference.md` in all 4 locales
 - [ ] **Sitemap i18n hreflang** — add `i18n` option to `sitemap()` in `astro.config.mjs`
-- [ ] **Twitter card `summary_large_image`** — change `twitter:card` in `Base.astro`
+- [x] ~~**Twitter card `summary_large_image`**~~ — changed `twitter:card` in `Base.astro`
+- [x] ~~**Landing page Reference section redundant**~~ — removed 7 accordion items duplicated in docs pages, replaced with CTA
+- [x] ~~**Landing page trust/credibility bar**~~ — static indicators (MIT, tests, languages, open source) between Hero and How It Works
+- [x] ~~**Landing page final CTA**~~ — closing call-to-action section with install + docs links before Footer
+- [x] ~~**README positioning section**~~ — "Why Meridian?" comparison table vs Marzban/Hiddify/raw 3x-ui
+- [x] ~~**README architecture diagram placement**~~ — moved above CLI reference for natural reading flow
+- [x] ~~**README CLI reference trimming**~~ — 8 essential commands, link to docs for full list
+- [x] ~~**GitHub topics stale**~~ — removed `ansible` (purged v3.3.0), added `anti-censorship`, `vpn`, `censorship-circumvention`, `python`, `cli`
 - [ ] **Dark mode toggle** — system-preference only, no manual override
 - [ ] **CSS sync activation** — `connection-info.html.j2` markers + `sync-template-css.mjs` in CI
 - [ ] **Accordion body translations** — ~50 hardcoded EN keys
@@ -298,6 +305,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 Items shipped in releases. See [CHANGELOG.md](CHANGELOG.md) for details.
 
+**3.8.0** — PWA security/a11y/i18n (40 tests), landing page restructure, README positioning, GitHub topics
 **3.7.4** — Caddy `handle_path` fix for PWA cache headers, mypy/lint fixes
 **3.7.2** — local mode, security hardening, reliability (19 items)
 **3.7.1** — HAProxy port fix
