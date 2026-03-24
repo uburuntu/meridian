@@ -507,6 +507,15 @@ class InstallHAProxy:
                 detail=f"HAProxy config validation failed: {result.stderr.strip()}",
             )
 
+        # Ensure HAProxy restarts on failure (distro defaults may not include this)
+        conn.run(
+            "mkdir -p /etc/systemd/system/haproxy.service.d && "
+            "printf '[Service]\\nRestart=on-failure\\nRestartSec=5\\n' "
+            "> /etc/systemd/system/haproxy.service.d/restart.conf && "
+            "systemctl daemon-reload",
+            timeout=10,
+        )
+
         # Start/enable/reload HAProxy
         conn.run("systemctl enable haproxy", timeout=10)
         result = conn.run("systemctl reload-or-restart haproxy", timeout=15)
@@ -720,6 +729,15 @@ class InstallCaddy:
                 f"sed -i '1i\\{{\\n\\tdefault_sni {q_sni}\\n}}' /etc/caddy/Caddyfile",
                 timeout=10,
             )
+
+        # -- Ensure Caddy restarts on failure --
+        conn.run(
+            "mkdir -p /etc/systemd/system/caddy.service.d && "
+            "printf '[Service]\\nRestart=on-failure\\nRestartSec=5\\n' "
+            "> /etc/systemd/system/caddy.service.d/restart.conf && "
+            "systemctl daemon-reload",
+            timeout=10,
+        )
 
         # -- Start/enable/reload Caddy --
         conn.run("systemctl enable caddy", timeout=10)

@@ -34,6 +34,8 @@ _SYSTEMD_UNIT = """\
 [Unit]
 Description=Meridian Relay (Realm TCP forwarder)
 After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
