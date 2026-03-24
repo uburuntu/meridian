@@ -29,8 +29,8 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Reliability
 
-- [ ] **No service health monitoring after deploy** — 3x-ui Docker has no `HEALTHCHECK`, Xray can crash inside the container without restart. No watchdog cron. Add 5-min health check cron similar to stats cron (`provision/docker.py`, `provision/services.py`)
-- [ ] **IP cert renewal depends on Caddy staying alive** — 6-day shortlived certs, no monitoring if Caddy dies. HAProxy/Caddy systemd units have no explicit `Restart=on-failure` added by provisioner (`provision/services.py:180-259`)
+- [x] ~~**No service health monitoring after deploy**~~ — added 5-min health watchdog cron (checks Xray/Caddy/HAProxy, restarts on failure, logs to syslog)
+- [x] ~~**IP cert renewal depends on Caddy staying alive**~~ — added systemd `Restart=on-failure` drop-in overrides for both HAProxy and Caddy
 
 ### Code quality
 
@@ -72,9 +72,9 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 - [ ] **Provisioner aborts on first failure with no recovery guidance** — user left in inconsistent state. Add "resume from step N" or explicit safe-to-re-run messaging (`provision/steps.py:118-121`)
 - [ ] **`InstallDocker` skips when containers running, regardless of image version** — re-deploy doesn't pull new 3x-ui image if tag unchanged but digest differs. No `docker compose pull` on re-deploy (`provision/docker.py:62-71`)
-- [ ] **Stats cron runs as root with no error output or alerting** — silent failures leave stats stale. Add `2>&1 | logger` or `MAILTO` (`provision/services.py:309-391`)
-- [ ] **Relay systemd unit missing `StartLimitBurst`** — infinite restart loop on persistent failure causes log flooding (`provision/relay.py:32-46`)
-- [ ] **Disk space pre-check missing from provisioner** — `preflight` checks disk but `deploy` doesn't. Add 2GB threshold guard at pipeline start
+- [x] ~~**Stats cron runs as root with no error output or alerting**~~ — added `| logger -t meridian-stats` for syslog capture
+- [x] ~~**Relay systemd unit missing `StartLimitBurst`**~~ — added `StartLimitIntervalSec=300` and `StartLimitBurst=5`
+- [x] ~~**Disk space pre-check missing from provisioner**~~ — added `CheckDiskSpace` step (2GB threshold) as first pipeline step
 
 ### UX / Accessibility
 
@@ -95,7 +95,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [ ] **URL construction duplicated** — `DeployConnectionPage` hand-builds VLESS URLs duplicating `protocols.py` logic. Use `build_protocol_urls()` from `urls.py` (`provision/services.py:759-810`)
 - [ ] **Jinja2 listed as dev-only dep but required at runtime** — `render.py` fallback path never tested in CI. Move to hard runtime dependency or test fallback (`pyproject.toml:39`)
 - [ ] **`SimpleNamespace(stdout=...)` QR hack** — cargo-culted artifact. Template should use plain string directly (`render.py:291-297`)
-- [ ] **`StepResult.status` type safety** — use `Literal["ok", "changed", "skipped", "failed"]` or `StrEnum` (`provision/steps.py:22`)
+- [x] ~~**`StepResult.status` type safety**~~ — `StepStatus = Literal["ok", "changed", "skipped", "failed"]` type alias added
 
 ---
 
@@ -274,3 +274,10 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [x] ~~Credential dir chmod enforcement~~
 - [x] ~~Sysctl shlex.quote()~~
 - [x] ~~Stats script URL-encoding~~
+- [x] ~~StepResult.status type safety (Literal)~~
+- [x] ~~HAProxy/Caddy systemd Restart=on-failure~~
+- [x] ~~Relay systemd StartLimitBurst~~
+- [x] ~~Service health watchdog cron~~
+- [x] ~~Stats cron syslog logging~~
+- [x] ~~Disk space pre-check step~~
+- [x] ~~Teardown cleanup (health-check.sh, systemd overrides)~~
