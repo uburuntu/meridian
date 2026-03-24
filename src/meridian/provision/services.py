@@ -932,11 +932,36 @@ class DeployConnectionPage:
         # Run stats update once
         conn.run("python3 /etc/meridian/update-stats.py", timeout=15)
 
-        # Add cron job (idempotent via crontab manipulation)
-        cron_job = "*/5 * * * * python3 /etc/meridian/update-stats.py"
+        # Add cron job (idempotent via crontab manipulation), with syslog logging
+        cron_job = "*/5 * * * * python3 /etc/meridian/update-stats.py 2>&1 | logger -t meridian-stats"
         q_cron = shlex.quote(cron_job)
         conn.run(
             f"(crontab -l 2>/dev/null | grep -v 'update-stats.py'; echo {q_cron}) | crontab -",
+            timeout=10,
+        )
+
+        # Deploy health watchdog cron (checks Xray, Caddy, HAProxy every 5 min)
+        watchdog_script = (
+            '#!/bin/sh\n'
+            '# Meridian service health watchdog — restarts crashed services\n'
+            'docker exec 3x-ui pgrep -f xray >/dev/null 2>&1 || '
+            '{ logger -t meridian-health "Xray not running, restarting 3x-ui"; '
+            'docker restart 3x-ui; }\n'
+            'systemctl is-active --quiet caddy || '
+            '{ logger -t meridian-health "Caddy not running, restarting"; '
+            'systemctl restart caddy; }\n'
+            'systemctl is-active --quiet haproxy || '
+            '{ logger -t meridian-health "HAProxy not running, restarting"; '
+            'systemctl restart haproxy; }\n'
+        )
+        q_watchdog = shlex.quote(watchdog_script)
+        conn.run(f"printf '%s' {q_watchdog} > /etc/meridian/health-check.sh", timeout=10)
+        conn.run("chmod 700 /etc/meridian/health-check.sh", timeout=5)
+
+        watchdog_cron = "*/5 * * * * /etc/meridian/health-check.sh 2>&1 | logger -t meridian-health"
+        q_wc = shlex.quote(watchdog_cron)
+        conn.run(
+            f"(crontab -l 2>/dev/null | grep -v 'health-check.sh'; echo {q_wc}) | crontab -",
             timeout=10,
         )
 
