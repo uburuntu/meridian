@@ -22,6 +22,26 @@ const detailSteps = [
   <main id="main">
     <Hero />
 
+    <!-- TRUST BAR -->
+    <section class="trust-bar">
+      <div class="container">
+        <div class="trust-items">
+          <div class="trust-item">
+            <span class="trust-value" data-t="trust.mit">MIT Licensed</span>
+          </div>
+          <div class="trust-item">
+            <span class="trust-value" data-t="trust.tests">290+ Tests</span>
+          </div>
+          <div class="trust-item">
+            <span class="trust-value" data-t="trust.languages">4 Languages</span>
+          </div>
+          <div class="trust-item">
+            <span class="trust-value" data-t="trust.oss">100% Open Source</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- HOW IT WORKS (simple) -->
     <section id="setup" class="reveal">
       <div class="container">
@@ -194,88 +214,20 @@ const detailSteps = [
       </div>
     </section>
 
-    <hr class="hr" />
-
-    <!-- REFERENCE -->
-    <section id="reference" class="reveal">
-      <div class="container">
-        <div class="section-label" data-t="ref.label">Reference</div>
-        <h2 data-t="ref.title">Configuration & operations</h2>
-
-        <Accordion title="Customization" titleKey="ref.customization">
-          <p>All settings are passed as CLI flags to <code>meridian deploy</code>:</p>
-          <div class="ref-table-wrap">
-            <table class="ref-table">
-              <thead>
-                <tr><th>Flag</th><th>Default</th><th>Description</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>--sni HOST</td><td>www.microsoft.com</td><td>Site that Reality impersonates</td></tr>
-                <tr><td>--domain DOMAIN</td><td>(none)</td><td>Enable domain mode with CDN fallback</td></tr>
-                <tr><td>--xhttp / --no-xhttp</td><td>enabled</td><td>XHTTP transport (through port 443)</td></tr>
-                <tr><td>--email EMAIL</td><td>(none)</td><td>Email for TLS certificates</td></tr>
-                <tr><td>--name NAME</td><td>default</td><td>Name for the first client</td></tr>
-                <tr><td>--user USER</td><td>root</td><td>SSH user (non-root gets sudo)</td></tr>
-                <tr><td>--yes</td><td></td><td>Skip confirmation prompts</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p>
-            For optimal stealth, use <code>meridian scan</code> or
-            <a href="https://github.com/XTLS/RealiTLScanner">RealiTLScanner</a>
-            to find an SNI target near your server.
-          </p>
-        </Accordion>
-
-        <Accordion title="Cloudflare CDN setup" titleKey="ref.cloudflare">
-          <p><strong>Follow this order</strong> to avoid TLS certificate issues:</p>
-          <p>
-            1. Add domain in Cloudflare, create A record to server IP<br />
-            2. Keep cloud icon <strong>grey</strong> ("DNS only")<br />
-            3. Run <code>meridian deploy</code> — Caddy gets the cert<br />
-            4. Switch to <strong>orange cloud</strong> (Proxied)<br />
-            5. SSL/TLS → <strong>Full (Strict)</strong>, enable WebSockets
-          </p>
-        </Accordion>
-
-        <Accordion title="Client management" titleKey="ref.clients">
-          <p>Share access with friends — each gets their own key:</p>
-          <CodeBlock code="meridian client add alice" />
-          <p>List all clients:</p>
-          <CodeBlock code="meridian client list" />
-          <p>Revoke access:</p>
-          <CodeBlock code="meridian client remove alice" />
-        </Accordion>
-
-        <Accordion title="Troubleshooting" titleKey="ref.troubleshoot">
-          <p><strong>Not connecting?</strong> Test reachability from your device:</p>
-          <CodeBlock code="meridian test" />
-          <p>
-            Or use the <a href="/ping/" data-astro-prefetch>web-based ping tool</a> — no install needed.
-          </p>
-          <p><strong>Connection fails immediately:</strong> Check device clock (±30 seconds).</p>
-          <p><strong>Was working, now stopped:</strong> IP may be blocked. Use CDN fallback or deploy a new server.</p>
-          <p>AI-powered diagnostics:</p>
-          <CodeBlock code="meridian doctor --ai" />
-        </Accordion>
-
-        <Accordion title="Update & maintenance" titleKey="ref.update">
-          <CodeBlock code={`ssh root@YOUR_SERVER\ncd /opt/3x-ui && docker compose pull && docker compose up -d`} />
-          <p>Or re-run <code>meridian deploy</code> — safe to repeat anytime.</p>
-        </Accordion>
-
-        <Accordion title="Uninstall" titleKey="ref.uninstall">
-          <CodeBlock code="meridian teardown" />
-          <p>Removes the proxy container, configs, and firewall rules. Docker and system packages are kept.</p>
-        </Accordion>
-
-        <Accordion title="Security notes" titleKey="ref.security">
-          <p>
-            Credentials at <code>/etc/meridian/</code> (server) and <code>~/.meridian/credentials/</code> (local).
-            Panel reverse-proxied on a secret HTTPS path. SSH password auth disabled. UFW allows only 22, 80, 443.
-            Docker image pinned. All secrets redacted from output.
-          </p>
-        </Accordion>
+    <!-- CTA -->
+    <section id="cta" class="reveal cta-section">
+      <div class="container cta-content">
+        <h2 data-t="cta.title">Ready to get started?</h2>
+        <p class="section-desc cta-desc" data-t="cta.desc">
+          Install Meridian, deploy to your server, and share access with the
+          people who need it. The whole process takes about five minutes.
+        </p>
+        <div class="hero__actions cta-actions">
+          <a href="#setup" class="hero__btn hero__btn--primary" data-t="cta.install">Install Meridian</a>
+          <a href="/docs/en/getting-started/" class="hero__btn hero__btn--secondary" data-astro-prefetch data-t="hero.docs">
+            Read the docs
+          </a>
+        </div>
       </div>
     </section>
   </main>
@@ -385,42 +337,40 @@ const detailSteps = [
     height: auto;
   }
 
-  /* Reference table */
-  .ref-table-wrap {
-    overflow-x: auto;
-    margin: 12px 0;
+  /* Trust bar */
+  .trust-bar {
+    padding: 0 0 24px;
   }
-  .ref-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
+  .trust-items {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
   }
-  .ref-table th {
-    text-align: left;
+  .trust-item {
+    text-align: center;
+  }
+  .trust-value {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
     color: var(--t3);
-    font-weight: 600;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding: 8px 14px;
-    border-bottom: 2px solid var(--b1);
-  }
-  .ref-table td {
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--b1);
-    color: var(--t2);
-    vertical-align: top;
-  }
-  .ref-table td:first-child {
-    color: var(--t1);
-    font-family: var(--mono);
-    font-size: 0.8rem;
-    white-space: nowrap;
-  }
-  .ref-table tr:last-child td {
-    border-bottom: none;
   }
 
-  [dir="rtl"] .ref-table th { text-align: right; }
+  /* CTA */
+  .cta-section {
+    text-align: center;
+    padding-top: 48px;
+  }
+  .cta-content {
+    max-width: 560px;
+    margin-inline: auto;
+  }
+  .cta-desc {
+    margin-inline: auto;
+  }
+  .cta-actions {
+    justify-content: center;
+  }
 </style>

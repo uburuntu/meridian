@@ -69,15 +69,18 @@ export const translations: Record<string, Record<string, string>> = {
     'arch.domain': 'Доменный режим (CDN-фолбэк)',
 
     // Reference
-    'ref.label': 'Справочник',
-    'ref.title': 'Настройка и управление',
-    'ref.customization': 'Настройка',
-    'ref.cloudflare': 'Настройка CDN Cloudflare',
-    'ref.clients': 'Управление клиентами',
-    'ref.troubleshoot': 'Решение проблем',
-    'ref.update': 'Обновление и обслуживание',
-    'ref.uninstall': 'Удаление',
-    'ref.security': 'Безопасность',
+    // (removed — content moved to docs pages)
+
+    // Trust bar
+    'trust.mit': 'MIT Лицензия',
+    'trust.tests': '290+ Тестов',
+    'trust.languages': '4 Языка',
+    'trust.oss': '100% Открытый код',
+
+    // CTA
+    'cta.title': 'Готовы начать?',
+    'cta.desc': 'Установите Meridian, разверните на вашем сервере и делитесь доступом с теми, кому он нужен. Весь процесс занимает около пяти минут.',
+    'cta.install': 'Установить Meridian',
 
     // Command builder
     'builder.label': 'Конструктор команд',
@@ -175,15 +178,19 @@ export const translations: Record<string, Record<string, string>> = {
     'arch.standalone': 'حالت مستقل (بدون دامنه)',
     'arch.domain': 'حالت دامنه (CDN)',
 
-    'ref.label': 'مرجع',
-    'ref.title': 'تنظیمات و مدیریت',
-    'ref.customization': 'سفارشی‌سازی',
-    'ref.cloudflare': 'تنظیم CDN Cloudflare',
-    'ref.clients': 'مدیریت کلاینت‌ها',
-    'ref.troubleshoot': 'عیب‌یابی',
-    'ref.update': 'به‌روزرسانی و نگهداری',
-    'ref.uninstall': 'حذف',
-    'ref.security': 'نکات امنیتی',
+    // Reference
+    // (removed — content moved to docs pages)
+
+    // Trust bar
+    'trust.mit': 'MIT مجاز',
+    'trust.tests': '۲۹۰+ تست',
+    'trust.languages': '۴ زبان',
+    'trust.oss': '۱۰۰٪ متن‌باز',
+
+    // CTA
+    'cta.title': 'آماده برای شروع؟',
+    'cta.desc': 'Meridian را نصب کنید، روی سرور خود راه‌اندازی کنید و دسترسی را با کسانی که نیاز دارند به اشتراک بگذارید. کل فرآیند حدود پنج دقیقه طول می‌کشد.',
+    'cta.install': 'نصب Meridian',
 
     // Command builder
     'builder.label': 'سازنده دستور',
@@ -280,15 +287,19 @@ export const translations: Record<string, Record<string, string>> = {
     'arch.standalone': '独立模式（无域名）',
     'arch.domain': '域名模式（CDN 回退）',
 
-    'ref.label': '参考',
-    'ref.title': '配置与运维',
-    'ref.customization': '自定义',
-    'ref.cloudflare': 'Cloudflare CDN 设置',
-    'ref.clients': '客户端管理',
-    'ref.troubleshoot': '故障排除',
-    'ref.update': '更新与维护',
-    'ref.uninstall': '卸载',
-    'ref.security': '安全说明',
+    // Reference
+    // (removed — content moved to docs pages)
+
+    // Trust bar
+    'trust.mit': 'MIT 许可证',
+    'trust.tests': '290+ 项测试',
+    'trust.languages': '4 种语言',
+    'trust.oss': '100% 开源',
+
+    // CTA
+    'cta.title': '准备好开始了吗？',
+    'cta.desc': '安装 Meridian，部署到你的服务器，并与需要的人分享访问权限。整个过程大约需要五分钟。',
+    'cta.install': '安装 Meridian',
 
     // Command builder
     'builder.label': '命令生成器',
