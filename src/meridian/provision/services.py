@@ -10,7 +10,7 @@ import shlex
 import textwrap
 
 from meridian.config import DEFAULT_FINGERPRINT, DEFAULT_PANEL_PORT
-from meridian.provision.steps import ProvisionContext, StepResult
+from meridian.provision.steps import ProvisionContext, StepResult, StepStatus
 from meridian.ssh import ServerConnection
 
 # ---------------------------------------------------------------------------
@@ -517,10 +517,10 @@ class InstallHAProxy:
                 detail=f"Failed to start HAProxy: {result.stderr.strip()}",
             )
 
-        status = "changed" if not already_installed else "ok"
+        result_status: StepStatus = "changed" if not already_installed else "ok"
         return StepResult(
             name=self.name,
-            status=status,
+            status=result_status,
             detail=(
                 f"HAProxy configured: SNI={self.reality_sni} -> "
                 f"127.0.0.1:{self.haproxy_reality_backend_port}, "

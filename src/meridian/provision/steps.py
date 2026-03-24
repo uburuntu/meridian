@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 from typing import Protocol as TypingProtocol
 
 from rich.console import Console
@@ -13,13 +13,15 @@ from rich.status import Status
 from meridian.config import DEFAULT_PANEL_PORT, DEFAULT_SNI
 from meridian.ssh import ServerConnection
 
+StepStatus = Literal["ok", "changed", "skipped", "failed"]
+
 
 @dataclass
 class StepResult:
     """Result of a provisioning step."""
 
     name: str  # Human-readable name: "Install Docker"
-    status: str  # "ok" | "changed" | "skipped" | "failed"
+    status: StepStatus
     detail: str = ""  # Human-readable detail for tracing
     duration_ms: int = 0
 
