@@ -103,9 +103,7 @@ class _MockConnection:
         self._default = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
     def when(self, pattern: str, *, stdout: str = "", stderr: str = "", rc: int = 0) -> _MockConnection:
-        self._rules.append(
-            (pattern, subprocess.CompletedProcess(args=[], returncode=rc, stdout=stdout, stderr=stderr))
-        )
+        self._rules.append((pattern, subprocess.CompletedProcess(args=[], returncode=rc, stdout=stdout, stderr=stderr)))
         return self
 
     def run(self, command: str, timeout: int = 30, **kwargs: object) -> subprocess.CompletedProcess[str]:
