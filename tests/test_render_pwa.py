@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import base64
 import json
+from pathlib import Path
 
 import pytest
 
 from meridian.models import ProtocolURL, RelayURLSet
 from meridian.render import (
+    _PWA_APPS,
     render_config_json,
     render_manifest,
     render_pwa_shell,
@@ -242,3 +244,125 @@ class TestRenderManifest:
         icon = result["icons"][0]
         assert icon["type"] == "image/svg+xml"
         assert icon["sizes"] == "any"
+
+
+# ---------------------------------------------------------------------------
+# TestConfigJsonSchema — protocol entry field validation (Gap #4)
+# ---------------------------------------------------------------------------
+
+
+class TestConfigJsonSchema:
+    """Verify config.json protocol and relay entries have all required fields."""
+
+    def test_protocol_entry_required_fields(self, protocol_urls: list[ProtocolURL]) -> None:
+        result = json.loads(render_config_json(protocol_urls, "198.51.100.1"))
+        required = {"key", "label", "url", "qr_b64", "recommended"}
+        for entry in result["protocols"]:
+            assert required.issubset(entry.keys()), f"Missing fields: {required - entry.keys()}"
+
+    def test_version_is_integer_one(self, protocol_urls: list[ProtocolURL]) -> None:
+        result = json.loads(render_config_json(protocol_urls, "198.51.100.1"))
+        assert result["version"] == 1
+        assert isinstance(result["version"], int)
+
+    def test_apps_entry_required_fields(self, protocol_urls: list[ProtocolURL]) -> None:
+        result = json.loads(render_config_json(protocol_urls, "198.51.100.1"))
+        required = {"name", "platform", "url"}
+        for app in result["apps"]:
+            assert required.issubset(app.keys()), f"App missing fields: {required - app.keys()}"
+
+    def test_relay_entry_structure(
+        self,
+        protocol_urls: list[ProtocolURL],
+        relay_entries: list[RelayURLSet],
+    ) -> None:
+        result = json.loads(render_config_json(protocol_urls, "198.51.100.1", relay_entries=relay_entries))
+        for relay in result["relays"]:
+            assert "name" in relay
+            assert "ip" in relay
+            assert "urls" in relay
+            assert isinstance(relay["urls"], list)
+            assert len(relay["urls"]) >= 1
+
+    def test_relay_url_entry_fields(
+        self,
+        protocol_urls: list[ProtocolURL],
+        relay_entries: list[RelayURLSet],
+    ) -> None:
+        result = json.loads(render_config_json(protocol_urls, "198.51.100.1", relay_entries=relay_entries))
+        required = {"key", "label", "url", "qr_b64"}
+        for relay in result["relays"]:
+            for url_entry in relay["urls"]:
+                assert required.issubset(url_entry.keys()), f"Relay URL missing fields: {required - url_entry.keys()}"
+
+
+# ---------------------------------------------------------------------------
+# TestPWAAppsSync — _PWA_APPS vs apps.json (Gap #5)
+# ---------------------------------------------------------------------------
+
+
+class TestPWAAppsSync:
+    """Verify _PWA_APPS in render.py matches website/src/data/apps.json."""
+
+    def test_apps_match_apps_json(self) -> None:
+        # Find apps.json relative to the repo root
+        repo_root = Path(__file__).resolve().parent.parent
+        apps_json_path = repo_root / "website" / "src" / "data" / "apps.json"
+        assert apps_json_path.exists(), f"apps.json not found at {apps_json_path}"
+
+        with open(apps_json_path) as f:
+            apps_json = json.load(f)
+
+        # Both should have the same entries (name + url pairs)
+        json_pairs = {(a["name"], a["url"]) for a in apps_json}
+        pwa_pairs = {(a["name"], a["url"]) for a in _PWA_APPS}
+        assert json_pairs == pwa_pairs, (
+            f"_PWA_APPS out of sync with apps.json.\n"
+            f"In apps.json only: {json_pairs - pwa_pairs}\n"
+            f"In _PWA_APPS only: {pwa_pairs - json_pairs}"
+        )
+
+    def test_apps_count_matches(self) -> None:
+        repo_root = Path(__file__).resolve().parent.parent
+        apps_json_path = repo_root / "website" / "src" / "data" / "apps.json"
+        with open(apps_json_path) as f:
+            apps_json = json.load(f)
+        assert len(_PWA_APPS) == len(apps_json)
+
+
+# ---------------------------------------------------------------------------
+# TestUnicodeClientNames — non-ASCII names (Gap #6)
+# ---------------------------------------------------------------------------
+
+
+class TestUnicodeClientNames:
+    """Verify rendering works correctly with non-ASCII client names."""
+
+    def test_config_json_cyrillic(self, protocol_urls: list[ProtocolURL]) -> None:
+        result = render_config_json(protocol_urls, "198.51.100.1", client_name="\u0410\u043b\u0438\u0441\u0430")
+        parsed = json.loads(result)
+        assert parsed["client_name"] == "\u0410\u043b\u0438\u0441\u0430"
+
+    def test_pwa_shell_farsi(self) -> None:
+        html = render_pwa_shell(client_name="\u0633\u0627\u0631\u0627")
+        # Should produce valid HTML without encoding errors
+        assert "<!DOCTYPE html>" in html or "<html" in html
+
+    def test_manifest_chinese(self) -> None:
+        result = render_manifest(client_name="\u5c0f\u660e")
+        parsed = json.loads(result)
+        # Chinese name should appear in the manifest name
+        assert "\u5c0f\u660e" in result
+
+    def test_config_json_emoji_name(self, protocol_urls: list[ProtocolURL]) -> None:
+        """Non-Latin characters should not corrupt JSON."""
+        name = "\u0645\u0631\u06cc\u0645"  # Farsi: Maryam
+        result = render_config_json(protocol_urls, "198.51.100.1", client_name=name)
+        parsed = json.loads(result)
+        assert parsed["client_name"] == name
+
+    def test_subscription_unaffected_by_unicode_name(self, protocol_urls: list[ProtocolURL]) -> None:
+        """Subscription rendering doesn't use client_name, but verify no crash."""
+        result = render_subscription(protocol_urls)
+        decoded = base64.b64decode(result).decode()
+        assert "vless://" in decoded
