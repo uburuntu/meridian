@@ -26,10 +26,27 @@ meridian deploy 1.2.3.4 --sni www.microsoft.com --name alice --yes
 | `--email EMAIL` | (none) | Email for TLS certificates (optional) |
 | `--xhttp / --no-xhttp` | enabled | XHTTP transport (through port 443 via Caddy) |
 | `--name NAME` | default | Name for the first client |
+| `--server-name NAME` | (none) | Display name on connection pages (e.g. "Alice's VPN") |
+| `--icon EMOJI_OR_URL` | (none) | Server icon — emoji or image URL |
+| `--color PALETTE` | ocean | Color palette (ocean/sunset/forest/lavender/rose/slate) |
 | `--user USER` | root | SSH user (non-root gets sudo automatically) |
 | `--harden / --no-harden` | enabled | Server hardening: SSH key-only + firewall (skip with `--no-harden` if other services run on the server) |
 | `--server NAME` | | Target a specific named server (for re-deploys) |
 | `--yes` | | Skip confirmation prompts |
+
+## Branding
+
+Personalize connection pages so recipients know who set up their VPN:
+
+```
+meridian deploy 1.2.3.4 --server-name "Alice's VPN" --icon 🚀 --color sunset
+```
+
+- **`--server-name`** — appears in the trust bar and page title. Use your name or a friendly label.
+- **`--icon`** — an emoji or image URL shown at the top of the connection page.
+- **`--color`** — sets the accent color palette. Options: `ocean` (default), `sunset`, `forest`, `lavender`, `rose`, `slate`.
+
+These settings are stored in server credentials and apply to all client connection pages.
 
 ## Choosing an SNI target
 

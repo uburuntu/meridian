@@ -26,8 +26,25 @@ meridian deploy 1.2.3.4 --sni www.microsoft.com --name alice --yes
 | `--email EMAIL` | （无） | TLS 证书的电子邮件（可选） |
 | `--xhttp / --no-xhttp` | 启用 | XHTTP 传输（通过 Caddy 的端口 443） |
 | `--name NAME` | default | 第一个客户端的名称 |
+| `--server-name NAME` | （无） | 连接页面上的显示名称（如 "Alice 的 VPN"） |
+| `--icon EMOJI_OR_URL` | （无） | 服务器图标 — 表情符号或图片 URL |
+| `--color PALETTE` | ocean | 颜色方案（ocean/sunset/forest/lavender/rose/slate） |
 | `--user USER` | root | SSH 用户（非 root 用户自动获得 sudo） |
 | `--yes` | | 跳过确认提示 |
+
+## 品牌定制
+
+个性化连接页面，让接收者知道谁设置了 VPN：
+
+```
+meridian deploy 1.2.3.4 --server-name "Alice 的 VPN" --icon 🚀 --color sunset
+```
+
+- **`--server-name`** — 显示在信任栏和页面标题中。使用您的名字或友好的标签。
+- **`--icon`** — 连接页面顶部显示的表情符号或图片 URL。
+- **`--color`** — 设置强调色方案。选项：`ocean`（默认）、`sunset`、`forest`、`lavender`、`rose`、`slate`。
+
+这些设置保存在服务器凭证中，并应用于所有客户端连接页面。
 
 ## 选择 SNI 目标
 

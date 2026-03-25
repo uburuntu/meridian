@@ -26,8 +26,25 @@ meridian deploy 1.2.3.4 --sni www.microsoft.com --name alice --yes
 | `--email EMAIL` | (هیچ) | ایمیل برای گواهی‌های TLS (اختیاری) |
 | `--xhttp / --no-xhttp` | فعال | XHTTP transport (از طریق پورت 443 via Caddy) |
 | `--name NAME` | default | نام برای کلاینت اول |
+| `--server-name NAME` | (هیچ) | نام نمایشی در صفحات اتصال (مثلاً "VPN علی") |
+| `--icon EMOJI_OR_URL` | (هیچ) | آیکون سرور — اموجی یا URL تصویر |
+| `--color PALETTE` | ocean | پالت رنگی (ocean/sunset/forest/lavender/rose/slate) |
 | `--user USER` | root | کاربر SSH (non-root به‌طور خودکار sudo دریافت می‌کند) |
 | `--yes` | | پرسش‌های تأیید را رد کنید |
+
+## شخصی‌سازی
+
+صفحات اتصال را شخصی‌سازی کنید تا دریافت‌کنندگان بدانند چه کسی VPN را راه‌اندازی کرده:
+
+```
+meridian deploy 1.2.3.4 --server-name "VPN علی" --icon 🚀 --color sunset
+```
+
+- **`--server-name`** — در نوار اعتماد و عنوان صفحه نمایش داده می‌شود. نام خود یا یک برچسب دوستانه استفاده کنید.
+- **`--icon`** — اموجی یا URL تصویر در بالای صفحه اتصال.
+- **`--color`** — پالت رنگی را تنظیم می‌کند. گزینه‌ها: `ocean` (پیش‌فرض)، `sunset`، `forest`، `lavender`، `rose`، `slate`.
+
+این تنظیمات در اعتبارنامه‌های سرور ذخیره می‌شوند و به تمام صفحات اتصال کلاینت‌ها اعمال می‌شوند.
 
 ## انتخاب هدف SNI
 

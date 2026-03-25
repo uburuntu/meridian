@@ -88,6 +88,31 @@ const tabs = [
         <span class="builder__hint" data-t="builder.field.name.hint">Name for the first client. Default: "default".</span>
       </div>
 
+      <div class="builder__field" id="row-server-name">
+        <label class="builder__label" for="f-server-name" data-t="builder.field.server-name">Server name</label>
+        <input id="f-server-name" type="text" placeholder="My VPN" class="builder__input builder__input--short" />
+        <span class="builder__hint" data-t="builder.field.server-name.hint">Display name on connection pages.</span>
+      </div>
+
+      <div class="builder__field" id="row-icon">
+        <label class="builder__label" for="f-icon" data-t="builder.field.icon">Icon</label>
+        <input id="f-icon" type="text" placeholder="🚀" class="builder__input builder__input--short" />
+        <span class="builder__hint" data-t="builder.field.icon.hint">Emoji or image URL for the connection page.</span>
+      </div>
+
+      <div class="builder__field" id="row-color">
+        <label class="builder__label" for="f-color" data-t="builder.field.color">Color</label>
+        <select id="f-color" class="builder__input builder__input--short">
+          <option value="">Default (ocean)</option>
+          <option value="sunset">Sunset</option>
+          <option value="forest">Forest</option>
+          <option value="lavender">Lavender</option>
+          <option value="rose">Rose</option>
+          <option value="slate">Slate</option>
+        </select>
+        <span class="builder__hint" data-t="builder.field.color.hint">Color palette for the connection page.</span>
+      </div>
+
       <div class="builder__field" id="row-relay-name">
         <label class="builder__label" for="f-relay-name" data-t="builder.field.relay-name">Relay name</label>
         <input id="f-relay-name" type="text" placeholder="ru-moscow" class="builder__input builder__input--short" />
@@ -139,7 +164,7 @@ const tabs = [
   const TAB_CONFIG: Record<string, { desc: string; show: string[]; cmd: string; descKey: string }> = {
     install: {
       desc: 'Deploy VLESS+Reality proxy. Configures Docker, Xray, firewall, and TLS automatically.',
-      show: ['ip', 'user', 'domain', 'sni', 'xhttp', 'name', 'yes'],
+      show: ['ip', 'user', 'domain', 'sni', 'xhttp', 'name', 'server-name', 'icon', 'color', 'yes'],
       cmd: 'deploy',
       descKey: 'builder.desc.deploy',
     },
@@ -175,7 +200,7 @@ const tabs = [
     },
   };
 
-  const ALL_FIELDS = ['ip', 'user', 'exit', 'domain', 'sni', 'xhttp', 'name', 'relay-name', 'port', 'ai', 'yes'];
+  const ALL_FIELDS = ['ip', 'user', 'exit', 'domain', 'sni', 'xhttp', 'name', 'server-name', 'icon', 'color', 'relay-name', 'port', 'ai', 'yes'];
   let curTab = 'install';
 
   function $(id: string) {
@@ -214,6 +239,9 @@ const tabs = [
     const sni = ($('f-sni') as HTMLInputElement).value.trim();
     const xhttp = ($('f-xhttp') as HTMLInputElement).checked;
     const clientName = ($('f-name') as HTMLInputElement).value.trim();
+    const serverNameVal = ($('f-server-name') as HTMLInputElement).value.trim();
+    const iconVal = ($('f-icon') as HTMLInputElement).value.trim();
+    const colorVal = ($('f-color') as HTMLSelectElement).value;
     const exitServer = ($('f-exit') as HTMLInputElement).value.trim();
     const relayName = ($('f-relay-name') as HTMLInputElement).value.trim();
     const port = ($('f-port') as HTMLInputElement).value.trim();
@@ -253,6 +281,9 @@ const tabs = [
     if (cfg.show.includes('sni') && sniOn && sni && sni !== 'www.microsoft.com') args.push('--sni ' + sni);
     if (cfg.show.includes('xhttp') && !xhttp) args.push('--no-xhttp');
     if (cfg.show.includes('name') && clientName && clientName !== 'default') args.push('--name ' + clientName);
+    if (cfg.show.includes('server-name') && serverNameVal) args.push('--server-name "' + serverNameVal + '"');
+    if (cfg.show.includes('icon') && iconVal) args.push('--icon "' + iconVal + '"');
+    if (cfg.show.includes('color') && colorVal) args.push('--color ' + colorVal);
     if (cfg.show.includes('relay-name') && relayName) args.push('--name ' + relayName);
     if (cfg.show.includes('port') && port && port !== '443') args.push('--port ' + port);
     if (cfg.show.includes('ai') && ai) args.push('--ai');
@@ -326,6 +357,9 @@ const tabs = [
           sni: ($('f-sni') as HTMLInputElement).value.trim(),
           xhttp: ($('f-xhttp') as HTMLInputElement).checked,
           name: ($('f-name') as HTMLInputElement).value.trim(),
+          serverName: ($('f-server-name') as HTMLInputElement).value.trim(),
+          icon: ($('f-icon') as HTMLInputElement).value.trim(),
+          color: ($('f-color') as HTMLSelectElement).value,
           relayName: ($('f-relay-name') as HTMLInputElement).value.trim(),
           port: ($('f-port') as HTMLInputElement).value.trim(),
           ai: ($('f-ai') as HTMLInputElement).checked,
@@ -348,6 +382,9 @@ const tabs = [
       if (saved.sni) ($('f-sni') as HTMLInputElement).value = saved.sni;
       if (saved.xhttp === false) ($('f-xhttp') as HTMLInputElement).checked = false;
       if (saved.name) ($('f-name') as HTMLInputElement).value = saved.name;
+      if (saved.serverName) ($('f-server-name') as HTMLInputElement).value = saved.serverName;
+      if (saved.icon) ($('f-icon') as HTMLInputElement).value = saved.icon;
+      if (saved.color) ($('f-color') as HTMLSelectElement).value = saved.color;
       if (saved.relayName) ($('f-relay-name') as HTMLInputElement).value = saved.relayName;
       if (saved.port && saved.port !== '443') ($('f-port') as HTMLInputElement).value = saved.port;
       if (saved.ai) ($('f-ai') as HTMLInputElement).checked = true;
@@ -364,7 +401,7 @@ const tabs = [
     btn.addEventListener('click', () => setTab((btn as HTMLElement).dataset.tab!));
   });
 
-  document.querySelectorAll('#builder input').forEach((input) => {
+  document.querySelectorAll('#builder input, #builder select').forEach((input) => {
     input.addEventListener('input', buildCmd);
     input.addEventListener('change', buildCmd);
   });
