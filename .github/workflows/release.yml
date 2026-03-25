@@ -46,7 +46,9 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: Generate PWA demo page
-        run: uv run meridian dev preview --output website/dist/demo
+        run: |
+          sudo apt-get install -y qrencode
+          uv run meridian dev preview --output website/dist/demo
 
       - name: Add deploy artifacts
         run: |

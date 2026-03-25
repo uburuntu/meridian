@@ -266,6 +266,7 @@ wheels = [
 name = "meridian-vpn"
 source = { editable = "." }
 dependencies = [
+    { name = "jinja2" },
     { name = "packaging" },
     { name = "pyyaml" },
     { name = "rich" },
@@ -274,7 +275,6 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
-    { name = "jinja2" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "ruff" },
@@ -283,7 +283,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "jinja2", marker = "extra == 'dev'", specifier = ">=3.0" },
+    { name = "jinja2", specifier = ">=3.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "packaging", specifier = ">=23.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
