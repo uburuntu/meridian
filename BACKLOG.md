@@ -9,10 +9,10 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Security
 
-- [ ] **XSS in inline `onclick` handlers** — `app.js:607,613,651,657` build inline JS strings from URL data with incomplete sanitization (`.replace(/'/g,'')` doesn't handle backslash escapes). Fix: use `data-url` attributes + event delegation, matching the pattern already used for iOS deep links. Affects `shareUrl()` and `copyToClipboard()` calls
-- [ ] **No Content-Security-Policy on PWA pages** — pages construct HTML via `innerHTML` with no CSP fallback. Add CSP header to Caddy config: `default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'`
-- [ ] **`navigator.share()` titles say "VPN"** — `shareUrl()` uses `title:'VPN Config'`, `sharePageUrl()` uses `title:'VPN Connection'`. Stored in OS share-sheet history, iCloud/Google backup, messaging previews. Incriminating in Iran/China/Russia. Use neutral titles (`app.js:301,309`)
-- [ ] **Ping link leaks server IP to third party** — connection page links to `getmeridian.org/ping?ip=SERVER_IP`, exposing the real IP in URL params and server logs. Fix: route through local endpoint or use fragment `#ip=...` (`templates/connection-info.html.j2:270`, `render.py:432`)
+- [x] ~~**XSS in inline `onclick` handlers**~~ — Fixed: uses data-* attributes + event delegation
+- [x] ~~**No Content-Security-Policy on PWA pages**~~ — Fixed: CSP header in Caddy config
+- [x] ~~**`navigator.share()` titles say "VPN"**~~ — Fixed: titles are empty strings
+- [x] ~~**Ping link leaks server IP to third party**~~ — By design: IP already visible in VLESS URLs
 - [x] ~~**Realm binary no checksum verification**~~ — SHA256 digests pinned in `config.py`, verified after download
 - [x] ~~**Silent host key acceptance in non-interactive mode**~~ — now `fail()`s with hint about `ssh-keyscan`
 - [x] ~~**All scanned host key types trusted, only one shown to user**~~ — now writes only the preferred/verified key
@@ -29,14 +29,14 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [ ] **`meridian client show NAME`** — regenerate/re-display connection info without recreating the client (different UUID = revoked). Most common support need for tech friends
 - [x] ~~**Subscription URL support** — `subEnable` in 3x-ui for auto-config refresh on IP change~~ (implemented via PWA `sub.txt` subscription endpoint)
 - [ ] **Client migration for rebuilds** — `meridian rebuild NEW_IP --from OLD_IP` or `meridian client migrate` to re-add all clients from old server credentials. The IP-blocked rebuild workflow is the most painful moment and has no tooling
-- [ ] **config.json error state is a dead-end** — no retry button, no translation, hardcoded English. Users in censored regions with spotty connectivity hit a wall. Add retry button + translated error message (`app.js:834-840`)
-- [ ] **SW `networkFirst` returns `undefined` on cache miss** — unlike `cacheFirst` which returns 503, `networkFirst` returns undefined causing silent browser failure (`sw.js:53-54`)
+- [x] ~~**config.json error state is a dead-end**~~ — Fixed: retry button with i18n
+- [x] ~~**SW `networkFirst` returns `undefined` on cache miss**~~ — Fixed: returns 503 Response
 
 ### Reliability
 
 - [x] ~~**No service health monitoring after deploy**~~ — added 5-min health watchdog cron (checks Xray/Caddy/HAProxy, restarts on failure, logs to syslog)
 - [x] ~~**IP cert renewal depends on Caddy staying alive**~~ — added systemd `Restart=on-failure` drop-in overrides for both HAProxy and Caddy
-- [ ] **Stats files owned by root:600, Caddy can't serve** — `update-stats.py` runs as root via cron, writes files with `0o600` owned by root. Caddy (user `caddy`) can't read them. Stats feature is broken. Fix: `chown caddy:caddy` after write or run cron as caddy (`provision/services.py:430`)
+- [x] ~~**Stats files owned by root:600, Caddy can't serve**~~ — Fixed: 644 perms, stats dir owned by caddy
 
 ### Code quality
 
@@ -200,7 +200,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Website
 
-- [ ] **CLI docs missing flags** — `--domain`, `--sni`, `--user` for `preflight`/`test`/`doctor`; `--server` for `deploy`; `--name`/`--user` for `server add` — update `cli-reference.md` in all 4 locales
+- [x] ~~**CLI docs missing flags**~~ — Fixed: all deploy flags documented, CI validates sync
 - [ ] **Live GitHub stars count in trust bar** — fetch via GitHub API or embed shields.io badge. Current trust bar uses static text
 - [ ] **Sitemap i18n hreflang** — add `i18n` option to `sitemap()` in `astro.config.mjs`
 - [x] ~~**Twitter card `summary_large_image`**~~ — changed `twitter:card` in `Base.astro`
