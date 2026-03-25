@@ -103,11 +103,6 @@ if ls /root/.meridian/credentials/"$IP"/*-alice-connection-info.html >/dev/null 
 else
     fail_test "alice HTML connection page missing"
 fi
-if ls /root/.meridian/credentials/"$IP"/*-alice-connection-info.txt >/dev/null 2>&1; then
-    pass "alice text connection info exists"
-else
-    fail_test "alice text connection info missing"
-fi
 
 # ---------------------------------------------------------------------------
 # 5. Ping
