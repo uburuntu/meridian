@@ -1,0 +1,69 @@
+---
+/**
+ * Client-side Mermaid diagram renderer.
+ * Astro's Shiki highlighter converts ```mermaid blocks into
+ * <pre class="astro-code" data-language="mermaid"><code>...</code></pre>.
+ * This script extracts the text, replaces the block with a <pre class="mermaid">,
+ * and dynamically imports mermaid.js to render them as SVG.
+ *
+ * The dynamic import ensures the 481KB mermaid bundle is only fetched
+ * on pages that actually contain mermaid diagrams.
+ */
+---
+
+<script>
+  // Convert Shiki-highlighted mermaid blocks to plain <pre class="mermaid">
+  const blocks = document.querySelectorAll('pre[data-language="mermaid"]');
+  if (blocks.length > 0) {
+    blocks.forEach((pre) => {
+      const code = pre.querySelector('code');
+      if (!code) return;
+      const mermaidPre = document.createElement('pre');
+      mermaidPre.className = 'mermaid';
+      mermaidPre.textContent = code.textContent || '';
+      pre.replaceWith(mermaidPre);
+    });
+
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    // Meridian design tokens mapped to mermaid theme variables
+    const theme = isDark ? {
+      primaryColor: '#2E3145', primaryTextColor: '#E4E2DE', primaryBorderColor: '#4A4F66',
+      lineColor: '#D4A24E', secondaryColor: '#1C1E28', tertiaryColor: '#373B50',
+      noteBkgColor: '#2E3145', noteBorderColor: '#3A3E52',
+      actorBkg: '#252836', actorBorder: '#4A4F66',
+    } : {
+      primaryColor: '#F5F0E8', primaryTextColor: '#1A1D2E', primaryBorderColor: '#D5CFC3',
+      lineColor: '#C8933A', secondaryColor: '#FDFAF6', tertiaryColor: '#EDE7DB',
+      noteBkgColor: '#F5F0E8', noteBorderColor: '#E5DFD3',
+      actorBkg: '#FFFFFF', actorBorder: '#D5CFC3',
+    };
+
+    const nodes = document.querySelectorAll('pre.mermaid');
+
+    const { default: mermaid } = await import('mermaid');
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'base',
+      themeVariables: theme,
+      securityLevel: 'loose',
+      fontFamily: "'Source Sans 3', system-ui, sans-serif",
+      flowchart: { curve: 'monotoneX', padding: 16 },
+      sequence: { mirrorActors: false, messageMargin: 40 },
+    });
+    await mermaid.run({ nodes });
+  }
+</script>
+
+<style is:global>
+  pre.mermaid {
+    background: transparent !important;
+    border: none !important;
+    padding: 24px 0 !important;
+    text-align: center;
+  }
+  pre.mermaid svg {
+    max-width: 100%;
+    height: auto;
+  }
+</style>

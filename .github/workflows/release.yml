@@ -39,7 +39,6 @@ jobs:
         run: |
           cd website
           npm ci
-          npx playwright install --with-deps chromium
           npm run build
 
       - name: Set up uv

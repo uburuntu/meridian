@@ -4,18 +4,18 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build && npx pagefind --site dist",
+    "dev": "uv run --project .. meridian dev preview --output public/demo 2>/dev/null; astro dev",
+    "build": "node scripts/validate-mermaid.mjs && astro build && npx pagefind --site dist",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.1",
     "astro": "^5.7.0",
-    "rehype-mermaid": "^3.0.0"
+    "mermaid": "^11.13.0"
   },
   "devDependencies": {
-    "pagefind": "^1.3.0",
-    "playwright": "^1.58.2"
+    "jsdom": "^29.0.1",
+    "pagefind": "^1.3.0"
   }
 }
