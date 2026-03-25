@@ -168,14 +168,14 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [x] ~~**"BACKUP (DIRECT)" label hardcoded English**~~ (added `data-t` key in PWA `app.js`)
 - [ ] **Farsi question mark uses ASCII `?` instead of `؟`** — undermines trust with native Farsi speakers (`app.js:73`)
 - [ ] **Multi-protocol labels use jargon** — "XHTTP", "via relay", "Routes through CDN" meaningless to non-tech users. Better: "Connection 1 (try first)", "Connection 2 (backup)"
-- [ ] **Clock sync warning shown even when clock is OK** — `clockStatus==='ok'` still renders "Clock Sync Required" heading. Confusing/scary for non-tech users. Only show when clock is bad, or soften to "Troubleshooting" (`app.js:501-507`)
-- [ ] **Subscription URL shown to all users** — non-tech users don't know what a subscription URL is. Hide behind "More options" expander
+- [x] ~~**Clock sync warning shown even when clock is OK**~~ — removed informational clock warning; only shown when skew detected
+- [x] ~~**Subscription URL shown to all users**~~ — moved behind `<details>` toggle
 - [ ] **`<title>` never updated on language switch** — stays English "Connection Setup" after switching to Russian/Farsi/Chinese
 - [ ] **"via {name}" hardcoded English preposition** — should be "через" (RU), "از طریق" (FA). Add to translation dict (`app.js:425-426`)
 - [ ] **`index.html` not in SW precache list** — first offline visit after SW install fails because HTML isn't cached (`sw.js:3-7`)
 - [ ] **Click-to-copy URL divs have no keyboard support** — `.url` and `.sub-url-value` use `onclick` on `<div>` with no `tabindex`, `role`, or `keydown` handler
 - [ ] **`apple-touch-icon` uses SVG** — iOS doesn't support SVG for touch icons, requires PNG. Icon won't appear on iOS home screen (`index.html.j2:15`)
-- [ ] **Flag emoji in language selector** — Iran flag may be unwelcome for diaspora/Afghan users; renders as letter codes on Windows. Use language names only
+- [x] ~~**Flag emoji in language selector**~~ — replaced with language names (English, Русский, فارسی, 中文)
 - [ ] **QR images 200x200px marginal on high-DPI** — generate 400x400px minimum for Retina displays
 - [ ] **Connection page stats strings English-only** — "Active now", "Active Xm ago" not in translation object
 - [ ] **Wizard `_confirm_scan()` silently fails on WSL** — `/dev/tty` read catches `OSError` with no user feedback
@@ -189,6 +189,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 ### Code quality
 
 - [ ] **`config.json` schema not validated in tests** — no test checks required fields (`key`, `label`, `url`, `qr_b64`, `recommended`) or relay sub-fields
+- [ ] **Measure test coverage** — run `pytest --cov` and add coverage badge to README. Replace vague "480+ tests" with an actual coverage percentage
 - [ ] **Unicode/non-ASCII client names never tested** — given target audience (Iran/China/Russia), Cyrillic/Farsi/CJK names are real-world scenarios
 - [ ] **`confirm()` raises Exit(1) on "n"** — can't distinguish rejection from failure, can't do cleanup. Should return bool (`console.py:82-97`)
 - [ ] **`_sync_credentials_to_server()` silently ignores SCP failures** — stale server credentials on sync failure. Return bool, retry once (`client.py:77-98`, `relay.py:110-129`)
@@ -226,7 +227,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [ ] **CommandBuilder status messages i18n** — hint text hardcoded EN
 - [ ] **GenAI images** — fresh OG, logo, favicon, connection page
 - [ ] **Docs sidebar on mobile** — no alternative navigation below 860px
-- [ ] **`og:locale` meta tag** — missing for non-English pages
+- [x] ~~**`og:locale` meta tag**~~ — added to `Base.astro` with proper locale mapping
 - [ ] **Footer `/version` endpoint** — fetch fails silently; generate file or remove
 - [ ] **Hero image no WebP/AVIF** — plain PNG bypasses Astro optimizer, 30-50% byte savings possible
 - [ ] **Font preload missing** — no `<link rel="preload">` for above-fold fonts
