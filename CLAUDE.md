@@ -56,7 +56,7 @@ website/                   Astro static site (getmeridian.org)
   src/layouts/             Base.astro, Docs.astro
   src/styles/              fonts.css, tokens.css, global.css
   src/i18n/                Client-side i18n (translations.ts, index.ts)
-  src/content/docs/{en,ru,fa,zh}/  40 markdown doc pages (also source for AI reference)
+  src/content/docs/{en,ru,fa,zh}/  48 markdown doc pages (12 per locale, also source for AI reference)
   src/data/apps.json       App download links (single source of truth)
   public/fonts/            Self-hosted woff2 (Fraunces, Source Sans 3, JetBrains Mono)
   public/img/              Images, terminal SVG, logos
