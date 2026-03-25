@@ -18,6 +18,7 @@ We aim to respond within 48 hours and will credit reporters in the fix.
 - **Firewall**: UFW configured with deny-all-incoming, only ports 22 + 443 + 80 (ACME) opened by default. The XHTTP port is also opened when XHTTP is enabled.
 - **Docker image**: pinned to a tested version to prevent supply chain issues
 - **TLS**: Caddy handles certificates automatically via Let's Encrypt
+- **Update checks**: the CLI periodically checks [PyPI](https://pypi.org/project/meridian-vpn/) for new versions by reading the public JSON API. No telemetry, no user data, no tracking — only an outbound HTTPS GET to `pypi.org`
 
 ## Scope
 

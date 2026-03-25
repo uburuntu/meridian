@@ -152,6 +152,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [ ] **`meridian server status`** — multi-server overview: alive, client count, relay count, last activity. All data available via existing panel API
 - [ ] **Domain mode Cloudflare detection in preflight** — detect orange-cloud-too-early by checking returned IP against Cloudflare ASNs
 - [ ] **`meridian test --via RELAY_IP`** — end-to-end TLS handshake test through relay, not just TCP check
+- [ ] **`meridian client export NAME`** — generate standalone HTML file with connection info for offline sharing via messaging apps (Signal, Telegram attachments). Bypasses URL filters in censored environments
 - [ ] **`qrencode` install or louder failure** — install script should include it, or failure message should include exact install command for detected OS
 
 ### Reliability
@@ -200,6 +201,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 ### Website
 
 - [ ] **CLI docs missing flags** — `--domain`, `--sni`, `--user` for `preflight`/`test`/`doctor`; `--server` for `deploy`; `--name`/`--user` for `server add` — update `cli-reference.md` in all 4 locales
+- [ ] **Live GitHub stars count in trust bar** — fetch via GitHub API or embed shields.io badge. Current trust bar uses static text
 - [ ] **Sitemap i18n hreflang** — add `i18n` option to `sitemap()` in `astro.config.mjs`
 - [x] ~~**Twitter card `summary_large_image`**~~ — changed `twitter:card` in `Base.astro`
 - [x] ~~**Landing page Reference section redundant**~~ — removed 7 accordion items duplicated in docs pages, replaced with CTA
