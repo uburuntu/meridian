@@ -115,6 +115,36 @@ jobs:
           fi
           echo "OK: CHANGELOG.md has entry for $VERSION"
 
+      - name: Verify deploy CLI flags are documented
+        run: |
+          python3 -c "
+          import re, sys
+          # Extract deploy flags from cli.py (typer.Option definitions)
+          cli = open('src/meridian/cli.py').read()
+          # Find the deploy_cmd function and extract its flags
+          deploy_match = re.search(r'def deploy_cmd\(.*?\) -> None:', cli, re.DOTALL)
+          if not deploy_match:
+              print('ERROR: Could not find deploy function in cli.py')
+              sys.exit(1)
+          deploy_body = deploy_match.group(0)
+          cli_flags = set(re.findall(r'\"--(\w[\w-]*)(?:/|\")', deploy_body))
+          # Extract documented flags from cli-reference.md deploy section
+          docs = open('website/src/content/docs/en/cli-reference.md').read()
+          # Get content between 'meridian deploy' and next '### meridian' heading
+          deploy_section = re.search(r'### meridian deploy.*?(?=### meridian|\Z)', docs, re.DOTALL)
+          if not deploy_section:
+              print('ERROR: Could not find deploy section in cli-reference.md')
+              sys.exit(1)
+          doc_flags = set(re.findall(r'\x60--(\w[\w-]*)', deploy_section.group(0)))
+          # Compare
+          undocumented = cli_flags - doc_flags
+          if undocumented:
+              print(f'UNDOCUMENTED deploy flags: {sorted(undocumented)}')
+              print('Add these to website/src/content/docs/en/cli-reference.md')
+              sys.exit(1)
+          print(f'OK: All {len(cli_flags)} deploy flags documented: {sorted(cli_flags)}')
+          "
+
   shellcheck:
     name: Shell
     runs-on: ubuntu-latest

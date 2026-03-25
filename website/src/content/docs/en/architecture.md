@@ -1,7 +1,7 @@
 ---
 title: Architecture
 description: System architecture, traffic flow, and service topology.
-order: 7
+order: 9
 section: reference
 ---
 

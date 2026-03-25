@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting
 description: Common issues, fixes, and diagnostic tools.
-order: 6
+order: 8
 section: guides
 ---
 
@@ -112,12 +112,9 @@ Domain doesn't resolve to server IP yet. Update the DNS A record. Propagation is
 
 ## Was working, now stopped
 
-**Most common cause:** Server IP got blocked. This is very common in censored regions.
+**Most common cause:** Server IP got blocked. Run `meridian test IP` — if TCP fails, the IP is likely blocked.
 
-**Fixes:**
-1. Run `meridian test IP` — if TCP fails, the IP is likely blocked
-2. Use the WSS/CDN link (domain mode)
-3. Deploy a new server: get a new IP and re-run `meridian deploy`
+See the [IP Blocked Recovery guide](/docs/en/recovery/) for step-by-step recovery options (new server, relay swap, CDN fallback).
 
 Other causes:
 - Server rebooted and Docker didn't auto-start → `docker start 3x-ui`
@@ -148,16 +145,7 @@ meridian doctor
 
 ## Relay not working
 
-**Check relay health:**
-```bash
-meridian relay check RELAY_IP
-```
-
-**Common issues:**
-- **Port conflict** — Another service is using port 443 on the relay server. Check with `ss -tlnp sport = :443` and stop the conflicting service.
-- **Firewall blocking** — Ensure port 443 is open on the relay's cloud provider firewall / security group.
-- **Exit server unreachable** — The relay must be able to reach the exit server on port 443. Test with `curl -I https://EXIT_IP`.
-- **Relay not started** — Check the Realm service: `systemctl status meridian-relay`.
+See the [Relay guide — Troubleshooting](/docs/en/relay/#troubleshooting) section for relay-specific issues (port conflict, firewall, exit unreachable, service not started).
 
 ## Interpreting preflight output
 

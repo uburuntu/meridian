@@ -87,6 +87,7 @@ The `--server` flag lets you target a specific server for any command: `meridian
 ## Next steps
 
 - [Deploy guide](/docs/en/deploy/) — full deployment walkthrough with all options
-- **Add a relay** — Route through a domestic IP for resilience when the exit server gets blocked: `meridian relay deploy RELAY_IP --exit EXIT_IP`
+- [Relay nodes](/docs/en/relay/) — route through a domestic IP for resilience when the exit IP gets blocked
 - [Domain mode](/docs/en/domain-mode/) — add CDN fallback via Cloudflare
+- [IP blocked?](/docs/en/recovery/) — step-by-step recovery when your server gets blocked
 - [Troubleshooting](/docs/en/troubleshooting/) — common issues and fixes

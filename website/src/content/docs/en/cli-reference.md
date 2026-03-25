@@ -1,7 +1,7 @@
 ---
 title: CLI Reference
 description: Complete reference for all Meridian CLI commands and flags.
-order: 8
+order: 10
 section: reference
 ---
 
@@ -24,6 +24,7 @@ meridian deploy [IP] [flags]
 | `--name NAME` | default | Name for the first client |
 | `--user USER` | root | SSH user |
 | `--harden / --no-harden` | enabled | Server hardening: SSH key-only + firewall |
+| `--server NAME` | | Target a named server (for re-deploys) |
 | `--yes` | | Skip confirmation prompts |
 
 ### meridian client

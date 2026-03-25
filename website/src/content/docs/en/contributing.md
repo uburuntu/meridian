@@ -1,7 +1,7 @@
 ---
 title: Contributing
 description: Development setup, PR guidelines, and testing approach.
-order: 10
+order: 12
 section: reference
 ---
 

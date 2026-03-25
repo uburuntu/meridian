@@ -94,10 +94,8 @@ Useful when SSH to self doesn't work (missing keys, firewall rules), for re-depl
 
 ## Adding a relay node
 
-After deploying your exit server, you can add a relay node for resilience. A relay is a lightweight TCP forwarder on a domestic server that routes traffic to your exit server abroad — useful when the exit IP gets blocked.
+After deploying your exit server, add a relay node for resilience when the exit IP gets blocked. See the [Relay guide](/docs/en/relay/) for full setup instructions.
 
 ```bash
 meridian relay deploy RELAY_IP --exit YOUR_EXIT_IP
 ```
-
-Clients automatically receive relay URLs when you add or update their connection pages. See the [CLI reference](/docs/en/cli-reference/) for all relay commands.

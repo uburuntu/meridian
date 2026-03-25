@@ -14,6 +14,10 @@ export const GET: APIRoute = async () => {
     '> Censorship-resistant proxy deployment CLI.',
     '> Source: https://getmeridian.org',
     '',
+    '## Table of Contents',
+    '',
+    ...sorted.map((doc, i) => `${i + 1}. ${doc.data.title}`),
+    '',
   ];
 
   for (const doc of sorted) {
