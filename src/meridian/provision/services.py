@@ -22,22 +22,49 @@ def _render_haproxy_cfg(
     reality_sni: str,
     haproxy_reality_backend_port: int,
     caddy_internal_port: int,
+    server_ip: str = "",
+    domain: str = "",
 ) -> str:
     """Render the HAProxy configuration.
 
     Replaces: roles/haproxy/templates/haproxy.cfg.j2
 
     HAProxy sits on port 443 and does TCP-level SNI routing WITHOUT
-    TLS termination. Reality-targeted SNIs go to Xray, everything
-    else goes to Caddy.
+    TLS termination. Reality-targeted SNIs go to Xray, only explicitly
+    allowed SNIs go to Caddy. Unrecognized SNI connections are dropped
+    to avoid fingerprinting (a catch-all ``default_backend`` would serve
+    an IP certificate for unknown SNIs — something no legitimate CDN does).
     """
+    # Build explicit Caddy SNI rules (server IP + optional domain)
+    caddy_sni_rules = ""
+    if server_ip:
+        caddy_sni_rules += (
+            f"\n            # Route connections with server IP SNI to Caddy"
+            f"\n            use_backend caddy_https if {{ req_ssl_sni -i {server_ip} }}"
+        )
+    if domain:
+        caddy_sni_rules += (
+            f"\n            # Route connections with domain SNI to Caddy"
+            f"\n            use_backend caddy_https if {{ req_ssl_sni -i {domain} }}"
+        )
+
+    # Flow comment lines
+    flow_lines = [
+        f"Client with SNI={reality_sni} -> Xray Reality (127.0.0.1:{haproxy_reality_backend_port})",
+    ]
+    if server_ip:
+        flow_lines.append(f"Client with SNI={server_ip}  -> Caddy HTTPS  (127.0.0.1:{caddy_internal_port})")
+    if domain:
+        flow_lines.append(f"Client with SNI={domain}  -> Caddy HTTPS  (127.0.0.1:{caddy_internal_port})")
+    flow_lines.append("Client with unknown SNI       -> connection dropped (anti-fingerprinting)")
+    flow_comment = "\n".join(f"        #   {line}" for line in flow_lines)
+
     return textwrap.dedent(f"""\
         # HAProxy SNI Router
         # Managed by Meridian. Manual edits will be overwritten on next run.
         #
         # Flow:
-        #   Client with SNI={reality_sni} -> Xray Reality (127.0.0.1:{haproxy_reality_backend_port})
-        #   Client with any other SNI      -> Caddy HTTPS  (127.0.0.1:{caddy_internal_port})
+{flow_comment}
 
         global
             log /dev/log local0
@@ -69,9 +96,11 @@ def _render_haproxy_cfg(
 
             # Route connections with Reality SNI to Xray
             use_backend xray_reality if {{ req_ssl_sni -i {reality_sni} }}
+{caddy_sni_rules}
 
-            # Everything else (user's domain, unknown SNI) goes to Caddy
-            default_backend caddy_https
+            # Drop connections with unrecognized SNI (no catch-all backend).
+            # This prevents fingerprinting: a default route would serve an IP
+            # certificate for arbitrary SNIs, which no legitimate server does.
 
         # --- Backend: Xray Reality ---
         backend xray_reality
@@ -437,7 +466,8 @@ class InstallHAProxy:
 
     HAProxy sits on port 443 and inspects the TLS ClientHello SNI field
     WITHOUT terminating TLS. Routes Reality-targeted SNIs to Xray,
-    everything else to Caddy.
+    explicitly allowed SNIs (server IP, domain) to Caddy, and drops
+    connections with unrecognized SNI to prevent fingerprinting.
     """
 
     name = "Install HAProxy"
@@ -447,12 +477,20 @@ class InstallHAProxy:
         reality_sni: str,
         haproxy_reality_backend_port: int = 10443,
         caddy_internal_port: int = 8443,
+        server_ip: str = "",
+        domain: str = "",
     ) -> None:
         self.reality_sni = reality_sni
         self.haproxy_reality_backend_port = haproxy_reality_backend_port
         self.caddy_internal_port = caddy_internal_port
+        self.server_ip = server_ip
+        self.domain = domain
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
+        # Resolve server_ip and domain from context if not set at init time
+        server_ip = self.server_ip or ctx.ip
+        domain = self.domain or ctx.domain
+
         # Check if already installed and configured
         check = conn.run("dpkg -l haproxy 2>/dev/null | grep -q '^ii'", timeout=10)
         already_installed = check.returncode == 0
@@ -475,6 +513,8 @@ class InstallHAProxy:
             reality_sni=self.reality_sni,
             haproxy_reality_backend_port=self.haproxy_reality_backend_port,
             caddy_internal_port=self.caddy_internal_port,
+            server_ip=server_ip,
+            domain=domain,
         )
         q_config = shlex.quote(config)
         result = conn.run(f"printf '%s' {q_config} > /etc/haproxy/haproxy.cfg", timeout=10)
@@ -520,7 +560,9 @@ class InstallHAProxy:
             detail=(
                 f"HAProxy configured: SNI={self.reality_sni} -> "
                 f"127.0.0.1:{self.haproxy_reality_backend_port}, "
-                f"default -> 127.0.0.1:{self.caddy_internal_port}"
+                f"SNI={server_ip} -> 127.0.0.1:{self.caddy_internal_port}"
+                + (f", SNI={domain} -> 127.0.0.1:{self.caddy_internal_port}" if domain else "")
+                + ", unknown SNI -> drop"
             ),
         )
 

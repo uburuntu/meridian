@@ -27,6 +27,7 @@ class TestRenderHAProxyCfg:
             reality_sni="www.microsoft.com",
             haproxy_reality_backend_port=10443,
             caddy_internal_port=8443,
+            server_ip="198.51.100.1",
         )
         assert "www.microsoft.com" in cfg
         assert "use_backend xray_reality" in cfg
@@ -37,12 +38,57 @@ class TestRenderHAProxyCfg:
             reality_sni="www.microsoft.com",
             haproxy_reality_backend_port=10443,
             caddy_internal_port=8443,
+            server_ip="198.51.100.1",
         )
         # Extract only the 'server' lines in backend sections
         for line in cfg.splitlines():
             stripped = line.strip()
             if stripped.startswith("server "):
                 assert "check" not in stripped, f"Backend server line must NOT use 'check': {stripped}"
+
+    def test_no_default_backend(self):
+        """Unknown SNI must NOT be forwarded — no default_backend allowed."""
+        cfg = _render_haproxy_cfg(
+            reality_sni="www.microsoft.com",
+            haproxy_reality_backend_port=10443,
+            caddy_internal_port=8443,
+            server_ip="198.51.100.1",
+        )
+        assert "default_backend" not in cfg
+
+    def test_server_ip_routes_to_caddy(self):
+        """Server IP must be an explicit SNI routing to Caddy."""
+        cfg = _render_haproxy_cfg(
+            reality_sni="www.microsoft.com",
+            haproxy_reality_backend_port=10443,
+            caddy_internal_port=8443,
+            server_ip="198.51.100.1",
+        )
+        assert "use_backend caddy_https if { req_ssl_sni -i 198.51.100.1 }" in cfg
+
+    def test_domain_routes_to_caddy(self):
+        """In domain mode, the domain must also route to Caddy."""
+        cfg = _render_haproxy_cfg(
+            reality_sni="www.microsoft.com",
+            haproxy_reality_backend_port=10443,
+            caddy_internal_port=8443,
+            server_ip="198.51.100.1",
+            domain="example.com",
+        )
+        assert "use_backend caddy_https if { req_ssl_sni -i example.com }" in cfg
+        assert "use_backend caddy_https if { req_ssl_sni -i 198.51.100.1 }" in cfg
+
+    def test_no_domain_no_domain_rule(self):
+        """Without domain, only server IP should route to Caddy."""
+        cfg = _render_haproxy_cfg(
+            reality_sni="www.microsoft.com",
+            haproxy_reality_backend_port=10443,
+            caddy_internal_port=8443,
+            server_ip="198.51.100.1",
+        )
+        # Only one caddy_https rule (for server IP)
+        caddy_rules = [line for line in cfg.splitlines() if "use_backend caddy_https" in line]
+        assert len(caddy_rules) == 1
 
 
 # ---------------------------------------------------------------------------
