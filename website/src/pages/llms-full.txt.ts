@@ -20,7 +20,9 @@ export const GET: APIRoute = async () => {
     const filePath = path.resolve(`src/content/docs/${doc.id}.md`);
     try {
       const raw = fs.readFileSync(filePath, 'utf-8');
-      const content = raw.replace(/^---[\s\S]*?---\n/, '');
+      let content = raw.replace(/^---[\s\S]*?---\n/, '');
+      // Rewrite internal doc links to markdown endpoints for LLM consumers
+      content = content.replace(/\(\/docs\//g, '(/md/');
       sections.push(`---\n\n# ${doc.data.title}\n\n${content.trim()}\n`);
     } catch {
       sections.push(`---\n\n# ${doc.data.title}\n\n(Content not available)\n`);

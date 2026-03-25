@@ -19,6 +19,8 @@ export const GET: APIRoute = async ({ props }) => {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
     content = raw.replace(/^---[\s\S]*?---\n/, '').trim();
+    // Rewrite internal doc links to markdown endpoints for LLM consumers
+    content = content.replace(/\(\/docs\//g, '(/md/');
   } catch {
     content = `(Content not available)`;
   }
