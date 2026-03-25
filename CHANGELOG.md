@@ -4,6 +4,13 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.8.3] - 2026-03-25
+
+### Added
+- **One-tap subscription import** — deep link buttons on connection pages let users import auto-updating subscriptions with a single tap. Supports v2rayNG, Hiddify, and Streisand URI schemes. Replaces the hidden manual-copy subscription flow.
+- **Streisand app** — added as an iOS client option (popular in censored regions, supports deep links).
+- **Branding flags in CLI reference** — `--server-name`, `--icon`, `--color` now documented in cli-reference across all 4 locales.
+
 ## [3.8.2] - 2026-03-25
 
 ### Added
