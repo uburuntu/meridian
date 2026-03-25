@@ -74,7 +74,6 @@ export const translations: Record<string, Record<string, string>> = {
 
     // Trust bar
     'trust.mit': 'MIT Лицензия',
-    'trust.tested': 'Протестировано',
     'trust.languages': '4 Языка',
     'trust.oss': '100% Открытый код',
 
@@ -185,7 +184,6 @@ export const translations: Record<string, Record<string, string>> = {
 
     // Trust bar
     'trust.mit': 'MIT مجاز',
-    'trust.tested': 'تست‌شده',
     'trust.languages': '۴ زبان',
     'trust.oss': '۱۰۰٪ متن‌باز',
 
@@ -295,7 +293,6 @@ export const translations: Record<string, Record<string, string>> = {
 
     // Trust bar
     'trust.mit': 'MIT 许可证',
-    'trust.tested': '已测试',
     'trust.languages': '4 种语言',
     'trust.oss': '100% 开源',
 
