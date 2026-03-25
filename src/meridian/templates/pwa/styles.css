@@ -89,6 +89,16 @@ summary::marker{display:none;content:none}
 }
 .hdr p{font-size:.78rem;color:var(--tx2)}
 
+/* --- Server icon --- */
+.server-icon{
+  width:48px;height:48px;border-radius:var(--r);
+  display:block;margin:0 auto 8px;object-fit:cover;
+}
+.server-icon-emoji{
+  display:block;text-align:center;font-size:2.5rem;line-height:1.2;
+  margin-bottom:4px;
+}
+
 /* --- Language selector --- */
 .lang-bar{display:flex;justify-content:center;gap:4px;margin-top:10px}
 .lang-btn{

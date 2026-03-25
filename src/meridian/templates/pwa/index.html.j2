@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#F5F6F8" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Connection Setup{% if client_name and client_name != 'default' %} — {{ client_name|capitalize }}{% endif %}</title>
+<title>{% if server_name %}{{ server_name }}{% elif client_name and client_name != 'default' %}Connection Setup — {{ client_name|capitalize }}{% else %}Connection Setup{% endif %}</title>
 <link rel="stylesheet" href="{{ asset_path }}/styles.css">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="{{ asset_path }}/icon.svg">

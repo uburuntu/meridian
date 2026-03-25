@@ -402,6 +402,37 @@ function relayViaLabel(name) {
 }
 
 /* -----------------------------------------------------------------------
+ * Color palettes — curated presets with dark + light mode variants
+ * ----------------------------------------------------------------------- */
+var PALETTES = {
+  ocean:    { dark: '#5b9cf5', light: '#2b7de9' },
+  sunset:   { dark: '#e57c4e', light: '#c4602a' },
+  forest:   { dark: '#4CD68A', light: '#1E8C52' },
+  lavender: { dark: '#9b8cf5', light: '#6b5de9' },
+  rose:     { dark: '#f56b8a', light: '#d94468' },
+  slate:    { dark: '#8B8FA2', light: '#646880' }
+};
+
+function applyPalette(paletteName) {
+  var p = PALETTES[paletteName];
+  if (!p) return;
+  var isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var accent = isDark ? p.dark : p.light;
+  var root = document.documentElement;
+  root.style.setProperty('--accent', accent);
+  root.style.setProperty('--accent-bg', accent + '10');
+  root.style.setProperty('--accent-br', accent + '28');
+}
+
+/* Listen for system theme changes to swap palette variant */
+var _activePalette = '';
+try {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+    if (_activePalette) applyPalette(_activePalette);
+  });
+} catch(e) { /* old browsers */ }
+
+/* -----------------------------------------------------------------------
  * Page rendering from config.json
  * ----------------------------------------------------------------------- */
 function renderPage(config) {
@@ -413,12 +444,28 @@ function renderPage(config) {
   var hasRelays = config.relays && config.relays.length > 0;
   var clockStatus = checkClockSkew(config.generated_at);
 
+  /* Apply color palette */
+  if (config.color && PALETTES[config.color]) {
+    _activePalette = config.color;
+    applyPalette(config.color);
+  }
+
   /* Clock warning at TOP if skew detected */
   if (clockStatus === 'bad') {
     html += '<div class="warn clock-warn-urgent">';
     html += '<h3 data-t="clock">Clock Sync Required</h3>';
     html += '<p data-t="clock.desc">Your device clock must be accurate within 30 seconds. Go to Settings &gt; Date &amp; Time &gt; enable "Set Automatically".</p>';
     html += '</div>';
+  }
+
+  /* Server icon */
+  var iconHtml = '';
+  if (config.server_icon) {
+    if (config.server_icon.indexOf('data:') === 0) {
+      iconHtml = '<img class="server-icon" src="' + config.server_icon + '" alt="" width="48" height="48">';
+    } else {
+      iconHtml = '<span class="server-icon-emoji">' + escapeHtml(config.server_icon) + '</span>';
+    }
   }
 
   /* Trust bar */
@@ -433,9 +480,20 @@ function renderPage(config) {
   html += '</div>';
 
   /* Header */
-  var titleExtra = trustName ? ' — ' + escapeHtml(trustName) : '';
+  var pageTitle = config.server_name ? escapeHtml(config.server_name) : 'Connection Setup';
+  var titleExtra = '';
+  if (!config.server_name && trustName) {
+    titleExtra = ' \u2014 ' + escapeHtml(trustName);
+  }
   html += '<div class="hdr">';
-  html += '<h1 data-t="title">Connection Setup' + titleExtra + '</h1>';
+  if (iconHtml) {
+    html += iconHtml;
+  }
+  if (config.server_name) {
+    html += '<h1>' + pageTitle + '</h1>';
+  } else {
+    html += '<h1 data-t="title">Connection Setup' + titleExtra + '</h1>';
+  }
   html += '<p data-t="subtitle">Scan QR code or tap to open in your app</p>';
 
   /* Language selector */

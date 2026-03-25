@@ -1,6 +1,6 @@
 {
-  "name": "Setup{% if client_name and client_name != 'default' %} — {{ client_name|capitalize }}{% endif %}",
-  "short_name": "Setup",
+  "name": "{% if server_name %}{{ server_name }}{% elif client_name and client_name != 'default' %}Setup — {{ client_name|capitalize }}{% else %}Setup{% endif %}",
+  "short_name": "{% if server_name %}{{ server_name }}{% else %}Setup{% endif %}",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#0c0e14",

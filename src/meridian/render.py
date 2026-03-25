@@ -144,6 +144,9 @@ def render_config_json(
     *,
     client_name: str = "",
     relay_entries: list[RelayURLSet] | None = None,
+    server_name: str = "",
+    server_icon: str = "",
+    color: str = "",
 ) -> str:
     """Render per-client config.json for the PWA shell.
 
@@ -200,6 +203,12 @@ def render_config_json(
         "apps": _PWA_APPS,
         "generated_at": now,
     }
+    if server_name:
+        config["server_name"] = server_name
+    if server_icon:
+        config["server_icon"] = server_icon
+    if color:
+        config["color"] = color
     return json.dumps(config, indent=2, ensure_ascii=False)
 
 
@@ -233,16 +242,19 @@ def render_pwa_shell(
     *,
     client_name: str = "",
     asset_path: str = "../pwa",
+    server_name: str = "",
 ) -> str:
     """Render the PWA HTML shell from the index.html.j2 template.
 
     The shell is lightweight — it loads config.json and shared assets
-    at runtime.  Only the client_name and asset_path are baked in.
+    at runtime.  Only the client_name, asset_path, and server_name
+    are baked in.
     """
     return _render_pwa_template(
         "index.html.j2",
         client_name=client_name,
         asset_path=asset_path,
+        server_name=server_name,
     )
 
 
@@ -250,12 +262,14 @@ def render_manifest(
     *,
     client_name: str = "",
     asset_path: str = "../pwa",
+    server_name: str = "",
 ) -> str:
     """Render the per-client PWA manifest from manifest.webmanifest.j2."""
     return _render_pwa_template(
         "manifest.webmanifest.j2",
         client_name=client_name,
         asset_path=asset_path,
+        server_name=server_name,
     )
 
 

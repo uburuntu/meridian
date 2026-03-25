@@ -85,6 +85,15 @@ class RelayEntry:
 
 
 @dataclass
+class BrandingConfig:
+    """Server branding for connection pages."""
+
+    server_name: str = ""  # display name (e.g., "Alice's VPN")
+    icon: str = ""  # emoji or data URI (e.g., "🛡️" or "data:image/png;base64,...")
+    color: str = ""  # palette name (ocean, sunset, forest, lavender, rose, slate)
+
+
+@dataclass
 class ServerCredentials:
     """Protocol-indexed credential storage (v2 format).
 
@@ -99,6 +108,7 @@ class ServerCredentials:
     protocols: dict[str, Any] = field(default_factory=dict)
     clients: list[ClientEntry] = field(default_factory=list)
     relays: list[RelayEntry] = field(default_factory=list)
+    branding: BrandingConfig = field(default_factory=BrandingConfig)
     # Extra fields from the YAML that we don't know about (forward-compat)
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
@@ -161,6 +171,13 @@ class ServerCredentials:
         # Relays
         if self.relays:
             out["relays"] = [_strip_none(asdict(r)) for r in self.relays]
+
+        # Branding
+        branding_dict = _strip_none(asdict(self.branding))
+        # Strip empty strings too — only store non-empty branding values
+        branding_dict = {k: v for k, v in branding_dict.items() if v}
+        if branding_dict:
+            out["branding"] = branding_dict
 
         # Extra fields (forward-compat)
         for k, v in self._extra.items():
@@ -382,8 +399,16 @@ def _load_v2(data: dict[str, Any]) -> ServerCredentials:
         )
 
     # Extra fields
-    known_top = {"version", "panel", "server", "protocols", "clients", "relays"}
+    known_top = {"version", "panel", "server", "protocols", "clients", "relays", "branding"}
     extra = {k: v for k, v in data.items() if k not in known_top}
+
+    # Branding
+    branding_data = data.get("branding", {})
+    branding = BrandingConfig(
+        server_name=branding_data.get("server_name", ""),
+        icon=branding_data.get("icon", ""),
+        color=branding_data.get("color", ""),
+    )
 
     return ServerCredentials(
         version=2,
@@ -392,6 +417,7 @@ def _load_v2(data: dict[str, Any]) -> ServerCredentials:
         protocols=protocols,
         clients=clients,
         relays=relays,
+        branding=branding,
         _extra=extra,
     )
 

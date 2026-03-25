@@ -38,6 +38,9 @@ def generate_client_files(
     *,
     client_name: str = "",
     relay_entries: list[RelayURLSet] | None = None,
+    server_name: str = "",
+    server_icon: str = "",
+    color: str = "",
 ) -> dict[str, str]:
     """Generate all per-client PWA files as a {filename: content} dict.
 
@@ -45,15 +48,18 @@ def generate_client_files(
     ``manifest.webmanifest``, ``sub.txt``.
     """
     return {
-        "index.html": render_pwa_shell(client_name=client_name),
+        "index.html": render_pwa_shell(client_name=client_name, server_name=server_name),
         "config.json": render_config_json(
             protocol_urls,
             server_ip=server_ip,
             domain=domain,
             client_name=client_name,
             relay_entries=relay_entries,
+            server_name=server_name,
+            server_icon=server_icon,
+            color=color,
         ),
-        "manifest.webmanifest": render_manifest(client_name=client_name),
+        "manifest.webmanifest": render_manifest(client_name=client_name, server_name=server_name),
         "sub.txt": render_subscription(
             protocol_urls,
             relay_entries=relay_entries,

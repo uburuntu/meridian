@@ -32,6 +32,10 @@ def run(
     yes: bool = False,
     harden: bool = True,
     requested_server: str = "",
+    *,
+    server_name: str = "",
+    icon: str = "",
+    color: str = "",
 ) -> None:
     """Deploy a VLESS+Reality proxy server."""
     registry = ServerRegistry(SERVERS_FILE)
@@ -66,14 +70,19 @@ def run(
 
     # Interactive wizard if no IP given
     if not server_ip:
-        server_ip, ssh_user, sni, domain, email, xhttp, harden = _interactive_wizard(
+        wizard_result = _interactive_wizard(
             sni=sni,
             xhttp=xhttp,
             domain=domain,
             email=email,
             harden=harden,
             yes=yes,
+            server_name=server_name,
+            icon=icon,
+            color=color,
         )
+        server_ip, ssh_user, sni, domain, email, xhttp, harden = wizard_result[:7]
+        server_name, icon, color = wizard_result[7:]
 
     # Validate IP (skip for 'local' keyword — resolve_server handles it)
     if not is_local_keyword(server_ip) and not is_ipv4(server_ip):
@@ -122,6 +131,20 @@ def run(
             hint="Use letters, numbers, hyphens, and underscores.",
             hint_type="user",
         )
+
+    # Save branding to credentials before provisioning
+    if server_name or icon or color:
+        from meridian.credentials import BrandingConfig
+
+        proxy_file = resolved.creds_dir / "proxy.yml"
+        creds = ServerCredentials.load(proxy_file) if proxy_file.exists() else ServerCredentials()
+        creds.branding = BrandingConfig(
+            server_name=server_name,
+            icon=icon,
+            color=color,
+        )
+        creds.save(proxy_file)
+
     _run_provisioner(resolved, domain, sni, name, xhttp, harden)
 
     # Register server
@@ -141,8 +164,15 @@ def _interactive_wizard(
     email: str,
     harden: bool,
     yes: bool,
-) -> tuple[str, str, str, str, str, bool, bool]:
-    """Interactive deployment wizard. Returns (ip, user, sni, domain, email, xhttp, harden)."""
+    server_name: str = "",
+    icon: str = "",
+    color: str = "",
+) -> tuple[str, str, str, str, str, bool, bool, str, str, str]:
+    """Interactive deployment wizard.
+
+    Returns (ip, user, sni, domain, email, xhttp, harden,
+             server_name, icon, color).
+    """
     import os
 
     # --- Protocol explanation ---
@@ -299,6 +329,71 @@ def _interactive_wizard(
     elif not domain:
         domain = ""
 
+    # --- Branding: server name ---
+    if not yes and not server_name:
+        err_console.print()
+        err_console.print("  [bold]Personalize[/bold]")
+        err_console.print("  [dim]Make the connection page yours. Your friends see this.[/dim]")
+        err_console.print()
+        server_name = prompt("Server name", default="My VPN")
+
+    # --- Branding: icon ---
+    if not yes and not icon:
+        from meridian.branding import ICON_SUGGESTIONS
+
+        err_console.print()
+        err_console.print("  [bold]Server icon[/bold]")
+        grid = "    "
+        for i, emoji in enumerate(ICON_SUGGESTIONS, 1):
+            grid += f"{i}. {emoji}  "
+        err_console.print(grid)
+        err_console.print()
+        icon_input = prompt("Pick a number, paste an emoji, or an image URL", default="1")
+        if icon_input.isdigit():
+            idx = int(icon_input) - 1
+            if 0 <= idx < len(ICON_SUGGESTIONS):
+                icon = ICON_SUGGESTIONS[idx]
+        if not icon:
+            from meridian.branding import process_icon
+
+            icon = process_icon(icon_input)
+    elif icon:
+        # CLI flag provided — process it
+        from meridian.branding import process_icon
+
+        processed = process_icon(icon)
+        if processed:
+            icon = processed
+
+    # --- Branding: color palette ---
+    if not yes and not color:
+        from meridian.branding import PALETTE_LABELS, PALETTES
+
+        err_console.print()
+        err_console.print("  [bold]Color palette[/bold]")
+        palette_names = list(PALETTES.keys())
+        for i, pname in enumerate(palette_names, 1):
+            marker = " [dim]← default[/dim]" if pname == "ocean" else ""
+            err_console.print(f"    {i}. {PALETTE_LABELS[pname]}{marker}")
+        err_console.print()
+        color_input = prompt("Choose", default="1")
+        if color_input.isdigit():
+            idx = int(color_input) - 1
+            if 0 <= idx < len(palette_names):
+                color = palette_names[idx]
+        if not color:
+            # Try matching by name
+            from meridian.branding import validate_color
+
+            color = validate_color(color_input) or "ocean"
+    elif color:
+        from meridian.branding import validate_color
+
+        color = validate_color(color) or "ocean"
+
+    if not color:
+        color = "ocean"
+
     # --- Summary panel ---
     from rich.panel import Panel
 
@@ -308,12 +403,25 @@ def _interactive_wizard(
     if domain:
         protocol_line += f"\n           + CDN fallback ({domain})"
 
+    icon_display = icon if icon and not icon.startswith("data:") else ""
+    branding_line = ""
+    if server_name or icon_display or color:
+        parts = []
+        if icon_display:
+            parts.append(icon_display)
+        if server_name:
+            parts.append(server_name)
+        if color:
+            parts.append(f"[dim]{color} palette[/dim]")
+        branding_line = f"\nBranding:   {' '.join(parts)}"
+
     server_label = f"this server ({detected_ip}) \u2014 local mode" if is_local else f"{ssh_user}@{server_ip}"
     summary = (
         f"Server:     {server_label}\n"
         f"Protocol:   {protocol_line}\n"
         f"Camouflage: {sni}\n"
         f"Mode:       {'CDN fallback' if domain else 'Standalone (IP certificate)'}"
+        f"{branding_line}"
     )
 
     err_console.print()
@@ -328,7 +436,7 @@ def _interactive_wizard(
             confirm(f"Deploy to {ssh_user}@{server_ip}?")
     err_console.print()
 
-    return server_ip, ssh_user, sni, domain, email, xhttp, harden
+    return server_ip, ssh_user, sni, domain, email, xhttp, harden, server_name, icon, color
 
 
 def _confirm_scan() -> bool:

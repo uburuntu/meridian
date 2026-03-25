@@ -128,6 +128,9 @@ def _deploy_client_page(
         domain=domain,
         client_name=client_name,
         relay_entries=relay_entries,
+        server_name=creds.branding.server_name,
+        server_icon=creds.branding.icon,
+        color=creds.branding.color,
     )
 
     conn = resolved.conn
