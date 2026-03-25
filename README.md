@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="website/public/img/logo-512.png" width="80" alt="Meridian">
+  <img src="https://raw.githubusercontent.com/uburuntu/meridian/main/website/public/img/logo-512.png" width="80" alt="Meridian">
 </p>
 
 <h1 align="center">Meridian</h1>
@@ -14,7 +14,7 @@
 <p align="center">Deploy a censorship-resistant proxy server in one command.<br>Invisible to DPI, active probing, and TLS fingerprinting.</p>
 
 <p align="center">
-  <img src="website/public/img/deploy-terminal.svg" width="720" alt="Meridian deploy terminal output">
+  <img src="https://raw.githubusercontent.com/uburuntu/meridian/main/website/public/img/deploy-terminal.svg" width="720" alt="Meridian deploy terminal output">
 </p>
 
 ## What is this
@@ -72,7 +72,7 @@ meridian client remove alice         # revoke access
 Each client gets a connection page hosted on the server with QR codes, one-tap deep links, and [live usage stats](https://getmeridian.org/demo). Share the URL directly — no file transfer needed.
 
 <p align="center">
-  <img src="website/public/img/connection-page.png" width="360" alt="Connection page with QR codes">
+  <img src="https://raw.githubusercontent.com/uburuntu/meridian/main/website/public/img/connection-page.png" width="360" alt="Connection page with QR codes">
 </p>
 
 ## How it works
@@ -88,17 +88,9 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    Internet((Internet)) -->|Port 443| HAProxy[HAProxy — SNI Router]
-    HAProxy -->|"SNI = camouflage host"| Xray["Xray Reality :10443"]
-    HAProxy -->|"SNI = server IP/domain"| Caddy["Caddy TLS :8443"]
-    Caddy --> Page[Connection Page]
-    Caddy --> Panel[3x-ui Panel]
-    Caddy --> XrayXHTTP["Xray XHTTP"]
-    Caddy -.->|domain mode| XrayWSS["Xray WSS"]
-    Internet -->|Port 80| CaddyACME["Caddy ACME"]
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/uburuntu/meridian/main/website/public/img/architecture.svg" width="720" alt="Meridian architecture — HAProxy SNI routing, Caddy TLS, Xray Reality">
+</p>
 
 **Standalone mode** — HAProxy on port 443 routes Reality traffic to Xray. Caddy provides auto-TLS (Let's Encrypt IP certificate) for hosted connection pages, panel access, and XHTTP transport. No domain needed.
 
