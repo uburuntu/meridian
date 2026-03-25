@@ -14,6 +14,7 @@ Meridian exists to make censorship-resistant VPN accessible to everyone. The cor
 - **Guided wizard** — interactive setup that explains each choice but has smart defaults.
 - **Guided handoff** — Meridian's responsibility ends at the server. Client setup is the user's job, but Meridian makes it effortless: polished connection pages with step-by-step instructions, app download links, QR codes, and shareable URLs.
 - **Rebuild-fast** — IPs get blocked. Spinning up a fresh VPS and running `meridian deploy` should get you back online in minutes.
+- **Aesthetics matter** — every surface is UI/UX. CLI output, terminal colors, QR codes, connection pages, URLs, error messages, docs — all must be clear, beautiful, and feel premium. URLs are UI too: they must be clean, readable, and aesthetically pleasing (no ugly query strings, no random noise in user-facing paths).
 
 ## Project overview
 
