@@ -100,7 +100,7 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 
 ## What you need
 
-- A VPS (Debian/Ubuntu) with root SSH key access — $3–5/month from any provider
+- A VPS (Debian/Ubuntu) with root SSH key access — $5/month from any provider
 - Recommended: Finland, Netherlands, Sweden, Germany (low latency, not flagged)
 - Optional: a domain pointed to the server (for CDN fallback via Cloudflare)
 
@@ -124,6 +124,7 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 | `meridian scan [IP]` | Find optimal SNI targets on server's network |
 | `meridian test [IP]` | Test proxy reachability from this device |
 | `meridian doctor [IP]` | Collect info for bug reports (alias: `rage`) |
+| `meridian update` | Update Meridian to the latest version |
 | `meridian teardown [IP]` | Remove proxy from server |
 
 See the [full CLI reference](https://getmeridian.org/docs/en/cli-reference/) for all commands and flags.
