@@ -72,6 +72,18 @@ meridian client add alice
 
 Each client gets their own key and connection page. List clients with `meridian client list`, revoke with `meridian client remove alice`.
 
+## Manage servers
+
+When you manage multiple VPS deployments:
+
+```
+meridian server list                # view all managed servers
+meridian server add 5.6.7.8        # add an existing server
+meridian server remove finland     # remove from registry
+```
+
+The `--server` flag lets you target a specific server for any command: `meridian client add alice --server finland`.
+
 ## Next steps
 
 - [Deploy guide](/docs/en/deploy/) — full deployment walkthrough with all options

@@ -66,6 +66,18 @@ meridian client add alice
 
 هر کلاینت کلید و صفحه اتصال خود را دارد. با `meridian client list` کلاینت‌ها را فهرست کنید، با `meridian client remove alice` لغو کنید.
 
+## مدیریت سرورها
+
+وقتی چندین VPS را مدیریت می‌کنید:
+
+```
+meridian server list                # مشاهده تمام سرورها
+meridian server add 5.6.7.8        # افزودن سرور موجود
+meridian server remove finland     # حذف از رجیستری
+```
+
+فلگ `--server` به شما اجازه می‌دهد سرور خاصی را برای هر دستور مشخص کنید: `meridian client add alice --server finland`.
+
 ## مراحل بعدی
 
 - [راهنمای استقرار](/docs/fa/deploy/) — راهنمای استقرار کامل با تمام گزینه‌ها

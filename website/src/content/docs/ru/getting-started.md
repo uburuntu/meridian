@@ -66,6 +66,18 @@ meridian client add alice
 
 Каждый клиент получает свой собственный ключ и страницу подключения. Отобразить клиентов можно командой `meridian client list`, отозвать доступ — `meridian client remove alice`.
 
+## Управление серверами
+
+Когда вы управляете несколькими VPS:
+
+```
+meridian server list                # просмотр всех серверов
+meridian server add 5.6.7.8        # добавить существующий сервер
+meridian server remove finland     # удалить из реестра
+```
+
+Флаг `--server` позволяет указать конкретный сервер для любой команды: `meridian client add alice --server finland`.
+
 ## Следующие шаги
 
 - [Руководство развёртывания](/docs/ru/deploy/) — полное руководство по развёртыванию со всеми опциями

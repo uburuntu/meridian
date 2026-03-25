@@ -66,6 +66,18 @@ meridian client add alice
 
 每个客户端都有自己的密钥和连接页面。使用 `meridian client list` 列出客户端，使用 `meridian client remove alice` 撤销访问权限。
 
+## 管理服务器
+
+当您管理多个 VPS 部署时：
+
+```
+meridian server list                # 查看所有管理的服务器
+meridian server add 5.6.7.8        # 添加现有服务器
+meridian server remove finland     # 从注册表中删除
+```
+
+`--server` 标志可以为任何命令指定特定服务器：`meridian client add alice --server finland`。
+
 ## 后续步骤
 
 - [部署指南](/docs/zh/deploy/) — 完整的部署演练，包括所有选项

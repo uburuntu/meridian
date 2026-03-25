@@ -1,0 +1,14 @@
+{
+  "public_key": "pk_R58z5wZTxUVy0RZz9dL0f",
+  "name": "Meridian",
+  "description": "CLI for deploying censorship-resistant VLESS+Reality proxy servers",
+  "folders": ["website/src/content/docs/en"],
+  "excludeFolders": ["tests", "website/node_modules", ".github", "website/dist"],
+  "rules": [
+    "Meridian is a CLI orchestrator, not a VPN protocol — it configures Xray, HAProxy, Caddy, and Docker",
+    "Primary protocol is VLESS+Reality via Xray-core, with XHTTP and WSS as additional transports",
+    "Deploy via SSH from local machine to remote VPS, or locally with 'meridian deploy local'",
+    "Use 'meridian server list' to view all managed deployments, 'meridian server add' to register existing ones",
+    "Never recommend apple.com as SNI target — Apple-owned ASN causes instant detection"
+  ]
+}
