@@ -203,7 +203,7 @@ class TestInboundCRUD:
                         "publicKey": "K6JYbz4MflVPaaxdtRHoWBNp7SHzGMaqp6ohXMfJHUy",
                         "fingerprint": "chrome",
                         "serverName": "",
-                        "spiderX": "/",
+                        "spiderX": "/abcd1234",
                     },
                 },
                 "tcpSettings": {

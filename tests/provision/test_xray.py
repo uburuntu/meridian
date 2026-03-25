@@ -78,6 +78,19 @@ class TestRealityStreamSettings:
         data = json.loads(raw)
         assert TEST_SHORT_ID in data["realitySettings"]["shortIds"]
 
+    def test_reality_stream_settings_spider_x_derived_from_short_id(self):
+        """spiderX is derived from short_id (not hardcoded '/')."""
+        raw = _reality_stream_settings(
+            sni=TEST_SNI,
+            private_key=TEST_PRIVATE_KEY,
+            public_key=TEST_PUBLIC_KEY,
+            short_id=TEST_SHORT_ID,
+        )
+        data = json.loads(raw)
+        spider_x = data["realitySettings"]["settings"]["spiderX"]
+        assert spider_x == f"/{TEST_SHORT_ID}"
+        assert spider_x != "/"
+
 
 # ---------------------------------------------------------------------------
 # _xhttp_stream_settings
@@ -95,6 +108,19 @@ class TestXHTTPStreamSettings:
         )
         data = json.loads(raw)
         assert data["xhttpSettings"]["mode"] == "packet-up"
+
+    def test_xhttp_stream_settings_spider_x_derived_from_short_id(self):
+        """spiderX in XHTTP Reality settings is derived from short_id."""
+        raw = _xhttp_stream_settings(
+            sni=TEST_SNI,
+            private_key=TEST_PRIVATE_KEY,
+            public_key=TEST_PUBLIC_KEY,
+            short_id=TEST_SHORT_ID,
+        )
+        data = json.loads(raw)
+        spider_x = data["realitySettings"]["settings"]["spiderX"]
+        assert spider_x == f"/{TEST_SHORT_ID}"
+        assert spider_x != "/"
 
 
 # ---------------------------------------------------------------------------

@@ -100,7 +100,7 @@ def _reality_stream_settings(
                     "publicKey": public_key,
                     "fingerprint": fingerprint,
                     "serverName": "",
-                    "spiderX": "/",
+                    "spiderX": f"/{short_id}",
                 },
             },
             "tcpSettings": {
@@ -141,7 +141,7 @@ def _xhttp_stream_settings(
                     "publicKey": public_key,
                     "fingerprint": fingerprint,
                     "serverName": "",
-                    "spiderX": "/",
+                    "spiderX": f"/{short_id}",
                 },
             },
             "xhttpSettings": {
