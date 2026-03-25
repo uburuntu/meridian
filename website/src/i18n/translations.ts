@@ -67,6 +67,7 @@ export const translations: Record<string, Record<string, string>> = {
     'arch.title': 'Под капотом',
     'arch.standalone': 'Автономный режим (без домена)',
     'arch.domain': 'Доменный режим (CDN-фолбэк)',
+    'arch.relay': 'Режим реле (внутренняя точка входа)',
 
     // Reference
     // (removed — content moved to docs pages)
@@ -177,6 +178,7 @@ export const translations: Record<string, Record<string, string>> = {
     'arch.title': 'زیر کاپوت',
     'arch.standalone': 'حالت مستقل (بدون دامنه)',
     'arch.domain': 'حالت دامنه (CDN)',
+    'arch.relay': 'حالت رله (نقطه ورود داخلی)',
 
     // Reference
     // (removed — content moved to docs pages)
@@ -286,6 +288,7 @@ export const translations: Record<string, Record<string, string>> = {
     'arch.title': '工作原理',
     'arch.standalone': '独立模式（无域名）',
     'arch.domain': '域名模式（CDN 回退）',
+    'arch.relay': '中继模式（境内入口）',
 
     // Reference
     // (removed — content moved to docs pages)

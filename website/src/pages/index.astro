@@ -210,6 +210,18 @@ const detailSteps = [
               if your server's IP is blocked.
             </p>
           </Accordion>
+
+          <Accordion title="Relay mode (domestic entry point)" titleKey="arch.relay">
+            <p>
+              A lightweight <strong>Realm</strong> TCP forwarder on a domestic server relays
+              port 443 to your exit server abroad. All protocols work through the relay
+              with end-to-end encryption — the relay never sees your traffic.
+            </p>
+            <p>
+              Deploy with <code>meridian relay deploy RELAY_IP</code>. Client connection
+              pages are automatically regenerated with relay routes.
+            </p>
+          </Accordion>
         </div>
       </div>
     </section>
