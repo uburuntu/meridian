@@ -9,8 +9,9 @@ var T = {
   ru: {
     title: 'Настройка подключения',
     subtitle: 'Отсканируйте QR-код или нажмите, чтобы открыть в приложении',
+    'subtitle.named': 'Подключение для {name} — отсканируйте QR-код или откройте в приложении',
     trust: 'Это безопасное подключение, настроенное для вас',
-    'trust.named': '{name} настроил(а) это подключение для вас',
+    'trust.server': 'Безопасное подключение через {name}',
     primary: 'Основной', backup: 'Резервный',
     'primary.rec': 'Рекомендовано',
     'primary.desc': 'Рекомендуется — самое быстрое и надёжное подключение. Используйте в первую очередь.',
@@ -38,6 +39,10 @@ var T = {
     'install.btn': 'Установить',
     'sub.label': 'Подписка (автообновление)',
     'sub.desc': 'Добавьте этот URL как подписку в приложении для автоматических обновлений.',
+    'import.label': 'Импорт в одно касание',
+    'import.desc': 'Добавьте в приложение одним нажатием. Обновляется автоматически.',
+    'import.add': 'Добавить в {name}',
+    'import.manual': 'Скопировать URL подписки',
     'install.offline': 'Доступ к подключению офлайн',
     'backup.direct': 'ЗАПАСНОЙ (ПРЯМОЙ)',
     'relay.desc': 'Подключайтесь через реле для лучшей надёжности в вашем регионе.',
@@ -60,8 +65,9 @@ var T = {
   fa: {
     title: 'تنظیم اتصال',
     subtitle: 'کد QR را اسکن کنید یا برای باز کردن در برنامه ضربه بزنید',
+    'subtitle.named': 'اتصال برای {name} — کد QR را اسکن کنید یا در برنامه باز کنید',
     trust: 'این یک اتصال امن است که برای شما تنظیم شده',
-    'trust.named': '{name} این اتصال را برای شما تنظیم کرده',
+    'trust.server': 'اتصال امن از {name}',
     primary: 'اصلی', backup: 'پشتیبان',
     'primary.rec': 'پیشنهادی',
     'primary.desc': 'پیشنهادی \u2014 سریع\u200Cترین و پایدارترین اتصال. ابتدا این را امتحان کنید.',
@@ -89,6 +95,10 @@ var T = {
     'install.btn': 'نصب',
     'sub.label': 'اشتراک (بروزرسانی خودکار)',
     'sub.desc': 'این URL را به عنوان اشتراک در برنامه اضافه کنید.',
+    'import.label': 'افزودن با یک ضربه',
+    'import.desc': 'با یک ضربه به برنامه اضافه کنید. به\u200Cروزرسانی خودکار.',
+    'import.add': 'افزودن به {name}',
+    'import.manual': 'کپی URL اشتراک',
     'install.offline': 'دسترسی آفلاین به اتصال',
     'backup.direct': 'پشتیبان (مستقیم)',
     'relay.desc': 'برای بهترین پایداری در منطقه خود از طریق رله متصل شوید.',
@@ -111,8 +121,9 @@ var T = {
   zh: {
     title: '连接设置',
     subtitle: '扫描二维码或点击在应用中打开',
+    'subtitle.named': '{name} 的连接 — 扫描二维码或点击在应用中打开',
     trust: '这是为您设置的安全连接',
-    'trust.named': '{name} 为您设置了此连接',
+    'trust.server': '来自 {name} 的安全连接',
     primary: '主要', backup: '备用',
     'primary.rec': '推荐',
     'primary.desc': '推荐 — 最快最稳定的连接。请优先使用。',
@@ -140,6 +151,10 @@ var T = {
     'install.btn': '安装',
     'sub.label': '订阅（自动更新）',
     'sub.desc': '将此 URL 作为订阅添加到应用中以自动更新。',
+    'import.label': '一键导入',
+    'import.desc': '一键添加到应用，自动更新。',
+    'import.add': '添加到 {name}',
+    'import.manual': '复制订阅链接',
     'install.offline': '离线访问连接',
     'backup.direct': '备用（直连）',
     'relay.desc': '通过中继连接以获得最佳可靠性。',
@@ -335,6 +350,12 @@ function getSubscriptionUrl() {
   return location.origin + path + '/sub.txt';
 }
 
+function buildDeepLink(template, subUrl, name) {
+  return template
+    .replace('{url}', encodeURIComponent(subUrl))
+    .replace('{name}', encodeURIComponent(name || 'Meridian'));
+}
+
 /* -----------------------------------------------------------------------
  * Web Share API
  * ----------------------------------------------------------------------- */
@@ -469,11 +490,12 @@ function renderPage(config) {
   }
 
   /* Trust bar */
-  var trustName = isPersonalName(config.client_name) ? capitalize(config.client_name) : '';
+  var serverName = config.server_name ? escapeHtml(config.server_name) : '';
+  var clientName = isPersonalName(config.client_name) ? capitalize(config.client_name) : '';
   html += '<div class="trust-bar">';
   html += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
-  if (trustName) {
-    html += '<span data-t="trust.named">' + escapeHtml(trustName) + ' set up this secure connection for you</span>';
+  if (serverName) {
+    html += '<span data-t="trust.server">Secure connection via ' + serverName + '</span>';
   } else {
     html += '<span data-t="trust">This is a secure connection set up for you</span>';
   }
@@ -482,8 +504,8 @@ function renderPage(config) {
   /* Header */
   var pageTitle = config.server_name ? escapeHtml(config.server_name) : 'Connection Setup';
   var titleExtra = '';
-  if (!config.server_name && trustName) {
-    titleExtra = ' \u2014 ' + escapeHtml(trustName);
+  if (!config.server_name && clientName) {
+    titleExtra = ' \u2014 ' + escapeHtml(clientName);
   }
   html += '<div class="hdr">';
   if (iconHtml) {
@@ -494,7 +516,11 @@ function renderPage(config) {
   } else {
     html += '<h1 data-t="title">Connection Setup' + titleExtra + '</h1>';
   }
-  html += '<p data-t="subtitle">Scan QR code or tap to open in your app</p>';
+  if (clientName) {
+    html += '<p data-t="subtitle.named">Connection for ' + escapeHtml(clientName) + ' \u2014 scan QR code or tap to open in your app</p>';
+  } else {
+    html += '<p data-t="subtitle">Scan QR code or tap to open in your app</p>';
+  }
 
   /* Language selector */
   html += '<div class="lang-bar">';
@@ -597,17 +623,10 @@ function renderPage(config) {
   html += '</div>';
   html += '</div>';
 
-  /* Subscription URL (behind toggle — advanced users only) */
+  /* One-Tap Import + Subscription URL */
   var subUrl = getSubscriptionUrl();
-  html += '<details class="more-options">';
-  html += '<summary data-t="sub.label">Subscription (auto-update)</summary>';
-  html += '<div class="card" style="margin-top:8px">';
-  html += '<p class="card-desc" data-t="sub.desc">Add this URL as a subscription in your app for automatic updates.</p>';
-  html += '<div class="sub-url">';
-  html += '<div class="sub-url-value" tabindex="0" role="button" data-action="copy-text">' + escapeHtml(subUrl) + '</div>';
-  html += '</div>';
-  html += '</div>';
-  html += '</details>';
+  var serverLabel = config.server_name || 'Meridian';
+  html += renderImportCard(config.apps, subUrl, platform, serverLabel);
 
   /* Clock warning only shown at top when skew is detected (clockStatus === 'bad') */
 
@@ -635,7 +654,7 @@ function renderPage(config) {
   var primaryUuid = extractUuid(config.protocols);
   if (primaryUuid) loadStats(primaryUuid);
   requestWakeLock();
-  applyI18n(config.client_name);
+  applyI18n(config.client_name, config.server_name);
   highlightActiveLang();
 }
 
@@ -776,6 +795,67 @@ function renderProtocolCard(proto, platform, opts) {
   return html;
 }
 
+function renderImportCard(apps, subUrl, platform, serverName) {
+  var deepApps = [];
+  if (apps) {
+    for (var i = 0; i < apps.length; i++) {
+      if (apps[i].deeplink) deepApps.push(apps[i]);
+    }
+  }
+  if (!deepApps.length) {
+    /* Fallback: show old-style subscription URL if no deep links */
+    var html = '<details class="more-options">';
+    html += '<summary data-t="sub.label">Subscription (auto-update)</summary>';
+    html += '<div class="card" style="margin-top:8px">';
+    html += '<p class="card-desc" data-t="sub.desc">Add this URL as a subscription in your app for automatic updates.</p>';
+    html += '<div class="sub-url">';
+    html += '<div class="sub-url-value" tabindex="0" role="button" data-action="copy-text">' + escapeHtml(subUrl) + '</div>';
+    html += '</div></div></details>';
+    return html;
+  }
+
+  var osMap = {
+    ios: 'iOS', android: 'Android',
+    windows: 'Windows', macos: 'All platforms', linux: 'All platforms',
+  };
+  var detectedOs = osMap[platform] || 'All platforms';
+
+  /* Sort detected platform first */
+  var sorted = [];
+  for (var j = 0; j < deepApps.length; j++) {
+    if (deepApps[j].platform === detectedOs) sorted.unshift(deepApps[j]);
+    else sorted.push(deepApps[j]);
+  }
+
+  var html = '<div class="card">';
+  html += '<div style="font-size:.78rem;font-weight:600;margin-bottom:4px" data-t="import.label">One-Tap Import</div>';
+  html += '<p class="card-desc" data-t="import.desc">Add to your app with one tap. Updates automatically.</p>';
+  html += '<div class="import-grid">';
+
+  for (var k = 0; k < sorted.length; k++) {
+    var app = sorted[k];
+    var href = buildDeepLink(app.deeplink, subUrl, serverName);
+    var detected = (app.platform === detectedOs) ? ' detected' : '';
+    html += '<a class="import-btn' + detected + '" href="' + escapeHtml(href) + '">';
+    html += '<span class="import-btn-add">+</span> ';
+    html += '<span data-t="import.add" data-t-name="' + escapeHtml(app.name) + '">Add to ' + escapeHtml(app.name) + '</span>';
+    html += '</a>';
+  }
+
+  html += '</div>';
+
+  /* Collapsed manual URL fallback */
+  html += '<details class="more-options" style="margin-top:8px">';
+  html += '<summary data-t="import.manual">Copy subscription URL</summary>';
+  html += '<div class="sub-url" style="margin-top:6px">';
+  html += '<div class="sub-url-value" tabindex="0" role="button" data-action="copy-text">' + escapeHtml(subUrl) + '</div>';
+  html += '</div>';
+  html += '</details>';
+
+  html += '</div>';
+  return html;
+}
+
 function renderAppsCard(apps, platform) {
   if (!apps || !apps.length) return '';
   var isReturning = 'serviceWorker' in navigator && navigator.serviceWorker.controller;
@@ -839,22 +919,30 @@ function highlightActiveLang() {
   });
 }
 
-function applyI18n(clientName) {
+function applyI18n(clientName, serverName) {
   currentLang = detectLang();
-  if (!currentLang) { currentLang = 'en'; highlightActiveLang(); updatePageMeta(clientName); return; }
+  if (!currentLang) { currentLang = 'en'; highlightActiveLang(); updatePageMeta(clientName, serverName); return; }
   var dict = T[currentLang];
-  if (!dict) { highlightActiveLang(); updatePageMeta(clientName); return; }
+  if (!dict) { highlightActiveLang(); updatePageMeta(clientName, serverName); return; }
   document.querySelectorAll('[data-t]').forEach(function(el) {
     var k = el.dataset.t;
     var v = dict[k];
     if (v) {
-      if (k === 'trust.named' && isPersonalName(clientName)) {
+      if (k === 'trust.server' && serverName) {
+        el.textContent = v.replace('{name}', serverName);
+      } else if (k === 'subtitle.named' && isPersonalName(clientName)) {
         el.textContent = v.replace('{name}', capitalize(clientName));
+      } else if (k === 'import.add' && el.dataset.tName) {
+        el.textContent = v.replace('{name}', el.dataset.tName);
       } else {
         el.textContent = v;
       }
-      if (k === 'title' && isPersonalName(clientName)) {
-        el.textContent += ' — ' + capitalize(clientName);
+      if (k === 'title') {
+        if (serverName) {
+          el.textContent = serverName;
+        } else if (isPersonalName(clientName)) {
+          el.textContent += ' \u2014 ' + capitalize(clientName);
+        }
       }
     }
   });
@@ -864,17 +952,21 @@ function applyI18n(clientName) {
     document.documentElement.dir = 'ltr';
   }
   highlightActiveLang();
-  updatePageMeta(clientName);
+  updatePageMeta(clientName, serverName);
 }
 
-function updatePageMeta(clientName) {
+function updatePageMeta(clientName, serverName) {
   /* Update <title> and <html lang> to match current language */
   var dict = currentLang && T[currentLang];
-  var titleText = (dict && dict['page_title']) || 'Connection Setup';
-  if (isPersonalName(clientName)) {
-    titleText += ' \u2014 ' + capitalize(clientName);
+  if (serverName) {
+    document.title = serverName;
+  } else {
+    var titleText = (dict && dict['page_title']) || 'Connection Setup';
+    if (isPersonalName(clientName)) {
+      titleText += ' \u2014 ' + capitalize(clientName);
+    }
+    document.title = titleText;
   }
-  document.title = titleText;
 
   /* Map internal lang codes to BCP 47 */
   var langMap = { en: 'en', ru: 'ru', fa: 'fa', zh: 'zh' };

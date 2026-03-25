@@ -329,6 +329,29 @@ class TestPWAAppsSync:
             apps_json = json.load(f)
         assert len(_PWA_APPS) == len(apps_json)
 
+    def test_deeplink_field_is_optional(self) -> None:
+        """Apps without deep links must not be required to have the field."""
+        for app in _PWA_APPS:
+            assert "name" in app
+            assert "url" in app
+            # deeplink is optional — some apps have it, some don't
+
+    def test_deeplink_templates_contain_url_placeholder(self) -> None:
+        """Every deep link template must include {url} for subscription URL."""
+        for app in _PWA_APPS:
+            if "deeplink" in app:
+                assert "{url}" in app["deeplink"], f"{app['name']} deeplink missing {{url}}: {app['deeplink']}"
+
+    def test_deeplink_sync_with_apps_json(self) -> None:
+        """Deeplink values in _PWA_APPS must match apps.json."""
+        repo_root = Path(__file__).resolve().parent.parent
+        apps_json_path = repo_root / "website" / "src" / "data" / "apps.json"
+        with open(apps_json_path) as f:
+            apps_json = json.load(f)
+        json_links = {a["name"]: a.get("deeplink") for a in apps_json}
+        pwa_links = {a["name"]: a.get("deeplink") for a in _PWA_APPS}
+        assert json_links == pwa_links, f"Deeplink mismatch:\n  apps.json: {json_links}\n  _PWA_APPS: {pwa_links}"
+
 
 # ---------------------------------------------------------------------------
 # TestUnicodeClientNames — non-ASCII names (Gap #6)

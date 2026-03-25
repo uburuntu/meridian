@@ -366,6 +366,24 @@ summary::marker{display:none;content:none}
 }
 
 /* ===================================================================
+ * ONE-TAP IMPORT
+ * =================================================================== */
+.import-grid{
+  display:grid;grid-template-columns:1fr;gap:8px;
+}
+.import-btn{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px 14px;border-radius:var(--r);
+  background:var(--bg2);border:1px solid var(--br);
+  color:var(--tx);font-size:.8rem;font-weight:600;
+  text-decoration:none;cursor:pointer;
+  transition:border-color .15s,background .15s;
+}
+.import-btn:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--bg2))}
+.import-btn.detected{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--bg2))}
+.import-btn-add{font-size:1rem;font-weight:700;color:var(--accent);line-height:1}
+
+/* ===================================================================
  * SKELETON LOADING
  * =================================================================== */
 .skeleton{padding:24px 0}
@@ -431,6 +449,9 @@ summary::marker{display:none;content:none}
   /* Apps grid */
   .apps { grid-template-columns: repeat(3, 1fr); gap: 10px }
   .app { padding: 14px 12px; font-size: .82rem }
+
+  /* Import grid */
+  .import-grid { grid-template-columns: repeat(3, 1fr) }
 
   /* URL hover tooltip replacing "tap to copy" */
   .url-hint { display: none }

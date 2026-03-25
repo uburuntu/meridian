@@ -131,8 +131,24 @@ def render_hosted_html(
 # App download links — matches website/src/data/apps.json (single source of truth)
 _PWA_APPS = [
     {"name": "v2RayTun", "platform": "iOS", "url": "https://apps.apple.com/app/v2raytun/id6476628951"},
-    {"name": "v2rayNG", "platform": "Android", "url": "https://github.com/2dust/v2rayNG/releases/latest"},
-    {"name": "Hiddify", "platform": "All platforms", "url": "https://github.com/hiddify/hiddify-app/releases/latest"},
+    {
+        "name": "Streisand",
+        "platform": "iOS",
+        "url": "https://apps.apple.com/app/streisand/id6450534064",
+        "deeplink": "streisand://import/{url}#{name}",
+    },
+    {
+        "name": "v2rayNG",
+        "platform": "Android",
+        "url": "https://github.com/2dust/v2rayNG/releases/latest",
+        "deeplink": "v2rayng://install-sub?url={url}&name={name}",
+    },
+    {
+        "name": "Hiddify",
+        "platform": "All platforms",
+        "url": "https://github.com/hiddify/hiddify-app/releases/latest",
+        "deeplink": "hiddify://install-config/?url={url}",
+    },
     {"name": "v2rayN", "platform": "Windows", "url": "https://github.com/2dust/v2rayN/releases/latest"},
 ]
 
