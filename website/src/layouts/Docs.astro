@@ -6,6 +6,7 @@
 import Base from './Base.astro';
 import DocsSidebar from '../components/DocsSidebar.astro';
 import TOC from '../components/TOC.astro';
+import Mermaid from '../components/Mermaid.astro';
 
 interface Heading {
   depth: number;
@@ -74,7 +75,7 @@ const dir = locale === 'fa' ? 'rtl' : 'ltr';
           <a href={mdPath} class="docs-locale-btn docs-md-btn" title="View as Markdown">MD</a>
         </div>
       )}
-      <article class="docs-article" data-pagefind-body>
+      <article class="docs-article prose" data-pagefind-body>
         <h1>{title}</h1>
         <slot />
       </article>
@@ -82,9 +83,12 @@ const dir = locale === 'fa' ? 'rtl' : 'ltr';
 
     <TOC headings={headings} />
   </div>
+  <Mermaid />
 </Base>
 
 <style is:global>
+  @import '../styles/prose.css';
+
   .docs-layout {
     display: flex;
     max-width: 1200px;
@@ -141,158 +145,15 @@ const dir = locale === 'fa' ? 'rtl' : 'ltr';
     letter-spacing: 0.04em;
   }
 
-  /* Markdown content styles */
-  .docs-article h2 {
-    margin-top: 48px;
-    margin-bottom: 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--b1);
-  }
-
-  .docs-article h3 {
-    margin-top: 32px;
-    margin-bottom: 12px;
-  }
-
-  .docs-article p {
-    color: var(--t2);
-    font-size: 0.92rem;
-    line-height: 1.75;
-    margin-bottom: 16px;
-  }
-
-  .docs-article ul, .docs-article ol {
-    color: var(--t2);
-    font-size: 0.92rem;
-    line-height: 1.75;
-    margin-bottom: 16px;
-    padding-left: 24px;
-  }
-
-  .docs-article li {
-    margin-bottom: 6px;
-  }
-
-  .docs-article strong {
-    color: var(--t1);
-    font-weight: 500;
-  }
-
-  .docs-article em {
-    color: var(--t1);
-    font-style: italic;
-  }
-
-  .docs-article code {
-    font-family: var(--mono);
-    font-size: 0.82rem;
-    background: var(--s1);
-    padding: 2px 7px;
-    border-radius: 4px;
-    border: 1px solid var(--b1);
-    color: var(--t1);
-  }
-
-  .docs-article pre {
-    background: var(--s1);
-    border: 1px solid var(--b1);
-    border-radius: var(--r);
-    padding: 18px 22px;
-    margin: 16px 0;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .docs-article pre code {
-    background: none;
-    border: none;
-    padding: 0;
-    font-size: 0.82rem;
-    line-height: 1.65;
-    color: var(--t1);
-  }
-
-  .docs-article a {
-    color: var(--ac);
-    text-decoration: underline;
-    text-decoration-color: var(--ac2);
-    text-underline-offset: 2px;
-    transition: text-decoration-color 0.1s;
-  }
-  .docs-article a:hover {
-    text-decoration-color: var(--ac);
-    color: var(--ac);
-  }
-
-  .docs-article table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.84rem;
-    margin: 16px 0;
-  }
-
-  .docs-article th {
-    text-align: left;
-    color: var(--t3);
-    font-weight: 500;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--b2);
-  }
-
-  .docs-article td {
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--b1);
-    color: var(--t2);
-    vertical-align: top;
-  }
-
-  .docs-article td:first-child {
-    color: var(--t1);
-    font-family: var(--mono);
-    font-size: 0.78rem;
-  }
-
-  .docs-article tr:last-child td {
-    border-bottom: none;
-  }
-
-  .docs-article blockquote {
-    border-left: 3px solid var(--ac);
-    padding: 12px 18px;
-    margin: 16px 0;
-    background: var(--ac3);
-    border-radius: 0 var(--r) var(--r) 0;
-    color: var(--t2);
-    font-size: 0.9rem;
-  }
-
-  .docs-article hr {
-    border: none;
-    height: 1px;
-    background: var(--b1);
-    margin: 40px 0;
-  }
-
-  .docs-article img {
-    max-width: 100%;
-    height: auto;
-    border-radius: var(--r);
-    border: 1px solid var(--b1);
-  }
-
   /* RTL support for docs */
-  [dir="rtl"] .docs-article th { text-align: right; }
-  [dir="rtl"] .docs-article { direction: rtl; }
-  [dir="rtl"] .docs-article ul,
-  [dir="rtl"] .docs-article ol {
+  [dir="rtl"] .prose th { text-align: right; }
+  [dir="rtl"] .prose { direction: rtl; }
+  [dir="rtl"] .prose ul,
+  [dir="rtl"] .prose ol {
     padding-left: 0;
     padding-right: 24px;
   }
-  [dir="rtl"] .docs-article blockquote {
+  [dir="rtl"] .prose blockquote {
     border-left: none;
     border-right: 3px solid var(--ac);
     border-radius: var(--r) 0 0 var(--r);

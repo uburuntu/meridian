@@ -11,6 +11,7 @@ export const translations: Record<string, Record<string, string>> = {
   ru: {
     // Nav / global
     'nav.docs': 'Документация',
+    'nav.blog': 'Блог',
     'nav.demo': 'Демо',
     'nav.ping': 'Пинг',
     'toc.label': 'На этой странице',
@@ -127,6 +128,7 @@ export const translations: Record<string, Record<string, string>> = {
 
   fa: {
     'nav.docs': 'مستندات',
+    'nav.blog': 'بلاگ',
     'nav.demo': 'نمونه',
     'nav.ping': 'پینگ',
     'toc.label': 'در این صفحه',
@@ -236,6 +238,7 @@ export const translations: Record<string, Record<string, string>> = {
 
   zh: {
     'nav.docs': '文档',
+    'nav.blog': '博客',
     'nav.demo': '演示',
     'nav.ping': '测试',
     'toc.label': '本页目录',

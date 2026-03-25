@@ -1,0 +1,122 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+
+const posts = (await getCollection('blog')).sort(
+  (a, b) => b.data.date.getTime() - a.data.date.getTime()
+);
+---
+
+<Base title="Blog — Meridian" description="Articles on censorship circumvention, proxy architecture, and internet freedom.">
+  <main id="main" class="blog-index">
+    <header class="blog-index__header">
+      <h1>Blog</h1>
+      <p>Technical deep-dives, guides, and engineering notes from the Meridian team.</p>
+    </header>
+    <div class="blog-grid">
+      {posts.map((post) => {
+        const formatted = post.data.date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        });
+        return (
+          <a href={`/blog/${post.id}/`} class="blog-card" data-astro-prefetch>
+            <div class="blog-card__top">
+              <span class="blog-card__category">{post.data.category}</span>
+              <span class="blog-card__time">{post.data.readingTime} min</span>
+            </div>
+            <h2 class="blog-card__title">{post.data.title}</h2>
+            <p class="blog-card__desc">{post.data.description}</p>
+            <time class="blog-card__date" datetime={post.data.date.toISOString().slice(0, 10)}>
+              {formatted}
+            </time>
+          </a>
+        );
+      })}
+    </div>
+  </main>
+</Base>
+
+<style>
+  .blog-index {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+  .blog-index__header {
+    margin-bottom: 40px;
+  }
+  .blog-index__header h1 {
+    margin-bottom: 8px;
+  }
+  .blog-index__header p {
+    color: var(--t3);
+    font-size: 0.92rem;
+  }
+
+  .blog-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  @media (min-width: 640px) {
+    .blog-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .blog-card {
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    border: 1px solid var(--b1);
+    border-radius: var(--r);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .blog-card:hover {
+    border-color: var(--b2);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .blog-card__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .blog-card__category {
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    background: var(--ac3);
+    color: var(--ac);
+    border-radius: 4px;
+  }
+  .blog-card__time {
+    font-size: 0.76rem;
+    color: var(--t3);
+  }
+
+  .blog-card__title {
+    font-size: 1.05rem;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--t1);
+    margin-bottom: 8px;
+  }
+  .blog-card__desc {
+    font-size: 0.84rem;
+    line-height: 1.55;
+    color: var(--t2);
+    flex: 1;
+    margin-bottom: 12px;
+  }
+  .blog-card__date {
+    font-size: 0.76rem;
+    color: var(--t3);
+  }
+</style>

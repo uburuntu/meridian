@@ -1,0 +1,108 @@
+---
+import Base from './Base.astro';
+import Mermaid from '../components/Mermaid.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  date: Date;
+  author: string;
+  category: string;
+  readingTime: number;
+}
+
+const { title, description, date, author, category, readingTime } = Astro.props;
+
+const formatted = date.toLocaleDateString('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<Base title={`${title} — Meridian Blog`} description={description}>
+  <main id="main" class="blog-post">
+    <article class="blog-article prose" data-pagefind-body>
+      <header class="blog-header">
+        <a href="/blog/" class="blog-back">&larr; All posts</a>
+        <h1>{title}</h1>
+        <div class="blog-meta">
+          <time datetime={date.toISOString().slice(0, 10)}>{formatted}</time>
+          <span class="blog-meta__sep">&middot;</span>
+          <span>{author}</span>
+          <span class="blog-meta__sep">&middot;</span>
+          <span class="blog-category">{category}</span>
+          <span class="blog-meta__sep">&middot;</span>
+          <span>{readingTime} min read</span>
+        </div>
+      </header>
+      <slot />
+    </article>
+    <footer class="blog-footer">
+      <a href="/blog/">&larr; Back to all posts</a>
+    </footer>
+  </main>
+  <Mermaid />
+</Base>
+
+<style is:global>
+  @import '../styles/prose.css';
+
+  .blog-post {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  .blog-back {
+    display: inline-block;
+    font-size: 0.84rem;
+    color: var(--t3);
+    text-decoration: none;
+    margin-bottom: 24px;
+    transition: color 0.12s;
+  }
+  .blog-back:hover {
+    color: var(--ac);
+  }
+
+  .blog-header {
+    margin-bottom: 40px;
+  }
+  .blog-header h1 {
+    margin-bottom: 12px;
+  }
+  .blog-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.84rem;
+    color: var(--t3);
+  }
+  .blog-meta__sep {
+    color: var(--b2);
+  }
+  .blog-category {
+    padding: 2px 8px;
+    font-size: 0.76rem;
+    font-weight: 500;
+    background: var(--ac3);
+    color: var(--ac);
+    border-radius: 4px;
+  }
+
+  .blog-footer {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--b1);
+  }
+  .blog-footer a {
+    font-size: 0.88rem;
+    color: var(--ac);
+    text-decoration: none;
+  }
+  .blog-footer a:hover {
+    text-decoration: underline;
+  }
+</style>

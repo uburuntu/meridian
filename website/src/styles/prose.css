@@ -1,0 +1,128 @@
+/*
+ * Prose — shared markdown content styles for docs and blog.
+ * Apply .prose class to any <article> rendering markdown content.
+ */
+
+.prose h2 {
+  margin-top: 48px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--b1);
+}
+.prose h3 {
+  margin-top: 32px;
+  margin-bottom: 12px;
+}
+.prose p {
+  color: var(--t2);
+  font-size: 0.92rem;
+  line-height: 1.75;
+  margin-bottom: 16px;
+}
+.prose ul, .prose ol {
+  color: var(--t2);
+  font-size: 0.92rem;
+  line-height: 1.75;
+  margin-bottom: 16px;
+  padding-left: 24px;
+}
+.prose li {
+  margin-bottom: 6px;
+}
+.prose strong {
+  color: var(--t1);
+  font-weight: 500;
+}
+.prose em {
+  color: var(--t1);
+  font-style: italic;
+}
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  background: var(--s1);
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--b1);
+  color: var(--t1);
+}
+.prose pre {
+  background: var(--s1);
+  border: 1px solid var(--b1);
+  border-radius: var(--r);
+  padding: 18px 22px;
+  margin: 16px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.prose pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: var(--t1);
+}
+.prose a {
+  color: var(--ac);
+  text-decoration: underline;
+  text-decoration-color: var(--ac2);
+  text-underline-offset: 2px;
+  transition: text-decoration-color 0.1s;
+}
+.prose a:hover {
+  text-decoration-color: var(--ac);
+  color: var(--ac);
+}
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  margin: 16px 0;
+}
+.prose th {
+  text-align: left;
+  color: var(--t3);
+  font-weight: 500;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--b2);
+}
+.prose td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--b1);
+  color: var(--t2);
+  vertical-align: top;
+}
+.prose td:first-child {
+  color: var(--t1);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+.prose tr:last-child td {
+  border-bottom: none;
+}
+.prose blockquote {
+  border-left: 3px solid var(--ac);
+  padding: 12px 18px;
+  margin: 16px 0;
+  background: var(--ac3);
+  border-radius: 0 var(--r) var(--r) 0;
+  color: var(--t2);
+  font-size: 0.9rem;
+}
+.prose hr {
+  border: none;
+  height: 1px;
+  background: var(--b1);
+  margin: 40px 0;
+}
+.prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--r);
+  border: 1px solid var(--b1);
+}

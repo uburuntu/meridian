@@ -57,6 +57,7 @@ website/                           — Astro rationale, i18n strategy, CLI relat
   src/components/                  — composition pattern, Accordion CSS lesson
   src/styles/                      — token system, warm light-first palette
   src/pages/                       — dynamic routing, machine-readable endpoints
+  src/pages/blog/                  — blog index, post route, English-only linear reads
 .github/workflows/                 — two-stage pipeline, VERSION-driven releases
 ```
 
