@@ -1,37 +1,28 @@
 # website — Astro static site (getmeridian.org)
 
-## Build
-
 ```bash
 cd website && npm install && npm run build   # Astro + Pagefind
 ```
 
-## Structure
+## Design decisions
 
-```
-astro.config.mjs          Astro config (sitemap, rehype-mermaid, i18n)
-src/pages/                Landing, demo, ping, 404, docs/[...slug]
-src/components/           Nav, Hero, CommandBuilder, Accordion, CodeBlock, etc.
-src/layouts/              Base.astro, Docs.astro
-src/styles/               fonts.css, tokens.css, global.css
-src/i18n/                 Client-side i18n (translations.ts, index.ts)
-src/content/docs/{en,ru,fa,zh}/  48 markdown doc pages (12 per locale)
-src/data/apps.json        App download links (single source of truth)
-public/fonts/             Self-hosted woff2 (Fraunces, Source Sans 3, JetBrains Mono)
-public/img/               Images, terminal SVG, logos
-scripts/sync-template-css.mjs  CSS sync between Astro tokens and Jinja2 template
-```
+**Why Astro** — static generation means every page is a flat HTTP request. Content collections integrate natively with markdown docs. File-based routing. Minimal JS shipped (islands architecture).
+
+**i18n strategy** — docs are per-locale markdown files (`src/content/docs/{locale}/`). Landing page uses client-side `data-t` attribute swapping. English is baked into HTML; non-EN languages swap at runtime. This is asymmetric but avoids shipping EN translations in JS.
+
+**Self-hosted everything** — fonts (woff2), no CDN, no Google. Zero external requests. Target users live in censored regions where external resources are blocked.
+
+**Machine-readable endpoints** — `/llms.txt` (AI index), `/llms-full.txt` (all docs concatenated), `/md/[slug]` (raw markdown per doc), `/context-hub.md`. These make the project AI-native.
 
 ## Website ↔ CLI relationship
 
-- **App download links**: `src/data/apps.json` is SOT, CI validates against `connection-info.html.j2`. Also propagated to `render.py:_PWA_APPS` and `app.js:osMap`
-- **AI docs**: human docs (en/) → `make ai-docs` → `src/meridian/data/ai-reference.md` (strips frontmatter, concatenates). CI generates automatically
-- **i18n**: landing page uses client-side `data-t` + JS swap; docs are server-rendered per-locale files
+- **App links**: `src/data/apps.json` is SOT. CI validates against template + Python constants.
+- **AI docs**: en/ markdown → `make ai-docs` → bundled `ai-reference.md`. CI generates automatically.
+- **install.sh**: deployed to `getmeridian.org/install.sh` by CI release workflow.
 
-## Conventions
+## Pitfalls
 
-- **Self-hosted fonts**: zero external requests (Google Fonts blocked in target regions)
-- **Referrer policy**: `<meta name="referrer" content="no-referrer">` on all pages
-- **Demo data**: use RFC 5737 IPs (`198.51.100.x`), never real server IPs
-- **install.sh**: deployed to `getmeridian.org/install.sh` by CI. References in docs are correct, not dangling
-- **CSS sync**: `scripts/sync-template-css.mjs` keeps Astro tokens and Jinja2 template styles aligned
+- **Language switch reload asymmetry** — EN reloads page (build-time HTML), non-EN does client-side DOM swap. Consolidating would simplify but requires shipping EN translations.
+- **Pagefind only works after build** — dev mode shows fallback search input.
+- **Docs must exist in all 4 locales** — missing locale file breaks sidebar generation.
+- **Early locale script in `<head>`** — detects lang from localStorage, sets `dir=rtl` for Farsi before paint. Prevents layout shift.

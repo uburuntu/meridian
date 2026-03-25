@@ -1,22 +1,32 @@
 # tests
 
-## Quick reference
-
 ```bash
 make test                              # pytest only
-uv run pytest tests/ -v --tb=short     # verbose with short tracebacks
-uv run pytest tests/test_foo.py -v     # single file
-uv run pytest tests/ -k "test_name"    # by name pattern
+uv run pytest tests/ -v --tb=short     # verbose
+uv run pytest tests/ -k "test_name"    # by pattern
 ```
 
-## Current state
+## Testing philosophy
 
-493 pass, 6 skip as of 2026-03-25.
+**Integration-level verification** — tests ensure contracts hold (API returns X → we handle Y), not that every function has a unit test. The codebase is integration-heavy; mocking away SSH and APIs doesn't verify real behavior.
+
+**MockConnection pattern** — `conn.when("pattern", stdout=..., rc=0)` stubs SSH commands by substring match. First match wins. Exact matching is too brittle for shell commands with quoting and pipes.
+
+## Fixture organization
+
+Top-level `conftest.py` provides:
+- **`tmp_home`** — isolates `~/.meridian/` per test via env var + monkeypatch. Both env AND config module constants must be patched (cached imports leak state otherwise).
+- **`sample_proxy_yml`** / **`sample_v1_proxy_yml`** — return Paths, not content. Callers read explicitly.
+- **`servers_file`** / **`creds_dir`** — pre-built directory structures.
 
 ## Conventions
 
-- **API quirk testing** — tests verify the quirk is handled, named after the quirk (e.g., `test_login_uses_form_urlencoded_not_json`)
-- **Fixtures** in `conftest.py` — shared mocks for `ServerConnection`, `ProvisionContext`, credentials
-- **Demo data** — use RFC 5737 IPs (`198.51.100.x`), never real server IPs
-- **Shell injection** — tests should verify `shlex.quote()` on any `conn.run()` interpolated values
-- **Idempotent steps** — provisioner step tests should verify state-check-before-act behavior
+- **Quirk-named tests** — e.g., `test_login_uses_form_urlencoded_not_json()`. The test name IS the documentation.
+- **RFC 5737 IPs** — always `198.51.100.x` for test data, never real IPs.
+- **Idempotency dual-path** — provisioner tests verify both "needs change" and "already done" paths.
+- **`_strip_ansi()`** — strip Rich color codes before asserting on CLI output.
+
+## Pitfalls
+
+- **Module-level mutable state** — globals like `_warned_servers`, `_qrencode_warned` can leak between tests. Clear in fixtures.
+- **`tmp_home` must patch both** — env var AND `meridian.config` attributes. Missing either causes tests to touch real home directory.

@@ -1,28 +1,24 @@
 # commands — One module per subcommand
 
-Each file (setup, client, server, relay, check, scan, ping, diagnostics, uninstall, dev) is a Typer sub-app registered in `cli.py`.
+## Design decisions
 
-## Server resolution cascade
+**One file per command** — keeps concerns isolated. Each is a Typer sub-app registered in `cli.py`.
 
-Shared logic in `resolve.py`. Resolution order:
+**Server resolution cascade** in `resolve.py` — strict priority order ensures predictable behavior:
+1. Explicit IP → 2. `--server` name → 3. `local` keyword → 4. Single-server auto-select → 5. Multi-server prompt → 6. Fail with hint
 
-1. Explicit IP argument
-2. Named server (`--server name` lookup in credentials)
-3. Local keyword (`local`/`locally` → detect public IP, use `bash -c`)
-4. Auto-select (single server in credentials → use it)
-5. Interactive prompt (multiple servers → ask user)
-6. Fail with context
+**Three-step pattern**: resolve → ensure connection → fetch credentials. Every server-touching command follows this. Deviating causes subtle bugs.
 
-## Key patterns
+**Version mismatch check** — `fetch_credentials()` compares `deployed_with` against running CLI. Warns once per server per session. Non-blocking.
 
-- **`fetch_credentials()`** — loads from local cache or fetches via SSH. Checks version mismatch between local CLI and remote server, warns if incompatible
-- **`resolve.py`** — `is_local_keyword()`, `detect_public_ip()`, `resolve_server()` used across all commands
-- **`console.fail()`** — always include `hint_type` and actionable suggestions. Raises `typer.Exit(1)`
-- **`dev` subcommand** — hidden from `--help`, developer/debugging tools only
+## What's done well
 
-## Adding a new subcommand
+- **`local` keyword everywhere** — `deploy local`, `check local`, `--server local` all work. Case-insensitive. Same code path.
+- **Credential sync** — modify locally first, SCP back to server. No lockout on network failure.
 
-1. Create `commands/mycommand.py` with a Typer app
-2. Register in `cli.py`
-3. Add tests
-4. Update README.md, website docs, CLAUDE.md
+## Pitfalls
+
+- **Local mode has two entry points** — `local` keyword and root auto-detect. They converge on `local_mode=True` but differ on `creds_dir`.
+- **SCP sync is fire-and-forget** — if SCP fails, server and local creds diverge silently.
+- **`console.fail()` always exits** — raises `typer.Exit(1)`. Only call from command entry points, never library code.
+- **`dev` subcommand is hidden** — not shown in `--help`. Intentional — developer tools only.

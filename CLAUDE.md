@@ -34,14 +34,39 @@ Python CLI (`meridian-vpn` on PyPI) for deploying censorship-resistant proxy ser
 ```
 pyproject.toml             Python package config (hatchling build, PyPI as meridian-vpn)
 VERSION                    Version source of truth (read by hatchling + importlib.metadata)
-src/meridian/              Python CLI package (see src/meridian/CLAUDE.md)
-  provision/               Pure-Python provisioner (see src/meridian/provision/CLAUDE.md)
-  commands/                Subcommands (see src/meridian/commands/CLAUDE.md)
-  templates/pwa/           PWA static assets (see src/meridian/templates/pwa/CLAUDE.md)
-website/                   Astro static site (see website/CLAUDE.md)
-tests/                     pytest tests (see tests/CLAUDE.md)
-.github/workflows/         CI (9 jobs) + Release (Pages + PyPI)
+src/meridian/              Python CLI package
+  commands/                One module per subcommand
+  provision/               Pure-Python step pipeline provisioner
+  templates/pwa/           PWA connection page (vanilla JS, no build step)
+website/                   Astro static site (getmeridian.org)
+  src/components/          Astro UI components
+  src/styles/              Design tokens, theming, typography
+  src/pages/               File-based routing, machine-readable endpoints
+tests/                     pytest tests
+  provision/               Provisioner step tests (MockConnection pattern)
+  e2e/                     End-to-end deployment in Docker
+.github/workflows/         CI (9 jobs) + Release (VERSION-driven)
 ```
+
+## Per-folder CLAUDE.md convention
+
+Every meaningful folder has its own `CLAUDE.md` capturing **design decisions, what's done well, and pitfalls**. This is a self-sustaining system:
+
+**What goes in a folder CLAUDE.md:**
+- WHY decisions were made (not WHAT the code does — that changes)
+- What's done really well and the design decision behind it
+- Pitfalls: things learned the hard way that future developers must not repeat
+
+**What does NOT go in:**
+- Line numbers, function signatures, or anything that drifts as code evolves
+- Exhaustive file listings (use `ls`)
+- Duplicated info from the root CLAUDE.md
+
+**When to create one:** any folder with 3+ files and distinct architectural concerns. Skip tiny leaf folders.
+
+**When to update one:** after making a design decision, fixing a subtle bug, or discovering a pitfall. The CLAUDE.md is a living document — update it as part of the PR, not as a separate task.
+
+**Self-healing property:** AI assistants read these files automatically. A good CLAUDE.md prevents the same mistake from being made twice, even across different developers and sessions. Each pitfall documented is a bug that never recurs.
 
 ## Local development
 

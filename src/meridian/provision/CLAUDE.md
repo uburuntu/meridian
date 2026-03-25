@@ -1,27 +1,24 @@
-# provision — Pure-Python provisioner
+# provision — Pure-Python step pipeline
 
-## Step pipeline
+## Design decisions
 
-Steps are composable and independently testable. Each step returns a `StepResult` with status (success/skip/fail).
+**Steps over monolithic script** — each step is a class with `run(conn, ctx) → StepResult` (ok/changed/skipped/failed). Composable, independently testable. Pipeline stops on first failure.
 
-**Pipeline order:** common → docker → panel → xray inbounds → services (HAProxy/Caddy/connection page)
+**Order matters**: packages → Docker → panel config → Xray inbounds → HAProxy → Caddy → connection page. Each step depends on artifacts from earlier steps.
 
-## Communication
+**Hybrid context** — `ProvisionContext` has typed fields for configuration (IP, domain, ports) and a dict for inter-step data (panel client, UUIDs). Typed fields are self-documenting; dict keeps steps loosely coupled.
 
-Steps communicate via `ProvisionContext`:
-- **Typed fields** for well-known data (IP, domain, credentials, etc.)
-- **Dict-like access** (`ctx["key"]`) for ad-hoc inter-step data
+**Idempotency by convention** — every step checks state before acting. Re-running `deploy` on a configured server is fast and safe.
 
-`ProvisionContext` + `ServerConnection` are created by the CLI layer and passed into `build_setup_steps()`.
+**Protocol-generic assembly** — `build_setup_steps()` loops over `PROTOCOLS` registry. Adding a protocol doesn't require editing pipeline code.
 
-## Key patterns
+## What's done well
 
-- **Idempotent provisioning** — every step checks state before acting. Re-running `meridian deploy` on an already-provisioned server should be safe
-- **Credential lockout prevention** — credentials saved locally BEFORE changing the panel password on the remote server. If the remote change fails, you still have access
-- **Protocol-generic** — step pipeline loops over `PROTOCOLS` registry, no protocol-specific branches in pipeline assembly
+- **Credential lockout prevention** — save locally BEFORE changing remote password. If API fails, user has recovery data.
+- **`deployed_with` updated on re-deploy** — not just fresh deploys. Enables downstream version mismatch warnings.
 
-## Adding a new step
+## Pitfalls
 
-1. Create step class with `run(ctx, conn)` method returning `StepResult`
-2. Add to `build_setup_steps()` in correct pipeline position
-3. Add unit test verifying both the action and the idempotent skip path
+- **JSON string quirk** — 3x-ui API requires `settings`/`streamSettings` as JSON *strings*, not objects. Tests verify this explicitly.
+- **HAProxy SNI catch-all** — unrecognized SNIs drop silently. Intentional anti-fingerprinting, surprising when debugging.
+- **Realm hash verification** — SHA256 mismatch = hard failure. This is supply chain defense, not a bug.
