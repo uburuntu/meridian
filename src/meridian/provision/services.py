@@ -56,6 +56,7 @@ def _render_haproxy_cfg(
         flow_lines.append(f"Client with SNI={server_ip}  -> Caddy HTTPS  (127.0.0.1:{caddy_internal_port})")
     if domain:
         flow_lines.append(f"Client with SNI={domain}  -> Caddy HTTPS  (127.0.0.1:{caddy_internal_port})")
+    flow_lines.append("Client with no SNI (IP only)  -> Caddy HTTPS  (browsers don't send SNI for IPs)")
     flow_lines.append("Client with unknown SNI       -> connection dropped (anti-fingerprinting)")
     flow_comment = "\n".join(f"        #   {line}" for line in flow_lines)
 
@@ -98,9 +99,13 @@ def _render_haproxy_cfg(
             use_backend xray_reality if {{ req_ssl_sni -i {reality_sni} }}
 {caddy_sni_rules}
 
-            # Drop connections with unrecognized SNI (no catch-all backend).
-            # This prevents fingerprinting: a default route would serve an IP
-            # certificate for arbitrary SNIs, which no legitimate server does.
+            # Route connections with no SNI (browsers connecting to IP) to Caddy.
+            # Browsers don't send SNI for bare IP addresses (RFC 6066).
+            use_backend caddy_https unless {{ req_ssl_sni -m found }}
+
+            # Connections with an unrecognized SNI are implicitly dropped.
+            # This prevents fingerprinting: responding to arbitrary SNIs
+            # is something no legitimate server does.
 
         # --- Backend: Xray Reality ---
         backend xray_reality
@@ -159,6 +164,13 @@ def _render_connection_page_block(info_page_path: str) -> str:
             header @nocache Cache-Control "no-store"
 
             header Content-Security-Policy "default-src 'self'; img-src 'self' data:; connect-src 'self'"
+        }}
+
+        # Drop requests to unknown paths (anti-probing).
+        # Only known secret paths get a response.
+        # Censors hitting / or random paths get an immediate connection close.
+        handle {{
+            abort
         }}
 
         header -Server
@@ -1011,6 +1023,9 @@ class DeployConnectionPage:
             server_ip=self.server_ip,
             domain=domain,
             client_name=first_client_name,
+            server_name=creds.branding.server_name,
+            server_icon=creds.branding.icon,
+            color=creds.branding.color,
         )
 
         if not upload_client_files(conn, reality_uuid, client_files):

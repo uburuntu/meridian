@@ -47,7 +47,11 @@ class TestRenderHAProxyCfg:
                 assert "check" not in stripped, f"Backend server line must NOT use 'check': {stripped}"
 
     def test_no_default_backend(self):
-        """Unknown SNI must NOT be forwarded — no default_backend allowed."""
+        """Unknown SNI must NOT be forwarded — no default_backend allowed.
+
+        No-SNI connections use an explicit 'unless' rule, not default_backend.
+        Connections with a wrong/unknown SNI are still dropped.
+        """
         cfg = _render_haproxy_cfg(
             reality_sni="www.microsoft.com",
             haproxy_reality_backend_port=10443,
@@ -55,6 +59,8 @@ class TestRenderHAProxyCfg:
             server_ip="198.51.100.1",
         )
         assert "default_backend" not in cfg
+        # No-SNI connections (browsers to IP) get routed to Caddy
+        assert "unless { req_ssl_sni -m found }" in cfg
 
     def test_server_ip_routes_to_caddy(self):
         """Server IP must be an explicit SNI routing to Caddy."""
@@ -79,16 +85,18 @@ class TestRenderHAProxyCfg:
         assert "use_backend caddy_https if { req_ssl_sni -i 198.51.100.1 }" in cfg
 
     def test_no_domain_no_domain_rule(self):
-        """Without domain, only server IP should route to Caddy."""
+        """Without domain, server IP + no-SNI fallback should route to Caddy."""
         cfg = _render_haproxy_cfg(
             reality_sni="www.microsoft.com",
             haproxy_reality_backend_port=10443,
             caddy_internal_port=8443,
             server_ip="198.51.100.1",
         )
-        # Only one caddy_https rule (for server IP)
+        # SNI-based rule for server IP + no-SNI fallback = 2 caddy rules
         caddy_rules = [line for line in cfg.splitlines() if "use_backend caddy_https" in line]
-        assert len(caddy_rules) == 1
+        assert len(caddy_rules) == 2
+        # No domain rule
+        assert "example.com" not in cfg
 
 
 # ---------------------------------------------------------------------------
