@@ -29,10 +29,11 @@ meridian deploy [IP] [flags]
 
 ### meridian client
 
-Manage client access keys.
+Manage client access keys and connection details.
 
 ```
 meridian client add NAME [--server NAME]
+meridian client show NAME [--server NAME]
 meridian client list [--server NAME]
 meridian client remove NAME [--server NAME]
 ```

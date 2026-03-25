@@ -110,6 +110,7 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 |---------|-------------|
 | `meridian deploy [IP\|local]` | Deploy proxy server (interactive wizard if no IP) |
 | `meridian client add NAME` | Add a named client key |
+| `meridian client show NAME` | Show connection info (QR code, URLs, shareable link) |
 | `meridian client list` | List all clients |
 | `meridian client remove NAME` | Remove a client key |
 | `meridian relay deploy RELAY_IP` | Deploy a relay node (TCP forwarder) |

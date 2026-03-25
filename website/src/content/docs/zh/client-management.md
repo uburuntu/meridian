@@ -1,6 +1,6 @@
 ---
 title: 客户端管理
-description: 添加、列出和删除客户端访问密钥。
+description: 添加用户、分享连接信息和管理访问密钥。
 order: 5
 section: guides
 ---
@@ -11,10 +11,34 @@ section: guides
 meridian client add alice
 ```
 
-每个客户端都获得自己的唯一连接密钥。该命令生成：
-- 在终端中显示的 **QR 码**
-- 本地保存的 **HTML 连接页面**
-- 一个 **可共享的 URL**（如果启用了服务器托管页面）
+这会为"alice"创建一个唯一的连接密钥并显示：
+- **终端中的二维码** — 用 VPN 应用扫描它即可立即连接
+- **连接 URL** — 每个协议的 VLESS 链接（Reality、XHTTP 和 WSS（如果启用了域名模式））
+- **可共享的页面 URL** — 托管在您的服务器上，可通过任何信使发送
+- **本地保存的 HTML 文件** — 离线共享的备份
+
+### 收件人看到的内容
+
+可共享的 URL 打开一个连接页面，包括：
+- 安装 VPN 应用（v2RayTun、v2rayNG、Hiddify 或 v2rayN）的分步说明
+- 每个连接协议的二维码
+- 一键"在应用中打开"的深度链接
+- 连接状态和使用统计
+
+通过电子邮件、iMessage、Telegram 或任何信使发送该 URL。收件人打开它、安装应用、扫描二维码并连接。无需任何技术知识。
+
+## 显示连接信息
+
+要在任何时候重新显示现有客户端的连接信息：
+
+```
+meridian client show alice
+```
+
+这会输出相同的二维码、连接 URL 和可共享的页面链接——不会创建新密钥。在以下情况下使用：
+- 您需要与某人重新分享连接页面
+- 您丢失了原始二维码或 HTML 文件
+- 您想验证客户端的连接看起来如何
 
 ## 列出客户端
 
@@ -38,6 +62,8 @@ meridian client remove alice
 
 ```
 meridian client add alice --server finland
+meridian client show alice --server finland
+meridian client list --server finland
 ```
 
 如果您只有一个服务器，它会自动选择。
