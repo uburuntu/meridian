@@ -433,7 +433,6 @@ def _print_success(resolved: ResolvedServer, name: str, domain: str) -> None:
     client_label = name or "default"
     creds_dir = resolved.creds_dir
     html_files = list(creds_dir.glob(f"*-{client_label}-connection-info.html"))
-    txt_files = list(creds_dir.glob("*-connection-info.txt"))
 
     # Check if there's a hosted page URL from credentials
     hosted_page_url = ""
@@ -458,9 +457,8 @@ def _print_success(resolved: ResolvedServer, name: str, domain: str) -> None:
         err_console.print(f"     [bold]{html_files[0]}[/bold]")
         err_console.print("     [dim](They open it, scan the QR code, and connect)[/dim]\n")
 
-    if txt_files:
-        err_console.print("  [ok]2.[/ok] View connection details:")
-        err_console.print(f"     [info]cat {txt_files[0]}[/info]\n")
+    err_console.print("  [ok]2.[/ok] View connection details anytime:")
+    err_console.print(f"     [info]meridian client show {client_label}[/info]\n")
 
     err_console.print("  [ok]3.[/ok] Test that the proxy works:")
     server_ip = resolved.ip
