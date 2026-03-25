@@ -51,6 +51,15 @@ export function setLang(lang: Locale, translations: Record<string, Record<string
     }
   });
 
+  // Swap placeholder attributes
+  document.querySelectorAll('[data-t-placeholder]').forEach((el) => {
+    const key = (el as HTMLElement).dataset.tPlaceholder!;
+    const text = translations[lang]?.[key];
+    if (text) {
+      (el as HTMLInputElement).placeholder = text;
+    }
+  });
+
   // Update picker active state
   document.querySelectorAll('.lang-picker__btn').forEach((btn) => {
     const btnLang = (btn as HTMLElement).dataset.lang;

@@ -1,7 +1,8 @@
 ---
 /**
- * Docs layout — sidebar + content area + TOC + locale switcher.
- * Used by docs/[...slug].astro for all documentation pages.
+ * Docs layout — sidebar + content area + TOC.
+ * Language switching handled by the header LanguagePicker, which reads
+ * available locales from the #docs-locales JSON script tag.
  */
 import Base from './Base.astro';
 import DocsSidebar from '../components/DocsSidebar.astro';
@@ -55,24 +56,12 @@ const dir = locale === 'fa' ? 'rtl' : 'ltr';
     <DocsSidebar sections={sections} currentSlug={currentSlug} />
 
     <main id="main" class="docs-content">
-      {availableLocales.length > 1 && (
-        <div class="docs-locale-switcher">
-          {availableLocales.map((l) => (
-            <a
-              href={l.href}
-              class:list={['docs-locale-btn', { 'docs-locale-btn--active': l.code === locale }]}
-            >
-              {l.label}
-            </a>
-          ))}
-          {mdPath && (
-            <a href={mdPath} class="docs-locale-btn docs-md-btn" title="View as Markdown">MD</a>
-          )}
-        </div>
-      )}
-      {!availableLocales.length && mdPath && (
-        <div class="docs-locale-switcher">
-          <a href={mdPath} class="docs-locale-btn docs-md-btn" title="View as Markdown">MD</a>
+      {/* Locale data for header LanguagePicker — it reads this to navigate between translations */}
+      <script type="application/json" id="docs-locales" set:html={JSON.stringify(availableLocales)} />
+
+      {mdPath && (
+        <div class="docs-md-link">
+          <a href={mdPath} class="docs-md-btn" title="View as Markdown" data-t="docs.viewMd">View as Markdown</a>
         </div>
       )}
       <article class="docs-article prose" data-pagefind-body>
@@ -113,36 +102,27 @@ const dir = locale === 'fa' ? 'rtl' : 'ltr';
     border-bottom: 1px solid var(--b1);
   }
 
-  /* Locale switcher */
-  .docs-locale-switcher {
+  /* MD link */
+  .docs-md-link {
     display: flex;
-    gap: 4px;
+    justify-content: flex-end;
     margin-bottom: 16px;
   }
-  .docs-locale-btn {
-    padding: 4px 10px;
-    font-size: 0.72rem;
+  .docs-md-btn {
+    font-family: var(--mono);
+    font-size: 0.68rem;
     font-weight: 500;
+    letter-spacing: 0.04em;
     color: var(--t3);
     text-decoration: none;
+    padding: 4px 10px;
     border: 1px solid var(--b1);
     border-radius: 4px;
     transition: color 0.1s, border-color 0.1s;
   }
-  .docs-locale-btn:hover {
+  .docs-md-btn:hover {
     color: var(--t1);
     border-color: var(--b2);
-  }
-  .docs-locale-btn--active {
-    color: var(--ac);
-    border-color: var(--ac);
-    background: var(--ac2);
-  }
-  .docs-md-btn {
-    margin-left: auto;
-    font-family: var(--mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.04em;
   }
 
   /* RTL support for docs */

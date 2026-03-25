@@ -1,7 +1,8 @@
 ---
 /**
  * LanguagePicker — client-side language switcher.
- * Renders 4 buttons (EN/RU/فا/中文), persists choice in localStorage.
+ * Compact labels (EN/RU/فا/中文) with full names in aria-label.
+ * Persists choice in localStorage.
  */
 ---
 
@@ -39,5 +40,10 @@
   .lang-picker__btn--active {
     background: var(--ac2);
     color: var(--ac);
+  }
+  .lang-picker__btn--unavailable {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
   }
 </style>

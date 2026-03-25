@@ -4,6 +4,9 @@
  *
  * Light-first design with warm cream tones.
  * Dark mode as a considered alternative, not an afterthought.
+ *
+ * Theme override: set data-theme="light" or data-theme="dark" on <html>
+ * to override the OS preference. No attribute = follow OS.
  */
 
 :root {
@@ -36,6 +39,10 @@
   --warn: #C8933A;
   --warn2: #C8933A10;
 
+  /* Code surfaces — distinct from page background */
+  --code-bg: #F0EBE1;
+  --code-br: #DDD7C9;
+
   /* Protocol card colors (connection page) */
   --blue: #2b7de9;
   --blue-bg: #2b7de90a;
@@ -64,9 +71,9 @@
   --sans: var(--body);
 }
 
-/* Dark mode — warm charcoal, not pitch black */
+/* Dark tokens — shared by OS preference and explicit override */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #1C1E28;
     --s1: #252836;
     --s2: #2E3145;
@@ -86,6 +93,8 @@
     --err2: #F0606014;
     --warn: #D4A24E;
     --warn2: #D4A24E14;
+    --code-bg: #1E2030;
+    --code-br: #3A3E52;
     --blue: #5b9cf5;
     --blue-bg: #5b9cf512;
     --blue-br: #5b9cf530;
@@ -96,4 +105,38 @@
     --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.25);
     --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.3);
   }
+}
+
+/* Explicit dark override — same tokens, triggered by data-theme="dark" */
+[data-theme="dark"] {
+  --bg: #1C1E28;
+  --s1: #252836;
+  --s2: #2E3145;
+  --s3: #373B50;
+  --b1: #3A3E52;
+  --b2: #4A4F66;
+  --t1: #E4E2DE;
+  --t2: #9A9CAA;
+  --t3: #6B6E7E;
+  --ac: #D4A24E;
+  --ac2: #D4A24E18;
+  --ac3: #D4A24E0A;
+  --ac-hover: #E0B060;
+  --ok: #5CE88E;
+  --ok2: #5CE88E14;
+  --err: #F06060;
+  --err2: #F0606014;
+  --warn: #D4A24E;
+  --warn2: #D4A24E14;
+  --code-bg: #1E2030;
+  --code-br: #3A3E52;
+  --blue: #5b9cf5;
+  --blue-bg: #5b9cf512;
+  --blue-br: #5b9cf530;
+  --amber: #e5a44e;
+  --amber-bg: #e5a44e12;
+  --amber-br: #e5a44e30;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.3);
 }

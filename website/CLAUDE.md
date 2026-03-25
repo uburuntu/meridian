@@ -22,7 +22,6 @@ cd website && npm install && npm run build   # Astro + Pagefind
 
 ## Pitfalls
 
+- **Single language picker** — one LanguagePicker in the nav header handles all pages. On docs pages it reads available locales from `#docs-locales` JSON and navigates to locale-specific URLs. On landing page it does client-side DOM swap.
 - **Language switch reload asymmetry** — EN reloads page (build-time HTML), non-EN does client-side DOM swap. Consolidating would simplify but requires shipping EN translations.
-- **Pagefind only works after build** — dev mode shows fallback search input.
-- **Docs must exist in all 4 locales** — missing locale file breaks sidebar generation.
-- **Early locale script in `<head>`** — detects lang from localStorage, sets `dir=rtl` for Farsi before paint. Prevents layout shift.
+- **Early `<head>` scripts** — detect lang + theme from localStorage before paint. Prevents RTL layout shift and dark mode flash.

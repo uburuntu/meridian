@@ -15,6 +15,8 @@ export const translations: Record<string, Record<string, string>> = {
     'nav.demo': 'Демо',
     'nav.ping': 'Пинг',
     'toc.label': 'На этой странице',
+    'docs.viewMd': 'Открыть Markdown',
+    'docs.search': 'Поиск по документации...',
 
     // Hero
     'hero.kicker': 'Инструмент для свободы интернета',
@@ -121,6 +123,7 @@ export const translations: Record<string, Record<string, string>> = {
     'builder.field.ai.hint': 'Копирует AI-промпт для ChatGPT/Claude в буфер обмена.',
     'builder.field.yes': 'Без подтверждений',
     'builder.field.yes.hint': 'Флаг --yes. Для CI/автоматизации или неинтерактивных SSH-сессий.',
+    'builder.wizard': '<strong>Впервые?</strong> Просто запустите <code>meridian deploy</code> — интерактивный мастер проведёт вас через все шаги.',
 
     // Footer
     'footer.tagline': 'Открытый код. Без трекинга. Без аккаунтов.',
@@ -132,6 +135,8 @@ export const translations: Record<string, Record<string, string>> = {
     'nav.demo': 'نمونه',
     'nav.ping': 'پینگ',
     'toc.label': 'در این صفحه',
+    'docs.viewMd': 'مشاهده Markdown',
+    'docs.search': 'جستجوی مستندات...',
 
     'hero.kicker': 'ابزار آزادی اینترنت',
     'hero.title': 'اینترنت <em>امن</em> را با عزیزانتان به&nbsp;اشتراک&nbsp;بگذارید',
@@ -232,6 +237,7 @@ export const translations: Record<string, Record<string, string>> = {
     'builder.field.ai.hint': 'پرامپت AI آماده را برای ChatGPT/Claude کپی می‌کند.',
     'builder.field.yes': 'بدون تأیید',
     'builder.field.yes.hint': 'فلگ --yes. برای CI یا جلسات SSH غیرتعاملی.',
+    'builder.wizard': '<strong>اولین بار؟</strong> فقط <code>meridian deploy</code> را اجرا کنید — ویزارد تعاملی شما را قدم به قدم راهنمایی می‌کند.',
 
     'footer.tagline': 'متن‌باز. بدون ردیابی. بدون حساب کاربری.',
   },
@@ -242,6 +248,8 @@ export const translations: Record<string, Record<string, string>> = {
     'nav.demo': '演示',
     'nav.ping': '测试',
     'toc.label': '本页目录',
+    'docs.viewMd': '查看 Markdown',
+    'docs.search': '搜索文档...',
 
     'hero.kicker': '开源隐私工具',
     'hero.title': '与关心的人分享<em>安全的互联网</em>',
@@ -342,6 +350,7 @@ export const translations: Record<string, Record<string, string>> = {
     'builder.field.ai.hint': '将 AI 提示复制到剪贴板，用于 ChatGPT/Claude 排障。',
     'builder.field.yes': '跳过确认',
     'builder.field.yes.hint': '添加 --yes 标志。用于 CI/自动化或非交互式 SSH 会话。',
+    'builder.wizard': '<strong>第一次使用？</strong>直接运行 <code>meridian deploy</code> — 交互式向导会引导你完成每一步。',
 
     'footer.tagline': '开源。无追踪。无账户。',
   },

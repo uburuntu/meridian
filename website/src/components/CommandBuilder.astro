@@ -129,6 +129,9 @@ const tabs = [
       <pre id="builder-cmd">meridian deploy</pre>
     </div>
     <p class="builder__status" id="builder-status"></p>
+    <div class="builder__wizard" id="builder-wizard" data-t="builder.wizard">
+      <strong>First time?</strong> Just run <code>meridian deploy</code> — the interactive wizard guides you through everything.
+    </div>
   </div>
 </div>
 
@@ -148,7 +151,7 @@ const tabs = [
     },
     check: {
       desc: 'Test if your server is compatible — checks SNI, ports, DNS, OS, disk, ASN match.',
-      show: ['ip', 'user', 'domain'],
+      show: ['ip', 'user', 'domain', 'sni', 'ai'],
       cmd: 'preflight',
       descKey: 'builder.desc.preflight',
     },
@@ -160,7 +163,7 @@ const tabs = [
     },
     diag: {
       desc: 'Collect system diagnostics for bug reports. Secrets are auto-redacted.',
-      show: ['ip', 'user', 'ai'],
+      show: ['ip', 'user', 'sni', 'ai'],
       cmd: 'doctor',
       descKey: 'builder.desc.doctor',
     },
@@ -220,8 +223,8 @@ const tabs = [
     const cfg = TAB_CONFIG[curTab];
 
     // Toggle conditional inputs
-    ($('f-domain') as HTMLElement).style.display = domOn ? '' : 'none';
-    ($('f-sni') as HTMLElement).style.display = sniOn ? '' : 'none';
+    ($('f-domain') as HTMLElement).style.display = domOn ? 'block' : 'none';
+    ($('f-sni') as HTMLElement).style.display = sniOn ? 'block' : 'none';
 
     // Hide SSH user when deploying locally
     const isLocal = /^locally?$/i.test(ip);
@@ -231,6 +234,7 @@ const tabs = [
     }
 
     const args: string[] = [];
+    const wizard = $('builder-wizard')!;
 
     if (ip) {
       if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip) && !/^locally?$/i.test(ip)) {
@@ -261,41 +265,48 @@ const tabs = [
     // Status hints
     if (curTab === 'install') {
       if (!ip) {
-        status.textContent = 'Run without IP for the interactive wizard (recommended for first-time setup).';
+        status.textContent = '';
         status.className = 'builder__status';
-      } else if (/^locally?$/i.test(ip)) {
-        status.textContent = 'Deploys on this server without SSH. Must run as root on the VPS.';
-        status.className = 'builder__status builder__status--ok';
-      } else if (domOn && !dom) {
-        status.textContent = 'Enter a domain or uncheck to skip.';
-        status.className = 'builder__status';
+        wizard.style.display = '';
       } else {
-        const mode = domOn ? 'Reality + CDN fallback' : 'Reality-only';
-        status.textContent = 'Deploys ' + mode + (xhttp ? '' : ' (XHTTP disabled)') + '.';
-        status.className = 'builder__status builder__status--ok';
+        wizard.style.display = 'none';
+        if (/^locally?$/i.test(ip)) {
+          status.textContent = 'Deploys on this server without SSH. Must run as root on the VPS.';
+          status.className = 'builder__status builder__status--ok';
+        } else if (domOn && !dom) {
+          status.textContent = 'Enter a domain or uncheck to skip.';
+          status.className = 'builder__status';
+        } else {
+          const mode = domOn ? 'Reality + CDN fallback' : 'Reality-only';
+          status.textContent = 'Deploys ' + mode + (xhttp ? '' : ' (XHTTP disabled)') + '.';
+          status.className = 'builder__status builder__status--ok';
+        }
       }
-    } else if (curTab === 'relay') {
-      if (!ip || !exitServer) {
-        status.textContent = 'Enter the relay IP and exit server. The exit server must be deployed first.';
-        status.className = 'builder__status';
-      } else {
-        status.textContent = 'Routes traffic through the relay to your exit server.';
-        status.className = 'builder__status builder__status--ok';
-      }
-    } else if (curTab === 'check') {
-      status.textContent = ip ? 'Runs preflight checks without installing anything.' : 'Enter your server IP to run the preflight.';
-      status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
-    } else if (curTab === 'scan') {
-      status.textContent = ip ? "Scans server's /24 subnet for same-network TLS targets." : 'Enter your server IP to find optimal SNI targets.';
-      status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
-    } else if (curTab === 'diag') {
-      status.textContent = ip
-        ? (ai ? 'Collects diagnostics and copies AI-ready prompt to clipboard.' : 'Collects diagnostics. Enable AI-ready output for instant help.')
-        : 'Enter your server IP to collect diagnostics.';
-      status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
     } else {
-      status.textContent = ip ? 'Removes Meridian. Docker and system packages are kept.' : 'IP is auto-detected from saved credentials if omitted.';
-      status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
+      wizard.style.display = 'none';
+      if (curTab === 'relay') {
+        if (!ip || !exitServer) {
+          status.textContent = 'Enter the relay IP and exit server. The exit server must be deployed first.';
+          status.className = 'builder__status';
+        } else {
+          status.textContent = 'Routes traffic through the relay to your exit server.';
+          status.className = 'builder__status builder__status--ok';
+        }
+      } else if (curTab === 'check') {
+        status.textContent = ip ? 'Runs preflight checks without installing anything.' : 'Enter your server IP to run the preflight.';
+        status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
+      } else if (curTab === 'scan') {
+        status.textContent = ip ? "Scans server's /24 subnet for same-network TLS targets." : 'Enter your server IP to find optimal SNI targets.';
+        status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
+      } else if (curTab === 'diag') {
+        status.textContent = ip
+          ? (ai ? 'Collects diagnostics and copies AI-ready prompt to clipboard.' : 'Collects diagnostics. Enable AI-ready output for instant help.')
+          : 'Enter your server IP to collect diagnostics.';
+        status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
+      } else {
+        status.textContent = ip ? 'Removes Meridian. Docker and system packages are kept.' : 'IP is auto-detected from saved credentials if omitted.';
+        status.className = ip ? 'builder__status builder__status--ok' : 'builder__status';
+      }
     }
 
     persist();
@@ -472,6 +483,7 @@ const tabs = [
     font-family: var(--mono);
     font-size: 0.7rem;
     background: var(--s2);
+    color: var(--t2);
     padding: 1px 4px;
     border-radius: 3px;
   }
@@ -479,8 +491,8 @@ const tabs = [
   .builder__output {
     position: relative;
     margin-top: 16px;
-    background: var(--s2);
-    border: 1px solid var(--b1);
+    background: var(--code-bg);
+    border: 1px solid var(--code-br);
     border-radius: var(--r);
     padding: 16px 20px;
     padding-right: 80px;
@@ -522,6 +534,35 @@ const tabs = [
   }
   .builder__status--ok { color: var(--ok); }
   .builder__status--error { color: var(--err); }
+
+  .builder__wizard {
+    margin-top: 12px;
+    padding: 12px 16px;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: var(--t2);
+    background: var(--ok2);
+    border-left: 3px solid var(--ok);
+    border-radius: 0 var(--r) var(--r) 0;
+  }
+  .builder__wizard strong {
+    color: var(--t1);
+    font-weight: 600;
+  }
+  .builder__wizard code {
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    background: var(--s1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--b1);
+    color: var(--t1);
+  }
+
+  .builder__output pre::before {
+    content: '$ ';
+    color: var(--t3);
+  }
 
   @media (max-width: 480px) {
     .builder__tab { font-size: 0.72rem; padding: 9px 6px; }

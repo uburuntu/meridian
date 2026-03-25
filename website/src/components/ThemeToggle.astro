@@ -1,0 +1,72 @@
+---
+/**
+ * ThemeToggle — two-state theme switcher (light ↔ dark).
+ * Defaults to OS preference. Click toggles to the opposite mode.
+ * Persists override in localStorage. Works with data-theme attribute on <html>.
+ * Self-contained — no dependency on parent container styling.
+ */
+---
+
+<button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme" title="Toggle theme">
+  <svg class="theme-toggle__icon theme-toggle__icon--sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="5"></circle>
+    <line x1="12" y1="1" x2="12" y2="3"></line>
+    <line x1="12" y1="21" x2="12" y2="23"></line>
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+    <line x1="1" y1="12" x2="3" y2="12"></line>
+    <line x1="21" y1="12" x2="23" y2="12"></line>
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+  </svg>
+  <svg class="theme-toggle__icon theme-toggle__icon--moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+  </svg>
+</button>
+
+<script is:inline>
+  (function() {
+    var btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+
+    function isDark() {
+      var saved = localStorage.getItem('meridian-theme');
+      if (saved === 'dark' || saved === 'light') return saved === 'dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    function apply(dark) {
+      btn.dataset.state = dark ? 'dark' : 'light';
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      localStorage.setItem('meridian-theme', dark ? 'dark' : 'light');
+    }
+
+    apply(isDark());
+
+    btn.addEventListener('click', function() {
+      apply(btn.dataset.state !== 'dark');
+    });
+  })();
+</script>
+
+<style>
+  .theme-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--t3);
+    transition: color 0.12s;
+  }
+  .theme-toggle:hover {
+    color: var(--t1);
+  }
+  /* In dark mode: show sun (click to go light). In light mode: show moon (click to go dark). */
+  .theme-toggle__icon { display: none; }
+  .theme-toggle[data-state="dark"] .theme-toggle__icon--sun { display: block; }
+  .theme-toggle[data-state="light"] .theme-toggle__icon--moon { display: block; }
+</style>
