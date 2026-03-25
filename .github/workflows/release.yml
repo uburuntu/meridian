@@ -62,7 +62,7 @@ jobs:
           cd ../..
           # Bundle AI docs
           mkdir -p website/dist/ai
-          for f in website/src/content/docs/en/cli-reference.md website/src/content/docs/en/architecture.md website/src/content/docs/en/troubleshooting.md website/src/content/docs/en/deploy.md; do
+          for f in website/src/content/docs/en/cli-reference.md website/src/content/docs/en/architecture.md website/src/content/docs/en/troubleshooting.md website/src/content/docs/en/deploy.md website/src/content/docs/en/relay.md website/src/content/docs/en/recovery.md; do
             awk 'BEGIN{skip=0} /^---$/{skip++;next} skip<2{next} {print}' "$f"
             echo ""
           done > website/dist/ai/reference.md
@@ -196,7 +196,7 @@ jobs:
           pip install hatchling build
           # Generate AI reference from human docs (not committed, built fresh)
           mkdir -p src/meridian/data
-          for f in website/src/content/docs/en/cli-reference.md website/src/content/docs/en/architecture.md website/src/content/docs/en/troubleshooting.md website/src/content/docs/en/deploy.md; do
+          for f in website/src/content/docs/en/cli-reference.md website/src/content/docs/en/architecture.md website/src/content/docs/en/troubleshooting.md website/src/content/docs/en/deploy.md website/src/content/docs/en/relay.md website/src/content/docs/en/recovery.md; do
             awk 'BEGIN{skip=0} /^---$/{skip++;next} skip<2{next} {print}' "$f"
             echo ""
           done > src/meridian/data/ai-reference.md

@@ -52,7 +52,9 @@ ai-docs: ## Generate AI reference from human docs (strip frontmatter)
 	@for f in website/src/content/docs/en/cli-reference.md \
 	          website/src/content/docs/en/architecture.md \
 	          website/src/content/docs/en/troubleshooting.md \
-	          website/src/content/docs/en/deploy.md; do \
+	          website/src/content/docs/en/deploy.md \
+	          website/src/content/docs/en/relay.md \
+	          website/src/content/docs/en/recovery.md; do \
 		awk 'BEGIN{skip=0} /^---$$/{skip++;next} skip<2{next} {print}' "$$f"; \
 		echo ""; \
 	done > src/meridian/data/ai-reference.md
