@@ -4,6 +4,17 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.9.0] - 2026-03-30
+
+### Added
+- **Decoy mode** (`--decoy 403`) — unknown paths return a stock nginx 403 page instead of aborting the connection. Server header, Content-Type, and response body match real nginx. CONNECT method handled. HTTP/3 disabled in decoy mode to prevent alt-svc header leak.
+- **Firewall cleanup** — deploy now removes stale UFW rules from previous setups, keeping only ports 22, 443, and optionally 80.
+
+### Changed
+- **Vision refresh** — README, website hero, docs, and CLAUDE.md updated around "deploy it right, share it easily" messaging. Emphasizes airtight deployment over protocol choice.
+- **Hero kicker** — "Open-source privacy tool" → "Open-source internet freedom tool" (English and Chinese aligned with existing Russian/Farsi translations).
+- **PyPI description** updated to reflect hardened-by-default messaging.
+
 ## [3.8.3] - 2026-03-25
 
 ### Added
