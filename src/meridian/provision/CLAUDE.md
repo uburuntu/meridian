@@ -25,4 +25,9 @@
 - **Realm hash verification** — SHA256 mismatch = hard failure. This is supply chain defense, not a bug.
 - **nginx `add_header` inheritance** — child `location` blocks with `add_header` suppress parent headers entirely. Use `map` directives for variable headers to avoid duplication.
 - **acme.sh bootstrap** — nginx needs a cert to start SSL, but acme.sh needs nginx on port 80. Solution: self-signed bootstrap cert, then issue real cert, then reload.
+- **acme.sh empty email** — `email=''` breaks the installer (`shift` error). Omit the arg when no email: `sh -s --` not `sh -s email=''`.
 - **nginx.conf stream block** — the default nginx.conf only has `http {}`. The stream block for SNI routing must be injected at the top level. Check idempotently before inserting.
+- **nginx stream = dynamic module** — on Ubuntu, stream is compiled as dynamic (`--with-stream=dynamic`). `nginx -V` shows compile flags but the `.so` isn't installed until `libnginx-mod-stream` is installed. Always install the package, don't trust compile flags.
+- **`return 444` + HTTP/2** — nginx 444 causes `PROTOCOL_ERROR` on HTTP/2 streams, which is more distinctive than a stock 403. Always use `return 403` for default locations.
+- **HTTP/2 on listen** — must add `http2` to the `listen` directive. Without it, ALPN only negotiates HTTP/1.1 — a fingerprinting vector since all modern servers support h2.
+- **Port 443 allowed list** — `docker.py` and `setup.py` both check port 443 occupancy. Both must include `haproxy`/`caddy` for upgrade-from-old-stack to work.

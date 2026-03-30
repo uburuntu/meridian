@@ -149,7 +149,9 @@ def _render_nginx_http_config(
             }}
         """).rstrip()
 
-    default_action = "return 403;" if decoy == "403" else "return 444;"
+    # 403 = stock nginx response. Looks genuine, works correctly with HTTP/2.
+    # (return 444 causes HTTP/2 PROTOCOL_ERROR — more distinctive than a 403)
+    default_action = "return 403;"
 
     return _render_nginx_server_block(
         host=domain,
@@ -193,7 +195,9 @@ def _render_nginx_ip_config(
             }}
         """).rstrip()
 
-    default_action = "return 403;" if decoy == "403" else "return 444;"
+    # 403 = stock nginx response. Looks genuine, works correctly with HTTP/2.
+    # (return 444 causes HTTP/2 PROTOCOL_ERROR — more distinctive than a 403)
+    default_action = "return 403;"
 
     return _render_nginx_server_block(
         host=server_ip,
@@ -252,7 +256,7 @@ def _render_nginx_server_block(
         }}
 
         server {{
-            listen 127.0.0.1:{nginx_internal_port} ssl;
+            listen 127.0.0.1:{nginx_internal_port} ssl http2;
             server_name {host};
             server_tokens off;
 
@@ -529,9 +533,9 @@ class InstallNginx:
         conn.run("rm -f /etc/meridian/health-check.sh", timeout=5)
         # Clean up old config files and cert storage
         conn.run(
-            "rm -f /etc/haproxy/haproxy.cfg /etc/caddy/conf.d/meridian.caddy && "
+            "rm -f /etc/haproxy/haproxy.cfg /etc/caddy/conf.d/meridian.caddy /etc/caddy/Caddyfile && "
             "rm -rf /etc/systemd/system/haproxy.service.d /etc/systemd/system/caddy.service.d "
-            "/var/lib/caddy/.local/share/caddy/certificates && "
+            "/var/lib/caddy/.local/share/caddy && "
             "systemctl daemon-reload 2>/dev/null; true",
             timeout=10,
         )
@@ -552,22 +556,27 @@ class InstallNginx:
                     detail=f"Failed to install nginx: {result.stderr.strip()}",
                 )
 
-        # -- Verify stream module is available --
-        check = conn.run("nginx -V 2>&1 | grep -q stream_ssl_preread_module", timeout=10)
+        # -- Ensure stream module is available --
+        # On Ubuntu/Debian, nginx compiles stream as a dynamic module
+        # (--with-stream=dynamic). The .so file ships in libnginx-mod-stream,
+        # which is NOT pulled in by the base nginx package. Install it
+        # unconditionally (apt is idempotent) to cover both fresh installs
+        # and upgrades from HAProxy+Caddy where it was never needed.
+        conn.run(
+            "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libnginx-mod-stream 2>/dev/null; true",
+            timeout=60,
+        )
+        # Verify the module .so exists (compile flags ≠ runtime availability)
+        check = conn.run(
+            "test -f /usr/lib/nginx/modules/ngx_stream_module.so || nginx -V 2>&1 | grep -q 'with-stream '",
+            timeout=10,
+        )
         if check.returncode != 0:
-            # Try installing libnginx-mod-stream (separate package on some distros)
-            conn.run(
-                "DEBIAN_FRONTEND=noninteractive apt-get update -qq && "
-                "DEBIAN_FRONTEND=noninteractive apt-get install -y libnginx-mod-stream",
-                timeout=60,
+            return StepResult(
+                name=self.name,
+                status="failed",
+                detail="nginx stream module not available — install libnginx-mod-stream",
             )
-            check = conn.run("nginx -V 2>&1 | grep -q stream_ssl_preread_module", timeout=10)
-            if check.returncode != 0:
-                return StepResult(
-                    name=self.name,
-                    status="failed",
-                    detail="nginx stream_ssl_preread_module not available",
-                )
 
         # -- Create directories --
         conn.run(
@@ -588,9 +597,10 @@ class InstallNginx:
         # -- Install acme.sh (if not already installed) --
         check = conn.run("test -f /root/.acme.sh/acme.sh", timeout=5)
         if check.returncode != 0:
-            email_arg = shlex.quote(self.email) if self.email else "''"
+            # email='' breaks acme.sh installer (shift error), omit when empty
+            email_flag = f"email={shlex.quote(self.email)}" if self.email else ""
             result = conn.run(
-                f"curl -fsSL https://get.acme.sh | sh -s email={email_arg}",
+                f"curl -fsSL https://get.acme.sh | sh -s -- {email_flag}",
                 timeout=60,
             )
             if result.returncode != 0:

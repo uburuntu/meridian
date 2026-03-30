@@ -361,8 +361,12 @@ class TestNginxWSS:
 
 
 class TestNginxDecoy:
-    def test_default_returns_444(self):
-        """Default (no decoy) returns 444 — nginx close connection."""
+    def test_default_returns_403(self):
+        """Default returns 403 — stock nginx response, works with HTTP/2.
+
+        return 444 causes HTTP/2 PROTOCOL_ERROR which is more distinctive
+        than a standard 403, making it a fingerprinting vector.
+        """
         cfg = _render_nginx_ip_config(
             server_ip="198.51.100.1",
             nginx_internal_port=8443,
@@ -370,8 +374,8 @@ class TestNginxDecoy:
             panel_internal_port=2053,
             info_page_path="connect",
         )
-        assert "return 444" in cfg
-        assert "return 403" not in cfg
+        assert "return 403" in cfg
+        assert "return 444" not in cfg
 
     def test_decoy_403_returns_403(self):
         """decoy=403 returns 403 — stock nginx 403 page (genuine)."""
@@ -424,6 +428,129 @@ class TestNginxDecoy:
                 decoy=decoy,
             )
             assert "server_tokens off" in cfg
+
+
+# ---------------------------------------------------------------------------
+# nginx config: fingerprinting resistance
+# ---------------------------------------------------------------------------
+
+
+class TestNginxFingerprinting:
+    """Tests for anti-fingerprinting properties discovered during real-server testing."""
+
+    def test_http2_enabled(self):
+        """HTTP/2 must be enabled — missing h2 ALPN is a fingerprinting vector."""
+        cfg = _render_nginx_ip_config(
+            server_ip="198.51.100.1",
+            nginx_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+        )
+        assert "ssl http2" in cfg
+
+    def test_domain_http2_enabled(self):
+        cfg = _render_nginx_http_config(
+            domain="example.com",
+            nginx_internal_port=8443,
+            ws_path="wspath",
+            wss_internal_port=28000,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+        )
+        assert "ssl http2" in cfg
+
+    def test_tls_modern_protocols_only(self):
+        """Only TLSv1.2 and TLSv1.3 — no older protocols."""
+        cfg = _render_nginx_ip_config(
+            server_ip="198.51.100.1",
+            nginx_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+        )
+        assert "TLSv1.2 TLSv1.3" in cfg
+        assert "TLSv1.0" not in cfg
+        assert "TLSv1.1" not in cfg
+        assert "SSLv" not in cfg
+
+    def test_stream_ipv6_listening(self):
+        """Stream server must listen on both IPv4 and IPv6."""
+        cfg = _render_nginx_stream_config(
+            reality_sni="www.microsoft.com",
+            reality_backend_port=10443,
+            nginx_internal_port=8443,
+            server_ip="198.51.100.1",
+        )
+        assert "listen 443;" in cfg
+        assert "listen [::]:443;" in cfg
+
+    def test_stream_fast_blackhole_timeout(self):
+        """Blackhole connections must get fast RST, not 60s default timeout."""
+        cfg = _render_nginx_stream_config(
+            reality_sni="www.microsoft.com",
+            reality_backend_port=10443,
+            nginx_internal_port=8443,
+            server_ip="198.51.100.1",
+        )
+        assert "proxy_connect_timeout 1s" in cfg
+
+    def test_http_redirect_uses_host_variable(self):
+        """HTTP->HTTPS redirect must use $host, not hardcoded domain (no info leak)."""
+        cfg = _render_nginx_ip_config(
+            server_ip="198.51.100.1",
+            nginx_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+        )
+        assert "$host$request_uri" in cfg
+
+    def test_port80_server_tokens_off(self):
+        """Port 80 server must also have server_tokens off."""
+        cfg = _render_nginx_ip_config(
+            server_ip="198.51.100.1",
+            nginx_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+        )
+        # Both server blocks should have server_tokens off
+        assert cfg.count("server_tokens off") == 2
+
+    def test_no_return_444_in_config(self):
+        """return 444 causes HTTP/2 PROTOCOL_ERROR — must not appear in configs."""
+        for cfg in [
+            _render_nginx_ip_config(
+                server_ip="198.51.100.1",
+                nginx_internal_port=8443,
+                panel_web_base_path="secretpanel",
+                panel_internal_port=2053,
+                info_page_path="connect",
+            ),
+            _render_nginx_http_config(
+                domain="example.com",
+                nginx_internal_port=8443,
+                ws_path="wspath",
+                wss_internal_port=28000,
+                panel_web_base_path="secretpanel",
+                panel_internal_port=2053,
+                info_page_path="connect",
+            ),
+        ]:
+            assert "return 444" not in cfg
+
+    def test_csp_restricts_external_resources(self):
+        """CSP must block external resource loading (self-hosted everything)."""
+        cfg = _render_nginx_ip_config(
+            server_ip="198.51.100.1",
+            nginx_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+        )
+        assert "default-src 'self'" in cfg
 
 
 # ---------------------------------------------------------------------------

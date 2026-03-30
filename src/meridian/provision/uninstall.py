@@ -41,15 +41,17 @@ class Uninstall:
             "rm -rf /etc/systemd/system/haproxy.service.d",
             # Legacy: Caddy (from older deployments)
             "systemctl stop caddy 2>/dev/null; systemctl disable caddy 2>/dev/null; true",
-            "rm -f /etc/caddy/conf.d/meridian.caddy",
+            "rm -f /etc/caddy/conf.d/meridian.caddy /etc/caddy/Caddyfile",
             "rm -rf /etc/systemd/system/caddy.service.d",
+            "rm -rf /var/lib/caddy/.local/share/caddy",
             # Web files
             "rm -rf /var/www/private /var/www/acme",
-            # Cron jobs (stats + health watchdog)
+            # Cron jobs (stats + health watchdog + acme.sh renewal)
             (
                 "crontab -l 2>/dev/null"
                 " | grep -v 'update-stats.py'"
                 " | grep -v 'health-check.sh'"
+                " | grep -v 'acme.sh'"
                 " | crontab - 2>/dev/null; true"
             ),
             # Server credentials and scripts

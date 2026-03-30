@@ -9,7 +9,7 @@ from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
 # Services allowed on port 443 (our own stack components)
-_PORT_443_ALLOWED = ("3x-ui", "xray", "nginx")
+_PORT_443_ALLOWED = ("3x-ui", "xray", "nginx", "haproxy", "caddy")
 
 # Conflicting Docker packages to remove before installing docker-ce
 _CONFLICTING_PACKAGES = [
