@@ -43,6 +43,7 @@ class ProvisionContext:
     hosted_page: bool = False  # serve connection pages via HTTPS on server
     harden: bool = True  # enable SSH hardening + firewall (skip for shared servers)
     creds_dir: str = ""  # local credentials directory path
+    decoy: str = ""  # decoy response for probers: "" = abort, "403" = nginx 403 page
 
     results: list[StepResult] = field(default_factory=list)
 

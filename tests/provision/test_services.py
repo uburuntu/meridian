@@ -444,6 +444,95 @@ class TestCaddyHandlePathStructure:
 
 
 # ---------------------------------------------------------------------------
+# Caddy config: decoy mode
+# ---------------------------------------------------------------------------
+
+
+class TestCaddyDecoy:
+    """Verify decoy mode renders correct default handler in Caddy configs."""
+
+    def test_default_has_abort(self):
+        """Default (no decoy) renders abort handler."""
+        cfg = _render_caddy_ip_config(
+            server_ip="198.51.100.1",
+            caddy_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+        )
+        assert "abort" in cfg
+        assert "nginx" not in cfg
+
+    def test_default_strips_server_header_site_wide(self):
+        """Default mode strips Server header at the site level."""
+        cfg = _render_caddy_ip_config(
+            server_ip="198.51.100.1",
+            caddy_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+        )
+        assert "header -Server" in cfg
+
+    def test_ip_config_403_has_nginx_page(self):
+        """decoy=403 renders nginx 403 page in IP mode."""
+        cfg = _render_caddy_ip_config(
+            server_ip="198.51.100.1",
+            caddy_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+            decoy="403",
+        )
+        assert "403 Forbidden" in cfg
+        assert "nginx/1.24.0" in cfg
+        assert "abort" not in cfg
+
+    def test_domain_config_403_has_nginx_page(self):
+        """decoy=403 renders nginx 403 page in domain mode."""
+        cfg = _render_caddy_config(
+            domain="example.com",
+            caddy_internal_port=8443,
+            ws_path="wspath",
+            wss_internal_port=28000,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+            decoy="403",
+        )
+        assert "403 Forbidden" in cfg
+        assert "nginx/1.24.0" in cfg
+        assert "abort" not in cfg
+
+    def test_403_sets_server_header_in_decoy_block(self):
+        """decoy=403 sets Server header to nginx in the handle block."""
+        cfg = _render_caddy_ip_config(
+            server_ip="198.51.100.1",
+            caddy_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+            decoy="403",
+        )
+        assert 'header Server "nginx/1.24.0"' in cfg
+
+    def test_403_strips_server_in_connection_pages(self):
+        """decoy=403 strips Server header inside connection page handle_path."""
+        cfg = _render_caddy_ip_config(
+            server_ip="198.51.100.1",
+            caddy_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+            decoy="403",
+        )
+        # header -Server should appear inside the handle_path block
+        handle_path_start = cfg.index("handle_path /connect/*")
+        handle_path_block = cfg[handle_path_start:cfg.index("}", handle_path_start + 100) + 50]
+        assert "header -Server" in handle_path_block
+
+
+# ---------------------------------------------------------------------------
 # _render_stats_script() basic test (Gap #7)
 # ---------------------------------------------------------------------------
 

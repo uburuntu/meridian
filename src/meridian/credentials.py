@@ -36,6 +36,7 @@ class ServerConfig:
     scanned_sni: str | None = None
     hosted_page: bool = False
     deployed_with: str = ""  # Meridian CLI version that last deployed this server
+    decoy: str = ""  # Decoy response for probers: "" = abort, "403" = nginx 403 page
 
 
 @dataclass
@@ -348,6 +349,7 @@ def _load_v2(data: dict[str, Any]) -> ServerCredentials:
         scanned_sni=server_data.get("scanned_sni"),
         hosted_page=bool(server_data.get("hosted_page", False)),
         deployed_with=server_data.get("deployed_with", ""),
+        decoy=server_data.get("decoy", ""),
     )
 
     # Protocols

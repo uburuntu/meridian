@@ -122,15 +122,56 @@ def _render_haproxy_cfg(
 # ---------------------------------------------------------------------------
 
 
-def _render_connection_page_block(info_page_path: str) -> str:
+def _render_connection_page_block(info_page_path: str, decoy: str = "") -> str:
     """Render the shared connection-page Caddy block.
 
     Used by both domain and IP config renderers to avoid duplication.
     Includes file serving, PWA headers, cache control, CSP, and security headers.
 
+    Args:
+        info_page_path: Secret URL prefix for connection pages.
+        decoy: Decoy mode — "" for abort (default), "403" for nginx 403 page.
+
     Returns a multi-line string (no trailing newline) indented at 8 spaces
     (matching the site-block body indentation in the Caddy config).
     """
+    if decoy == "403":
+        # Decoy: serve a stock nginx 403 page. The Server header is set
+        # explicitly in the handle block; connection pages strip it via
+        # header -Server inside handle_path to avoid leaking Caddy identity.
+        default_handler = textwrap.dedent("""\
+
+            # Decoy: serve a stock nginx 403 page to probers.
+            # Looks like a default nginx installation — common and boring.
+            handle {
+                header Server "nginx/1.24.0"
+                respond <<NGINX
+            <html>
+            <head><title>403 Forbidden</title></head>
+            <body>
+            <center><h1>403 Forbidden</h1></center>
+            <hr><center>nginx/1.24.0</center>
+            </body>
+            </html>
+            NGINX 403
+            }""")
+        # Strip Caddy's Server header only for connection pages
+        server_header_line = ""
+        connection_page_server_header = "\n            header -Server"
+    else:
+        # Default: abort connections to unknown paths (anti-probing)
+        default_handler = textwrap.dedent("""\
+
+            # Drop requests to unknown paths (anti-probing).
+            # Only known secret paths get a response.
+            # Censors hitting / or random paths get an immediate connection close.
+            handle {
+                abort
+            }""")
+        # Strip Server header site-wide
+        server_header_line = "\n        header -Server"
+        connection_page_server_header = ""
+
     return textwrap.dedent(f"""\
 
         # --- Connection Info Pages (PWA with per-client config) ---
@@ -139,6 +180,7 @@ def _render_connection_page_block(info_page_path: str) -> str:
         handle_path /{info_page_path}/* {{
             root * /var/www/private
             file_server
+{connection_page_server_header}
 
             @manifest path *.webmanifest
             header @manifest Content-Type "application/manifest+json"
@@ -165,15 +207,8 @@ def _render_connection_page_block(info_page_path: str) -> str:
 
             header Content-Security-Policy "default-src 'self'; img-src 'self' data:; connect-src 'self'"
         }}
-
-        # Drop requests to unknown paths (anti-probing).
-        # Only known secret paths get a response.
-        # Censors hitting / or random paths get an immediate connection close.
-        handle {{
-            abort
-        }}
-
-        header -Server
+{default_handler}
+{server_header_line}
         header X-Content-Type-Options "nosniff"
         header X-Frame-Options "DENY"
         header Referrer-Policy "no-referrer"
@@ -197,6 +232,7 @@ def _render_caddy_config(
     email: str = "",
     xhttp_path: str = "",
     xhttp_internal_port: int = 0,
+    decoy: str = "",
 ) -> str:
     """Render the Meridian Caddy configuration.
 
@@ -222,7 +258,7 @@ def _render_caddy_config(
             }}
         """).rstrip()
 
-    connection_block = _render_connection_page_block(info_page_path)
+    connection_block = _render_connection_page_block(info_page_path, decoy=decoy)
 
     return (
         textwrap.dedent(f"""\
@@ -270,6 +306,7 @@ def _render_caddy_ip_config(
     email: str = "",
     xhttp_path: str = "",
     xhttp_internal_port: int = 0,
+    decoy: str = "",
 ) -> str:
     """Render Caddy configuration for IP certificate mode (no domain).
 
@@ -294,7 +331,7 @@ def _render_caddy_ip_config(
             }}
         """).rstrip()
 
-    connection_block = _render_connection_page_block(info_page_path)
+    connection_block = _render_connection_page_block(info_page_path, decoy=decoy)
 
     return (
         textwrap.dedent(f"""\
@@ -611,6 +648,7 @@ class InstallCaddy:
         ip_mode: bool = False,
         xhttp_path: str = "",
         xhttp_internal_port: int = 0,
+        decoy: str = "",
     ) -> None:
         self.domain = domain
         self.caddy_internal_port = caddy_internal_port
@@ -625,6 +663,7 @@ class InstallCaddy:
         self.ip_mode = ip_mode
         self.xhttp_path = xhttp_path
         self.xhttp_internal_port = xhttp_internal_port
+        self.decoy = decoy
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         # Resolve runtime values from context (populated by ConfigurePanel)
@@ -634,6 +673,7 @@ class InstallCaddy:
         server_ip = self.server_ip or ctx.ip
         xhttp_path = self.xhttp_path or ctx.get("xhttp_path", "")
         xhttp_internal_port = self.xhttp_internal_port or (ctx.xhttp_port if ctx.xhttp_enabled else 0)
+        decoy = self.decoy or ctx.decoy
         ws_path = self.ws_path or ctx.get("ws_path", "")
         wss_internal_port = self.wss_internal_port or ctx.wss_port
 
@@ -724,6 +764,7 @@ class InstallCaddy:
                 email=self.email,
                 xhttp_path=xhttp_path,
                 xhttp_internal_port=xhttp_internal_port,
+                decoy=decoy,
             )
         else:
             caddy_config = _render_caddy_config(
@@ -737,6 +778,7 @@ class InstallCaddy:
                 email=self.email,
                 xhttp_path=xhttp_path,
                 xhttp_internal_port=xhttp_internal_port,
+                decoy=decoy,
             )
         q_config = shlex.quote(caddy_config)
         result = conn.run(

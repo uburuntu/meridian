@@ -97,6 +97,7 @@ def deploy_cmd(
     ),
     icon: str = typer.Option("", "--icon", help="Server icon — emoji or image URL"),
     color: str = typer.Option("", "--color", help="Color palette (ocean/sunset/forest/lavender/rose/slate)"),
+    decoy: str = typer.Option("", "--decoy", help="Decoy response for probers (none/403)"),
 ) -> None:
     """Deploy a VLESS+Reality proxy server. Interactive wizard if no IP provided.
 
@@ -108,7 +109,7 @@ def deploy_cmd(
     """
     from meridian.commands.setup import run
 
-    run(ip, domain, email, sni, xhttp, name, user, yes, harden, server, server_name=server_name, icon=icon, color=color)
+    run(ip, domain, email, sni, xhttp, name, user, yes, harden, server, server_name=server_name, icon=icon, color=color, decoy=decoy)
 
 
 # =============================================================================

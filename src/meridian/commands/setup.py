@@ -36,8 +36,19 @@ def run(
     server_name: str = "",
     icon: str = "",
     color: str = "",
+    decoy: str = "",
 ) -> None:
     """Deploy a VLESS+Reality proxy server."""
+    # Validate and normalize decoy
+    if decoy == "none":
+        decoy = ""
+    if decoy and decoy != "403":
+        fail(
+            f"Invalid decoy mode: '{decoy}'",
+            hint="Valid options: none (default), 403",
+            hint_type="user",
+        )
+
     registry = ServerRegistry(SERVERS_FILE)
     server_ip = ip
     ssh_user = user
@@ -132,20 +143,30 @@ def run(
             hint_type="user",
         )
 
-    # Save branding to credentials before provisioning
-    if server_name or icon or color:
+    # Save branding and decoy to credentials before provisioning
+    if server_name or icon or color or decoy:
         from meridian.credentials import BrandingConfig
 
         proxy_file = resolved.creds_dir / "proxy.yml"
         creds = ServerCredentials.load(proxy_file) if proxy_file.exists() else ServerCredentials()
-        creds.branding = BrandingConfig(
-            server_name=server_name,
-            icon=icon,
-            color=color,
-        )
+        if server_name or icon or color:
+            creds.branding = BrandingConfig(
+                server_name=server_name,
+                icon=icon,
+                color=color,
+            )
+        if decoy:
+            creds.server.decoy = decoy
         creds.save(proxy_file)
 
-    _run_provisioner(resolved, domain, sni, name, xhttp, harden)
+    # Load saved decoy from credentials if not specified via CLI
+    if not decoy:
+        proxy_file = resolved.creds_dir / "proxy.yml"
+        if proxy_file.exists():
+            saved_creds = ServerCredentials.load(proxy_file)
+            decoy = saved_creds.server.decoy or ""
+
+    _run_provisioner(resolved, domain, sni, name, xhttp, harden, decoy=decoy)
 
     # Register server
     registry.add(ServerEntry(host=resolved.ip, user=resolved.user))
@@ -457,6 +478,7 @@ def _run_provisioner(
     name: str,
     xhttp: bool,
     harden: bool = True,
+    decoy: str = "",
 ) -> None:
     """Run the Python provisioner pipeline."""
     from meridian.provision import ProvisionContext, Provisioner, build_setup_steps
@@ -470,6 +492,7 @@ def _run_provisioner(
         hosted_page=True,  # always serve connection pages on server
         harden=harden,
         creds_dir=str(resolved.creds_dir),
+        decoy=decoy,
     )
 
     # Default panel port — 3x-ui starts on 2053. ConfigurePanel may change it later.
