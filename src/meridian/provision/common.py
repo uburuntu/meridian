@@ -239,8 +239,8 @@ class HardenSSH:
                 detail=f"sshd config validation failed: {validate.stderr.strip()[:200]}",
             )
 
-        # Restart sshd
-        restart = conn.run("systemctl restart sshd", timeout=15)
+        # Restart sshd (service is named "sshd" on some distros, "ssh" on others)
+        restart = conn.run("systemctl restart sshd 2>/dev/null || systemctl restart ssh", timeout=15)
         if restart.returncode != 0:
             return StepResult(
                 name=self.name,
