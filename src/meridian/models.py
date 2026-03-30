@@ -17,6 +17,7 @@ class Inbound:
     remark: str
     protocol: str
     port: int
+    listen: str = ""
     clients: list[dict] = field(default_factory=list)
     stream_settings: dict = field(default_factory=dict)
 

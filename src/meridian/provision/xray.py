@@ -227,8 +227,8 @@ class CreateRealityInbound:
         # Check if inbound already exists
         existing = panel.find_inbound(remark)
         if existing is not None:
-            # Check for port mismatch (mode switch)
-            if existing.port != self.port:
+            # Check for port or listen mismatch (mode switch or hardening fix)
+            if existing.port != self.port or existing.listen != self.listen:
                 _delete_inbound(panel, existing.id, remark)
             else:
                 return StepResult(

@@ -129,6 +129,7 @@ class PanelClient:
                     remark=obj.get("remark", ""),
                     protocol=obj.get("protocol", ""),
                     port=obj.get("port", 0),
+                    listen=obj.get("listen", ""),
                     clients=settings.get("clients", []),
                     stream_settings=stream,
                 )
