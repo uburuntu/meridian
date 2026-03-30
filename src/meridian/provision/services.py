@@ -10,7 +10,7 @@ from __future__ import annotations
 import shlex
 import textwrap
 
-from meridian.config import DEFAULT_FINGERPRINT, DEFAULT_PANEL_PORT
+from meridian.config import DEFAULT_FINGERPRINT
 from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
@@ -466,21 +466,21 @@ class InstallNginx:
     def __init__(
         self,
         domain: str,
-        reality_sni: str = "",
-        reality_backend_port: int = 0,
+        reality_sni: str | None = None,
+        reality_backend_port: int | None = None,
         nginx_internal_port: int = 8443,
-        ws_path: str = "",
-        wss_internal_port: int = 0,
-        panel_web_base_path: str = "",
-        panel_internal_port: int = DEFAULT_PANEL_PORT,
-        info_page_path: str = "",
+        ws_path: str | None = None,
+        wss_internal_port: int | None = None,
+        panel_web_base_path: str | None = None,
+        panel_internal_port: int | None = None,
+        info_page_path: str | None = None,
         email: str = "",
-        server_ip: str = "",
+        server_ip: str | None = None,
         skip_dns_check: bool = False,
         ip_mode: bool = False,
-        xhttp_path: str = "",
-        xhttp_internal_port: int = 0,
-        decoy: str = "",
+        xhttp_path: str | None = None,
+        xhttp_internal_port: int | None = None,
+        decoy: str | None = None,
     ) -> None:
         self.domain = domain
         self.reality_sni = reality_sni
@@ -500,18 +500,26 @@ class InstallNginx:
         self.decoy = decoy
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
-        # Resolve runtime values from context (populated by ConfigurePanel)
-        panel_web_base_path = self.panel_web_base_path or ctx.get("web_base_path", "")
-        info_page_path = self.info_page_path or ctx.get("info_page_path", "")
-        panel_internal_port = self.panel_internal_port or ctx.panel_port
-        server_ip = self.server_ip or ctx.ip
-        xhttp_path = self.xhttp_path or ctx.get("xhttp_path", "")
-        xhttp_internal_port = self.xhttp_internal_port or (ctx.xhttp_port if ctx.xhttp_enabled else 0)
-        decoy = self.decoy or ctx.decoy
-        ws_path = self.ws_path or ctx.get("ws_path", "")
-        wss_internal_port = self.wss_internal_port or ctx.wss_port
-        reality_sni = self.reality_sni or ctx.sni
-        reality_backend_port = self.reality_backend_port or ctx.reality_port
+        # Resolve runtime values from context (populated by ConfigurePanel).
+        # None = "not provided by caller, use context". Explicit values
+        # (including falsy ones like 0 or "") are respected as-is.
+        def _r(val, fallback):  # noqa: ANN001, ANN202
+            return val if val is not None else fallback
+
+        panel_web_base_path = _r(self.panel_web_base_path, ctx.get("web_base_path", ""))
+        info_page_path = _r(self.info_page_path, ctx.get("info_page_path", ""))
+        panel_internal_port = _r(self.panel_internal_port, ctx.panel_port)
+        server_ip = _r(self.server_ip, ctx.ip)
+        xhttp_path = _r(self.xhttp_path, ctx.get("xhttp_path", ""))
+        xhttp_internal_port = _r(
+            self.xhttp_internal_port,
+            ctx.xhttp_port if ctx.xhttp_enabled else 0,
+        )
+        decoy = _r(self.decoy, ctx.decoy)
+        ws_path = _r(self.ws_path, ctx.get("ws_path", ""))
+        wss_internal_port = _r(self.wss_internal_port, ctx.wss_port)
+        reality_sni = _r(self.reality_sni, ctx.sni)
+        reality_backend_port = _r(self.reality_backend_port, ctx.reality_port)
 
         # -- DNS pre-check (domain mode only) --
         if not self.ip_mode and not self.skip_dns_check:

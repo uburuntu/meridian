@@ -30,3 +30,4 @@ Top-level `conftest.py` provides:
 
 - **Module-level mutable state** — globals like `_warned_servers`, `_qrencode_warned` can leak between tests. Clear in fixtures.
 - **`tmp_home` must patch both** — env var AND `meridian.config` attributes. Missing either causes tests to touch real home directory.
+- **MockConnection substring matching** — `when("grep", rc=1)` matches ANY command containing "grep". If a `conn.run()` call combines multiple commands (e.g., `grep ... && sed ... || printf ...`), the mock matches the whole string on the first keyword. Keep each `conn.run()` to a single command, or use a more specific pattern in the mock.
