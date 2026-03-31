@@ -28,6 +28,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
         ConfigureBBR,
         ConfigureFirewall,
         EnableAutoUpgrades,
+        EnsurePort443,
         HardenSSH,
         InstallPackages,
         SetTimezone,
@@ -65,6 +66,10 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
 
     if ctx.harden:
         steps.append(ConfigureFirewall())
+    else:
+        # Even without --harden, ensure port 443 is allowed if ufw is active.
+        # Without this, a pre-existing firewall blocks the deployment.
+        steps.append(EnsurePort443())
 
     steps.extend(
         [

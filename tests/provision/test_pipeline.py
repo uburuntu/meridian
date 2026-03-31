@@ -57,11 +57,12 @@ def domain_ctx(tmp_path: Path) -> ProvisionContext:
 
 class TestMinimalPipeline:
     def test_minimal_step_count(self, base_ctx: ProvisionContext):
-        """Minimal config: disk check, packages, auto-upgrades, timezone, BBR, docker,
-        deploy 3xui, configure panel, login, reality, verify xray = 11 steps."""
+        """Minimal config: disk check, packages, auto-upgrades, timezone, BBR,
+        ensure port 443, docker, deploy 3xui, configure panel, login, reality,
+        verify xray = 12 steps."""
         steps = build_setup_steps(base_ctx)
         names = [s.name for s in steps]
-        assert len(steps) == 11, f"Expected 11 minimal steps, got {len(steps)}: {names}"
+        assert len(steps) == 12, f"Expected 12 minimal steps, got {len(steps)}: {names}"
 
     def test_no_services_without_domain_or_hosted_page(self, base_ctx: ProvisionContext):
         names = step_names(base_ctx)
@@ -70,14 +71,16 @@ class TestMinimalPipeline:
 
 
 class TestHardenSteps:
-    def test_harden_adds_two_steps(self, base_ctx: ProvisionContext):
+    def test_harden_adds_ssh_and_firewall(self, base_ctx: ProvisionContext):
         names_without = step_names(base_ctx)
         base_ctx.harden = True
         names_with = step_names(base_ctx)
-        added = set(names_with) - set(names_without)
-        assert "Harden SSH configuration" in added
-        assert "Configure firewall" in added
-        assert len(names_with) == len(names_without) + 2
+        # harden=True replaces EnsurePort443 with HardenSSH + ConfigureFirewall (+1 net)
+        assert "Harden SSH configuration" in names_with
+        assert "Configure firewall" in names_with
+        assert "Ensure port 443" not in names_with
+        assert "Ensure port 443" in names_without
+        assert len(names_with) == len(names_without) + 1
 
 
 class TestXHTTPStep:

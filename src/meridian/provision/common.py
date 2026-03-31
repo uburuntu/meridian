@@ -295,6 +295,37 @@ class ConfigureBBR:
         return StepResult(name=self.name, status="changed")
 
 
+class EnsurePort443:
+    """Ensure port 443 is allowed if ufw is already active.
+
+    Used when --no-harden skips full firewall configuration. Without this,
+    a pre-existing firewall blocks the deployment silently.
+    """
+
+    name = "Ensure port 443"
+
+    def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
+        check = conn.run("which ufw", timeout=5)
+        if check.returncode != 0:
+            return StepResult(name=self.name, status="ok", detail="ufw not installed")
+
+        ufw_status = conn.run("ufw status", timeout=10)
+        if ufw_status.returncode != 0 or "Status: active" not in ufw_status.stdout:
+            return StepResult(name=self.name, status="ok", detail="ufw not active")
+
+        result = conn.run("ufw allow 443/tcp", timeout=10)
+        if result.returncode != 0:
+            return StepResult(
+                name=self.name,
+                status="failed",
+                detail=f"failed to allow HTTPS: {result.stderr.strip()[:200]}",
+            )
+
+        if "Skipping" in result.stdout:
+            return StepResult(name=self.name, status="ok", detail="already allowed")
+        return StepResult(name=self.name, status="changed", detail="port 443 added to ufw")
+
+
 class ConfigureFirewall:
     """Configure UFW firewall rules."""
 
