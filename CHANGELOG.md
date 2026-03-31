@@ -4,6 +4,12 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.10.0] - 2026-03-31
+
+### Added
+- **`meridian probe`** — censor-perspective server analysis. Runs 9 checks from the client side (no SSH): port surface, HTTP response, TLS certificate, SNI consistency, proxy path probing, WebSocket upgrade, reverse DNS, HTTP/2 ALPN, and legacy TLS versions. Works on any server, not just Meridian deployments. Accepts IPs and domain names.
+- **Non-LTS Ubuntu detection** — preflight warns on non-LTS Ubuntu releases (only 9 months of support). Provisioner detects EOL package repos and gives a clear error.
+
 ## [3.9.0] - 2026-03-30
 
 ### Added
