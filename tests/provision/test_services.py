@@ -361,11 +361,13 @@ class TestNginxWSS:
 
 
 class TestNginxDecoy:
-    def test_default_drops_connection(self):
-        """Default is silent drop (444) — server reveals nothing.
+    def test_default_returns_403_404(self):
+        """Default is 403 on root, 404 elsewhere — realistic nginx with empty docroot.
 
-        444 causes HTTP/2 PROTOCOL_ERROR, but that's not VPN-specific.
-        Users who prefer a plausible web server use --decoy 403.
+        Blind censor assessment (three independent experts) rated 444 (silent
+        close after TLS handshake) as 9/10 suspicious — virtually no legitimate
+        server does this. 403/404 rated 3-4/10 with high false-positive cost
+        for censors (40-60% of real servers).
         """
         cfg = _render_nginx_ip_config(
             server_ip="198.51.100.1",
@@ -374,41 +376,14 @@ class TestNginxDecoy:
             panel_internal_port=2053,
             info_page_path="connect",
         )
-        assert "return 444" in cfg
-        assert "return 403" not in cfg
-        assert "return 404" not in cfg
-
-    def test_decoy_403_returns_403(self):
-        """decoy=403 returns 403 on root, 404 on other paths (realistic nginx)."""
-        cfg = _render_nginx_ip_config(
-            server_ip="198.51.100.1",
-            nginx_internal_port=8443,
-            panel_web_base_path="secretpanel",
-            panel_internal_port=2053,
-            info_page_path="connect",
-            decoy="403",
-        )
         assert "return 403" in cfg
         assert "return 404" in cfg
-        assert "return 444" not in cfg
+        # 444 must never appear in the HTTPS server block
+        https_block = cfg.split("listen 80")[0]
+        assert "return 444" not in https_block
 
-    def test_domain_decoy_403(self):
-        cfg = _render_nginx_http_config(
-            domain="example.com",
-            nginx_internal_port=8443,
-            ws_path="wspath",
-            wss_internal_port=28000,
-            panel_web_base_path="secretpanel",
-            panel_internal_port=2053,
-            info_page_path="connect",
-            decoy="403",
-        )
-        assert "return 403" in cfg
-        assert "return 404" in cfg
-        assert "return 444" not in cfg
-
-    def test_domain_default_drops_connection(self):
-        """Domain mode default is also silent drop (444)."""
+    def test_domain_default_returns_403_404(self):
+        """Domain mode also uses 403/404."""
         cfg = _render_nginx_http_config(
             domain="example.com",
             nginx_internal_port=8443,
@@ -418,9 +393,11 @@ class TestNginxDecoy:
             panel_internal_port=2053,
             info_page_path="connect",
         )
-        assert "return 444" in cfg
-        assert "return 403" not in cfg
-        assert "return 404" not in cfg
+        assert "return 403" in cfg
+        assert "return 404" in cfg
+        # 444 must not appear in the HTTPS server block
+        https_block = cfg.split("listen 80")[0]
+        assert "return 444" not in https_block
 
     def test_default_has_security_headers(self):
         cfg = _render_nginx_ip_config(
@@ -436,15 +413,24 @@ class TestNginxDecoy:
 
     def test_server_tokens_off(self):
         """Both modes should have server_tokens off."""
-        for decoy in ("", "403"):
-            cfg = _render_nginx_ip_config(
+        for cfg in [
+            _render_nginx_ip_config(
                 server_ip="198.51.100.1",
                 nginx_internal_port=8443,
                 panel_web_base_path="secretpanel",
                 panel_internal_port=2053,
                 info_page_path="connect",
-                decoy=decoy,
-            )
+            ),
+            _render_nginx_http_config(
+                domain="example.com",
+                nginx_internal_port=8443,
+                ws_path="wspath",
+                wss_internal_port=28000,
+                panel_web_base_path="secretpanel",
+                panel_internal_port=2053,
+                info_page_path="connect",
+            ),
+        ]:
             assert "server_tokens off" in cfg
 
 
@@ -514,8 +500,8 @@ class TestNginxFingerprinting:
         )
         assert "proxy_connect_timeout 1s" in cfg
 
-    def test_http_redirect_uses_host_variable(self):
-        """HTTP->HTTPS redirect must use $host, not hardcoded domain (no info leak)."""
+    def test_ip_mode_no_http_redirect(self):
+        """IP mode must NOT redirect HTTP→HTTPS (redirect to 403 is a contradiction)."""
         cfg = _render_nginx_ip_config(
             server_ip="198.51.100.1",
             nginx_internal_port=8443,
@@ -523,6 +509,25 @@ class TestNginxFingerprinting:
             panel_internal_port=2053,
             info_page_path="connect",
         )
+        assert "return 301" not in cfg
+        # Port 80 should still serve ACME challenges
+        assert "/.well-known/acme-challenge/" in cfg
+        # Port 80 non-ACME should silently close
+        http_block = cfg.split("listen 80")[1] if "listen 80" in cfg else ""
+        assert "return 444" in http_block
+
+    def test_domain_mode_keeps_http_redirect(self):
+        """Domain mode SHOULD redirect HTTP→HTTPS (has real content)."""
+        cfg = _render_nginx_http_config(
+            domain="example.com",
+            nginx_internal_port=8443,
+            ws_path="wspath",
+            wss_internal_port=28000,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+        )
+        assert "return 301" in cfg
         assert "$host$request_uri" in cfg
 
     def test_port80_server_tokens_off(self):
@@ -537,8 +542,8 @@ class TestNginxFingerprinting:
         # Both server blocks should have server_tokens off
         assert cfg.count("server_tokens off") == 2
 
-    def test_decoy_403_avoids_444(self):
-        """--decoy 403 uses realistic 403/404, never 444 (HTTP/2-safe)."""
+    def test_no_444_in_https_server_block(self):
+        """HTTPS block must never use 444 — silent close after TLS is the highest signal."""
         for cfg in [
             _render_nginx_ip_config(
                 server_ip="198.51.100.1",
@@ -546,7 +551,6 @@ class TestNginxFingerprinting:
                 panel_web_base_path="secretpanel",
                 panel_internal_port=2053,
                 info_page_path="connect",
-                decoy="403",
             ),
             _render_nginx_http_config(
                 domain="example.com",
@@ -556,12 +560,13 @@ class TestNginxFingerprinting:
                 panel_web_base_path="secretpanel",
                 panel_internal_port=2053,
                 info_page_path="connect",
-                decoy="403",
             ),
         ]:
-            assert "return 403" in cfg
-            assert "return 404" in cfg
-            assert "return 444" not in cfg
+            # Split at port 80 to isolate the HTTPS block
+            https_block = cfg.split("listen 80")[0]
+            assert "return 403" in https_block
+            assert "return 404" in https_block
+            assert "return 444" not in https_block
 
     def test_csp_restricts_external_resources(self):
         """CSP must block external resource loading (self-hosted everything)."""
@@ -585,15 +590,14 @@ class TestNginxFingerprinting:
         assert "default  nginx_https" in cfg
         assert "blackhole" not in cfg
 
-    def test_decoy_403_root_vs_default_paths(self):
-        """--decoy 403 returns 403 on root, 404 on other paths (like real nginx)."""
+    def test_root_403_vs_default_404(self):
+        """Root returns 403 (directory listing forbidden), other paths 404 (not found)."""
         cfg = _render_nginx_ip_config(
             server_ip="198.51.100.1",
             nginx_internal_port=8443,
             panel_web_base_path="secretpanel",
             panel_internal_port=2053,
             info_page_path="connect",
-            decoy="403",
         )
         assert "location = /" in cfg
         assert "return 403" in cfg

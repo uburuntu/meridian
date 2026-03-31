@@ -97,7 +97,7 @@ def deploy_cmd(
     ),
     icon: str = typer.Option("", "--icon", help="Server icon — emoji or image URL"),
     color: str = typer.Option("", "--color", help="Color palette (ocean/sunset/forest/lavender/rose/slate)"),
-    decoy: str = typer.Option("", "--decoy", help="Serve decoy page to probers (403). Default: silent drop"),
+    decoy: str = typer.Option("", "--decoy", hidden=True, help="Deprecated: 403/404 is now always used"),
 ) -> None:
     """Deploy a VLESS+Reality proxy server. Interactive wizard if no IP provided.
 

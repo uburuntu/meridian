@@ -109,7 +109,6 @@ def _render_nginx_http_config(
     email: str = "",
     xhttp_path: str = "",
     xhttp_internal_port: int = 0,
-    decoy: str = "",
 ) -> str:
     """Render the nginx http configuration for domain mode.
 
@@ -142,15 +141,13 @@ def _render_nginx_http_config(
             }}
         """).rstrip()
 
-    # Default: silent drop (444) — server reveals nothing, connection closes.
-    # --decoy 403: realistic nginx — root 403 (directory listing forbidden),
-    # unknown paths 404 (not found). Matches real nginx with empty docroot.
-    if decoy == "403":
-        root_action = "return 403;"
-        default_action = "return 404;"
-    else:
-        root_action = "return 444;"
-        default_action = "return 444;"
+    # Default: realistic nginx — root 403 (directory listing forbidden),
+    # unknown paths 404 (not found). Matches genuine nginx with empty docroot.
+    # Three independent censor-perspective assessments confirmed 403/404 is
+    # less fingerprintable than 444 (silent close after TLS), which virtually
+    # no legitimate server does and rated 9/10 suspiciousness.
+    root_action = "return 403;"
+    default_action = "return 404;"
 
     return _render_nginx_server_block(
         host=domain,
@@ -163,6 +160,7 @@ def _render_nginx_http_config(
         default_action=default_action,
         mode_comment="Domain Mode",
         tls_comment=(f"TLS: certificates issued by acme.sh for {domain}"),
+        redirect_http=True,
     )
 
 
@@ -175,7 +173,6 @@ def _render_nginx_ip_config(
     email: str = "",
     xhttp_path: str = "",
     xhttp_internal_port: int = 0,
-    decoy: str = "",
 ) -> str:
     """Render nginx http configuration for IP certificate mode (no domain).
 
@@ -195,15 +192,11 @@ def _render_nginx_ip_config(
             }}
         """).rstrip()
 
-    # Default: silent drop (444) — server reveals nothing, connection closes.
-    # --decoy 403: realistic nginx — root 403 (directory listing forbidden),
-    # unknown paths 404 (not found). Matches real nginx with empty docroot.
-    if decoy == "403":
-        root_action = "return 403;"
-        default_action = "return 404;"
-    else:
-        root_action = "return 444;"
-        default_action = "return 444;"
+    # Default: realistic nginx — root 403 (directory listing forbidden),
+    # unknown paths 404 (not found). Matches genuine nginx with empty docroot.
+    # See domain mode comment for rationale (blind censor assessment).
+    root_action = "return 403;"
+    default_action = "return 404;"
 
     return _render_nginx_server_block(
         host=server_ip,
@@ -216,6 +209,7 @@ def _render_nginx_ip_config(
         default_action=default_action,
         mode_comment="IP Certificate Mode",
         tls_comment=("TLS: Let's Encrypt IP certificate (acme.sh, shortlived profile)"),
+        redirect_http=False,
     )
 
 
@@ -230,12 +224,25 @@ def _render_nginx_server_block(
     default_action: str,
     mode_comment: str,
     tls_comment: str,
+    redirect_http: bool = True,
 ) -> str:
     """Render the shared nginx server block structure.
 
     Used by both domain and IP config renderers to avoid duplication.
+    redirect_http: True = HTTP→HTTPS redirect (domain mode, has real content).
+                   False = ACME-only, no redirect (IP mode — redirect to
+                   HTTPS that returns 403 is a contradiction signal).
     """
     csp = "default-src 'self'; img-src 'self' data:; connect-src 'self'"
+
+    # Port 80 behavior: domain mode redirects (has real content),
+    # IP mode serves ACME challenges only (no redirect — redirect to
+    # HTTPS that returns 403 is a contradiction signal for censors).
+    if redirect_http:
+        http_default = "return 301 https://$host$request_uri;"
+    else:
+        http_default = "return 444;"
+
     return textwrap.dedent(f"""\
         # Meridian Proxy Configuration ({mode_comment})
         # Managed by Meridian — this file is overwritten on each deploy.
@@ -304,7 +311,7 @@ def _render_nginx_server_block(
             access_log /var/log/nginx/meridian.log;
         }}
 
-        # --- HTTP: ACME challenge + redirect ---
+        # --- HTTP: ACME challenge{" + redirect" if redirect_http else " only (no redirect)"} ---
         server {{
             listen 80;
             listen [::]:80;
@@ -316,7 +323,7 @@ def _render_nginx_server_block(
             }}
 
             location / {{
-                return 301 https://$host$request_uri;
+                {http_default}
             }}
         }}
     """)
@@ -493,7 +500,6 @@ class InstallNginx:
         ip_mode: bool = False,
         xhttp_path: str | None = None,
         xhttp_internal_port: int | None = None,
-        decoy: str | None = None,
     ) -> None:
         self.domain = domain
         self.reality_sni = reality_sni
@@ -510,7 +516,6 @@ class InstallNginx:
         self.ip_mode = ip_mode
         self.xhttp_path = xhttp_path
         self.xhttp_internal_port = xhttp_internal_port
-        self.decoy = decoy
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         # Resolve runtime values from context (populated by ConfigurePanel).
@@ -528,7 +533,6 @@ class InstallNginx:
             self.xhttp_internal_port,
             ctx.xhttp_port if ctx.xhttp_enabled else 0,
         )
-        decoy = _r(self.decoy, ctx.decoy)
         ws_path = _r(self.ws_path, ctx.get("ws_path", ""))
         wss_internal_port = _r(self.wss_internal_port, ctx.wss_port)
         reality_sni = _r(self.reality_sni, ctx.sni)
@@ -680,7 +684,6 @@ class InstallNginx:
                 email=self.email,
                 xhttp_path=xhttp_path,
                 xhttp_internal_port=xhttp_internal_port,
-                decoy=decoy,
             )
         else:
             http_config = _render_nginx_http_config(
@@ -694,7 +697,6 @@ class InstallNginx:
                 email=self.email,
                 xhttp_path=xhttp_path,
                 xhttp_internal_port=xhttp_internal_port,
-                decoy=decoy,
             )
         q_http = shlex.quote(http_config)
         result = conn.run(
