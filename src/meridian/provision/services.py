@@ -890,18 +890,6 @@ class DeployConnectionPage:
                 detail="No Reality UUID found — ConfigurePanel may have failed",
             )
 
-        # Install qrencode
-        result = conn.run(
-            "DEBIAN_FRONTEND=noninteractive apt-get install -y qrencode",
-            timeout=60,
-        )
-        if result.returncode != 0:
-            return StepResult(
-                name=self.name,
-                status="failed",
-                detail=f"Failed to install qrencode: {result.stderr.strip()}",
-            )
-
         # Build connection URLs
         reality_url = (
             f"vless://{reality_uuid}@{self.server_ip}:443"
@@ -919,39 +907,22 @@ class DeployConnectionPage:
                 f"&type=ws&host={domain}&path=%2F{ws_path}#VLESS-WSS-CDN"
             )
 
-        # Generate QR codes as base64 PNG
-        q_reality = shlex.quote(reality_url)
-        result = conn.run(
-            f"printf '%s' {q_reality} | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'",
-            timeout=15,
-        )
-        reality_qr_b64 = result.stdout.strip() if result.returncode == 0 else ""
-
-        wss_qr_b64 = ""
-        if wss_url:
-            q_wss = shlex.quote(wss_url)
-            result = conn.run(
-                f"printf '%s' {q_wss} | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'",
-                timeout=15,
-            )
-            wss_qr_b64 = result.stdout.strip() if result.returncode == 0 else ""
-
-        xhttp_qr_b64 = ""
         xhttp_url = ""
         if xhttp_enabled and xhttp_path:
             # Use domain if available, otherwise IP
             xhttp_host = domain or self.server_ip
             xhttp_url = (
                 f"vless://{reality_uuid}@{xhttp_host}:443"
-                f"?encryption=none&security=tls"
+                f"?encryption=none&security=tls&sni={xhttp_host}&fp={self.fingerprint}"
                 f"&type=xhttp&path=%2F{xhttp_path}#VLESS-XHTTP"
             )
-            q_xhttp = shlex.quote(xhttp_url)
-            result = conn.run(
-                f"printf '%s' {q_xhttp} | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'",
-                timeout=15,
-            )
-            xhttp_qr_b64 = result.stdout.strip() if result.returncode == 0 else ""
+
+        # Generate QR codes as base64 PNG (pure Python, no qrencode binary needed)
+        from meridian.urls import generate_qr_base64
+
+        reality_qr_b64 = generate_qr_base64(reality_url)
+        wss_qr_b64 = generate_qr_base64(wss_url) if wss_url else ""
+        xhttp_qr_b64 = generate_qr_base64(xhttp_url) if xhttp_url else ""
 
         # Store QR data in context for the HTML template
         ctx["reality_qr_b64"] = reality_qr_b64

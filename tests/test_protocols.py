@@ -170,7 +170,9 @@ class TestXHTTPBuildURL:
         # No Reality params
         assert "pbk=" not in url
         assert "sid=" not in url
-        assert "sni=" not in url
+        # TLS params (sni defaults to host, fp defaults to chrome)
+        assert "sni=1.2.3.4" in url
+        assert "fp=chrome" in url
 
     def test_url_with_domain(self) -> None:
         proto = XHTTPProtocol()
@@ -185,6 +187,8 @@ class TestXHTTPBuildURL:
         assert "security=tls" in url
         assert "type=xhttp" in url
         assert "path=%2Fmypath" in url
+        assert "sni=example.com" in url
+        assert "fp=chrome" in url
 
     def test_url_without_domain_uses_ip(self) -> None:
         proto = XHTTPProtocol()
@@ -195,12 +199,24 @@ class TestXHTTPBuildURL:
             xhttp_path="p",
         )
         assert "vless://test-uuid@5.6.7.8:443" in url
+        assert "sni=5.6.7.8" in url
 
     def test_url_suffix(self) -> None:
         assert XHTTPProtocol().url_suffix == "-XHTTP"
 
     def test_shares_uuid_with_reality(self) -> None:
         assert XHTTPProtocol().shares_uuid_with == "reality"
+
+    def test_custom_fingerprint(self) -> None:
+        proto = XHTTPProtocol()
+        url = proto.build_url(
+            "test-uuid",
+            "bob",
+            ip="1.2.3.4",
+            xhttp_path="p",
+            fingerprint="firefox",
+        )
+        assert "fp=firefox" in url
 
 
 class TestWSSBuildURL:

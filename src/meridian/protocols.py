@@ -213,9 +213,14 @@ class XHTTPProtocol(Protocol):
         ip = kwargs["ip"]
         xhttp_path = kwargs.get("xhttp_path", "")
         domain = kwargs.get("domain", "")
+        fingerprint = kwargs.get("fingerprint", DEFAULT_FINGERPRINT)
         # Use domain if available, otherwise IP
         host = domain or ip
-        return f"vless://{uuid}@{host}:443?encryption=none&security=tls&type=xhttp&path=%2F{xhttp_path}#{name}-XHTTP"
+        return (
+            f"vless://{uuid}@{host}:443"
+            f"?encryption=none&security=tls&sni={host}&fp={fingerprint}"
+            f"&type=xhttp&path=%2F{xhttp_path}#{name}-XHTTP"
+        )
 
 
 class WSSProtocol(Protocol):

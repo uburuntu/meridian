@@ -171,6 +171,7 @@ class TestBuildRelayUrls:
         xhttp_url = xhttp_urls[0].url
         assert "@1.2.3.4:" in xhttp_url  # connects to relay
         assert "sni=5.6.7.8" in xhttp_url  # TLS identity is exit IP
+        assert "fp=chrome" in xhttp_url  # TLS fingerprint
         assert "xhttp123" in xhttp_url  # path preserved
 
     def test_build_relay_urls_no_name(self, sample_proxy_with_relays: Path) -> None:

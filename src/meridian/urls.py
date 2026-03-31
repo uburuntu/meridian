@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import shlex
-import subprocess
+import base64
+import io
+
+import segno
 
 from meridian.config import DEFAULT_FINGERPRINT, DEFAULT_SNI
 from meridian.credentials import ServerCredentials
 from meridian.models import ProtocolURL, RelayURLSet
 from meridian.protocols import PROTOCOLS
-
-# Module-level flag to warn about missing qrencode only once per session.
-_qrencode_warned = False
 
 
 def build_protocol_urls(
@@ -146,7 +145,7 @@ def build_relay_urls(
         xhttp_sni = domain or exit_ip
         xhttp_url = (
             f"vless://{reality_uuid}@{relay_ip}:{relay_port}"
-            f"?encryption=none&security=tls&sni={xhttp_sni}"
+            f"?encryption=none&security=tls&sni={xhttp_sni}&fp={DEFAULT_FINGERPRINT}"
             f"&type=xhttp&path=%2F{xhttp_path}"
             f"#{name}{suffix}-XHTTP"
         )
@@ -182,58 +181,22 @@ def build_all_relay_urls(
 
 
 def generate_qr_terminal(url: str) -> str:
-    """Generate a QR code for terminal display using qrencode."""
-    global _qrencode_warned  # noqa: PLW0603
+    """Generate a QR code for terminal display."""
     try:
-        result = subprocess.run(
-            ["qrencode", "-t", "ANSIUTF8", url],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            stdin=subprocess.DEVNULL,
-        )
-        if result.returncode == 0:
-            return result.stdout
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        if not _qrencode_warned:
-            from meridian.console import warn
-
-            warn(
-                "qrencode not installed — QR codes will be missing. "
-                "Install: apt install qrencode (Linux) or brew install qrencode (macOS)"
-            )
-            _qrencode_warned = True
-    return ""
+        qr = segno.make(url)
+        buf = io.StringIO()
+        qr.terminal(out=buf, compact=True)
+        return buf.getvalue()
+    except Exception:
+        return ""
 
 
 def generate_qr_base64(url: str) -> str:
-    """Generate a QR code as base64-encoded PNG for HTML embedding.
-
-    Uses ``base64 | tr -d '\\n'`` for macOS compatibility (no -w0).
-    """
-    global _qrencode_warned  # noqa: PLW0603
+    """Generate a QR code as base64-encoded PNG for HTML embedding."""
     try:
-        result = subprocess.run(
-            [
-                "bash",
-                "-c",
-                f"printf '%s' {shlex.quote(url)} | qrencode -t PNG -o - -s 6 | base64 | tr -d '\\n'",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            stdin=subprocess.DEVNULL,
-        )
-        if result.returncode == 0 and result.stdout:
-            return result.stdout
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-    if not _qrencode_warned:
-        from meridian.console import warn
-
-        warn(
-            "qrencode not installed — QR codes will be missing. "
-            "Install: apt install qrencode (Linux) or brew install qrencode (macOS)"
-        )
-        _qrencode_warned = True
-    return ""
+        qr = segno.make(url)
+        buf = io.BytesIO()
+        qr.save(buf, kind="png", scale=6)
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return ""

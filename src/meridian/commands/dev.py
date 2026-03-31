@@ -60,8 +60,8 @@ def _build_demo_urls(
     if xhttp:
         xhttp_url = (
             f"vless://{reality_uuid}@{server_ip}:443"
-            f"?security=tls&encryption=none&type=xhttp"
-            f"&path=/{DEMO_XHTTP_PATH}&fp=chrome"
+            f"?security=tls&encryption=none&sni={server_ip}&fp=chrome"
+            f"&type=xhttp&path=/{DEMO_XHTTP_PATH}"
             f"#Meridian-XHTTP"
         )
         urls.append(

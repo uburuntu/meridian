@@ -84,6 +84,8 @@ class TestBuildProtocolURLs:
         assert "#alice-XHTTP" in xhttp
         # XHTTP now uses TLS (via nginx), not Reality
         assert "security=tls" in xhttp
+        assert "sni=1.2.3.4" in xhttp
+        assert "fp=chrome" in xhttp
         # XHTTP must NOT have flow (empty)
         assert "flow=" not in xhttp
 
@@ -155,6 +157,8 @@ class TestBuildProtocolURLsEdgeCases:
         assert reality.startswith("vless://r-uuid@1.2.3.4:443")
         assert xhttp.startswith("vless://r-uuid@example.com:443")
         assert "path=%2Fxp" in xhttp
+        assert "sni=example.com" in xhttp
+        assert "fp=chrome" in xhttp
         assert wss.startswith("vless://w-uuid@example.com:443")
         assert "#alice" in reality
         assert "#alice-XHTTP" in xhttp
@@ -217,48 +221,31 @@ class TestBuildProtocolURLsEdgeCases:
 
 
 class TestQRCodeGeneration:
-    """Test QR code generation with mocked subprocess."""
+    """Test QR code generation with segno."""
 
     def test_generate_qr_terminal_success(self) -> None:
-        mock_result = type("Result", (), {"returncode": 0, "stdout": "QR_OUTPUT"})()
-        with patch("meridian.urls.subprocess.run", return_value=mock_result):
-            result = generate_qr_terminal("vless://test")
-        assert result == "QR_OUTPUT"
+        result = generate_qr_terminal("vless://test@1.2.3.4:443")
+        assert result  # non-empty
+        assert "\n" in result  # multi-line terminal output
 
-    def test_generate_qr_terminal_failure(self) -> None:
-        mock_result = type("Result", (), {"returncode": 1, "stdout": ""})()
-        with patch("meridian.urls.subprocess.run", return_value=mock_result):
-            result = generate_qr_terminal("vless://test")
-        assert result == ""
-
-    def test_generate_qr_terminal_not_installed(self) -> None:
-        with patch("meridian.urls.subprocess.run", side_effect=FileNotFoundError):
-            result = generate_qr_terminal("vless://test")
-        assert result == ""
-
-    def test_generate_qr_terminal_timeout(self) -> None:
-        import subprocess
-
-        with patch("meridian.urls.subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="qrencode", timeout=5)):
-            result = generate_qr_terminal("vless://test")
-        assert result == ""
+    def test_generate_qr_terminal_empty_input(self) -> None:
+        # segno handles empty strings gracefully
+        result = generate_qr_terminal("")
+        assert isinstance(result, str)
 
     def test_generate_qr_base64_success(self) -> None:
-        mock_result = type("Result", (), {"returncode": 0, "stdout": "iVBORw0KGgo="})()
-        with patch("meridian.urls.subprocess.run", return_value=mock_result):
-            result = generate_qr_base64("vless://test")
-        assert result == "iVBORw0KGgo="
+        result = generate_qr_base64("vless://test@1.2.3.4:443")
+        assert result  # non-empty
+        # Verify it's valid base64 encoding of a PNG
+        import base64
 
-    def test_generate_qr_base64_failure(self) -> None:
-        mock_result = type("Result", (), {"returncode": 1, "stdout": ""})()
-        with patch("meridian.urls.subprocess.run", return_value=mock_result):
-            result = generate_qr_base64("vless://test")
-        assert result == ""
+        decoded = base64.b64decode(result)
+        assert decoded[:4] == b"\x89PNG"
 
-    def test_generate_qr_base64_not_installed(self) -> None:
-        with patch("meridian.urls.subprocess.run", side_effect=FileNotFoundError):
-            result = generate_qr_base64("vless://test")
-        assert result == ""
+    def test_generate_qr_base64_empty_input(self) -> None:
+        # segno handles empty strings gracefully
+        result = generate_qr_base64("")
+        assert isinstance(result, str)
 
 
 class TestSaveConnectionHtml:
