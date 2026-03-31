@@ -4,6 +4,11 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.10.1] - 2026-03-31
+
+### Fixed
+- **`--no-harden` port 443 bug** — deploying with `--no-harden` on a server with an active firewall left port 443 blocked. New `EnsurePort443` step adds the rule when ufw is already active, without touching SSH or other firewall settings.
+
 ## [3.10.0] - 2026-03-31
 
 ### Added
