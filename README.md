@@ -148,6 +148,7 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 | `meridian preflight [IP]` | Pre-flight server validation (ports, SNI, OS, disk) |
 | `meridian scan [IP]` | Find optimal SNI targets on server's network |
 | `meridian test [IP]` | Test proxy reachability from this device |
+| `meridian probe [IP\|DOMAIN]` | Probe server as a censor would — check if deployment is detectable |
 | `meridian doctor [IP]` | Collect info for bug reports (alias: `rage`) |
 | `meridian update` | Update Meridian to the latest version |
 | `meridian teardown [IP]` | Remove proxy from server |

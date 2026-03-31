@@ -259,6 +259,17 @@ def test_cmd(
     run(ip, domain, sni, server)
 
 
+@app.command("probe")
+def probe_cmd(
+    ip: str = typer.Argument("", help="Server IP or domain"),
+    server: str = typer.Option("", "--server", help="Target server (name or IP)"),
+) -> None:
+    """Probe your server as a censor would — check if the deployment is detectable."""
+    from meridian.commands.probe import run
+
+    run(ip, server)
+
+
 # =============================================================================
 # Doctor / Teardown / Update
 # =============================================================================

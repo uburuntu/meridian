@@ -97,6 +97,16 @@ Test proxy reachability from the client device. No SSH needed.
 meridian test [IP] [--server NAME]
 ```
 
+### meridian probe
+
+Probe a server as a censor would — check if the deployment is detectable. No SSH needed. Works on any server, not just Meridian deployments. Accepts IP addresses or domain names.
+
+Runs 9 checks: port surface, HTTP response, TLS certificate, SNI consistency, proxy path probing, WebSocket upgrade, reverse DNS, HTTP/2 support, and legacy TLS versions.
+
+```
+meridian probe [IP|DOMAIN] [--server NAME]
+```
+
 ### meridian doctor
 
 Collect system diagnostics for debugging. Alias: `meridian rage`.
