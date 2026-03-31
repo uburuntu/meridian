@@ -36,7 +36,7 @@ class ServerConfig:
     scanned_sni: str | None = None
     hosted_page: bool = False
     deployed_with: str = ""  # Meridian CLI version that last deployed this server
-    decoy: str = ""  # Decoy response for probers: "" = abort, "403" = nginx 403 page
+    decoy: str = ""  # Decoy response: "" = silent drop, "403" = realistic nginx (403 root + 404 paths)
 
 
 @dataclass

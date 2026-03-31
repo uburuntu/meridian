@@ -29,10 +29,10 @@ def _render_nginx_stream_config(
     """Render the nginx stream configuration for SNI-based routing.
 
     nginx stream sits on port 443 and inspects the TLS ClientHello SNI
-    WITHOUT terminating TLS. Reality-targeted SNIs go to Xray, explicitly
-    allowed SNIs (server IP, domain) go to the nginx HTTPS backend.
-    Unrecognized SNI connections hit a blackhole upstream (nothing listens
-    on port 1, so the client gets an immediate RST).
+    WITHOUT terminating TLS. Reality-targeted SNIs go to Xray, all other
+    SNIs (server IP, domain, unknown) go to the nginx HTTPS backend.
+    Unknown SNIs get the same response as direct IP access — no routing
+    differential for censors to detect.
     """
     # Build SNI → backend map entries
     map_entries = [
@@ -45,8 +45,8 @@ def _render_nginx_stream_config(
 
     # No SNI (browsers connecting to bare IP per RFC 6066) → nginx
     map_entries.append('    ""  nginx_https;')
-    # Unknown SNI → drop (anti-fingerprinting)
-    map_entries.append("    default  blackhole;")
+    # Unknown SNI → same response as direct IP (no routing differential)
+    map_entries.append("    default  nginx_https;")
 
     map_block = "\n".join(map_entries)
 
@@ -59,7 +59,7 @@ def _render_nginx_stream_config(
     if domain:
         flow_lines.append(f"SNI={domain} -> nginx HTTPS (127.0.0.1:{nginx_internal_port})")
     flow_lines.append(f"No SNI (bare IP) -> nginx HTTPS (127.0.0.1:{nginx_internal_port})")
-    flow_lines.append("Unknown SNI -> connection dropped (anti-fingerprinting)")
+    flow_lines.append("Unknown SNI -> nginx HTTPS (same as direct IP)")
     flow_comment = "\n".join(f"#   {line}" for line in flow_lines)
 
     return textwrap.dedent(f"""\
@@ -81,20 +81,13 @@ def _render_nginx_stream_config(
             server 127.0.0.1:{nginx_internal_port};
         }}
 
-        # Nothing listens on port 1 — connection gets immediate RST.
-        # This drops unknown-SNI connections without leaking any response.
-        upstream blackhole {{
-            server 127.0.0.1:1;
-        }}
-
         server {{
             listen 443;
             listen [::]:443;
             ssl_preread on;
             proxy_pass $meridian_backend;
-            # Fast timeout for blackhole upstream — unknown-SNI connections
-            # get RST in <1s instead of waiting 60s (default). Also reduces
-            # log noise from port scanners since connections close quickly.
+            # Short timeout — don't wait 60s (default) if a backend is
+            # temporarily unavailable.
             proxy_connect_timeout 1s;
         }}
     """)
@@ -150,8 +143,14 @@ def _render_nginx_http_config(
         """).rstrip()
 
     # Default: silent drop (444) — server reveals nothing, connection closes.
-    # --decoy 403: stock nginx 403 page — looks like a real web server.
-    default_action = "return 403;" if decoy == "403" else "return 444;"
+    # --decoy 403: realistic nginx — root 403 (directory listing forbidden),
+    # unknown paths 404 (not found). Matches real nginx with empty docroot.
+    if decoy == "403":
+        root_action = "return 403;"
+        default_action = "return 404;"
+    else:
+        root_action = "return 444;"
+        default_action = "return 444;"
 
     return _render_nginx_server_block(
         host=domain,
@@ -160,6 +159,7 @@ def _render_nginx_http_config(
         panel_internal_port=panel_internal_port,
         info_page_path=info_page_path,
         extra_locations=wss_block + xhttp_block,
+        root_action=root_action,
         default_action=default_action,
         mode_comment="Domain Mode",
         tls_comment=(f"TLS: certificates issued by acme.sh for {domain}"),
@@ -196,8 +196,14 @@ def _render_nginx_ip_config(
         """).rstrip()
 
     # Default: silent drop (444) — server reveals nothing, connection closes.
-    # --decoy 403: stock nginx 403 page — looks like a real web server.
-    default_action = "return 403;" if decoy == "403" else "return 444;"
+    # --decoy 403: realistic nginx — root 403 (directory listing forbidden),
+    # unknown paths 404 (not found). Matches real nginx with empty docroot.
+    if decoy == "403":
+        root_action = "return 403;"
+        default_action = "return 404;"
+    else:
+        root_action = "return 444;"
+        default_action = "return 444;"
 
     return _render_nginx_server_block(
         host=server_ip,
@@ -206,6 +212,7 @@ def _render_nginx_ip_config(
         panel_internal_port=panel_internal_port,
         info_page_path=info_page_path,
         extra_locations=xhttp_block,
+        root_action=root_action,
         default_action=default_action,
         mode_comment="IP Certificate Mode",
         tls_comment=("TLS: Let's Encrypt IP certificate (acme.sh, shortlived profile)"),
@@ -219,6 +226,7 @@ def _render_nginx_server_block(
     panel_internal_port: int,
     info_page_path: str,
     extra_locations: str,
+    root_action: str,
     default_action: str,
     mode_comment: str,
     tls_comment: str,
@@ -283,7 +291,12 @@ def _render_nginx_server_block(
                 add_header Referrer-Policy "no-referrer" always;
             }}
 
-            # Default: unknown paths
+            # Root: exact match (403 = directory listing forbidden, or 444 = drop)
+            location = / {{
+                {root_action}
+            }}
+
+            # Default: everything else (404 = not found, or 444 = drop)
             location / {{
                 {default_action}
             }}

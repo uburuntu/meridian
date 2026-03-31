@@ -73,19 +73,19 @@ class TestRenderNginxStreamConfig:
         )
         assert '""  nginx_https' in cfg
 
-    def test_unknown_sni_drops(self):
-        """Unknown SNI must route to blackhole (connection dropped)."""
+    def test_unknown_sni_routes_to_nginx(self):
+        """Unknown SNI routes to nginx — same response as direct IP (no differential)."""
         cfg = _render_nginx_stream_config(
             reality_sni="www.microsoft.com",
             reality_backend_port=10443,
             nginx_internal_port=8443,
             server_ip="198.51.100.1",
         )
-        assert "default  blackhole" in cfg
-        assert "127.0.0.1:1" in cfg
+        assert "default  nginx_https" in cfg
+        assert "blackhole" not in cfg
 
     def test_no_domain_no_domain_rule(self):
-        """Without domain, only server IP + no-SNI route to nginx."""
+        """Without domain, only server IP + no-SNI + default route to nginx."""
         cfg = _render_nginx_stream_config(
             reality_sni="www.microsoft.com",
             reality_backend_port=10443,
@@ -93,13 +93,13 @@ class TestRenderNginxStreamConfig:
             server_ip="198.51.100.1",
         )
         assert "example.com" not in cfg
-        # Count nginx_https entries: server IP + no-SNI = 2
+        # Count nginx_https map entries: server IP + no-SNI + default = 3
         nginx_rules = [
             line
             for line in cfg.splitlines()
             if "nginx_https" in line and "upstream" not in line and "server" not in line
         ]
-        assert len(nginx_rules) == 2
+        assert len(nginx_rules) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -376,9 +376,10 @@ class TestNginxDecoy:
         )
         assert "return 444" in cfg
         assert "return 403" not in cfg
+        assert "return 404" not in cfg
 
     def test_decoy_403_returns_403(self):
-        """decoy=403 returns 403 — stock nginx 403 page (genuine)."""
+        """decoy=403 returns 403 on root, 404 on other paths (realistic nginx)."""
         cfg = _render_nginx_ip_config(
             server_ip="198.51.100.1",
             nginx_internal_port=8443,
@@ -388,6 +389,7 @@ class TestNginxDecoy:
             decoy="403",
         )
         assert "return 403" in cfg
+        assert "return 404" in cfg
         assert "return 444" not in cfg
 
     def test_domain_decoy_403(self):
@@ -402,6 +404,7 @@ class TestNginxDecoy:
             decoy="403",
         )
         assert "return 403" in cfg
+        assert "return 404" in cfg
         assert "return 444" not in cfg
 
     def test_domain_default_drops_connection(self):
@@ -417,6 +420,7 @@ class TestNginxDecoy:
         )
         assert "return 444" in cfg
         assert "return 403" not in cfg
+        assert "return 404" not in cfg
 
     def test_default_has_security_headers(self):
         cfg = _render_nginx_ip_config(
@@ -500,8 +504,8 @@ class TestNginxFingerprinting:
         assert "listen 443;" in cfg
         assert "listen [::]:443;" in cfg
 
-    def test_stream_fast_blackhole_timeout(self):
-        """Blackhole connections must get fast RST, not 60s default timeout."""
+    def test_stream_proxy_connect_timeout(self):
+        """Stream proxy should have a short connect timeout (good practice)."""
         cfg = _render_nginx_stream_config(
             reality_sni="www.microsoft.com",
             reality_backend_port=10443,
@@ -534,7 +538,7 @@ class TestNginxFingerprinting:
         assert cfg.count("server_tokens off") == 2
 
     def test_decoy_403_avoids_444(self):
-        """--decoy 403 uses stock 403 page, never 444 (HTTP/2-safe)."""
+        """--decoy 403 uses realistic 403/404, never 444 (HTTP/2-safe)."""
         for cfg in [
             _render_nginx_ip_config(
                 server_ip="198.51.100.1",
@@ -556,6 +560,7 @@ class TestNginxFingerprinting:
             ),
         ]:
             assert "return 403" in cfg
+            assert "return 404" in cfg
             assert "return 444" not in cfg
 
     def test_csp_restricts_external_resources(self):
@@ -568,6 +573,31 @@ class TestNginxFingerprinting:
             info_page_path="connect",
         )
         assert "default-src 'self'" in cfg
+
+    def test_no_sni_routing_differential(self):
+        """Unknown SNI must get same backend as direct IP — no fingerprint."""
+        cfg = _render_nginx_stream_config(
+            reality_sni="www.microsoft.com",
+            reality_backend_port=10443,
+            nginx_internal_port=8443,
+            server_ip="198.51.100.1",
+        )
+        assert "default  nginx_https" in cfg
+        assert "blackhole" not in cfg
+
+    def test_decoy_403_root_vs_default_paths(self):
+        """--decoy 403 returns 403 on root, 404 on other paths (like real nginx)."""
+        cfg = _render_nginx_ip_config(
+            server_ip="198.51.100.1",
+            nginx_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+            decoy="403",
+        )
+        assert "location = /" in cfg
+        assert "return 403" in cfg
+        assert "return 404" in cfg
 
 
 # ---------------------------------------------------------------------------
