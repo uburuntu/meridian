@@ -6,6 +6,7 @@ from typing import NoReturn
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.theme import Theme
 
 _theme = Theme(
@@ -69,9 +70,11 @@ def banner(version: str) -> None:
 def prompt(message: str, default: str = "") -> str:
     """Interactive prompt that reads from /dev/tty for pipe safety."""
     suffix = f" [{default}]" if default else ""
+    # Escape message and suffix to prevent Rich from parsing [y/N] etc. as markup
+    escaped = escape(f"{message}{suffix}")
     try:
         with open("/dev/tty") as tty:
-            err_console.print(f"  [info]\u2192[/info] {message}{suffix}: ", end="")
+            err_console.print(f"  [info]\u2192[/info] {escaped}: ", end="")
             value = tty.readline().strip()
     except OSError:
         # No TTY available (CI, non-interactive)
