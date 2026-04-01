@@ -4,6 +4,12 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.10.6] - 2026-04-01
+
+### Fixed
+- **Relay re-bind after exit teardown** — `relay deploy` now detects a previous Realm process on the port and stops it instead of failing with "port already in use". Fixes the teardown → re-deploy → relay bind flow.
+- **Teardown leaves zombie relays** — `teardown` now stops and disables relay nodes before uninstalling the exit server, preventing orphaned Realm processes forwarding to a dead exit.
+
 ## [3.10.5] - 2026-04-01
 
 ### Fixed
