@@ -225,7 +225,7 @@ class TestCheckSniConsistency:
         ):
             result = check_sni_consistency(_TEST_IP)
         assert result.passed
-        assert any("identical" in msg for msg in _finding_messages(result))
+        assert any("consistent" in msg for msg in _finding_messages(result))
 
     def test_different_certs_warns(self) -> None:
         call_count = 0
@@ -248,7 +248,7 @@ class TestCheckSniConsistency:
         ):
             result = check_sni_consistency(_TEST_IP)
         assert not result.passed
-        assert any("different" in msg for msg in _finding_messages(result))
+        assert any("inconsistent" in msg for msg in _finding_messages(result))
 
     def test_same_identity_different_der_passes(self) -> None:
         """CDN scenario: different cert bytes but same subject+issuer."""
@@ -268,7 +268,7 @@ class TestCheckSniConsistency:
         ):
             result = check_sni_consistency(_TEST_IP)
         assert result.passed
-        assert any("identical" in msg for msg in _finding_messages(result))
+        assert any("consistent" in msg for msg in _finding_messages(result))
 
 
 # ---------------------------------------------------------------------------

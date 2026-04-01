@@ -307,14 +307,22 @@ def _cert_identity(der: bytes) -> str:
 
 
 def check_sni_consistency(ip: str) -> CheckResult:
-    """Test if different SNI values produce identical responses."""
+    """Test if repeated connections with the same unknown SNI are consistent.
+
+    A Meridian server TCP-proxies unknown SNIs to the Reality dest site.
+    We test consistency by connecting multiple times with the SAME SNI
+    and verifying we get the same certificate each time. Different SNIs
+    may legitimately produce different certs (the dest CDN routes by SNI),
+    so we don't compare across different SNI values.
+    """
     result = CheckResult(name="SNI consistency", passed=True)
 
-    test_snis = ["google.com", "example.com", "test123456.invalid"]
+    # Use a single plausible SNI for consistency testing
+    test_sni = "example.com"
     certs: list[bytes] = []
 
-    for sni in test_snis:
-        der = _get_cert_der(ip, sni)
+    for _ in range(3):
+        der = _get_cert_der(ip, test_sni)
         if der:
             certs.append(der)
 
@@ -327,14 +335,14 @@ def check_sni_consistency(ip: str) -> CheckResult:
     # same subject+issuer means the routing destination is consistent.
     identities = [_cert_identity(c) for c in certs]
     if len(set(identities)) == 1:
-        result.findings.append((True, "All unknown SNIs produce identical certificate"))
+        result.findings.append((True, "SNI routing is consistent (same cert on repeated probes)"))
     else:
         result.passed = False
         unique = len(set(identities))
         result.findings.append(
             (
                 False,
-                f"{unique} different certificates across {len(certs)} SNI probes — routing is distinguishable",
+                f"{unique} different certificates across {len(certs)} probes with same SNI — routing is inconsistent",
             )
         )
 
