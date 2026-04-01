@@ -4,6 +4,14 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.10.8] - 2026-04-01
+
+### Changed
+- **Disable Xray logs on deploy** — new `DisableXrayLogs` step patches the Xray config template to set `access="none"` and `error="none"`. Runs on every deploy (idempotent), so existing servers get logs disabled on re-deploy.
+
+### Fixed
+- **Probe SNI consistency false positive** — the check tested 3 different unknown SNIs which get TCP-proxied to the Reality dest; the dest CDN returns different certs for different SNIs (expected behavior). Now tests the same SNI repeatedly to verify deterministic routing.
+
 ## [3.10.7] - 2026-04-01
 
 ### Changed
