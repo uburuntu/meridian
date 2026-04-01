@@ -4,6 +4,16 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.10.5] - 2026-04-01
+
+### Fixed
+- **Probe false positives on Meridian-deployed servers** — suspicious port scan now verifies with an HTTPS request before flagging. Cloud middleboxes that complete TCP handshakes but serve no content are reported as informational, not issues.
+- **Probe SNI consistency false positives** — certificates are now compared by subject+issuer identity (via openssl) instead of raw bytes. CDN cert rotation (same origin, different serial numbers) no longer triggers warnings.
+- **XHTTP upstream timeouts** — nginx reverse proxy `proxy_read_timeout` increased from 360s to 86400s for XHTTP location blocks. XHTTP `mode=auto` lets clients negotiate streaming modes (`stream-one`/`stream-up`) with long-lived connections that previously timed out. Added `proxy_send_timeout` and `proxy_request_buffering off`.
+
+### Changed
+- **Probe verdict** — removed circular "Meridian handles these automatically: `meridian deploy`" suggestion. Replaced with neutral diagnostic messaging.
+
 ## [3.10.4] - 2026-04-01
 
 ### Fixed
