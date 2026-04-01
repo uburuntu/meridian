@@ -4,6 +4,16 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.10.4] - 2026-04-01
+
+### Fixed
+- **SSH timeout crashes** — `conn.run()` now catches `TimeoutExpired` and returns a graceful failure (rc=124) instead of crashing with a raw Python traceback. Every provisioning step benefits.
+- **Misleading "ufw not found"** — a timeout on `which ufw` was reported as "ufw not found" instead of showing the actual timeout error.
+- **Opaque PWA upload errors** — `"Failed to upload shared PWA assets"` now includes the filename and stderr (e.g. `"Failed to upload pwa/app.js: Command timed out after 30s"`).
+
+### Changed
+- **Increased all SSH timeouts for low-end machines** — simple commands 5s→15s, file writes 15s→30s, Docker/systemctl 30s→60s, apt/acme.sh 120s→180s, Docker pull 180s→300s. Accounts for SSH handshake overhead on cheap VPS providers.
+
 ## [3.10.3] - 2026-03-31
 
 ### Fixed
