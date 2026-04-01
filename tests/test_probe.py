@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 from meridian.cli import app
 from meridian.commands.probe import (
     _NGINX_STOCK_LENGTH,
+    _cert_identity,
     check_http2_support,
     check_http_response,
     check_legacy_tls,
@@ -52,7 +53,10 @@ class TestCheckPorts:
         assert any("443" in msg for msg in _finding_messages(result))
 
     def test_suspicious_port_open_warns(self) -> None:
-        with patch("meridian.commands.probe.tcp_connect") as mock_tcp:
+        with (
+            patch("meridian.commands.probe.tcp_connect") as mock_tcp,
+            patch("meridian.commands.probe._https_get", return_value=(200, {}, b"panel")),
+        ):
             mock_tcp.side_effect = lambda ip, port, timeout=3: port in (443, 2053)
             result = check_ports(_TEST_IP)
         assert not result.passed
@@ -72,7 +76,10 @@ class TestCheckPorts:
         assert any("80" in msg for msg in _finding_messages(result))
 
     def test_findings_carry_correct_status(self) -> None:
-        with patch("meridian.commands.probe.tcp_connect") as mock_tcp:
+        with (
+            patch("meridian.commands.probe.tcp_connect") as mock_tcp,
+            patch("meridian.commands.probe._https_get", return_value=(200, {}, b"panel")),
+        ):
             mock_tcp.side_effect = lambda ip, port, timeout=3: port in (443, 2053)
             result = check_ports(_TEST_IP)
         # Port 443 finding should be ok=True, port 2053 should be ok=False
@@ -81,6 +88,26 @@ class TestCheckPorts:
                 assert is_ok
             if "2053" in msg:
                 assert not is_ok
+
+    def test_suspicious_port_middlebox_passes(self) -> None:
+        """TCP handshake completes but no real service — middlebox, not a real issue."""
+        with (
+            patch("meridian.commands.probe.tcp_connect") as mock_tcp,
+            patch("meridian.commands.probe._https_get", return_value=(0, {}, b"")),
+        ):
+            mock_tcp.side_effect = lambda ip, port, timeout=3: port in (443, 8080)
+            result = check_ports(_TEST_IP)
+        assert result.passed
+        assert any("no service" in msg for msg in _finding_messages(result))
+
+    def test_multiple_middlebox_ports_still_passes(self) -> None:
+        """All suspicious ports TCP-reachable but none serve real content."""
+        with (
+            patch("meridian.commands.probe.tcp_connect", return_value=True),
+            patch("meridian.commands.probe._https_get", return_value=(0, {}, b"")),
+        ):
+            result = check_ports(_TEST_IP)
+        assert result.passed
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +219,10 @@ class TestCheckTlsCertificate:
 class TestCheckSniConsistency:
     def test_identical_certs_passes(self) -> None:
         same_cert = b"\x30\x82\x01\x00" + b"\x00" * 256
-        with patch("meridian.commands.probe._get_cert_der", return_value=same_cert):
+        with (
+            patch("meridian.commands.probe._get_cert_der", return_value=same_cert),
+            patch("meridian.commands.probe._cert_identity", return_value="same-identity"),
+        ):
             result = check_sni_consistency(_TEST_IP)
         assert result.passed
         assert any("identical" in msg for msg in _finding_messages(result))
@@ -205,10 +235,40 @@ class TestCheckSniConsistency:
             call_count += 1
             return b"\x30\x82" + call_count.to_bytes(2, "big") + b"\x00" * 256
 
-        with patch("meridian.commands.probe._get_cert_der", side_effect=varying_cert):
+        identity_count = 0
+
+        def varying_identity(der: bytes) -> str:
+            nonlocal identity_count
+            identity_count += 1
+            return f"identity-{identity_count}"
+
+        with (
+            patch("meridian.commands.probe._get_cert_der", side_effect=varying_cert),
+            patch("meridian.commands.probe._cert_identity", side_effect=varying_identity),
+        ):
             result = check_sni_consistency(_TEST_IP)
         assert not result.passed
         assert any("different" in msg for msg in _finding_messages(result))
+
+    def test_same_identity_different_der_passes(self) -> None:
+        """CDN scenario: different cert bytes but same subject+issuer."""
+        call_count = 0
+
+        def varying_cert(ip: str, sni: str, timeout: int = 5) -> bytes:
+            nonlocal call_count
+            call_count += 1
+            return b"\x30\x82" + call_count.to_bytes(2, "big") + b"\x00" * 256
+
+        with (
+            patch("meridian.commands.probe._get_cert_der", side_effect=varying_cert),
+            patch(
+                "meridian.commands.probe._cert_identity",
+                return_value="subject=CN=cdn.example.com|issuer=O=DigiCert",
+            ),
+        ):
+            result = check_sni_consistency(_TEST_IP)
+        assert result.passed
+        assert any("identical" in msg for msg in _finding_messages(result))
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +410,35 @@ class TestCheckLegacyTls:
             result = check_legacy_tls(_TEST_IP)
         assert not result.passed
         assert any("TLS 1.0 + TLS 1.1" in msg for msg in _finding_messages(result))
+
+
+# ---------------------------------------------------------------------------
+# _cert_identity helper
+# ---------------------------------------------------------------------------
+
+
+class TestCertIdentity:
+    def test_openssl_extracts_subject_issuer(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = b"subject=CN=example.com\nissuer=O=DigiCert"
+        with patch("meridian.commands.probe.subprocess.run", return_value=mock_result):
+            identity = _cert_identity(b"\x30\x82\x00")
+        assert "example.com" in identity
+        assert "DigiCert" in identity
+
+    def test_fallback_without_openssl(self) -> None:
+        with patch("meridian.commands.probe.subprocess.run", side_effect=FileNotFoundError):
+            identity = _cert_identity(b"\x30\x82\x00")
+        assert len(identity) == 64  # sha256 hex
+
+    def test_openssl_failure_falls_back(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = b""
+        with patch("meridian.commands.probe.subprocess.run", return_value=mock_result):
+            identity = _cert_identity(b"\x30\x82\x00")
+        assert len(identity) == 64  # sha256 hex
 
 
 # ---------------------------------------------------------------------------

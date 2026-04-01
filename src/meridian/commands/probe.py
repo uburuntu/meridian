@@ -63,13 +63,14 @@ def _https_get(
     path: str,
     timeout: int = 5,
     extra_headers: dict[str, str] | None = None,
+    port: int = 443,
 ) -> tuple[int, dict[str, str], bytes]:
     """HTTPS GET to an IP. Returns (status, headers_dict, body).
 
     Returns (0, {}, b"") on connection failure.
     """
     try:
-        conn = http.client.HTTPSConnection(ip, timeout=timeout, context=_ssl_context())
+        conn = http.client.HTTPSConnection(ip, port=port, timeout=timeout, context=_ssl_context())
         headers = {"Host": ip, "User-Agent": "Mozilla/5.0"}
         if extra_headers:
             headers.update(extra_headers)
@@ -123,8 +124,15 @@ def check_ports(ip: str) -> CheckResult:
     # Suspicious ports
     for port, description in _SUSPICIOUS_PORTS.items():
         if tcp_connect(ip, port, timeout=3):
-            result.passed = False
-            result.findings.append((False, f"Port {port} is open ({description})"))
+            # Verify with HTTPS — middleboxes complete TCP but don't serve real content
+            status, _, _ = _https_get(ip, "/", timeout=3, port=port)
+            if status > 0:
+                result.passed = False
+                result.findings.append((False, f"Port {port} is open ({description})"))
+            else:
+                result.findings.append(
+                    (True, f"Port {port} TCP-reachable but no service detected (network infrastructure)")
+                )
 
     if result.passed:
         result.findings.append((True, "No unexpected ports open"))
@@ -278,6 +286,26 @@ def _get_cert_text_via_openssl(ip: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _cert_identity(der: bytes) -> str:
+    """Extract subject+issuer identity from DER cert bytes.
+
+    Uses openssl for semantic comparison (handles CDN cert rotation).
+    Falls back to sha256 hex if openssl is unavailable.
+    """
+    try:
+        proc = subprocess.run(
+            ["openssl", "x509", "-inform", "DER", "-noout", "-subject", "-issuer"],
+            input=der,
+            capture_output=True,
+            timeout=5,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.strip().decode(errors="replace")
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return hashlib.sha256(der).hexdigest()
+
+
 def check_sni_consistency(ip: str) -> CheckResult:
     """Test if different SNI values produce identical responses."""
     result = CheckResult(name="SNI consistency", passed=True)
@@ -294,12 +322,15 @@ def check_sni_consistency(ip: str) -> CheckResult:
         result.findings.append((True, "Could not complete SNI probes (skipped)"))
         return result
 
-    # Compare all certs
-    if len(set(certs)) == 1:
+    # Compare all certs by identity (subject+issuer), not raw DER bytes.
+    # CDNs return different cert instances from different edge nodes;
+    # same subject+issuer means the routing destination is consistent.
+    identities = [_cert_identity(c) for c in certs]
+    if len(set(identities)) == 1:
         result.findings.append((True, "All unknown SNIs produce identical certificate"))
     else:
         result.passed = False
-        unique = len(set(certs))
+        unique = len(set(identities))
         result.findings.append(
             (
                 False,
@@ -607,11 +638,8 @@ def run(
     else:
         err_console.print(
             f"  [warn][bold]{issues} issue(s) found.[/bold][/warn]"
-            " These patterns can help distinguish this server from a regular web server."
+            " These patterns can help a censor distinguish this server from a regular web server."
         )
-        err_console.print()
-        err_console.print("  Meridian handles these automatically:")
-        err_console.print(f"    [cyan]meridian deploy {resolved.ip}[/cyan]")
     err_console.print()
 
 
