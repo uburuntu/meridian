@@ -143,7 +143,7 @@ class EnableAutoUpgrades:
                 status="failed",
                 detail=f"failed to write config: {result.stderr.strip()[:200]}",
             )
-        conn.run(f"chmod 644 {conf_path}", timeout=5)
+        conn.run(f"chmod 644 {conf_path}", timeout=10)
 
         return StepResult(name=self.name, status="changed")
 
@@ -304,7 +304,7 @@ class EnsurePort443:
     name = "Ensure port 443"
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
-        check = conn.run("which ufw", timeout=5)
+        check = conn.run("which ufw", timeout=10)
         if check.returncode != 0:
             return StepResult(name=self.name, status="ok", detail="ufw not installed")
 
@@ -332,7 +332,7 @@ class ConfigureFirewall:
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         # Check if ufw is available
-        check = conn.run("which ufw", timeout=5)
+        check = conn.run("which ufw", timeout=10)
         if check.returncode != 0:
             return StepResult(name=self.name, status="failed", detail="ufw not found")
 

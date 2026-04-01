@@ -165,7 +165,7 @@ class ConfigureRelayFirewall:
     name = "Configure relay firewall"
 
     def run(self, conn: ServerConnection, ctx: RelayContext) -> StepResult:
-        check = conn.run("which ufw", timeout=5)
+        check = conn.run("which ufw", timeout=10)
         if check.returncode != 0:
             return StepResult(name=self.name, status="failed", detail="ufw not found")
 
@@ -217,7 +217,7 @@ class InstallRealm:
                 return StepResult(name=self.name, status="ok", detail=f"v{ctx.realm_version} already installed")
 
         # Detect architecture
-        arch_result = conn.run("uname -m", timeout=5)
+        arch_result = conn.run("uname -m", timeout=10)
         if arch_result.returncode != 0:
             return StepResult(name=self.name, status="failed", detail="cannot detect architecture")
 
@@ -250,7 +250,7 @@ class InstallRealm:
             check = conn.run("sha256sum /tmp/realm.tar.gz | cut -d' ' -f1", timeout=10)
             actual_hash = check.stdout.strip()
             if actual_hash != expected_hash:
-                conn.run("rm -f /tmp/realm.tar.gz", timeout=5)
+                conn.run("rm -f /tmp/realm.tar.gz", timeout=10)
                 return StepResult(
                     name=self.name,
                     status="failed",
@@ -298,7 +298,7 @@ class ConfigureRealm:
             f'remote = "{ctx.exit_ip}:{ctx.exit_port}"\n'
         )
 
-        conn.run("mkdir -p /etc/meridian", timeout=5)
+        conn.run("mkdir -p /etc/meridian", timeout=10)
 
         q_config = shlex.quote(config_content)
         write_config = conn.run(
@@ -311,7 +311,7 @@ class ConfigureRealm:
                 status="failed",
                 detail=f"failed to write config: {write_config.stderr.strip()[:200]}",
             )
-        conn.run(f"chmod 600 {RELAY_CONFIG_PATH}", timeout=5)
+        conn.run(f"chmod 600 {RELAY_CONFIG_PATH}", timeout=10)
 
         # Write relay metadata
         relay_meta = (
@@ -323,7 +323,7 @@ class ConfigureRealm:
             "mv /etc/meridian/relay.yml.tmp /etc/meridian/relay.yml",
             timeout=10,
         )
-        conn.run("chmod 600 /etc/meridian/relay.yml", timeout=5)
+        conn.run("chmod 600 /etc/meridian/relay.yml", timeout=10)
 
         # Write systemd service
         unit_content = _SYSTEMD_UNIT.format(config_path=RELAY_CONFIG_PATH)

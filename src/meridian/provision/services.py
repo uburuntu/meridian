@@ -558,7 +558,7 @@ class InstallNginx:
         )
         # Remove old watchdog immediately to prevent it from restarting
         # haproxy/caddy during the deploy (cron runs every 5 min)
-        conn.run("rm -f /etc/meridian/health-check.sh", timeout=5)
+        conn.run("rm -f /etc/meridian/health-check.sh", timeout=10)
         # Clean up old config files and cert storage
         conn.run(
             "rm -f /etc/haproxy/haproxy.cfg /etc/caddy/conf.d/meridian.caddy /etc/caddy/Caddyfile && "
@@ -623,7 +623,7 @@ class InstallNginx:
         )
 
         # -- Install acme.sh (if not already installed) --
-        check = conn.run("test -f /root/.acme.sh/acme.sh", timeout=5)
+        check = conn.run("test -f /root/.acme.sh/acme.sh", timeout=10)
         if check.returncode != 0:
             # email='' breaks acme.sh installer (shift error), omit when empty
             email_flag = f"email={shlex.quote(self.email)}" if self.email else ""
@@ -639,7 +639,7 @@ class InstallNginx:
                 )
 
         # -- Bootstrap: generate self-signed cert so nginx can start --
-        check = conn.run("test -f /etc/ssl/meridian/fullchain.pem", timeout=5)
+        check = conn.run("test -f /etc/ssl/meridian/fullchain.pem", timeout=10)
         if check.returncode != 0:
             cert_host = server_ip if self.ip_mode else self.domain
             q_subj = shlex.quote(f"/CN={cert_host}")
@@ -718,7 +718,7 @@ class InstallNginx:
         # include conf.d/*.conf. We need a top-level stream{} block
         # for SNI routing. Stream config lives in stream.d/ to avoid
         # being included inside http{} by the default conf.d/*.conf glob.
-        check = conn.run("grep -q 'stream {' /etc/nginx/nginx.conf", timeout=5)
+        check = conn.run("grep -q 'stream {' /etc/nginx/nginx.conf", timeout=10)
         if check.returncode != 0:
             # Append stream block at the end of nginx.conf (outside http{})
             stream_block = "\\nstream {\\n    include /etc/nginx/stream.d/*.conf;\\n}\\n"
@@ -728,7 +728,7 @@ class InstallNginx:
             )
 
         # -- Remove default site (conflicts with our port 80 listener) --
-        conn.run("rm -f /etc/nginx/sites-enabled/default", timeout=5)
+        conn.run("rm -f /etc/nginx/sites-enabled/default", timeout=10)
 
         # -- Validate configuration --
         result = conn.run("nginx -t 2>&1", timeout=10)
@@ -821,18 +821,18 @@ class DeployPWAAssets:
         from meridian.pwa import upload_pwa_assets
 
         try:
-            ok = upload_pwa_assets(conn)
+            error = upload_pwa_assets(conn)
         except Exception as exc:
             return StepResult(
                 name=self.name,
                 status="failed",
                 detail=f"Failed to load PWA assets: {exc}",
             )
-        if not ok:
+        if error:
             return StepResult(
                 name=self.name,
                 status="failed",
-                detail="Failed to upload shared PWA assets",
+                detail=error,
             )
         return StepResult(
             name=self.name,
@@ -935,9 +935,9 @@ class DeployConnectionPage:
         # Deploy stats update script
         stats_script = _render_stats_script(panel_internal_port)
         q_script = shlex.quote(stats_script)
-        conn.run("mkdir -p /etc/meridian", timeout=5)
+        conn.run("mkdir -p /etc/meridian", timeout=10)
         conn.run(f"printf '%s' {q_script} > /etc/meridian/update-stats.py", timeout=10)
-        conn.run("chmod 700 /etc/meridian/update-stats.py", timeout=5)
+        conn.run("chmod 700 /etc/meridian/update-stats.py", timeout=10)
 
         # Create stats directory
         conn.run(
@@ -969,7 +969,7 @@ class DeployConnectionPage:
         )
         q_watchdog = shlex.quote(watchdog_script)
         conn.run(f"printf '%s' {q_watchdog} > /etc/meridian/health-check.sh", timeout=10)
-        conn.run("chmod 700 /etc/meridian/health-check.sh", timeout=5)
+        conn.run("chmod 700 /etc/meridian/health-check.sh", timeout=10)
 
         watchdog_cron = "*/5 * * * * /etc/meridian/health-check.sh 2>&1 | logger -t meridian-health"
         q_wc = shlex.quote(watchdog_cron)
@@ -1000,11 +1000,12 @@ class DeployConnectionPage:
             color=creds.branding.color,
         )
 
-        if not upload_client_files(conn, reality_uuid, client_files):
+        upload_error = upload_client_files(conn, reality_uuid, client_files)
+        if upload_error:
             return StepResult(
                 name=self.name,
                 status="failed",
-                detail="Stats deployed but PWA file upload failed",
+                detail=upload_error,
             )
 
         page_url = f"https://{self.server_ip}/{info_page_path}/{reality_uuid}/"

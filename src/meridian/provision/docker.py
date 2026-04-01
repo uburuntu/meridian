@@ -105,7 +105,7 @@ class InstallDocker:
             )
 
         # Create keyrings directory
-        conn.run("mkdir -p /etc/apt/keyrings && chmod 755 /etc/apt/keyrings", timeout=5)
+        conn.run("mkdir -p /etc/apt/keyrings && chmod 755 /etc/apt/keyrings", timeout=10)
 
         # Detect distro for Docker repo
         distro = conn.run("bash -c '. /etc/os-release && echo $ID'", timeout=10)
@@ -187,7 +187,7 @@ class Deploy3xui:
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         # Create data directories
         for d in ("/opt/3x-ui", "/opt/3x-ui/db", "/opt/3x-ui/cert"):
-            result = conn.run(f"mkdir -p {d} && chmod 700 {d}", timeout=5)
+            result = conn.run(f"mkdir -p {d} && chmod 700 {d}", timeout=10)
             if result.returncode != 0:
                 return StepResult(
                     name=self.name,
@@ -222,7 +222,7 @@ class Deploy3xui:
                 status="failed",
                 detail=f"failed to write docker-compose.yml: {result.stderr.strip()[:200]}",
             )
-        conn.run("chmod 644 /opt/3x-ui/docker-compose.yml", timeout=5)
+        conn.run("chmod 644 /opt/3x-ui/docker-compose.yml", timeout=10)
 
         # Pull the 3x-ui image (with retries)
         pull_ok = False
@@ -266,7 +266,7 @@ class Deploy3xui:
         for attempt in range(30):
             check = conn.run(
                 f"curl -s -o /dev/null -w '%{{http_code}}' {shlex.quote(panel_url)}",
-                timeout=5,
+                timeout=10,
             )
             if check.returncode == 0 and check.stdout.strip() in (
                 "200",
