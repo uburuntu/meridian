@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 
 from meridian.config import DEFAULT_PANEL_PORT, DEFAULT_SNI
+from meridian.console import warn
 from meridian.credentials import ServerCredentials
 from meridian.panel import PanelClient, PanelError
 from meridian.provision.steps import ProvisionContext, StepResult
@@ -86,26 +87,56 @@ class ConfigurePanel:
         # Check if already configured
         creds = ctx.get("credentials")
         if creds is not None and ctx.get("panel_configured"):
-            # Update mutable fields even on re-runs (may have changed)
-            changed = False
-            if creds.server.hosted_page != ctx.hosted_page:
-                creds.server.hosted_page = ctx.hosted_page
-                changed = True
+            # Verify saved credentials actually work (catches partial deploys
+            # where creds were saved but panel settings weren't fully applied)
+            username = creds.panel.username
+            password = creds.panel.password
+            web_base_path = creds.panel.web_base_path or ""
+            panel_port = creds.panel.port
 
-            from meridian import __version__
+            if username and password:
+                try:
+                    _wait_for_panel(conn, panel_port, web_base_path, retries=10, delay=2.0)
+                    test_panel = PanelClient(conn, panel_port=panel_port, web_base_path=web_base_path)
+                    test_panel.login(username, password)
+                    test_panel.cleanup()
+                except PanelError:
+                    # Credentials don't match panel state — previous deploy failed
+                    # mid-apply. Wipe stale state and reconfigure from scratch.
+                    warn("Saved credentials don't match panel — reconfiguring")
+                    creds._extra.pop("panel_configured", None)
+                    ctx["panel_configured"] = False
+                    # Fall through to fresh configuration below
+                else:
+                    # Update mutable fields even on re-runs (may have changed)
+                    changed = False
+                    if creds.server.hosted_page != ctx.hosted_page:
+                        creds.server.hosted_page = ctx.hosted_page
+                        changed = True
 
-            if creds.server.deployed_with != __version__:
-                creds.server.deployed_with = __version__
-                changed = True
+                    from meridian import __version__
 
-            if changed:
-                creds.save(self.creds_path)
-                ctx["credentials"] = creds
-            return StepResult(
-                name=self.name,
-                status="skipped",
-                detail="Panel already configured (credentials exist)",
-            )
+                    if creds.server.deployed_with != __version__:
+                        creds.server.deployed_with = __version__
+                        changed = True
+
+                    if changed:
+                        creds.save(self.creds_path)
+                        ctx["credentials"] = creds
+                    return StepResult(
+                        name=self.name,
+                        status="skipped",
+                        detail="Panel already configured (credentials verified)",
+                    )
+
+        # Need fresh configuration — either first deploy or recovery from partial
+        if creds is not None and ctx.get("panel_configured") is False:
+            # Recovery: nuke stale container and DB so we start clean
+            conn.run("docker rm -f 3x-ui 2>/dev/null", timeout=30)
+            conn.run("rm -rf /opt/3x-ui/db 2>/dev/null", timeout=15)
+            conn.run("mkdir -p /opt/3x-ui/db", timeout=10)
+            # Bring container back up with fresh DB
+            conn.run("cd /opt/3x-ui && docker compose up -d", timeout=120)
 
         # -- Generate random credentials --
         panel_username = _random_lower_digits(12)
@@ -420,11 +451,12 @@ def _wait_for_panel(
 ) -> None:
     """Wait for the panel to become responsive after restart.
 
-    Polls the panel URL until it responds (200 status) or retries are exhausted.
-    After first run, the panel root '/' returns 404 (webBasePath is set) --
-    so we check the webBasePath URL.
+    Polls the panel login endpoint until it responds with any HTTP status
+    (meaning the server is up), or retries are exhausted. Checks the login
+    path directly since '/' returns 404 when webBasePath is set.
     """
-    url = f"http://127.0.0.1:{panel_port}/{web_base_path}/"
+    login_path = f"/{web_base_path}/login/" if web_base_path else "/login/"
+    url = f"http://127.0.0.1:{panel_port}{login_path}"
     q_url = shlex.quote(url)
 
     for attempt in range(retries):
@@ -432,7 +464,9 @@ def _wait_for_panel(
             f"curl -s -o /dev/null -w '%{{http_code}}' {q_url}",
             timeout=15,
         )
-        if result.returncode == 0 and result.stdout.strip() == "200":
+        code = result.stdout.strip()
+        # Any HTTP response means panel is alive (200, 302, etc.)
+        if result.returncode == 0 and code and code != "000":
             return
         time.sleep(delay)
 
