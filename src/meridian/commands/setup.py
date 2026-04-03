@@ -221,7 +221,7 @@ def _interactive_wizard(
     # --- Server hardening ---
     if not yes:
         err_console.print()
-        err_console.print("  [bold]Server hardening[/bold] [dim][Y/n][/dim]")
+        err_console.print("  [bold]Server hardening[/bold]")
         err_console.print("  [dim]Disables password SSH login and enables firewall[/dim]")
         err_console.print("  [dim](allows ports 22, 80, 443 only). Skip if you have[/dim]")
         err_console.print("  [dim]other services running on this server.[/dim]")
@@ -279,8 +279,7 @@ def _interactive_wizard(
                         err_console.print()
                         top = candidates[:5]
                         for i, candidate in enumerate(top, 1):
-                            marker = " [dim]\u2190 recommended[/dim]" if i == 1 else ""
-                            err_console.print(f"    {i}. {candidate}{marker}")
+                            err_console.print(f"    {i}. {candidate}")
                         skip_idx = len(top) + 1
                         err_console.print(f"    {skip_idx}. [dim]Skip \u2014 use default ({DEFAULT_SNI})[/dim]")
                         err_console.print()
@@ -450,7 +449,7 @@ def _confirm_scan() -> bool:
     """Ask user if they want to scan. Returns True/False without exiting on 'n'."""
     try:
         with open("/dev/tty") as tty:
-            err_console.print("  [info]\u2192[/info] Scan for optimal target? (~30 seconds) [dim][Y/n][/dim] ", end="")
+            err_console.print("  [info]\u2192[/info] Scan for optimal target? (~1 minute) [dim][Y/n][/dim] ", end="")
             answer = tty.readline().strip().lower()
     except OSError:
         return False

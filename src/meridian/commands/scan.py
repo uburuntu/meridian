@@ -84,7 +84,7 @@ def scan_for_sni(conn: ServerConnection, ip: str) -> list[str]:
 
     # Run scan
     q_cidr = shlex.quote(server_cidr)
-    info(f"Scanning {server_cidr} (~30 seconds)...")
+    info(f"Scanning {server_cidr}...")
     try:
         conn.run(
             f"cd /tmp && timeout 90 ./realitlscanner -addr {q_cidr}"
@@ -124,7 +124,19 @@ def scan_for_sni(conn: ServerConnection, ip: str) -> list[str]:
         if cert_domain.startswith("*"):
             continue  # wildcard certs
         # Filter known-bad targets
-        if any(bad in cert_domain for bad in ("apple.com", "icloud.com")):
+        if any(
+            bad in cert_domain.lower()
+            for bad in (
+                "apple.com",
+                "icloud.com",  # ASN mismatch with VPS providers
+                "fake",
+                "kubernetes",
+                "ingress",  # self-signed / k8s default certs
+                "localhost",
+                "invalid",
+                "example",  # placeholder certs
+            )
+        ):
             continue
         # Skip the server's own IP in domain
         if ip in cert_domain:
