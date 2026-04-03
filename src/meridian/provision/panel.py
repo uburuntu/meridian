@@ -240,6 +240,7 @@ class LoginToPanel:
 
         panel = PanelClient(conn, panel_port=panel_port, web_base_path=web_base_path)
         try:
+            _wait_for_panel(conn, panel_port, web_base_path)
             panel.login(username, password)
         except PanelError as e:
             return StepResult(
@@ -334,7 +335,8 @@ def _apply_panel_settings(
 
     Replaces: apply_panel_settings.yml
     """
-    # Step 1: Login with default credentials
+    # Step 1: Wait for panel to be ready, then login with default credentials
+    _wait_for_panel(conn, panel_port, "")
     panel = PanelClient(conn, panel_port=panel_port, web_base_path="")
     panel.login("admin", "admin")
 
