@@ -40,16 +40,11 @@ Things that require human action outside the codebase.
 
 - [ ] **Relay SNI mismatch** — relay in RU zone inherits exit node's SNI (e.g. microsoft.com). Client connecting to a Russian IP with Microsoft SNI is unrealistic and detectable. Relay deploy should scan its own IP range and pick a locally plausible SNI, independent of exit node
 - [ ] **IP cert fingerprinting via nginx catch-all** — active probers get Let's Encrypt IP cert on non-Reality SNI. Need cert strategy that mimics camouflage target or drops connection
-- [ ] **XHTTP URL missing `sni=` and `fp=` in direct mode** — Shadowrocket shows warning, connection fails. Reality URL has all params, XHTTP URL is missing `sni` and `fp=chrome`. Relay XHTTP URL correctly includes `sni` but direct doesn't
 
 ### Product
 
 - [ ] **`meridian client show NAME`** — regenerate/re-display connection info without recreating client
 - [ ] **Client migration for rebuilds** — `meridian rebuild NEW_IP --from OLD_IP` or `meridian client migrate`
-
-### UX
-
-- [ ] **Rich markup eats `[y/N]` hint in prompts** — `prompt("Set up a relay? [y/N]")` renders without the hint because Rich parses `[y/N]` as markup tag. Fix: escape brackets or use `markup=False`
 
 ### Code quality
 

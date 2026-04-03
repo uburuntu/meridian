@@ -109,3 +109,5 @@ Patch: fixes/docs (auto). Minor: features (prompted). Major: breaking (prompted)
 ## Backlog
 
 See `BACKLOG.md` — includes Manual/External section for promotion and non-code work.
+
+**After completing work**, check if any BACKLOG items were resolved and mark them done or remove them. Keep the backlog in sync with reality.
