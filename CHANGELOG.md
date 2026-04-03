@@ -4,6 +4,23 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.11.0] - 2026-04-03
+
+### Added
+- **Deep link overhaul** — 5 → 13 proxy client apps with one-tap import. Fixed v2RayTun deep link (the #1 user complaint). Added ShadowRocket, V2Box, FoXray, Happ, Karing, sing-box, FlClash, NekoBox. Three URL encoding modes: percent-encoded, raw path, base64.
+- **Platform-specific download URLs** — cross-platform apps show App Store links on iOS, Google Play on Android, instead of generic GitHub/website links. Non-matching platforms collapsed under "Other platforms."
+- **Numbered choices in deploy wizard** — all Y/n prompts replaced with numbered options. Manual SNI entry without scan. Rich spinner during scan. Deploy summary shows hardening status.
+- **`choose()` helper** — new console utility for numbered selection prompts, documented in commands/CLAUDE.md.
+
+### Fixed
+- **SNI scan using private VPC IP** — servers with VPC addresses (e.g. 10.129.x.x) scanned a private /24 subnet instead of the public IP network. Now excludes all RFC 1918 ranges.
+- **Partial deploy recovery** — if a previous deploy failed mid-"Configure panel", re-deploy detected stale credentials, nukes the panel DB, and reconfigures from scratch automatically.
+- **Panel wait before login** — both "Configure panel" and "Log in to panel" steps now wait for the panel to become responsive before attempting login. Fixes "Empty response from login endpoint" on slow servers.
+- **Panel health check** — checks `/login/` endpoint instead of `/` (which returns 404 when webBasePath is set). Accepts any HTTP response, not just 200.
+- **Relay error messages** — "relay cannot reach exit" now includes a 3-point checklist and manual test command.
+- **sudo detection** — non-root SSH to servers without sudo gives actionable hint instead of generic SSH failure.
+- **Scan junk filtering** — filters Kubernetes ingress fake certs, self-signed placeholders from scan results.
+
 ## [3.10.9] - 2026-04-03
 
 ### Fixed

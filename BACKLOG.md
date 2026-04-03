@@ -73,7 +73,7 @@ Things that require human action outside the codebase.
 - [ ] **VPS provider guide** — first blocker for Tier 1 "tech friends"
 - [ ] **Auto SSH key setup** — when VPS only has password auth, auto-generate key, copy via `ssh-copy-id`, and proceed. Eliminates manual key setup step before deploy
 - [ ] **Telegram bot for client management** — add/revoke clients, view stats without SSH. Mobile-friendly for "not at computer" use case
-- [ ] **Add ShadowRocket to connection page** — popular paid iOS client, already supports VLESS subscription URLs
+- [ ] **Add Happ and ShadowRocket to connection page** — popular cross-platform clients, already support VLESS subscription URLs
 - [ ] **Wizard hardening before SSH key validation** — can lock out password-only users
 - [ ] **Connection page plain-language intro** — 2-3 trust-building sentences before "scan QR"
 - [ ] **`client list` with usage stats** — last-seen, traffic totals via 3x-ui `getClientTraffics/{email}`
@@ -83,13 +83,11 @@ Things that require human action outside the codebase.
 
 ### Reliability
 
-- [ ] **Provisioner no recovery guidance** — user left in inconsistent state. Add "resume from step N" messaging
 - [ ] **`InstallDocker` skips regardless of image version** — no `docker compose pull` on re-deploy
-- [ ] **Docker panel deploy intermittent timeout** — panel slow to start. Add retry with backoff to `_wait_for_panel`
 
 ### UX
 
-- [ ] **iOS/Android deep link inconsistency** — hardcodes v2RayTun/Hiddify. Use `vless://` scheme
+- [ ] **`--sni` flag ignored during deploy** — user passes `--sni` but deploy still uses microsoft.com. Flag not plumbed through to config
 - [ ] **`document.execCommand('copy')` deprecated** — broken on iOS 16.4+
 
 ---
@@ -116,7 +114,7 @@ Things that require human action outside the codebase.
 - [ ] **`meridian client export NAME`** — standalone HTML for offline sharing
 - [ ] **OpenWRT router auto-deploy** — deploy client config directly to OpenWRT routers
 - [ ] **Relay on server with existing nginx** — support deploying relay alongside an existing web server on port 443
-- [ ] **WebRTC leak mitigation** — Google geo-detects VPN users as Russian via WebRTC IP leaks. Investigate server-side or client-config mitigations
+- [ ] **WebRTC leak warning on connection page** — WebRTC leaks are client-side (browser discovers local IPs via OS APIs, bypassing the proxy entirely). Server-side fixes don't help — traffic never reaches Xray. Add amber warning box to connection page with: 1) link to browserleaks.com/webrtc leak test, 2) per-app guidance (v2rayNG: Global mode, Hiddify: route all connections), 3) browser extension recommendation. Same pattern as clock-sync warning
 - [ ] **Replace `qrencode` binary with Python `segno` package** — eliminates system dependency
 
 ### Reliability
