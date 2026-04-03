@@ -193,3 +193,7 @@ Or [open an issue](https://github.com/uburuntu/meridian/issues) with `meridian d
 Full documentation, interactive command builder, and setup guides:
 
 **[getmeridian.org](https://getmeridian.org)** · [Connection page demo](https://getmeridian.org/demo)
+
+## Community
+
+- [Вастрик.Клуб](https://vas3k.club/project/31264/) — launch post (78 upvotes, 3k+ views)
