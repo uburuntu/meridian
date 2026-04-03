@@ -70,8 +70,10 @@ def scan_for_sni(conn: ServerConnection, ip: str) -> list[str]:
 
     # Get server's subnet CIDR for scanning
     try:
+        # Filter out private/loopback IPs: 127.x, 10.x, 172.16-31.x, 192.168.x
+        private_filter = r"127\.\|10\.\|172\.1[6-9]\.\|172\.2[0-9]\.\|172\.3[01]\.\|192\.168\."
         cidr_result = conn.run(
-            "ip addr show | grep 'inet ' | grep -v '127.0.0\\|172.17\\|10.0\\|192.168' | head -1 | awk '{print $2}'",
+            f"ip addr show | grep 'inet ' | grep -v '{private_filter}' | head -1 | awk '{{print $2}}'",
             timeout=10,
         )
         server_cidr = cidr_result.stdout.strip()
