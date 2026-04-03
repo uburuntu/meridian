@@ -352,6 +352,8 @@ function getSubscriptionUrl() {
 
 function buildDeepLink(template, subUrl, name) {
   return template
+    .replace('{url_raw}', subUrl)
+    .replace('{url_b64}', btoa(subUrl))
     .replace('{url}', encodeURIComponent(subUrl))
     .replace('{name}', encodeURIComponent(name || 'Meridian'));
 }
@@ -796,13 +798,26 @@ function renderProtocolCard(proto, platform, opts) {
 }
 
 function renderImportCard(apps, subUrl, platform, serverName) {
+  var osMap = {
+    ios: 'iOS', android: 'Android',
+    windows: 'Windows', macos: 'All platforms', linux: 'All platforms',
+  };
+  var detectedOs = osMap[platform] || 'All platforms';
+
+  /* Filter: only apps with deep links AND relevant to this platform */
   var deepApps = [];
+  var otherDeepApps = [];
   if (apps) {
     for (var i = 0; i < apps.length; i++) {
-      if (apps[i].deeplink) deepApps.push(apps[i]);
+      if (!apps[i].deeplink) continue;
+      if (apps[i].platform === detectedOs || apps[i].platform === 'All platforms') {
+        deepApps.push(apps[i]);
+      } else {
+        otherDeepApps.push(apps[i]);
+      }
     }
   }
-  if (!deepApps.length) {
+  if (!deepApps.length && !otherDeepApps.length) {
     /* Fallback: show old-style subscription URL if no deep links */
     var html = '<details class="more-options">';
     html += '<summary data-t="sub.label">Subscription (auto-update)</summary>';
@@ -814,35 +829,36 @@ function renderImportCard(apps, subUrl, platform, serverName) {
     return html;
   }
 
-  var osMap = {
-    ios: 'iOS', android: 'Android',
-    windows: 'Windows', macos: 'All platforms', linux: 'All platforms',
-  };
-  var detectedOs = osMap[platform] || 'All platforms';
-
-  /* Sort detected platform first */
-  var sorted = [];
-  for (var j = 0; j < deepApps.length; j++) {
-    if (deepApps[j].platform === detectedOs) sorted.unshift(deepApps[j]);
-    else sorted.push(deepApps[j]);
-  }
-
   var html = '<div class="card">';
   html += '<div style="font-size:.78rem;font-weight:600;margin-bottom:4px" data-t="import.label">One-Tap Import</div>';
   html += '<p class="card-desc" data-t="import.desc">Add to your app with one tap. Updates automatically.</p>';
   html += '<div class="import-grid">';
 
-  for (var k = 0; k < sorted.length; k++) {
-    var app = sorted[k];
+  for (var j = 0; j < deepApps.length; j++) {
+    var app = deepApps[j];
     var href = buildDeepLink(app.deeplink, subUrl, serverName);
-    var detected = (app.platform === detectedOs) ? ' detected' : '';
-    html += '<a class="import-btn' + detected + '" href="' + escapeHtml(href) + '">';
+    html += '<a class="import-btn detected" href="' + escapeHtml(href) + '">';
     html += '<span class="import-btn-add">+</span> ';
     html += '<span data-t="import.add" data-t-name="' + escapeHtml(app.name) + '">Add to ' + escapeHtml(app.name) + '</span>';
     html += '</a>';
   }
 
   html += '</div>';
+
+  if (otherDeepApps.length) {
+    html += '<details class="more-options" style="margin-top:6px">';
+    html += '<summary data-t="import.other">Other platforms</summary>';
+    html += '<div class="import-grid" style="margin-top:6px">';
+    for (var m = 0; m < otherDeepApps.length; m++) {
+      var oa = otherDeepApps[m];
+      var ohref = buildDeepLink(oa.deeplink, subUrl, serverName);
+      html += '<a class="import-btn" href="' + escapeHtml(ohref) + '">';
+      html += '<span class="import-btn-add">+</span> ';
+      html += '<span data-t="import.add" data-t-name="' + escapeHtml(oa.name) + '">Add to ' + escapeHtml(oa.name) + '</span>';
+      html += '</a>';
+    }
+    html += '</div></details>';
+  }
 
   /* Collapsed manual URL fallback */
   html += '<details class="more-options" style="margin-top:8px">';
@@ -859,31 +875,67 @@ function renderImportCard(apps, subUrl, platform, serverName) {
 function renderAppsCard(apps, platform) {
   if (!apps || !apps.length) return '';
   var isReturning = 'serviceWorker' in navigator && navigator.serviceWorker.controller;
-  var html = '';
-  if (isReturning) {
-    /* Returning user: collapse app card */
-    html += '<details class="more-options"><summary data-t="apps">Client Apps</summary>';
-  }
-  html += '<div class="card">';
-  html += '<div style="font-size:.78rem;font-weight:600;margin-bottom:4px" data-t="apps">Client Apps</div>';
-  html += '<p class="card-desc" data-t="apps.desc">Install one, then tap "Open in App" or scan the QR code.</p>';
-  html += '<div class="apps">';
 
   var osMap = {
     ios: 'iOS', android: 'Android',
     windows: 'Windows', macos: 'All platforms', linux: 'All platforms',
   };
+  var urlKeyMap = {
+    ios: 'iOS', android: 'Android',
+    windows: 'Windows', macos: 'macOS', linux: 'Linux',
+  };
   var detectedOs = osMap[platform] || 'All platforms';
+  var urlKey = urlKeyMap[platform] || '';
 
+  /* Split: relevant apps (matching platform) vs others */
+  var relevant = [];
+  var others = [];
   for (var i = 0; i < apps.length; i++) {
     var a = apps[i];
-    var detected = (a.platform === detectedOs) ? ' detected' : '';
-    html += '<a class="app' + detected + '" href="' + escapeHtml(a.url) + '" target="_blank" data-os="' + escapeHtml(a.platform) + '">';
-    html += escapeHtml(a.name);
-    html += '<span>' + escapeHtml(a.platform) + '</span>';
+    if (a.platform === detectedOs || a.platform === 'All platforms') {
+      relevant.push(a);
+    } else {
+      others.push(a);
+    }
+  }
+
+  function appUrl(a) {
+    return (a.urls && a.urls[urlKey]) || a.url;
+  }
+
+  var html = '';
+  if (isReturning) {
+    html += '<details class="more-options"><summary data-t="apps">Client Apps</summary>';
+  }
+  html += '<div class="card">';
+  html += '<div style="font-size:.78rem;font-weight:600;margin-bottom:4px" data-t="apps">Client Apps</div>';
+  html += '<p class="card-desc" data-t="apps.desc">Install one, then tap "One-Tap Import" below.</p>';
+  html += '<div class="apps">';
+
+  for (var j = 0; j < relevant.length; j++) {
+    var r = relevant[j];
+    html += '<a class="app detected" href="' + escapeHtml(appUrl(r)) + '" target="_blank">';
+    html += escapeHtml(r.name);
+    html += '<span>' + escapeHtml(r.platform) + '</span>';
     html += '</a>';
   }
-  html += '</div></div>';
+  html += '</div>';
+
+  if (others.length) {
+    html += '<details class="more-options" style="margin-top:6px">';
+    html += '<summary data-t="apps.more">Other platforms</summary>';
+    html += '<div class="apps" style="margin-top:6px">';
+    for (var k = 0; k < others.length; k++) {
+      var o = others[k];
+      html += '<a class="app" href="' + escapeHtml(appUrl(o)) + '" target="_blank">';
+      html += escapeHtml(o.name);
+      html += '<span>' + escapeHtml(o.platform) + '</span>';
+      html += '</a>';
+    }
+    html += '</div></details>';
+  }
+
+  html += '</div>';
   if (isReturning) html += '</details>';
   return html;
 }

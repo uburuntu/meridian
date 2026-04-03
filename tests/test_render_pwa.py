@@ -337,10 +337,11 @@ class TestPWAAppsSync:
             # deeplink is optional — some apps have it, some don't
 
     def test_deeplink_templates_contain_url_placeholder(self) -> None:
-        """Every deep link template must include {url} for subscription URL."""
+        """Every deep link template must include a URL placeholder."""
         for app in _PWA_APPS:
             if "deeplink" in app:
-                assert "{url}" in app["deeplink"], f"{app['name']} deeplink missing {{url}}: {app['deeplink']}"
+                has_url = "{url}" in app["deeplink"] or "{url_raw}" in app["deeplink"] or "{url_b64}" in app["deeplink"]
+                assert has_url, f"{app['name']} deeplink missing URL placeholder: {app['deeplink']}"
 
     def test_deeplink_sync_with_apps_json(self) -> None:
         """Deeplink values in _PWA_APPS must match apps.json."""
