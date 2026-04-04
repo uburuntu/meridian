@@ -1059,7 +1059,8 @@ class DeployConnectionPage:
                 detail=upload_error,
             )
 
-        page_url = f"https://{self.server_ip}/{info_page_path}/{reality_uuid}/"
+        host = domain or self.server_ip
+        page_url = f"https://{host}/{info_page_path}/{reality_uuid}/"
         ctx["hosted_page_url"] = page_url
 
         return StepResult(
