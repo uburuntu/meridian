@@ -17,7 +17,7 @@ We aim to respond within 48 hours and will credit reporters in the fix.
 
 ## Security design
 
-- **Credentials**: stored with `0600` permissions, secrets never passed through shell commands without `shlex.quote()`, redacted from `meridian doctor` output
+- **Credentials**: stored with `0600` permissions in `~/.meridian/credentials/<IP>/`, secrets never passed through shell commands without `shlex.quote()`, redacted from `meridian doctor` output. Directory permissions are `0700` (owner-only). Any application running as your user can read these files — this is inherent to all CLI tools that store credentials locally (SSH keys, cloud CLI tokens, etc.). If your local machine is compromised at the user level, credential encryption would not help: malware can keylog the passphrase or intercept SSH sessions. Protect your local machine.
 - **Panel access**: reverse-proxied by nginx at a secret HTTPS path in all modes — no SSH tunnel required. Panel URL and credentials are in `~/.meridian/credentials/<IP>/proxy.yml`
 - **SSH**: password authentication disabled by default
 - **Firewall**: UFW configured with deny-all-incoming, only ports 22, 80, and 443 opened
