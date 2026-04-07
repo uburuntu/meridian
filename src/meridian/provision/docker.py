@@ -5,6 +5,8 @@ from __future__ import annotations
 import shlex
 import time
 
+from meridian.panel import PanelError
+from meridian.provision.panel import _wait_for_panel
 from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
@@ -300,30 +302,13 @@ class Deploy3xui:
             )
 
         # Wait for the panel to become responsive
-        # On first run: / returns 200. On re-run: / returns 404 (webBasePath set).
-        # Both mean the panel process is running.
-        panel_url = f"http://127.0.0.1:{ctx.panel_port}/"
-        responsive = False
-        for attempt in range(30):
-            check = conn.run(
-                f"curl -s -o /dev/null -w '%{{http_code}}' {shlex.quote(panel_url)}",
-                timeout=15,
-            )
-            if check.returncode == 0 and check.stdout.strip() in (
-                "200",
-                "301",
-                "302",
-                "404",
-            ):
-                responsive = True
-                break
-            time.sleep(2)
-
-        if not responsive:
+        try:
+            _wait_for_panel(conn, ctx.panel_port, web_base_path="")
+        except PanelError:
             return StepResult(
                 name=self.name,
                 status="failed",
-                detail=f"3x-ui panel did not respond at {panel_url} after 60s",
+                detail=f"3x-ui panel did not respond at port {ctx.panel_port} after 60s",
             )
 
         return StepResult(name=self.name, status="changed")
