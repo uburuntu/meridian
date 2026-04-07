@@ -25,12 +25,14 @@ function slugifyCategory(text: string) {
           day: 'numeric',
         });
         return (
-          <a href={`/blog/${post.id}/`} class="blog-card" data-astro-prefetch>
+          <div class="blog-card">
             <div class="blog-card__top">
               <a href={`/blog/category/${slugifyCategory(post.data.category)}/`} class="blog-card__category">{post.data.category}</a>
               <span class="blog-card__time">{post.data.readingTime} min</span>
             </div>
-            <h2 class="blog-card__title">{post.data.title}</h2>
+            <h2 class="blog-card__title">
+              <a href={`/blog/${post.id}/`} data-astro-prefetch>{post.data.title}</a>
+            </h2>
             <p class="blog-card__desc">{post.data.description}</p>
             <div class="blog-card__footer">
               <time class="blog-card__date" datetime={post.data.date.toISOString().slice(0, 10)}>
@@ -42,7 +44,7 @@ function slugifyCategory(text: string) {
                 ))}
               </div>
             </div>
-          </a>
+          </div>
         );
       })}
     </div>
@@ -84,8 +86,7 @@ function slugifyCategory(text: string) {
     padding: 20px;
     border: 1px solid var(--b1);
     border-radius: var(--r);
-    text-decoration: none;
-    color: inherit;
+    position: relative;
     transition: border-color 0.15s, box-shadow 0.15s;
   }
   .blog-card:hover {
@@ -106,6 +107,8 @@ function slugifyCategory(text: string) {
     background: var(--ac3);
     color: var(--ac);
     border-radius: 4px;
+    position: relative;
+    z-index: 1;
   }
   .blog-card__time {
     font-size: 0.76rem;
@@ -118,6 +121,16 @@ function slugifyCategory(text: string) {
     line-height: 1.35;
     color: var(--t1);
     margin-bottom: 8px;
+  }
+  .blog-card__title a {
+    text-decoration: none;
+    color: inherit;
+  }
+  /* Stretched link: makes the entire card clickable via the title link */
+  .blog-card__title a::after {
+    content: '';
+    position: absolute;
+    inset: 0;
   }
   .blog-card__desc {
     font-size: 0.84rem;
@@ -147,6 +160,8 @@ function slugifyCategory(text: string) {
     font-size: 0.68rem;
     color: var(--t3);
     text-decoration: none;
+    position: relative;
+    z-index: 1;
     transition: color 0.12s;
   }
   .blog-card__tags a:hover {
@@ -156,8 +171,5 @@ function slugifyCategory(text: string) {
   .blog-card__category {
     text-decoration: none;
     transition: opacity 0.12s;
-  }
-  .blog-card__category:hover {
-    opacity: 0.8;
   }
 </style>
