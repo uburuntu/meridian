@@ -60,6 +60,26 @@ class InstallDocker:
         docker_installed = version_check.returncode == 0
 
         if docker_installed:
+            # Ensure compose plugin is available (docker.io from distro
+            # doesn't include it; docker-ce does but might be missing)
+            compose_check = conn.run("docker compose version", timeout=15)
+            if compose_check.returncode != 0:
+                conn.run(
+                    "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-compose-plugin 2>/dev/null; true",
+                    timeout=120,
+                )
+                # Verify it's now available
+                recheck = conn.run("docker compose version", timeout=15)
+                if recheck.returncode != 0:
+                    return StepResult(
+                        name=self.name,
+                        status="failed",
+                        detail=(
+                            "docker compose plugin not available — "
+                            "install docker-compose-plugin or upgrade to docker-ce"
+                        ),
+                    )
+
             # Check for running containers
             ps_check = conn.run("docker ps -q", timeout=15)
             has_containers = ps_check.returncode == 0 and ps_check.stdout.strip() != ""
