@@ -224,7 +224,10 @@ def fetch_credentials(resolved: ResolvedServer) -> bool:
             return True
     except (PermissionError, OSError):
         pass
-    resolved.creds_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        resolved.creds_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    except PermissionError:
+        return False
     ok = resolved.conn.fetch_credentials(resolved.creds_dir)
     if ok:
         _check_version_mismatch(resolved.ip, proxy_file)
