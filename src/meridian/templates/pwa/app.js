@@ -41,6 +41,7 @@ var T = {
     'sub.desc': 'Добавьте этот URL как подписку в приложении для автоматических обновлений.',
     'import.label': 'Импорт в одно касание',
     'import.desc': 'Добавьте в приложение одним нажатием. Обновляется автоматически.',
+    'import.desc.qr': 'Сканируйте любым V2Ray-приложением или нажмите для добавления. Обновляется автоматически.',
     'import.add': 'Добавить в {name}',
     'import.manual': 'Скопировать URL подписки',
     'install.offline': 'Доступ к подключению офлайн',
@@ -99,6 +100,7 @@ var T = {
     'sub.desc': 'این URL را به عنوان اشتراک در برنامه اضافه کنید.',
     'import.label': 'افزودن با یک ضربه',
     'import.desc': 'با یک ضربه به برنامه اضافه کنید. به\u200Cروزرسانی خودکار.',
+    'import.desc.qr': 'با هر برنامه V2Ray اسکن کنید یا برای افزودن ضربه بزنید. به\u200Cروزرسانی خودکار.',
     'import.add': 'افزودن به {name}',
     'import.manual': 'کپی URL اشتراک',
     'install.offline': 'دسترسی آفلاین به اتصال',
@@ -157,6 +159,7 @@ var T = {
     'sub.desc': '将此 URL 作为订阅添加到应用中以自动更新。',
     'import.label': '一键导入',
     'import.desc': '一键添加到应用，自动更新。',
+    'import.desc.qr': '使用任意V2Ray应用扫描，或点击添加。自动更新。',
     'import.add': '添加到 {name}',
     'import.manual': '复制订阅链接',
     'install.offline': '离线访问连接',
@@ -766,7 +769,7 @@ function renderImportCard(apps, subUrl, platform, serverName, subQrB64) {
   /* Subscription QR hero — scan to import all protocols */
   if (subQrB64 && isValidBase64(subQrB64)) {
     html += '<div class="qr" style="margin:4px auto 12px"><img src="data:image/png;base64,' + subQrB64 + '" alt="QR" loading="lazy"></div>';
-    html += '<p class="card-desc" style="text-align:center" data-t="import.desc">Scan with any V2Ray app or tap to add. Updates automatically.</p>';
+    html += '<p class="card-desc" style="text-align:center" data-t="import.desc.qr">Scan with any V2Ray app or tap to add. Updates automatically.</p>';
   } else {
     html += '<div style="font-size:.78rem;font-weight:600;margin-bottom:4px" data-t="import.label">One-Tap Import</div>';
     html += '<p class="card-desc" data-t="import.desc">Add to your app with one tap. Updates automatically.</p>';
