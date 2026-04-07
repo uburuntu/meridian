@@ -139,7 +139,8 @@ def _deploy_client_page(
         warn(f"Could not deploy server-hosted connection page: {upload_error}")
         return ""
 
-    return f"https://{server_ip}/{info_page_path}/{reality_uuid}/"
+    host = domain or server_ip
+    return f"https://{host}/{info_page_path}/{reality_uuid}/"
 
 
 def _remove_client_page(
@@ -371,7 +372,8 @@ def run_show(
     # Check for hosted page URL
     hosted_page_url = ""
     if creds.server.hosted_page and creds.panel.info_page_path and client_entry.reality_uuid:
-        hosted_page_url = f"https://{server_ip}/{creds.panel.info_page_path}/{client_entry.reality_uuid}/"
+        host = creds.server.domain or server_ip
+        hosted_page_url = f"https://{host}/{creds.panel.info_page_path}/{client_entry.reality_uuid}/"
 
     # Print terminal output
     print_terminal_output(

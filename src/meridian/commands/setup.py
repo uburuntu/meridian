@@ -533,6 +533,8 @@ def _run_provisioner(
     info(f"Configuring server at {ctx.ip}...")
     if domain:
         info(f"Domain: {domain}")
+    if sni and sni != DEFAULT_SNI:
+        info(f"SNI: {sni}")
     if xhttp:
         info("XHTTP: enabled (enhanced stealth)")
     err_console.print()
@@ -571,8 +573,8 @@ def _print_success(resolved: ResolvedServer, name: str, domain: str) -> None:
     if proxy_file.exists():
         creds = ServerCredentials.load(proxy_file)
         if creds.server.hosted_page and creds.panel.info_page_path and creds.reality.uuid:
-            ip = creds.server.ip or resolved.ip
-            hosted_page_url = f"https://{ip}/{creds.panel.info_page_path}/{creds.reality.uuid}/"
+            host = creds.server.domain or creds.server.ip or resolved.ip
+            hosted_page_url = f"https://{host}/{creds.panel.info_page_path}/{creds.reality.uuid}/"
 
     err_console.print("\n  [ok][bold]Done![/bold][/ok]\n")
     ok("Your proxy server is live and ready to use.")
