@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 
 from meridian.provision.xray import (
+    _BLOCKED_OUTBOUND,
+    _GEO_BLOCK_RULES,
     _XRAY_LOG_CONFIG,
     _client_settings,
     _reality_stream_settings,
@@ -401,3 +403,125 @@ class TestCreateInbound:
         data = json.loads(result)
         assert data["network"] == "ws"
         assert "/ws789" in data["wsSettings"]["path"]
+
+
+# ---------------------------------------------------------------------------
+# ConfigureGeoBlocking
+# ---------------------------------------------------------------------------
+
+
+class TestConfigureGeoBlocking:
+    """Tests for the ConfigureGeoBlocking step."""
+
+    def _make_xray_template(self, outbounds=None, routing=None):
+        """Build a fake Xray config template as returned by the panel API."""
+        template = {"log": {}, "outbounds": outbounds or [{"protocol": "freedom", "tag": "direct"}]}
+        if routing is not None:
+            template["routing"] = routing
+        return template
+
+    def _panel_returning(self, template):
+        """Create a MagicMock panel that returns the given template from /panel/xray/."""
+        from unittest.mock import MagicMock
+
+        panel = MagicMock()
+        xray_setting = json.dumps(template)
+        wrapper = json.dumps({"xraySetting": xray_setting})
+        panel.api_post_empty.return_value = {"success": True, "obj": wrapper}
+        panel.api_post_form.return_value = {"success": True}
+        return panel
+
+    def _run_step(self, panel):
+        from meridian.provision.steps import ProvisionContext
+        from meridian.provision.xray import ConfigureGeoBlocking
+        from tests.provision.conftest import MockConnection
+
+        step = ConfigureGeoBlocking()
+        conn = MockConnection()
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp")
+        ctx["panel"] = panel
+        return step.run(conn, ctx)
+
+    def test_adds_blocked_outbound_and_routing_rules(self):
+        """Fresh config gets blackhole outbound + geo-block routing rules."""
+        template = self._make_xray_template()
+        panel = self._panel_returning(template)
+
+        result = self._run_step(panel)
+        assert result.status == "changed"
+        assert "geosite:category-ru" in result.detail
+
+        # Verify the saved template contains the blocked outbound and rules
+        saved_call = panel.api_post_form.call_args
+        assert saved_call is not None
+        from urllib.parse import unquote
+
+        form_data = saved_call[0][1]
+        saved_json = unquote(form_data.split("xraySetting=")[1])
+        saved = json.loads(saved_json)
+
+        outbound_tags = [o.get("tag") for o in saved.get("outbounds", [])]
+        assert "blocked" in outbound_tags
+
+        rules = saved.get("routing", {}).get("rules", [])
+        blocked_rules = [r for r in rules if r.get("outboundTag") == "blocked"]
+        assert len(blocked_rules) == 2
+
+    def test_idempotent_when_already_configured(self):
+        """Skip when blocked outbound and geo rules already exist."""
+        template = self._make_xray_template(
+            outbounds=[
+                {"protocol": "freedom", "tag": "direct"},
+                _BLOCKED_OUTBOUND,
+            ],
+            routing={"rules": _GEO_BLOCK_RULES},
+        )
+        panel = self._panel_returning(template)
+
+        result = self._run_step(panel)
+        assert result.status == "ok"
+        assert "already configured" in result.detail
+        panel.api_post_form.assert_not_called()
+
+    def test_api_fetch_failure_returns_failed(self):
+        """Panel API error when fetching Xray config produces failed result."""
+        from unittest.mock import MagicMock
+
+        from meridian.panel import PanelError
+
+        panel = MagicMock()
+        panel.api_post_empty.side_effect = PanelError("connection refused")
+
+        result = self._run_step(panel)
+        assert result.status == "failed"
+        assert "Failed to fetch Xray config" in result.detail
+
+    def test_api_save_failure_returns_failed(self):
+        """Panel API error when saving Xray config produces failed result."""
+        template = self._make_xray_template()
+        panel = self._panel_returning(template)
+        panel.api_post_form.return_value = {"success": False, "msg": "disk full"}
+
+        result = self._run_step(panel)
+        assert result.status == "failed"
+        assert "disk full" in result.detail
+
+    def test_geo_rules_prepended_before_existing_rules(self):
+        """Geo-block rules are inserted before existing routing rules."""
+        existing_rule = {"type": "field", "outboundTag": "direct", "domain": ["geosite:category-ads"]}
+        template = self._make_xray_template(routing={"rules": [existing_rule]})
+        panel = self._panel_returning(template)
+
+        result = self._run_step(panel)
+        assert result.status == "changed"
+
+        from urllib.parse import unquote
+
+        form_data = panel.api_post_form.call_args[0][1]
+        saved_json = unquote(form_data.split("xraySetting=")[1])
+        saved = json.loads(saved_json)
+
+        rules = saved["routing"]["rules"]
+        # Geo-block rules come first, existing rule is last
+        assert rules[-1] == existing_rule
+        assert rules[0]["outboundTag"] == "blocked"

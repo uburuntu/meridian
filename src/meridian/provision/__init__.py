@@ -36,6 +36,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     from meridian.provision.docker import Deploy3xui, InstallDocker
     from meridian.provision.panel import ConfigurePanel, LoginToPanel
     from meridian.provision.xray import (
+        ConfigureGeoBlocking,
         CreateInbound,
         DisableXrayLogs,
         VerifyXray,
@@ -118,6 +119,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
         )
 
     steps.append(DisableXrayLogs())
+    steps.append(ConfigureGeoBlocking())
     steps.append(VerifyXray())
 
     # nginx + connection page (domain mode or hosted page)

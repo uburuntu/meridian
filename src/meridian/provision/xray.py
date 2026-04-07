@@ -408,6 +408,96 @@ class DisableXrayLogs:
 
 
 # ---------------------------------------------------------------------------
+# ConfigureGeoBlocking
+# ---------------------------------------------------------------------------
+
+_BLOCKED_OUTBOUND = {
+    "protocol": "blackhole",
+    "tag": "blocked",
+}
+
+_GEO_BLOCK_RULES = [
+    {
+        "type": "field",
+        "outboundTag": "blocked",
+        "domain": ["geosite:category-ru"],
+    },
+    {
+        "type": "field",
+        "outboundTag": "blocked",
+        "ip": ["geoip:ru"],
+    },
+]
+
+
+class ConfigureGeoBlocking:
+    """Block traffic to Russian domains and IPs at the Xray routing level."""
+
+    name = "Configure geo-blocking"
+
+    def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
+        panel: PanelClient = ctx["panel"]
+
+        try:
+            data = panel.api_post_empty("/panel/xray/")
+        except PanelError as e:
+            return StepResult(name=self.name, status="failed", detail=f"Failed to fetch Xray config: {e}")
+
+        if not data.get("success"):
+            return StepResult(name=self.name, status="failed", detail="Failed to fetch Xray config template")
+
+        obj = data.get("obj", "")
+        try:
+            wrapper = json.loads(obj) if isinstance(obj, str) else obj
+            template_str = wrapper.get("xraySetting", "")
+            template = json.loads(template_str) if isinstance(template_str, str) else template_str
+        except (json.JSONDecodeError, TypeError, AttributeError) as e:
+            return StepResult(name=self.name, status="failed", detail=f"Failed to parse Xray template: {e}")
+
+        outbounds = template.get("outbounds", [])
+        has_blocked = any(o.get("tag") == "blocked" for o in outbounds)
+
+        routing = template.get("routing", {})
+        rules = routing.get("rules", [])
+        has_geo_rules = any(
+            r.get("outboundTag") == "blocked"
+            and ("geoip:ru" in r.get("ip", []) or "geosite:category-ru" in r.get("domain", []))
+            for r in rules
+        )
+
+        if has_blocked and has_geo_rules:
+            return StepResult(name=self.name, status="ok", detail="Geo-blocking already configured")
+
+        if not has_blocked:
+            outbounds.append(_BLOCKED_OUTBOUND)
+            template["outbounds"] = outbounds
+
+        if not has_geo_rules:
+            if "routing" not in template:
+                template["routing"] = {}
+            template["routing"]["rules"] = _GEO_BLOCK_RULES + rules
+
+        updated_json = json.dumps(template)
+        try:
+            from urllib.parse import quote as urlquote
+
+            form_data = f"xraySetting={urlquote(updated_json, safe='')}"
+            save_data = panel.api_post_form("/panel/xray/update", form_data)
+        except PanelError as e:
+            return StepResult(name=self.name, status="failed", detail=f"Failed to save Xray config: {e}")
+
+        if not save_data.get("success"):
+            return StepResult(name=self.name, status="failed", detail=f"Save failed: {save_data.get('msg', 'unknown')}")
+
+        try:
+            panel.api_post_empty("/panel/api/server/restartXrayService")
+        except PanelError:
+            pass  # Non-fatal — Xray will pick up config on next restart
+
+        return StepResult(name=self.name, status="changed", detail="Blocked geosite:category-ru + geoip:ru")
+
+
+# ---------------------------------------------------------------------------
 # VerifyXray
 # ---------------------------------------------------------------------------
 

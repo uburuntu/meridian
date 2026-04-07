@@ -59,10 +59,10 @@ class TestMinimalPipeline:
     def test_minimal_step_count(self, base_ctx: ProvisionContext):
         """Minimal config: disk check, packages, auto-upgrades, timezone, BBR,
         ensure port 443, docker, deploy 3xui, configure panel, login, reality,
-        disable logs, verify xray = 13 steps."""
+        disable logs, geo-blocking, verify xray = 14 steps."""
         steps = build_setup_steps(base_ctx)
         names = [s.name for s in steps]
-        assert len(steps) == 13, f"Expected 13 minimal steps, got {len(steps)}: {names}"
+        assert len(steps) == 14, f"Expected 14 minimal steps, got {len(steps)}: {names}"
 
     def test_no_services_without_domain_or_hosted_page(self, base_ctx: ProvisionContext):
         names = step_names(base_ctx)
@@ -127,10 +127,11 @@ class TestHostedPage:
 class TestFullPipeline:
     def test_full_pipeline_step_count(self, domain_ctx: ProvisionContext):
         """All flags on: disk check + common(3) + harden(2) + BBR + docker(2) + panel(2)
-        + reality + xhttp + wss + disable logs + verify + nginx(3) + pwa assets + connection page = 21."""
+        + reality + xhttp + wss + disable logs + geo-blocking + verify
+        + nginx(3) + pwa assets + connection page = 22."""
         steps = build_setup_steps(domain_ctx)
         names = [s.name for s in steps]
-        assert len(steps) == 21, f"Expected 21 full steps, got {len(steps)}: {names}"
+        assert len(steps) == 22, f"Expected 22 full steps, got {len(steps)}: {names}"
 
 
 class TestStepOrdering:
@@ -151,7 +152,8 @@ class TestStepOrdering:
         assert_before("Log in to panel", "Create Reality inbound")
         # Inbounds before verify
         assert_before("Create Reality inbound", "Disable Xray logs")
-        assert_before("Disable Xray logs", "Verify Xray configuration")
+        assert_before("Disable Xray logs", "Configure geo-blocking")
+        assert_before("Configure geo-blocking", "Verify Xray configuration")
         # Verify before services
         assert_before("Verify Xray configuration", "Install nginx")
         assert_before("Install nginx", "Configure nginx")
