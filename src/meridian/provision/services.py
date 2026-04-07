@@ -115,6 +115,39 @@ def _render_nginx_stream_config(
 # ---------------------------------------------------------------------------
 
 
+def _render_xhttp_location(xhttp_path: str) -> str:
+    """Render the XHTTP reverse proxy location block."""
+    return textwrap.dedent(f"""\
+
+        # --- VLESS+XHTTP (enhanced stealth, nginx-terminated TLS) ---
+        # Long timeouts: XHTTP mode=auto lets clients negotiate streaming
+        # modes (stream-one/stream-up) with long-lived connections.
+        location /{xhttp_path}/ {{
+            proxy_pass http://meridian_xhttp;
+            proxy_http_version 1.1;
+            # Empty Connection header enables upstream keepalive reuse —
+            # without this, nginx sends Connection: close per request.
+            proxy_set_header Connection "";
+            proxy_read_timeout 86400s;
+            proxy_send_timeout 86400s;
+            proxy_buffering off;
+            proxy_request_buffering off;
+        }}
+    """).rstrip()
+
+
+def _render_xhttp_upstream(xhttp_internal_port: int) -> str:
+    """Render the XHTTP upstream keepalive pool block."""
+    return textwrap.dedent(f"""\
+        upstream meridian_xhttp {{
+            server 127.0.0.1:{xhttp_internal_port};
+            keepalive 32;
+            keepalive_requests 10000;
+            keepalive_timeout 300s;
+        }}
+    """)
+
+
 def _render_nginx_http_config(
     domain: str,
     nginx_internal_port: int,
@@ -146,43 +179,16 @@ def _render_nginx_http_config(
     """).rstrip()
 
     xhttp_block = ""
+    xhttp_upstream = ""
     if xhttp_path and xhttp_internal_port > 0:
-        xhttp_block = textwrap.dedent(f"""\
-
-            # --- VLESS+XHTTP (enhanced stealth, nginx-terminated TLS) ---
-            # Long timeouts: XHTTP mode=auto lets clients negotiate streaming
-            # modes (stream-one/stream-up) with long-lived connections.
-            location /{xhttp_path}/ {{
-                proxy_pass http://meridian_xhttp;
-                proxy_http_version 1.1;
-                # Empty Connection header enables upstream keepalive reuse —
-                # without this, nginx sends Connection: close per request.
-                proxy_set_header Connection "";
-                proxy_read_timeout 86400s;
-                proxy_send_timeout 86400s;
-                proxy_buffering off;
-                proxy_request_buffering off;
-            }}
-        """).rstrip()
+        xhttp_block = _render_xhttp_location(xhttp_path)
+        xhttp_upstream = _render_xhttp_upstream(xhttp_internal_port)
 
     # Root: nginx's built-in 403 page. NOT a custom Meridian page — custom
     # HTML would be fingerprintable (one known server reveals all others).
     # nginx generates 403/404 bodies itself, identical across all installs.
     root_action = "return 403;"
     default_action = "return 404;"
-
-    # Upstream keepalive pool for XHTTP — connections to Xray are reused
-    # across sub-requests instead of opening a new TCP conn each time.
-    xhttp_upstream = ""
-    if xhttp_path and xhttp_internal_port > 0:
-        xhttp_upstream = textwrap.dedent(f"""\
-            upstream meridian_xhttp {{
-                server 127.0.0.1:{xhttp_internal_port};
-                keepalive 32;
-                keepalive_requests 10000;
-                keepalive_timeout 300s;
-            }}
-        """)
 
     return _render_nginx_server_block(
         host=domain,
@@ -216,40 +222,14 @@ def _render_nginx_ip_config(
     TLS via Let's Encrypt IP certificate (acme.sh --certificate-profile shortlived).
     """
     xhttp_block = ""
+    xhttp_upstream = ""
     if xhttp_path and xhttp_internal_port > 0:
-        xhttp_block = textwrap.dedent(f"""\
-
-            # --- VLESS+XHTTP (enhanced stealth, nginx-terminated TLS) ---
-            # Long timeouts: XHTTP mode=auto lets clients negotiate streaming
-            # modes (stream-one/stream-up) with long-lived connections.
-            location /{xhttp_path}/ {{
-                proxy_pass http://meridian_xhttp;
-                proxy_http_version 1.1;
-                # Empty Connection header enables upstream keepalive reuse —
-                # without this, nginx sends Connection: close per request.
-                proxy_set_header Connection "";
-                proxy_read_timeout 86400s;
-                proxy_send_timeout 86400s;
-                proxy_buffering off;
-                proxy_request_buffering off;
-            }}
-        """).rstrip()
+        xhttp_block = _render_xhttp_location(xhttp_path)
+        xhttp_upstream = _render_xhttp_upstream(xhttp_internal_port)
 
     # Root: nginx's built-in 403 — see domain mode comment for rationale.
     root_action = "return 403;"
     default_action = "return 404;"
-
-    # Upstream keepalive pool for XHTTP (see domain mode for rationale).
-    xhttp_upstream = ""
-    if xhttp_path and xhttp_internal_port > 0:
-        xhttp_upstream = textwrap.dedent(f"""\
-            upstream meridian_xhttp {{
-                server 127.0.0.1:{xhttp_internal_port};
-                keepalive 32;
-                keepalive_requests 10000;
-                keepalive_timeout 300s;
-            }}
-        """)
 
     return _render_nginx_server_block(
         host=server_ip,
