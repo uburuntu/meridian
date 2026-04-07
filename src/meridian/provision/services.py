@@ -655,11 +655,22 @@ class InstallNginx:
             codename = conn.run("bash -c '. /etc/os-release && echo $VERSION_CODENAME'", timeout=15)
             distro_codename = codename.stdout.strip() if codename.returncode == 0 else "jammy"
 
-            # Add nginx.org signing key
+            # Remove conflicting distro packages before official repo install
+            conn.run(
+                "DEBIAN_FRONTEND=noninteractive apt-get remove -y"
+                " nginx-common nginx-core nginx-full 'libnginx-mod-*' 2>/dev/null; true",
+                timeout=120,
+            )
+
+            # Ensure keyrings directory exists (missing on Ubuntu < 22.04)
+            conn.run("mkdir -p /etc/apt/keyrings && chmod 755 /etc/apt/keyrings", timeout=15)
+
+            # Add nginx.org signing key (download directly like Docker step,
+            # avoiding gpg dependency on minimal images)
             result = conn.run(
                 "curl -fsSL https://nginx.org/keys/nginx_signing.key"
-                " | gpg --dearmor -o /etc/apt/keyrings/nginx.gpg"
-                " && chmod 644 /etc/apt/keyrings/nginx.gpg",
+                " -o /etc/apt/keyrings/nginx.asc"
+                " && chmod 644 /etc/apt/keyrings/nginx.asc",
                 timeout=60,
             )
             if result.returncode != 0:
@@ -671,7 +682,7 @@ class InstallNginx:
 
             # Add nginx.org stable repo
             repo_line = (
-                f"deb [signed-by=/etc/apt/keyrings/nginx.gpg] "
+                f"deb [signed-by=/etc/apt/keyrings/nginx.asc] "
                 f"https://nginx.org/packages/{distro_name} "
                 f"{distro_codename} nginx"
             )
@@ -680,9 +691,9 @@ class InstallNginx:
                 timeout=15,
             )
 
-            # Pin official repo higher to override distro packages
+            # Pin official nginx packages higher to override distro
             conn.run(
-                "printf 'Package: *\\nPin: origin nginx.org\\nPin: release o=nginx\\n"
+                "printf 'Package: nginx*\\nPin: origin nginx.org\\n"
                 "Pin-Priority: 900\\n' > /etc/apt/preferences.d/99nginx",
                 timeout=15,
             )
@@ -698,6 +709,14 @@ class InstallNginx:
                     status="failed",
                     detail=f"Failed to install nginx from official repo: {result.stderr.strip()[:200]}",
                 )
+
+            # Clean up stale load_module directives — official nginx has
+            # stream compiled statically, old distro nginx.conf may reference
+            # dynamic .so files that no longer exist.
+            conn.run(
+                "sed -i '/load_module.*ngx_stream_module/d' /etc/nginx/nginx.conf 2>/dev/null; true",
+                timeout=15,
+            )
 
         # -- Ensure stream module is available --
         # On Ubuntu/Debian, nginx compiles stream as a dynamic module
