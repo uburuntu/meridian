@@ -212,6 +212,8 @@ class CreateInbound:
         delete_on_port_mismatch: bool = False,
         ctx_exports: dict[str, str] | None = None,
     ) -> None:
+        if protocol_key not in INBOUND_TYPES:
+            raise ValueError(f"Unknown protocol_key: {protocol_key!r} (expected one of {list(INBOUND_TYPES)})")
         self.protocol_key = protocol_key
         self.port = port
         self.first_client_name = first_client_name

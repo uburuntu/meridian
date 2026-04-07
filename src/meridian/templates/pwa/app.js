@@ -198,11 +198,6 @@ function detectPlatform() {
 /* -----------------------------------------------------------------------
  * Deep link construction
  * ----------------------------------------------------------------------- */
-function buildOpenUrl(url) {
-  /* Use vless:// scheme directly — most V2Ray apps register it */
-  return url;
-}
-
 function tryOpenIOS(index) {
   var el = document.querySelector('[data-ios-idx="' + index + '"]');
   if (!el) return;
@@ -702,7 +697,7 @@ function renderProtocolCard(proto, platform, opts) {
     var idx = iosButtonIndex++;
     html += '<a href="#" data-ios-idx="' + idx + '" data-url="' + escapeHtml(proto.url) + '" data-action="open-ios" class="open-btn" data-t="open">Open in App</a>';
   } else {
-    var openUrl = buildOpenUrl(proto.url);
+    var openUrl = proto.url;
     html += '<a href="' + escapeHtml(openUrl) + '" class="open-btn" data-t="open">Open in App</a>';
   }
   if (navigator.share) {

@@ -11,7 +11,6 @@ interface Props {
 
 const { locale = 'en' } = Astro.props;
 const t = createT(locale);
-const docsLocale = locale === 'en' ? 'en' : locale;
 ---
 
 <section class="hero">
@@ -24,7 +23,7 @@ const docsLocale = locale === 'en' ? 'en' : locale;
 
     <div class="hero__actions">
       <a href="#setup" class="hero__btn hero__btn--primary" data-t="hero.cta">{t('hero.cta', 'Get started')}</a>
-      <a href={`/docs/${docsLocale}/getting-started/`} class="hero__btn hero__btn--secondary" data-astro-prefetch data-t="hero.docs">
+      <a href={`/docs/${locale}/getting-started/`} class="hero__btn hero__btn--secondary" data-astro-prefetch data-t="hero.docs">
         {t('hero.docs', 'Read the docs')}
       </a>
     </div>

@@ -156,7 +156,6 @@ def _render_nginx_http_config(
     panel_web_base_path: str,
     panel_internal_port: int,
     info_page_path: str,
-    email: str = "",
     xhttp_path: str = "",
     xhttp_internal_port: int = 0,
 ) -> str:
@@ -212,7 +211,6 @@ def _render_nginx_ip_config(
     panel_web_base_path: str,
     panel_internal_port: int,
     info_page_path: str,
-    email: str = "",
     xhttp_path: str = "",
     xhttp_internal_port: int = 0,
 ) -> str:
@@ -516,6 +514,8 @@ class InstallNginx:
         self.email = email
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
+        changed = False
+
         # -- Upgrade path: stop old HAProxy and Caddy if present --
         conn.run(
             "systemctl stop haproxy 2>/dev/null; systemctl disable haproxy 2>/dev/null; true",
@@ -558,6 +558,7 @@ class InstallNginx:
                 # Distro install failed — fall through to official repo
                 needs_official_repo = True
             else:
+                changed = True
                 ver_check = conn.run("nginx -v 2>&1", timeout=15)
                 ver_output = ver_check.stdout + ver_check.stderr
                 m = re.search(r"nginx/(\d+)\.(\d+)", ver_output)
@@ -626,6 +627,8 @@ class InstallNginx:
                     detail=f"Failed to install nginx from official repo: {result.stderr.strip()[:200]}",
                 )
 
+            changed = True
+
             # Clean up stale load_module directives — official nginx has
             # stream compiled statically, old distro nginx.conf may reference
             # dynamic .so files that no longer exist.
@@ -680,8 +683,9 @@ class InstallNginx:
                     status="failed",
                     detail=f"Failed to install acme.sh: {result.stderr.strip()}",
                 )
+            changed = True
 
-        return StepResult(name=self.name, status="changed")
+        return StepResult(name=self.name, status="changed" if changed else "ok")
 
 
 # ---------------------------------------------------------------------------

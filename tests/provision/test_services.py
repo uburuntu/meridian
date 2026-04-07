@@ -685,7 +685,7 @@ class TestNginxFingerprinting:
 
 
 class TestInstallNginx:
-    def test_already_installed_succeeds(self, tmp_path: Path):
+    def test_already_installed_returns_ok(self, tmp_path: Path):
         conn = MockConnection()
         # nginx installed, stream module available
         conn.when("dpkg -l nginx", stdout="ii  nginx")
@@ -704,7 +704,7 @@ class TestInstallNginx:
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
         step = InstallNginx()
         result = step.run(conn, ctx)
-        assert result.status == "changed"
+        assert result.status == "ok"
 
 
 # ---------------------------------------------------------------------------
@@ -750,6 +750,36 @@ class TestIssueTLSCert:
         result = step.run(conn, ctx)
         assert result.status == "changed"
         assert "TLS cert issued" in result.detail
+
+    def test_acme_failure_returns_warning(self, tmp_path: Path):
+        """ACME failure returns changed with warning, not failed."""
+        conn = MockConnection()
+        conn.when("acme.sh --issue", stdout="", rc=1)
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = IssueTLSCert(domain="", ip_mode=True, server_ip="198.51.100.1")
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+        assert "WARNING" in result.detail
+        assert "self-signed" in result.detail
+        # nginx should NOT be reloaded on ACME failure
+        conn.assert_not_called_with_pattern("systemctl reload")
+
+    def test_domain_mode_omits_shortlived(self, tmp_path: Path):
+        """Domain mode does not use --certificate-profile shortlived."""
+        conn = MockConnection()
+        conn.when("acme.sh --issue", stdout="", rc=2)
+        conn.when("acme.sh --install-cert", stdout="")
+        conn.when("systemctl", stdout="")
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = IssueTLSCert(domain="example.com", ip_mode=False)
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+        # Verify no shortlived flag in the acme command
+        acme_calls = [c for c in conn.calls if "acme.sh --issue" in c]
+        assert acme_calls
+        assert "shortlived" not in acme_calls[0]
 
 
 # ---------------------------------------------------------------------------

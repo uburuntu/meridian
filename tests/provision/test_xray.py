@@ -166,3 +166,174 @@ class TestXrayLogConfig:
 
     def test_dns_log_disabled(self):
         assert _XRAY_LOG_CONFIG["dnsLog"] is False
+
+
+# ---------------------------------------------------------------------------
+# CreateInbound
+# ---------------------------------------------------------------------------
+
+
+class TestCreateInbound:
+    """Tests for the unified CreateInbound step."""
+
+    def test_invalid_protocol_key_raises(self):
+        """Unknown protocol_key fails at construction, not deploy time."""
+        import pytest
+
+        from meridian.provision.xray import CreateInbound
+
+        with pytest.raises(ValueError, match="Unknown protocol_key"):
+            CreateInbound(protocol_key="invalid", port=443)
+
+    def test_reality_uses_reality_uuid(self):
+        """Reality protocol resolves UUID from creds.reality."""
+        from unittest.mock import MagicMock
+
+        from meridian.provision.xray import CreateInbound
+
+        step = CreateInbound(protocol_key="reality", port=443, delete_on_port_mismatch=True)
+        creds = MagicMock()
+        creds.reality.uuid = "reality-uuid-123"
+        creds.wss.uuid = "wss-uuid-456"
+        assert step._get_uuid(creds) == "reality-uuid-123"
+
+    def test_xhttp_uses_reality_uuid(self):
+        """XHTTP shares Reality UUID."""
+        from unittest.mock import MagicMock
+
+        from meridian.provision.xray import CreateInbound
+
+        step = CreateInbound(protocol_key="xhttp", port=30000, listen="127.0.0.1")
+        creds = MagicMock()
+        creds.reality.uuid = "reality-uuid-123"
+        creds.wss.uuid = "wss-uuid-456"
+        assert step._get_uuid(creds) == "reality-uuid-123"
+
+    def test_wss_uses_wss_uuid(self):
+        """WSS uses its own UUID."""
+        from unittest.mock import MagicMock
+
+        from meridian.provision.xray import CreateInbound
+
+        step = CreateInbound(protocol_key="wss", port=28000, listen="127.0.0.1")
+        creds = MagicMock()
+        creds.reality.uuid = "reality-uuid-123"
+        creds.wss.uuid = "wss-uuid-456"
+        assert step._get_uuid(creds) == "wss-uuid-456"
+
+    def test_xhttp_missing_path_returns_none(self):
+        """XHTTP with empty xhttp_path fails gracefully."""
+        from unittest.mock import MagicMock
+
+        from meridian.provision.xray import CreateInbound
+
+        step = CreateInbound(protocol_key="xhttp", port=30000)
+        creds = MagicMock()
+        creds.xhttp.xhttp_path = ""
+        assert step._build_stream_settings(creds) is None
+
+    def test_reality_stream_settings_valid_json(self):
+        """Reality stream settings produce valid JSON."""
+        import json
+        from unittest.mock import MagicMock
+
+        from meridian.provision.xray import CreateInbound
+
+        step = CreateInbound(protocol_key="reality", port=443)
+        creds = MagicMock()
+        creds.server.sni = "www.example.com"
+        creds.reality.private_key = "test-priv"
+        creds.reality.public_key = "test-pub"
+        creds.reality.short_id = "abcd1234"
+        result = step._build_stream_settings(creds)
+        assert result is not None
+        data = json.loads(result)
+        assert data["security"] == "reality"
+
+    def test_ctx_exports(self):
+        """ctx_exports sets context keys using step attributes."""
+        from unittest.mock import MagicMock
+
+        from meridian.provision.xray import CreateInbound
+
+        step = CreateInbound(
+            protocol_key="xhttp", port=31000, listen="127.0.0.1", ctx_exports={"xhttp_port": "port"}
+        )
+        panel = MagicMock()
+        panel.find_inbound.return_value = None
+        panel.api_post_json.return_value = {"success": True}
+
+        from meridian.provision.steps import ProvisionContext
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp")
+        ctx["panel"] = panel
+
+        from tests.provision.conftest import make_credentials
+
+        ctx["credentials"] = make_credentials()
+
+        from tests.provision.conftest import MockConnection
+
+        conn = MockConnection()
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+        assert ctx["xhttp_port"] == 31000
+
+    def test_delete_on_port_mismatch(self):
+        """Reality inbound is deleted and recreated on port mismatch."""
+        from unittest.mock import MagicMock
+
+        from meridian.provision.xray import CreateInbound
+
+        step = CreateInbound(protocol_key="reality", port=10443, delete_on_port_mismatch=True)
+        panel = MagicMock()
+        existing = MagicMock()
+        existing.port = 443  # different from step's 10443
+        existing.listen = ""
+        existing.id = 42
+        panel.find_inbound.return_value = existing
+        panel.api_post_json.return_value = {"success": True}
+
+        from meridian.provision.steps import ProvisionContext
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp")
+        ctx["panel"] = panel
+
+        from tests.provision.conftest import make_credentials
+
+        ctx["credentials"] = make_credentials()
+
+        from tests.provision.conftest import MockConnection
+
+        conn = MockConnection()
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+        panel.api_post_empty.assert_called_once()  # _delete_inbound was called
+
+    def test_skip_on_existing_no_mismatch(self):
+        """Non-reality inbound skips when already exists."""
+        from unittest.mock import MagicMock
+
+        from meridian.provision.xray import CreateInbound
+
+        step = CreateInbound(protocol_key="wss", port=28000, listen="127.0.0.1")
+        panel = MagicMock()
+        existing = MagicMock()
+        existing.port = 28000
+        existing.listen = "127.0.0.1"
+        panel.find_inbound.return_value = existing
+
+        from meridian.provision.steps import ProvisionContext
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp")
+        ctx["panel"] = panel
+
+        from tests.provision.conftest import make_credentials
+
+        ctx["credentials"] = make_credentials()
+
+        from tests.provision.conftest import MockConnection
+
+        conn = MockConnection()
+        result = step.run(conn, ctx)
+        assert result.status == "skipped"
