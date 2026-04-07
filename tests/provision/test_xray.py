@@ -256,9 +256,7 @@ class TestCreateInbound:
 
         from meridian.provision.xray import CreateInbound
 
-        step = CreateInbound(
-            protocol_key="xhttp", port=31000, listen="127.0.0.1", ctx_exports={"xhttp_port": "port"}
-        )
+        step = CreateInbound(protocol_key="xhttp", port=31000, listen="127.0.0.1", ctx_exports={"xhttp_port": "port"})
         panel = MagicMock()
         panel.find_inbound.return_value = None
         panel.api_post_json.return_value = {"success": True}

@@ -7,11 +7,11 @@ import pytest
 from meridian.config import REALM_SHA256, REALM_VERSION
 from meridian.provision.common import ConfigureBBR, InstallPackages
 from meridian.provision.relay import (
+    _RELAY_PACKAGES,
     ConfigureRealm,
     InstallRealm,
     RelayContext,
     VerifyRelay,
-    _RELAY_PACKAGES,
     build_relay_steps,
 )
 from tests.provision.conftest import MockConnection
