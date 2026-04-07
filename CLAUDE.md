@@ -113,6 +113,8 @@ Patch: fixes/docs (auto). Minor: features (prompted). Major: breaking (prompted)
 4. Bump `VERSION` + `CHANGELOG.md`, commit, push
 5. CI creates the GitHub release automatically — don't create releases manually
 
+**Update UX tone:** don't push users to update. If their server works, there's no urgency. Link to GitHub releases so they can decide. CLI update is local-only — always remind that `meridian deploy` is needed to apply changes to servers. Servers and Linux environments are diverse; update + redeploy is for people ready to address a potentially broken state.
+
 ## Community & public communication
 
 **Always ask before posting.** Show the exact text to the user and get approval before:

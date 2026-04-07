@@ -16,6 +16,8 @@ from packaging.version import Version
 from meridian.config import CACHE_DIR, PYPI_JSON_URL, PYPI_PACKAGE, UPDATE_CHECK_INTERVAL
 from meridian.console import err_console, info, ok, warn
 
+_RELEASES_URL = "https://github.com/uburuntu/meridian/releases"
+
 
 def get_pypi_latest() -> str | None:
     """Fetch latest version from PyPI JSON API."""
@@ -70,17 +72,18 @@ def check_for_update(current_version: str) -> None:
             # Re-exec so new version runs
             os.execvp(sys.argv[0], sys.argv)
     elif current.major != remote.major:
-        # Major: highlighted breaking change warning
-        err_console.print(f"\n  [bold red]Major update available:[/bold red] v{current_version} → v{latest}")
-        err_console.print("  [dim]This release may include breaking changes —")
-        err_console.print("  redeploy your servers after updating.[/dim]")
-        err_console.print("  Run: [bold]meridian update[/bold]\n")
+        # Major: review before updating
+        err_console.print(f"\n  [bold red]v{latest} available (major release)[/bold red]")
+        err_console.print(f"  [dim]Review changes before updating: {_RELEASES_URL}[/dim]")
+        err_console.print("  [dim]After updating, run[/dim] [bold]meridian deploy[/bold] [dim]to apply[/dim]\n")
     else:
-        # Minor: new features, possible behavior changes
-        err_console.print(f"\n  [warn]Update available:[/warn] v{current_version} → v{latest}")
-        err_console.print("  [dim]We maintain backwards compatibility, but with diverse server environments")
-        err_console.print("  some changes may require a redeploy.[/dim]")
-        err_console.print("  Run: [bold]meridian update[/bold]\n")
+        # Minor: inform, link to changelog
+        err_console.print(f"\n  [warn]v{latest} available[/warn]")
+        err_console.print(f"  [dim]See what's new: {_RELEASES_URL}[/dim]")
+        err_console.print(
+            "  [dim]Run[/dim] [bold]meridian update[/bold] [dim]then[/dim] "
+            "[bold]meridian deploy[/bold] [dim]to apply[/dim]\n"
+        )
 
 
 def do_upgrade() -> bool:
@@ -166,19 +169,14 @@ def run_self_update() -> None:
 
     # Version-level context
     if current.major != remote.major:
-        warn(
-            f"Major version bump (v{__version__} → v{latest}) — "
-            "this may include breaking changes. Redeploy your servers after updating."
-        )
+        warn(f"Major release v{latest} — some defaults or behavior may change.")
+        info(f"Review before redeploying: {_RELEASES_URL}")
     elif current.minor != remote.minor:
-        info(
-            f"New features in v{latest}. We maintain backwards compatibility, but with "
-            "diverse server environments some changes may require a redeploy."
-        )
+        info(f"v{latest} available. What's new: {_RELEASES_URL}")
 
     info(f"Updating v{__version__} → v{latest}...")
     if do_upgrade():
         ok(f"Updated to v{latest}")
-        info("Restart meridian to use the new version")
+        info("Run `meridian deploy` to apply changes to your servers")
     else:
         warn(f"Could not upgrade automatically. Try: uv tool upgrade {PYPI_PACKAGE}")
