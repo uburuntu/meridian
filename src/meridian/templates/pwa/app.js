@@ -781,7 +781,11 @@ function renderImportCard(apps, subUrl, platform, serverName, subQrB64) {
     var app = deepApps[j];
     var href = buildDeepLink(app.deeplink, subUrl, serverName);
     html += '<a class="import-btn detected" href="' + escapeHtml(href) + '">';
-    html += '<span class="import-btn-add">+</span> ';
+    if (app.icon) {
+      html += '<img class="import-btn-icon" src="' + escapeHtml(app.icon) + '" alt="" width="20" height="20">';
+    } else {
+      html += '<span class="import-btn-add">+</span> ';
+    }
     html += '<span data-t="import.add" data-t-name="' + escapeHtml(app.name) + '">Add to ' + escapeHtml(app.name) + '</span>';
     html += '</a>';
   }
@@ -796,7 +800,11 @@ function renderImportCard(apps, subUrl, platform, serverName, subQrB64) {
       var oa = otherDeepApps[m];
       var ohref = buildDeepLink(oa.deeplink, subUrl, serverName);
       html += '<a class="import-btn" href="' + escapeHtml(ohref) + '">';
-      html += '<span class="import-btn-add">+</span> ';
+      if (oa.icon) {
+        html += '<img class="import-btn-icon" src="' + escapeHtml(oa.icon) + '" alt="" width="20" height="20">';
+      } else {
+        html += '<span class="import-btn-add">+</span> ';
+      }
       html += '<span data-t="import.add" data-t-name="' + escapeHtml(oa.name) + '">Add to ' + escapeHtml(oa.name) + '</span>';
       html += '</a>';
     }
@@ -856,6 +864,7 @@ function renderAppsCard(apps, platform, isReturning) {
   for (var j = 0; j < relevant.length; j++) {
     var r = relevant[j];
     html += '<a class="app detected" href="' + escapeHtml(appUrl(r)) + '" target="_blank">';
+    if (r.icon) html += '<img class="app-icon" src="' + escapeHtml(r.icon) + '" alt="" width="32" height="32">';
     html += escapeHtml(r.name);
     html += '<span>' + escapeHtml(r.platform) + '</span>';
     html += '</a>';
@@ -869,6 +878,7 @@ function renderAppsCard(apps, platform, isReturning) {
     for (var k = 0; k < others.length; k++) {
       var o = others[k];
       html += '<a class="app" href="' + escapeHtml(appUrl(o)) + '" target="_blank">';
+      if (o.icon) html += '<img class="app-icon" src="' + escapeHtml(o.icon) + '" alt="" width="32" height="32">';
       html += escapeHtml(o.name);
       html += '<span>' + escapeHtml(o.platform) + '</span>';
       html += '</a>';

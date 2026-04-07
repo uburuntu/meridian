@@ -250,6 +250,7 @@ summary::marker{display:none;content:none}
 .app:hover{border-color:var(--tx3)}
 .app.detected{border-color:var(--accent);background:var(--accent-bg)}
 .app span{font-size:.66rem;color:var(--tx3);font-weight:400}
+.app-icon{width:32px;height:32px;border-radius:22%;object-fit:contain}
 
 /* ===================================================================
  * QUICK SETUP STEPS
@@ -382,6 +383,7 @@ summary::marker{display:none;content:none}
 .import-btn:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--bg2))}
 .import-btn.detected{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--bg2))}
 .import-btn-add{font-size:1rem;font-weight:700;color:var(--accent);line-height:1}
+.import-btn-icon{width:20px;height:20px;border-radius:22%;object-fit:contain;flex-shrink:0}
 
 /* ===================================================================
  * SKELETON LOADING
