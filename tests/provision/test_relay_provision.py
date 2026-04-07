@@ -9,6 +9,7 @@ from meridian.provision.common import ConfigureBBR, InstallPackages
 from meridian.provision.relay import (
     _RELAY_PACKAGES,
     ConfigureRealm,
+    ConfigureRelayFirewall,
     InstallRealm,
     RelayContext,
     VerifyRelay,
@@ -112,6 +113,57 @@ class TestConfigureRelayBBR:
         conn.when("tcp_congestion_control", stdout="bbr")
         conn.when("default_qdisc", stdout="fq")
         result = ConfigureBBR().run(conn, _make_ctx())
+        assert result.status == "ok"
+
+
+# ---------------------------------------------------------------------------
+# ConfigureRelayFirewall
+# ---------------------------------------------------------------------------
+
+
+class TestConfigureRelayFirewall:
+    def test_ufw_not_found_returns_failed(self):
+        """When ufw binary is not found and install fails, status is failed."""
+        conn = MockConnection()
+        conn.when("which ufw", rc=1)
+        conn.when("apt-get update", stdout="")
+        conn.when("apt-get install", stdout="")
+
+        result = ConfigureRelayFirewall().run(conn, _make_ctx())
+
+        assert result.status == "failed"
+        assert "ufw not available" in result.detail
+        conn.assert_called_with_pattern("apt-get install")
+
+    def test_ufw_installed_after_retry(self):
+        """When ufw is missing but apt install succeeds, step continues."""
+        conn = MockConnection()
+        # First check (with 2>/dev/null) fails; recheck (without) succeeds
+        conn.when("which ufw 2>/dev/null", rc=1)
+        conn.when("which ufw", rc=0)
+        conn.when("apt-get update", stdout="")
+        conn.when("apt-get install", stdout="")
+        conn.when("ufw status", stdout="Status: inactive")
+        conn.when("ufw allow", stdout="Rule added")
+        conn.when("ufw default", rc=0)
+        conn.when("ufw enable", stdout="Firewall is active")
+
+        result = ConfigureRelayFirewall().run(conn, _make_ctx())
+
+        assert result.status == "changed"
+        conn.assert_called_with_pattern("apt-get install")
+
+    def test_already_active_returns_ok(self):
+        """When ufw is present and rules already exist, status is ok."""
+        conn = MockConnection()
+        conn.when("which ufw", rc=0)
+        conn.when("ufw status", stdout="Status: active\n22/tcp ALLOW\n443/tcp ALLOW")
+        conn.when("ufw allow", stdout="Skipping adding existing rule")
+        conn.when("ufw default", rc=0)
+        conn.when("ufw reload", rc=0)
+
+        result = ConfigureRelayFirewall().run(conn, _make_ctx())
+
         assert result.status == "ok"
 
 

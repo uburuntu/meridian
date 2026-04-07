@@ -82,10 +82,17 @@ class ConfigureRelayFirewall:
     name = "Configure relay firewall"
 
     def run(self, conn: ServerConnection, ctx: RelayContext) -> StepResult:
-        check = conn.run("which ufw", timeout=15)
+        check = conn.run("which ufw 2>/dev/null", timeout=15)
         if check.returncode != 0:
-            detail = check.stderr.strip() if check.stderr.strip() else "ufw not found"
-            return StepResult(name=self.name, status="failed", detail=detail)
+            # ufw not found — try to install it explicitly
+            conn.run("apt-get update -qq && apt-get install -y -qq ufw", timeout=120)
+            recheck = conn.run("which ufw", timeout=15)
+            if recheck.returncode != 0:
+                return StepResult(
+                    name=self.name,
+                    status="failed",
+                    detail="ufw not available — install it manually: apt-get install ufw",
+                )
 
         changed = False
 
