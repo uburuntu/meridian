@@ -36,9 +36,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     from meridian.provision.docker import Deploy3xui, InstallDocker
     from meridian.provision.panel import ConfigurePanel, LoginToPanel
     from meridian.provision.xray import (
-        CreateRealityInbound,
-        CreateWSSInbound,
-        CreateXHTTPInbound,
+        CreateInbound,
         DisableXrayLogs,
         VerifyXray,
     )
@@ -88,21 +86,36 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
                 xhttp_enabled=ctx.xhttp_enabled,
             ),
             LoginToPanel(),
-            CreateRealityInbound(
+            CreateInbound(
+                protocol_key="reality",
                 port=ctx.reality_port,
                 first_client_name=first_client,
                 listen="127.0.0.1" if ctx.needs_web_server else "",
+                delete_on_port_mismatch=True,
             ),
         ]
     )
 
     # XHTTP inbound (enabled by default)
     if ctx.xhttp_enabled:
-        steps.append(CreateXHTTPInbound(port=ctx.xhttp_port))
+        steps.append(
+            CreateInbound(
+                protocol_key="xhttp",
+                port=ctx.xhttp_port,
+                listen="127.0.0.1",
+                ctx_exports={"xhttp_port": "port"},
+            )
+        )
 
     # Domain mode: WSS inbound
     if ctx.domain_mode:
-        steps.append(CreateWSSInbound(port=ctx.wss_port))  # WSS binds to 127.0.0.1
+        steps.append(
+            CreateInbound(
+                protocol_key="wss",
+                port=ctx.wss_port,
+                listen="127.0.0.1",
+            )
+        )
 
     steps.append(DisableXrayLogs())
     steps.append(VerifyXray())

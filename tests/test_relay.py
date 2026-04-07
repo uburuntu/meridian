@@ -250,7 +250,7 @@ class TestRelayProvisioner:
         steps = build_relay_steps(ctx)
         assert len(steps) == 6
         names = [s.name for s in steps]
-        assert "Install relay packages" in names
+        assert "Install system packages" in names
         assert "Enable BBR congestion control" in names
         assert "Configure relay firewall" in names
         assert "Install Realm TCP relay" in names

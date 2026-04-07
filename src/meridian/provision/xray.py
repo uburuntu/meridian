@@ -185,60 +185,106 @@ def _xhttp_reverse_proxy_stream_settings(xhttp_path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# CreateRealityInbound
+# CreateInbound — unified inbound creation step
 # ---------------------------------------------------------------------------
 
+# Human-readable labels for spinner output
+_PROTOCOL_LABELS = {"reality": "Reality", "xhttp": "XHTTP", "wss": "WSS"}
 
-class CreateRealityInbound:
-    """Create the VLESS+Reality+TCP inbound (primary protocol).
 
-    Replaces: configure_reality.yml
+class CreateInbound:
+    """Create a VLESS inbound via the 3x-ui API.
 
-    Handles mode switching: if an inbound exists on the wrong port (e.g.,
-    switching from no-domain to domain mode), it is deleted and recreated.
+    A single parameterized step that handles all inbound protocols.
+    Protocol-specific behavior (UUID source, stream settings) is resolved
+    from the protocol_key and credentials.
     """
-
-    name = "Create Reality inbound"
 
     def __init__(
         self,
+        protocol_key: str,
         port: int,
         first_client_name: str = "default",
         client_limit_ip: int = 2,
         client_total_gb: int = 0,
         fingerprint: str = DEFAULT_FINGERPRINT,
         listen: str = "",
+        delete_on_port_mismatch: bool = False,
+        ctx_exports: dict[str, str] | None = None,
     ) -> None:
+        self.protocol_key = protocol_key
         self.port = port
         self.first_client_name = first_client_name
         self.client_limit_ip = client_limit_ip
         self.client_total_gb = client_total_gb
         self.fingerprint = fingerprint
         self.listen = listen
+        self.delete_on_port_mismatch = delete_on_port_mismatch
+        self.ctx_exports = ctx_exports or {}
+
+        label = _PROTOCOL_LABELS.get(protocol_key, protocol_key)
+        self.name = f"Create {label} inbound"
+
+    def _get_uuid(self, creds: Any) -> str:
+        """Resolve the UUID for this protocol from credentials."""
+        if self.protocol_key in ("reality", "xhttp"):
+            return creds.reality.uuid
+        return creds.wss.uuid
+
+    def _build_stream_settings(self, creds: Any) -> str | None:
+        """Build the streamSettings JSON string for this protocol.
+
+        Returns None if a required field is missing (caller returns failed).
+        """
+        if self.protocol_key == "reality":
+            return _reality_stream_settings(
+                sni=creds.server.sni,
+                private_key=creds.reality.private_key,
+                public_key=creds.reality.public_key,
+                short_id=creds.reality.short_id,
+                fingerprint=self.fingerprint,
+            )
+        elif self.protocol_key == "xhttp":
+            xhttp_path = creds.xhttp.xhttp_path
+            if not xhttp_path:
+                return None
+            return _xhttp_reverse_proxy_stream_settings(xhttp_path=xhttp_path)
+        elif self.protocol_key == "wss":
+            return _wss_stream_settings(ws_path=creds.wss.ws_path)
+        else:
+            return None
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         panel: PanelClient | None = ctx.get("panel")
         if panel is None:
             return StepResult(name=self.name, status="failed", detail="No panel client in context")
 
-        remark = INBOUND_TYPES["reality"].remark
+        inbound_type = INBOUND_TYPES[self.protocol_key]
+        remark = inbound_type.remark
         creds = ctx["credentials"]
 
         # Check if inbound already exists
         existing = panel.find_inbound(remark)
         if existing is not None:
-            # Check for port or listen mismatch (mode switch or hardening fix)
-            if existing.port != self.port or existing.listen != self.listen:
+            if self.delete_on_port_mismatch and (existing.port != self.port or existing.listen != self.listen):
                 _delete_inbound(panel, existing.id, remark)
             else:
                 return StepResult(
                     name=self.name,
                     status="skipped",
-                    detail=f"Reality inbound already exists on port {existing.port}",
+                    detail=f"{remark} inbound already exists",
                 )
 
-        # Build the inbound creation body
-        email = f"reality-{self.first_client_name}"
+        uuid = self._get_uuid(creds)
+        stream_settings = self._build_stream_settings(creds)
+        if stream_settings is None:
+            return StepResult(
+                name=self.name,
+                status="failed",
+                detail=f"Missing config for {self.protocol_key} — ConfigurePanel may have failed",
+            )
+
+        email = f"{inbound_type.email_prefix}{self.first_client_name}"
         body: dict[str, Any] = {
             "remark": remark,
             "enable": True,
@@ -248,19 +294,13 @@ class CreateRealityInbound:
             "expiryTime": 0,
             "total": 0,
             "settings": _client_settings(
-                uuid=creds.reality.uuid,
+                uuid=uuid,
                 client_email=email,
-                flow="xtls-rprx-vision",
+                flow=inbound_type.flow,
                 client_limit_ip=self.client_limit_ip,
                 client_total_gb=self.client_total_gb,
             ),
-            "streamSettings": _reality_stream_settings(
-                sni=creds.server.sni,
-                private_key=creds.reality.private_key,
-                public_key=creds.reality.public_key,
-                short_id=creds.reality.short_id,
-                fingerprint=self.fingerprint,
-            ),
+            "streamSettings": stream_settings,
             "sniffing": SNIFFING_JSON,
         }
 
@@ -270,191 +310,17 @@ class CreateRealityInbound:
             return StepResult(
                 name=self.name,
                 status="failed",
-                detail=(f"Failed to create Reality inbound: {msg}. Fix: run 'meridian teardown' then retry deploy."),
+                detail=f"Failed to create {remark}: {msg}. Fix: run 'meridian teardown' then retry deploy.",
             )
+
+        # Export context values (e.g., xhttp_port for downstream steps)
+        for key, attr in self.ctx_exports.items():
+            ctx[key] = getattr(self, attr)
 
         return StepResult(
             name=self.name,
             status="changed",
-            detail=f"Reality inbound created on port {self.port}",
-        )
-
-
-# ---------------------------------------------------------------------------
-# CreateXHTTPInbound
-# ---------------------------------------------------------------------------
-
-
-class CreateXHTTPInbound:
-    """Create the VLESS+XHTTP inbound behind nginx (TLS terminated by nginx).
-
-    Replaces: configure_reality_xhttp.yml
-
-    Uses the same UUID as Reality (shared identity).
-    XHTTP listens on 127.0.0.1 (traffic arrives via nginx reverse proxy),
-    following the same pattern as WSS.
-    """
-
-    name = "Create XHTTP inbound"
-
-    def __init__(
-        self,
-        port: int,
-        first_client_name: str = "default",
-        client_limit_ip: int = 2,
-        client_total_gb: int = 0,
-    ) -> None:
-        self.port = port
-        self.first_client_name = first_client_name
-        self.client_limit_ip = client_limit_ip
-        self.client_total_gb = client_total_gb
-
-    def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
-        panel: PanelClient | None = ctx.get("panel")
-        if panel is None:
-            return StepResult(name=self.name, status="failed", detail="No panel client in context")
-
-        remark = INBOUND_TYPES["xhttp"].remark
-        creds = ctx["credentials"]
-
-        # Check if inbound already exists
-        existing = panel.find_inbound(remark)
-        if existing is not None:
-            return StepResult(
-                name=self.name,
-                status="skipped",
-                detail="XHTTP inbound already exists",
-            )
-
-        # Get xhttp_path from credentials (generated by ConfigurePanel)
-        xhttp_path = creds.xhttp.xhttp_path or ctx.get("xhttp_path", "")
-        if not xhttp_path:
-            return StepResult(
-                name=self.name,
-                status="failed",
-                detail="No xhttp_path found — ConfigurePanel may have failed",
-            )
-
-        # XHTTP shares reality_uuid
-        email = f"xhttp-{self.first_client_name}"
-        body: dict[str, Any] = {
-            "remark": remark,
-            "enable": True,
-            "listen": "127.0.0.1",
-            "port": self.port,
-            "protocol": "vless",
-            "expiryTime": 0,
-            "total": 0,
-            "settings": _client_settings(
-                uuid=creds.reality.uuid,
-                client_email=email,
-                client_limit_ip=self.client_limit_ip,
-                client_total_gb=self.client_total_gb,
-            ),
-            "streamSettings": _xhttp_reverse_proxy_stream_settings(
-                xhttp_path=xhttp_path,
-            ),
-            "sniffing": SNIFFING_JSON,
-        }
-
-        data = panel.api_post_json("/panel/api/inbounds/add", body)
-        if not data.get("success"):
-            msg = data.get("msg", "unknown error")
-            return StepResult(
-                name=self.name,
-                status="failed",
-                detail=(f"Failed to create XHTTP inbound: {msg}. Fix: run 'meridian teardown' then retry deploy."),
-            )
-
-        # Store the port in context for connection info
-        ctx["xhttp_port"] = self.port
-
-        return StepResult(
-            name=self.name,
-            status="changed",
-            detail=f"XHTTP inbound created on 127.0.0.1:{self.port}",
-        )
-
-
-# ---------------------------------------------------------------------------
-# CreateWSSInbound
-# ---------------------------------------------------------------------------
-
-
-class CreateWSSInbound:
-    """Create the VLESS+WSS inbound (CDN fallback via Cloudflare).
-
-    Replaces: configure_wss.yml
-
-    Only created when domain mode is enabled. Listens on 127.0.0.1
-    (traffic arrives via nginx reverse proxy).
-    """
-
-    name = "Create WSS inbound"
-
-    def __init__(
-        self,
-        port: int,
-        first_client_name: str = "default",
-        client_limit_ip: int = 2,
-        client_total_gb: int = 0,
-    ) -> None:
-        self.port = port
-        self.first_client_name = first_client_name
-        self.client_limit_ip = client_limit_ip
-        self.client_total_gb = client_total_gb
-
-    def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
-        panel: PanelClient | None = ctx.get("panel")
-        if panel is None:
-            return StepResult(name=self.name, status="failed", detail="No panel client in context")
-
-        remark = INBOUND_TYPES["wss"].remark
-        creds = ctx["credentials"]
-
-        # Check if inbound already exists
-        existing = panel.find_inbound(remark)
-        if existing is not None:
-            return StepResult(
-                name=self.name,
-                status="skipped",
-                detail="WSS inbound already exists",
-            )
-
-        email = f"wss-{self.first_client_name}"
-        body: dict[str, Any] = {
-            "remark": remark,
-            "enable": True,
-            "listen": "127.0.0.1",
-            "port": self.port,
-            "protocol": "vless",
-            "expiryTime": 0,
-            "total": 0,
-            "settings": _client_settings(
-                uuid=creds.wss.uuid,
-                client_email=email,
-                client_limit_ip=self.client_limit_ip,
-                client_total_gb=self.client_total_gb,
-            ),
-            "streamSettings": _wss_stream_settings(
-                ws_path=creds.wss.ws_path,
-            ),
-            "sniffing": SNIFFING_JSON,
-        }
-
-        data = panel.api_post_json("/panel/api/inbounds/add", body)
-        if not data.get("success"):
-            msg = data.get("msg", "unknown error")
-            return StepResult(
-                name=self.name,
-                status="failed",
-                detail=(f"Failed to create WSS inbound: {msg}. Fix: run 'meridian teardown' then retry deploy."),
-            )
-
-        return StepResult(
-            name=self.name,
-            status="changed",
-            detail=f"WSS inbound created on 127.0.0.1:{self.port}",
+            detail=f"{remark} created on {self.listen or '0.0.0.0'}:{self.port}",
         )
 
 
