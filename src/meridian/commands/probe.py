@@ -342,7 +342,8 @@ def check_sni_consistency(ip: str) -> CheckResult:
         result.findings.append(
             (
                 False,
-                f"{unique} different certificates across {len(certs)} probes with same SNI — routing is inconsistent",
+                f"{unique} different certificates across {len(certs)} probes with same SNI — "
+                "routing is inconsistent (expected for relay nodes, investigate for exit servers)",
             )
         )
 
