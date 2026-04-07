@@ -103,6 +103,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
             CreateInbound(
                 protocol_key="xhttp",
                 port=ctx.xhttp_port,
+                first_client_name=first_client,
                 listen="127.0.0.1",
                 ctx_exports={"xhttp_port": "port"},
             )
@@ -114,6 +115,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
             CreateInbound(
                 protocol_key="wss",
                 port=ctx.wss_port,
+                first_client_name=first_client,
                 listen="127.0.0.1",
             )
         )
