@@ -176,6 +176,18 @@ class InstallDocker:
         conn.run("systemctl start docker", timeout=15)
         conn.run("systemctl enable docker", timeout=15)
 
+        # Disable secretservice credential helper — headless servers lack D-Bus
+        # secret service, which makes `docker compose pull` fail even for
+        # public images.  Stripping credsStore lets Docker work without a
+        # keyring while preserving the rest of the config.
+        conn.run(
+            "test -f ~/.docker/config.json"
+            " && jq 'del(.credsStore)' ~/.docker/config.json > ~/.docker/config.json.tmp"
+            " && mv ~/.docker/config.json.tmp ~/.docker/config.json"
+            " || true",
+            timeout=15,
+        )
+
         return StepResult(name=self.name, status="changed")
 
 
