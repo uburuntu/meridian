@@ -109,3 +109,5 @@ def run(
     err_console.print()
     ok("Uninstall complete.")
     err_console.print()
+    err_console.print(f"  [dim]To redeploy: meridian deploy {resolved.ip}[/dim]")
+    err_console.print()
