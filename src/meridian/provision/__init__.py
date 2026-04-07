@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from meridian.provision.steps import ProvisionContext, Provisioner, Step, StepResult
+from meridian.provision.steps import ProvisionContext, Provisioner, Step, StepContext, StepResult
 
-__all__ = ["Provisioner", "ProvisionContext", "Step", "StepResult", "build_setup_steps"]
+__all__ = ["Provisioner", "ProvisionContext", "Step", "StepContext", "StepResult", "build_setup_steps"]
 
 
 def build_setup_steps(ctx: ProvisionContext) -> list[Step]:

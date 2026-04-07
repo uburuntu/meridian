@@ -80,12 +80,18 @@ class ProvisionContext:
         return self._state.get(key, default)
 
 
+class StepContext(TypingProtocol):
+    """Minimal protocol for step contexts (ProvisionContext, RelayContext, etc.)."""
+
+    results: list[StepResult]
+
+
 class Step(TypingProtocol):
     """Protocol for provisioning steps."""
 
     name: str
 
-    def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult: ...
+    def run(self, conn: ServerConnection, ctx: StepContext) -> StepResult: ...
 
 
 class Provisioner:
