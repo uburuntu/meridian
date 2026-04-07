@@ -274,16 +274,77 @@ class TestRunShow:
         assert call_kwargs.kwargs.get("header_verb") == "connection info"
 
     def test_show_nonexistent_client_fails(self, tmp_home: Path, creds_dir: Path) -> None:
-        """Client not in credentials -- should fail."""
+        """Client not in credentials and not in panel -- should fail."""
         _write_proxy_yml(creds_dir)
 
         mock_resolved = _make_mock_resolved(creds_dir)
+
+        # Panel has a reality inbound but no matching client
+        inbounds = [_make_inbound(id=1, remark="VLESS-Reality", port=443, clients=[])]
+        mock_panel = _make_mock_panel(inbounds)
 
         with (
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
             patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client._make_panel", return_value=mock_panel),
+        ):
+            with pytest.raises(typer.Exit) as exc:
+                run_show("ghost")
+        assert exc.value.exit_code == 1
+
+    def test_show_recovers_from_panel(self, tmp_home: Path, creds_dir: Path) -> None:
+        """Client missing from credentials but found in panel -- should recover and show."""
+        _write_proxy_yml(creds_dir)
+
+        mock_resolved = _make_mock_resolved(creds_dir)
+
+        # Panel has alice in reality inbound but local creds do not
+        inbounds = [
+            _make_inbound(
+                id=1,
+                remark="VLESS-Reality",
+                port=443,
+                clients=[{"id": "recovered-uuid", "email": "reality-alice", "flow": "xtls-rprx-vision"}],
+            ),
+        ]
+        mock_panel = _make_mock_panel(inbounds)
+
+        with (
+            patch("meridian.commands.client.ServerRegistry"),
+            patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
+            patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
+            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client._make_panel", return_value=mock_panel),
+            patch("meridian.commands.client.print_terminal_output") as mock_print,
+        ):
+            run_show("alice")
+
+        # Should have printed connection info
+        mock_print.assert_called_once()
+        assert mock_print.call_args.kwargs.get("header_verb") == "connection info"
+
+        # Credentials should have been synced back
+        proxy_content = (creds_dir / "proxy.yml").read_text()
+        assert "alice" in proxy_content
+        assert "recovered-uuid" in proxy_content
+
+    def test_show_panel_error_falls_back_to_fail(self, tmp_home: Path, creds_dir: Path) -> None:
+        """Client not in credentials and panel errors -- should fail gracefully."""
+        _write_proxy_yml(creds_dir)
+
+        mock_resolved = _make_mock_resolved(creds_dir)
+
+        mock_panel = MagicMock()
+        mock_panel.list_inbounds.side_effect = PanelError("unauthorized")
+
+        with (
+            patch("meridian.commands.client.ServerRegistry"),
+            patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
+            patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
+            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client._make_panel", return_value=mock_panel),
         ):
             with pytest.raises(typer.Exit) as exc:
                 run_show("ghost")

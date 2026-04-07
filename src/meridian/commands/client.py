@@ -353,11 +353,65 @@ def run_show(
     # Find the client in credentials
     client_entry = next((c for c in creds.clients if c.name == name), None)
     if client_entry is None:
-        fail(
-            f"Client '{name}' not found in credentials",
-            hint="Check client name with: meridian client list",
-            hint_type="user",
-        )
+        # Client not in local creds — try to find in panel (handles credential sync gaps)
+        panel = _make_panel(creds, resolved.conn)
+        with panel:
+            try:
+                inbounds = panel.list_inbounds()
+            except PanelError:
+                fail(
+                    f"Client '{name}' not found in credentials",
+                    hint="Check client name with: meridian client list",
+                    hint_type="user",
+                )
+            reality_proto = get_protocol("reality")
+            if reality_proto is None:
+                raise ValueError("Reality protocol not registered -- this is a bug")
+            reality_inbound = reality_proto.find_inbound(inbounds)
+            if reality_inbound is None:
+                fail(
+                    f"Client '{name}' not found",
+                    hint="Check client name with: meridian client list",
+                    hint_type="user",
+                )
+
+            # Find client by email
+            reality_email = f"{reality_proto.email_prefix}{name}"
+            reality_uuid = ""
+            for client in reality_inbound.clients:
+                if client.get("email") == reality_email:
+                    reality_uuid = client.get("id", "")
+                    break
+
+            if not reality_uuid:
+                fail(
+                    f"Client '{name}' not found",
+                    hint="Check client name with: meridian client list",
+                    hint_type="user",
+                )
+
+            # Find WSS UUID if applicable
+            wss_uuid = ""
+            wss_proto = get_protocol("wss")
+            if wss_proto:
+                wss_inbound = wss_proto.find_inbound(inbounds)
+                if wss_inbound:
+                    wss_email = f"{wss_proto.email_prefix}{name}"
+                    for client in wss_inbound.clients:
+                        if client.get("email") == wss_email:
+                            wss_uuid = client.get("id", "")
+                            break
+
+            # Sync back to credentials
+            client_entry = ClientEntry(
+                name=name,
+                added=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                reality_uuid=reality_uuid,
+                wss_uuid=wss_uuid,
+            )
+            creds.clients.append(client_entry)
+            creds.save(resolved.creds_dir / "proxy.yml")
+            warn(f"Client '{name}' recovered from panel (credentials synced)")
 
     # Build protocol URLs
     protocol_urls = build_protocol_urls(
