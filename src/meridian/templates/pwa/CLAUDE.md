@@ -14,6 +14,14 @@ Server-hosted Progressive Web App. The old `connection-info.html.j2` is kept for
 
 **i18n** — English is the HTML default, NOT a translation dict. Non-EN languages swap via `data-t` attributes. Switching back to EN requires full `renderPage()` re-render.
 
+**Subscription QR hero layout** — the subscription QR (encodes `sub.txt` URL) is the first thing after the header. Rationale: scanning one QR imports ALL protocols at once — most users don't need to understand individual protocol cards. Deep link "Add to App" buttons sit directly below the QR for one-tap import. Everything else is secondary:
+- Apps list collapsed — we assume the user already has an app installed
+- Quick setup collapsed — returning users skip it
+- Individual protocol cards collapsed under "Individual connections" — for advanced users or troubleshooting
+- Stats at the bottom — informational, not actionable
+
+This layout serves both sides of the UX: end-users scan the QR and go, power users expand the advanced section.
+
 ## What's done well
 
 - **`config.json` decoupling** — credentials change without HTML redeploy.

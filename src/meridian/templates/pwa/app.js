@@ -49,6 +49,8 @@ var T = {
     'relay.via': 'через {name}',
     'direct.desc': 'Прямое подключение — используйте, если реле недоступно.',
     'more.options': 'Другие варианты подключения',
+    'import.other': 'Другие платформы',
+    'apps.more': 'Другие платформы',
     'show.qr': 'Показать QR-код',
     'share.page': 'Поделиться этой страницей',
     copied: 'Скопировано',
@@ -105,6 +107,8 @@ var T = {
     'relay.via': 'از طریق {name}',
     'direct.desc': 'اتصال مستقیم \u2014 اگر رله در دسترس نیست استفاده کنید.',
     'more.options': 'گزینه\u200Cهای دیگر',
+    'import.other': 'پلتفرم\u200Cهای دیگر',
+    'apps.more': 'پلتفرم\u200Cهای دیگر',
     'show.qr': 'نمایش کد QR',
     'share.page': 'اشتراک\u200Cگذاری این صفحه',
     copied: '\u06A9\u067E\u06CC \u0634\u062F',
@@ -161,6 +165,8 @@ var T = {
     'relay.via': '经由 {name}',
     'direct.desc': '直接连接 — 中继不可用时使用。',
     'more.options': '更多连接选项',
+    'import.other': '其他平台',
+    'apps.more': '其他平台',
     'show.qr': '显示二维码',
     'share.page': '分享此页面',
     copied: '已复制',
@@ -540,83 +546,19 @@ function renderPage(config) {
   html += '<button class="install-dismiss" data-action="dismiss">&times;</button>';
   html += '</div>';
 
-  /* Stats */
-  html += '<div class="stats" id="stats">';
-  html += '<div class="stats-title" data-t="stats">Usage</div>';
-  html += '<div class="stats-grid">';
-  html += '<div class="stats-item"><div class="stats-val" id="s-up">&mdash;</div><div class="stats-label" data-t="stats.upload">Upload</div></div>';
-  html += '<div class="stats-item"><div class="stats-val" id="s-down">&mdash;</div><div class="stats-label" data-t="stats.download">Download</div></div>';
-  html += '</div>';
-  html += '<div class="stats-active" id="s-active"></div>';
-  html += '</div>';
+  /* ---- Subscription QR hero ---- */
+  var subUrl = getSubscriptionUrl();
+  var serverLabel = config.server_name || 'Meridian';
+  html += renderImportCard(config.apps, subUrl, platform, serverLabel, config.subscription_qr_b64);
 
-  /* Primary protocol card (hero) — first relay or first direct */
-  var primaryCards = '';
-  var secondaryCards = '';
+  /* ---- Client Apps (open for first-time visitors, collapsed for returning) ---- */
+  var isReturning = 'serviceWorker' in navigator && navigator.serviceWorker.controller;
+  html += renderAppsCard(config.apps, platform, isReturning);
 
-  if (hasRelays) {
-    /* First relay card is primary (hero) */
-    var firstRelay = config.relays[0];
-    if (firstRelay.urls.length > 0) {
-      primaryCards += renderProtocolCard(firstRelay.urls[0], platform, {
-        extraLabel: relayViaLabel(escapeHtml(firstRelay.name || firstRelay.ip)),
-        isRelay: true,
-        isPrimary: true,
-        isHero: true,
-      });
-    }
-    /* Remaining relay URLs */
-    for (var ri = 0; ri < config.relays.length; ri++) {
-      var relay = config.relays[ri];
-      var startIdx = (ri === 0) ? 1 : 0;
-      for (var rui = startIdx; rui < relay.urls.length; rui++) {
-        secondaryCards += renderProtocolCard(relay.urls[rui], platform, {
-          extraLabel: relayViaLabel(escapeHtml(relay.name || relay.ip)),
-          isRelay: true,
-        });
-      }
-    }
-    /* Direct cards go to secondary */
-    if (config.protocols.length > 0) {
-      secondaryCards += '<div class="section-divider" data-t="backup.direct">BACKUP (DIRECT)</div>';
-    }
-    for (var pi = 0; pi < config.protocols.length; pi++) {
-      secondaryCards += renderProtocolCard(config.protocols[pi], platform, {
-        hasRelays: true,
-        isFirst: pi === 0,
-      });
-    }
-  } else {
-    /* No relays: first protocol is primary (hero), rest are secondary */
-    if (config.protocols.length > 0) {
-      primaryCards += renderProtocolCard(config.protocols[0], platform, {
-        isFirst: true,
-        isPrimary: true,
-        isHero: true,
-      });
-    }
-    for (var pi2 = 1; pi2 < config.protocols.length; pi2++) {
-      secondaryCards += renderProtocolCard(config.protocols[pi2], platform, {});
-    }
-  }
-
-  /* Render primary card (hero) */
-  html += '<div class="cards-grid">' + primaryCards + '</div>';
-
-  /* Secondary cards collapsed */
-  if (secondaryCards) {
-    html += '<details class="more-options">';
-    html += '<summary data-t="more.options">More connection options</summary>';
-    html += '<div class="cards-grid">' + secondaryCards + '</div>';
-    html += '</details>';
-  }
-
-  /* Client Apps */
-  html += renderAppsCard(config.apps, platform);
-
-  /* Quick Setup */
-  html += '<div class="card">';
-  html += '<div style="font-size:.78rem;font-weight:600;margin-bottom:4px" data-t="setup">Quick Setup</div>';
+  /* ---- Quick Setup (collapsed) ---- */
+  html += '<details class="more-options">';
+  html += '<summary data-t="setup">Quick Setup</summary>';
+  html += '<div class="card" style="margin-top:8px">';
   html += '<div class="steps">';
   html += '<div class="step" data-t="step1">Install a client app from the list above</div>';
   html += '<div class="step" data-t="step2">Tap "Open in App" — the connection imports automatically</div>';
@@ -624,13 +566,44 @@ function renderPage(config) {
   html += '<div class="step" data-t="step4">Activate the connection in the app</div>';
   html += '</div>';
   html += '</div>';
+  html += '</details>';
 
-  /* One-Tap Import + Subscription URL */
-  var subUrl = getSubscriptionUrl();
-  var serverLabel = config.server_name || 'Meridian';
-  html += renderImportCard(config.apps, subUrl, platform, serverLabel, config.subscription_qr_b64);
+  /* ---- Individual protocol cards (collapsed — advanced) ---- */
+  var allProtocolCards = '';
 
-  /* Clock warning only shown at top when skew is detected (clockStatus === 'bad') */
+  if (hasRelays) {
+    for (var ri = 0; ri < config.relays.length; ri++) {
+      var relay = config.relays[ri];
+      for (var rui = 0; rui < relay.urls.length; rui++) {
+        allProtocolCards += renderProtocolCard(relay.urls[rui], platform, {
+          extraLabel: relayViaLabel(escapeHtml(relay.name || relay.ip)),
+          isRelay: true,
+        });
+      }
+    }
+    if (config.protocols.length > 0) {
+      allProtocolCards += '<div class="section-divider" data-t="backup.direct">BACKUP (DIRECT)</div>';
+    }
+    for (var pi = 0; pi < config.protocols.length; pi++) {
+      allProtocolCards += renderProtocolCard(config.protocols[pi], platform, {
+        hasRelays: true,
+        isFirst: pi === 0,
+      });
+    }
+  } else {
+    for (var pi2 = 0; pi2 < config.protocols.length; pi2++) {
+      allProtocolCards += renderProtocolCard(config.protocols[pi2], platform, {
+        isFirst: pi2 === 0,
+      });
+    }
+  }
+
+  if (allProtocolCards) {
+    html += '<details class="more-options">';
+    html += '<summary data-t="more.options">Individual connections</summary>';
+    html += '<div class="cards-grid" style="margin-top:8px">' + allProtocolCards + '</div>';
+    html += '</details>';
+  }
 
   /* Ping test */
   var pingUrl = 'https://getmeridian.org/ping?ip=' + encodeURIComponent(config.server_ip);
@@ -639,6 +612,16 @@ function renderPage(config) {
   html += '<h3 data-t="ping">Not connecting?</h3>';
   html += '<p><span data-t="ping.desc">Test if the server is reachable from your device:</span> ';
   html += '<a href="' + escapeHtml(pingUrl) + '" target="_blank" style="color:var(--amber)" data-t="ping.link">Run ping test</a></p>';
+  html += '</div>';
+
+  /* Stats (bottom — informational) */
+  html += '<div class="stats" id="stats">';
+  html += '<div class="stats-title" data-t="stats">Usage</div>';
+  html += '<div class="stats-grid">';
+  html += '<div class="stats-item"><div class="stats-val" id="s-up">&mdash;</div><div class="stats-label" data-t="stats.upload">Upload</div></div>';
+  html += '<div class="stats-item"><div class="stats-val" id="s-down">&mdash;</div><div class="stats-label" data-t="stats.download">Download</div></div>';
+  html += '</div>';
+  html += '<div class="stats-active" id="s-active"></div>';
   html += '</div>';
 
   /* Footer */
@@ -704,94 +687,47 @@ function renderProtocolCard(proto, platform, opts) {
     html += '<p class="card-desc" data-t="backup.desc">Fallback — routes through CDN. Use only if both above fail.</p>';
   }
 
-  if (opts.isHero) {
-    /* ---- Hero layout: QR prominent, then actions ---- */
-    html += '<div class="card-body">';
+  html += '<div class="card-body">';
 
-    /* QR code — always visible, prominent */
-    if (proto.qr_b64 && isValidBase64(proto.qr_b64)) {
-      html += '<div class="qr"><img src="data:image/png;base64,' + proto.qr_b64 + '" alt="QR code" loading="lazy"></div>';
-    }
-
-    html += '<div class="card-controls">';
-
-    /* Open in App button */
-    html += '<div class="card-actions">';
-    if (platform === 'ios') {
-      var idx = iosButtonIndex++;
-      html += '<a href="#" data-ios-idx="' + idx + '" data-url="' + escapeHtml(proto.url) + '" data-action="open-ios" class="open-btn" data-t="open">Open in App</a>';
-    } else {
-      var openUrl = buildOpenUrl(proto.url);
-      html += '<a href="' + escapeHtml(openUrl) + '" class="open-btn" data-t="open">Open in App</a>';
-    }
-    if (navigator.share) {
-      html += '<button class="share-btn" data-action="share" data-url="' + escapeHtml(proto.url) + '" data-t="share">Share</button>';
-    }
-    html += '</div>';
-
-    /* Secondary actions: copy link */
-    html += '<div class="card-tools">';
-    html += '<button class="copy-link-btn" data-action="copy" data-url="' + escapeHtml(proto.url) + '">';
-    html += ICON_COPY;
-    html += '<span data-t="copy.link">Copy link</span>';
-    html += '</button>';
-    html += '</div>';
-
-    /* Show raw link */
-    html += '<details class="url-section"><summary data-t="show.raw">Show raw link</summary>';
-    html += '<div class="url" tabindex="0" role="button" data-action="copy" data-url="' + escapeHtml(proto.url) + '">';
-    html += escapeHtml(proto.url);
-    html += '<span class="url-hint"><span data-t="copy.hint">tap to copy</span></span>';
-    html += '</div>';
-    html += '</details>';
-
-    html += '</div>'; /* card-controls */
-    html += '</div>'; /* card-body */
-
-  } else {
-    /* ---- Same layout as hero, just without card-hero class ---- */
-    html += '<div class="card-body">';
-
-    /* QR code — always visible */
-    if (proto.qr_b64 && isValidBase64(proto.qr_b64)) {
-      html += '<div class="qr"><img src="data:image/png;base64,' + proto.qr_b64 + '" alt="QR code" loading="lazy"></div>';
-    }
-
-    html += '<div class="card-controls">';
-
-    /* Open in App button */
-    html += '<div class="card-actions">';
-    if (platform === 'ios') {
-      var idx2 = iosButtonIndex++;
-      html += '<a href="#" data-ios-idx="' + idx2 + '" data-url="' + escapeHtml(proto.url) + '" data-action="open-ios" class="open-btn" data-t="open">Open in App</a>';
-    } else {
-      var openUrl2 = buildOpenUrl(proto.url);
-      html += '<a href="' + escapeHtml(openUrl2) + '" class="open-btn" data-t="open">Open in App</a>';
-    }
-    if (navigator.share) {
-      html += '<button class="share-btn" data-action="share" data-url="' + escapeHtml(proto.url) + '" data-t="share">Share</button>';
-    }
-    html += '</div>';
-
-    /* Secondary actions: copy link */
-    html += '<div class="card-tools">';
-    html += '<button class="copy-link-btn" data-action="copy" data-url="' + escapeHtml(proto.url) + '">';
-    html += ICON_COPY;
-    html += '<span data-t="copy.link">Copy link</span>';
-    html += '</button>';
-    html += '</div>';
-
-    /* Show raw link */
-    html += '<details class="url-section"><summary data-t="show.raw">Show raw link</summary>';
-    html += '<div class="url" tabindex="0" role="button" data-action="copy" data-url="' + escapeHtml(proto.url) + '">';
-    html += escapeHtml(proto.url);
-    html += '<span class="url-hint"><span data-t="copy.hint">tap to copy</span></span>';
-    html += '</div>';
-    html += '</details>';
-
-    html += '</div>'; /* card-controls */
-    html += '</div>'; /* card-body */
+  /* QR code */
+  if (proto.qr_b64 && isValidBase64(proto.qr_b64)) {
+    html += '<div class="qr"><img src="data:image/png;base64,' + proto.qr_b64 + '" alt="QR code" loading="lazy"></div>';
   }
+
+  html += '<div class="card-controls">';
+
+  /* Open in App button */
+  html += '<div class="card-actions">';
+  if (platform === 'ios') {
+    var idx = iosButtonIndex++;
+    html += '<a href="#" data-ios-idx="' + idx + '" data-url="' + escapeHtml(proto.url) + '" data-action="open-ios" class="open-btn" data-t="open">Open in App</a>';
+  } else {
+    var openUrl = buildOpenUrl(proto.url);
+    html += '<a href="' + escapeHtml(openUrl) + '" class="open-btn" data-t="open">Open in App</a>';
+  }
+  if (navigator.share) {
+    html += '<button class="share-btn" data-action="share" data-url="' + escapeHtml(proto.url) + '" data-t="share">Share</button>';
+  }
+  html += '</div>';
+
+  /* Secondary actions: copy link */
+  html += '<div class="card-tools">';
+  html += '<button class="copy-link-btn" data-action="copy" data-url="' + escapeHtml(proto.url) + '">';
+  html += ICON_COPY;
+  html += '<span data-t="copy.link">Copy link</span>';
+  html += '</button>';
+  html += '</div>';
+
+  /* Show raw link */
+  html += '<details class="url-section"><summary data-t="show.raw">Show raw link</summary>';
+  html += '<div class="url" tabindex="0" role="button" data-action="copy" data-url="' + escapeHtml(proto.url) + '">';
+  html += escapeHtml(proto.url);
+  html += '<span class="url-hint"><span data-t="copy.hint">tap to copy</span></span>';
+  html += '</div>';
+  html += '</details>';
+
+  html += '</div>'; /* card-controls */
+  html += '</div>'; /* card-body */
 
   html += '</div>'; /* card */
   return html;
@@ -829,9 +765,19 @@ function renderImportCard(apps, subUrl, platform, serverName, subQrB64) {
     return html;
   }
 
-  var html = '<div class="card">';
-  html += '<div style="font-size:.78rem;font-weight:600;margin-bottom:4px" data-t="import.label">One-Tap Import</div>';
-  html += '<p class="card-desc" data-t="import.desc">Add to your app with one tap. Updates automatically.</p>';
+  var heroClass = (subQrB64 && isValidBase64(subQrB64)) ? ' card-hero' : '';
+  var html = '<div class="card' + heroClass + '">';
+
+  /* Subscription QR hero — scan to import all protocols */
+  if (subQrB64 && isValidBase64(subQrB64)) {
+    html += '<div class="qr" style="margin:4px auto 12px"><img src="data:image/png;base64,' + subQrB64 + '" alt="QR" loading="lazy"></div>';
+    html += '<p class="card-desc" style="text-align:center" data-t="import.desc">Scan with any V2Ray app or tap to add. Updates automatically.</p>';
+  } else {
+    html += '<div style="font-size:.78rem;font-weight:600;margin-bottom:4px" data-t="import.label">One-Tap Import</div>';
+    html += '<p class="card-desc" data-t="import.desc">Add to your app with one tap. Updates automatically.</p>';
+  }
+
+  /* Deep link buttons */
   html += '<div class="import-grid">';
 
   for (var j = 0; j < deepApps.length; j++) {
@@ -860,34 +806,20 @@ function renderImportCard(apps, subUrl, platform, serverName, subQrB64) {
     html += '</div></details>';
   }
 
-  /* Subscription QR — scan to import all protocols at once */
-  if (subQrB64 && isValidBase64(subQrB64)) {
-    html += '<details class="more-options" style="margin-top:8px">';
-    html += '<summary data-t="sub.label">Subscription (auto-update)</summary>';
-    html += '<div style="margin-top:6px">';
-    html += '<p class="card-desc" data-t="sub.desc">Add this URL as a subscription in your app for automatic updates.</p>';
-    html += '<div class="qr" style="margin:8px auto"><img src="data:image/png;base64,' + subQrB64 + '" alt="Subscription QR" loading="lazy"></div>';
-    html += '<div class="sub-url">';
-    html += '<div class="sub-url-value" tabindex="0" role="button" data-action="copy-text">' + escapeHtml(subUrl) + '</div>';
-    html += '</div>';
-    html += '</div></details>';
-  } else {
-    /* Collapsed manual URL fallback */
-    html += '<details class="more-options" style="margin-top:8px">';
-    html += '<summary data-t="import.manual">Copy subscription URL</summary>';
-    html += '<div class="sub-url" style="margin-top:6px">';
-    html += '<div class="sub-url-value" tabindex="0" role="button" data-action="copy-text">' + escapeHtml(subUrl) + '</div>';
-    html += '</div>';
-    html += '</details>';
-  }
+  /* Collapsed subscription URL */
+  html += '<details class="more-options" style="margin-top:8px">';
+  html += '<summary data-t="import.manual">Copy subscription URL</summary>';
+  html += '<div class="sub-url" style="margin-top:6px">';
+  html += '<div class="sub-url-value" tabindex="0" role="button" data-action="copy-text">' + escapeHtml(subUrl) + '</div>';
+  html += '</div>';
+  html += '</details>';
 
   html += '</div>';
   return html;
 }
 
-function renderAppsCard(apps, platform) {
+function renderAppsCard(apps, platform, isReturning) {
   if (!apps || !apps.length) return '';
-  var isReturning = 'serviceWorker' in navigator && navigator.serviceWorker.controller;
 
   var osMap = {
     ios: 'iOS', android: 'Android',
@@ -917,12 +849,11 @@ function renderAppsCard(apps, platform) {
   }
 
   var html = '';
-  if (isReturning) {
-    html += '<details class="more-options"><summary data-t="apps">Client Apps</summary>';
-  }
-  html += '<div class="card">';
-  html += '<div style="font-size:.78rem;font-weight:600;margin-bottom:4px" data-t="apps">Client Apps</div>';
-  html += '<p class="card-desc" data-t="apps.desc">Install one, then tap "One-Tap Import" below.</p>';
+  /* Collapsed for returning visitors, open for first-timers */
+  var openAttr = isReturning ? '' : ' open';
+  html += '<details class="more-options"' + openAttr + '><summary data-t="apps">Client Apps</summary>';
+  html += '<div class="card" style="margin-top:8px">';
+  html += '<p class="card-desc" data-t="apps.desc">Install one, then tap an import button above.</p>';
   html += '<div class="apps">';
 
   for (var j = 0; j < relevant.length; j++) {
@@ -949,7 +880,7 @@ function renderAppsCard(apps, platform) {
   }
 
   html += '</div>';
-  if (isReturning) html += '</details>';
+  html += '</details>';
   return html;
 }
 
