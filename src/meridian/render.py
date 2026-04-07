@@ -131,10 +131,10 @@ def render_hosted_html(
 # App download links — matches website/src/data/apps.json (single source of truth)
 _PWA_APPS = [
     {
-        "name": "v2RayTun",
+        "name": "ShadowRocket",
         "platform": "iOS",
-        "url": "https://apps.apple.com/app/v2raytun/id6476628951",
-        "deeplink": "v2raytun://import/{url_raw}",
+        "url": "https://apps.apple.com/app/shadowrocket/id932747118",
+        "deeplink": "sub://{url_b64}",
     },
     {
         "name": "Streisand",
@@ -143,28 +143,15 @@ _PWA_APPS = [
         "deeplink": "streisand://import/{url}#{name}",
     },
     {
-        "name": "ShadowRocket",
+        "name": "v2RayTun",
         "platform": "iOS",
-        "url": "https://apps.apple.com/app/shadowrocket/id932747118",
-        "deeplink": "sub://{url_b64}",
-    },
-    {
-        "name": "V2Box",
-        "platform": "iOS",
-        "url": "https://apps.apple.com/app/v2box-v2ray-client/id6446814690",
-        "deeplink": "v2box://install-sub?url={url}&name={name}",
-    },
-    {
-        "name": "FoXray",
-        "platform": "iOS",
-        "url": "https://apps.apple.com/app/foxray/id6448898396",
-        "deeplink": "foxray://yiguo.dev/sub/add/?url={url_b64}#{name}",
+        "url": "https://apps.apple.com/app/v2raytun/id6476628951",
+        "deeplink": "v2raytun://import/{url}",
     },
     {
         "name": "v2rayNG",
         "platform": "Android",
         "url": "https://github.com/2dust/v2rayNG/releases/latest",
-        "urls": {"Android": "https://play.google.com/store/apps/details?id=com.v2ray.ang"},
         "deeplink": "v2rayng://install-sub?url={url}&name={name}",
     },
     {
@@ -174,24 +161,20 @@ _PWA_APPS = [
         "deeplink": "sn://subscription?url={url}&name={name}",
     },
     {
-        "name": "Happ",
+        "name": "FlClash",
         "platform": "All platforms",
-        "url": "https://happ.su/",
-        "urls": {
-            "iOS": "https://apps.apple.com/app/happ-proxy-utility/id6504287215",
-            "Android": "https://play.google.com/store/apps/details?id=com.happproxy",
-        },
-        "deeplink": "happ://add/{url_raw}",
+        "url": "https://github.com/chen08209/FlClash/releases/latest",
+        "deeplink": "flclash://install-config?url={url}",
     },
     {
-        "name": "Karing",
+        "name": "sing-box",
         "platform": "All platforms",
-        "url": "https://github.com/KaringX/karing/releases/latest",
+        "url": "https://github.com/SagerNet/sing-box/releases/latest",
         "urls": {
-            "iOS": "https://apps.apple.com/app/karing/id6472431552",
-            "Android": "https://play.google.com/store/apps/details?id=com.nebula.karing",
+            "iOS": "https://apps.apple.com/app/sing-box-vt/id6673731168",
+            "Android": "https://play.google.com/store/apps/details?id=io.nekohasekai.sfa",
         },
-        "deeplink": "karing://install-config?url={url}&name={name}",
+        "deeplink": "sing-box://import-remote-profile?url={url}#{name}",
     },
     {
         "name": "Hiddify",
@@ -204,23 +187,85 @@ _PWA_APPS = [
         "deeplink": "hiddify://install-config/?url={url}",
     },
     {
-        "name": "sing-box",
+        "name": "Karing",
         "platform": "All platforms",
-        "url": "https://github.com/SagerNet/sing-box/releases/latest",
+        "url": "https://github.com/KaringX/karing/releases/latest",
         "urls": {
-            "iOS": "https://apps.apple.com/app/sing-box/id6451272673",
-            "Android": "https://play.google.com/store/apps/details?id=io.nekohasekai.sfa",
+            "iOS": "https://apps.apple.com/app/karing/id6472431552",
+            "Android": "https://play.google.com/store/apps/details?id=com.nebula.karing",
         },
-        "deeplink": "sing-box://import-remote-profile?url={url}#{name}",
+        "deeplink": "karing://install-config?url={url}&name={name}",
     },
     {
-        "name": "FlClash",
+        "name": "V2Box",
         "platform": "All platforms",
-        "url": "https://github.com/chen08209/FlClash/releases/latest",
-        "deeplink": "flclash://install-config?url={url}",
+        "url": "https://apps.apple.com/app/v2box-v2ray-client/id6446814690",
+        "urls": {
+            "iOS": "https://apps.apple.com/app/v2box-v2ray-client/id6446814690",
+            "Android": "https://play.google.com/store/apps/details?id=dev.hexasoftware.v2box",
+        },
+        "deeplink": "v2box://install-sub?url={url_b64}&name={name}",
+    },
+    {
+        "name": "Happ",
+        "platform": "All platforms",
+        "url": "https://happ.su/",
+        "urls": {
+            "iOS": "https://apps.apple.com/app/happ-proxy-utility/id6504287215",
+            "Android": "https://play.google.com/store/apps/details?id=com.happproxy",
+        },
+        "deeplink": "happ://add/{url_raw}",
     },
     {"name": "v2rayN", "platform": "Windows", "url": "https://github.com/2dust/v2rayN/releases/latest"},
+    {
+        "name": "Clash Verge Rev",
+        "platform": "Windows",
+        "url": "https://github.com/clash-verge-rev/clash-verge-rev/releases/latest",
+        "deeplink": "clash://install-config?url={url}",
+    },
 ]
+
+# App icon name mapping: app name → icon filename (without extension).
+# Icons stored as optimized WebP in src/meridian/icons/.
+_APP_ICON_NAMES = {
+    "ShadowRocket": "shadowrocket",
+    "Streisand": "streisand",
+    "v2RayTun": "v2raytun",
+    "v2rayNG": "v2rayng",
+    "NekoBox": "nekobox",
+    "FlClash": "flclash",
+    "sing-box": "sing-box",
+    "Hiddify": "hiddify",
+    "Karing": "karing",
+    "V2Box": "v2box",
+    "Happ": "happ",
+    "v2rayN": "v2rayn",
+    "Clash Verge Rev": "clash-verge-rev",
+}
+
+_app_icons_cache: dict[str, str] | None = None
+
+
+def _load_app_icons() -> dict[str, str]:
+    """Load app icons from package data and return {app_name: data_uri} dict."""
+    global _app_icons_cache
+    if _app_icons_cache is not None:
+        return _app_icons_cache
+
+    from importlib.resources import files
+
+    icons_dir = files("meridian") / "icons"
+    result: dict[str, str] = {}
+    for app_name, filename in _APP_ICON_NAMES.items():
+        resource = icons_dir / f"{filename}.webp"
+        try:
+            data = resource.read_bytes()
+            b64 = base64.b64encode(data).decode()
+            result[app_name] = f"data:image/webp;base64,{b64}"
+        except (FileNotFoundError, OSError):
+            pass
+    _app_icons_cache = result
+    return result
 
 
 def render_config_json(
@@ -280,6 +325,9 @@ def render_config_json(
                     }
                 )
 
+    icons = _load_app_icons()
+    apps = [dict(app, icon=icons[app["name"]]) if app["name"] in icons else app for app in _PWA_APPS]
+
     config = {
         "version": 1,
         "client_name": name,
@@ -287,7 +335,7 @@ def render_config_json(
         "domain": domain,
         "protocols": protocols,
         "relays": relays,
-        "apps": _PWA_APPS,
+        "apps": apps,
         "generated_at": now,
     }
     if server_name:

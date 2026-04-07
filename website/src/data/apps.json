@@ -1,9 +1,9 @@
 [
   {
-    "name": "v2RayTun",
+    "name": "ShadowRocket",
     "platform": "iOS",
-    "url": "https://apps.apple.com/app/v2raytun/id6476628951",
-    "deeplink": "v2raytun://import/{url_raw}"
+    "url": "https://apps.apple.com/app/shadowrocket/id932747118",
+    "deeplink": "sub://{url_b64}"
   },
   {
     "name": "Streisand",
@@ -12,30 +12,15 @@
     "deeplink": "streisand://import/{url}#{name}"
   },
   {
-    "name": "ShadowRocket",
+    "name": "v2RayTun",
     "platform": "iOS",
-    "url": "https://apps.apple.com/app/shadowrocket/id932747118",
-    "deeplink": "sub://{url_b64}"
-  },
-  {
-    "name": "V2Box",
-    "platform": "iOS",
-    "url": "https://apps.apple.com/app/v2box-v2ray-client/id6446814690",
-    "deeplink": "v2box://install-sub?url={url}&name={name}"
-  },
-  {
-    "name": "FoXray",
-    "platform": "iOS",
-    "url": "https://apps.apple.com/app/foxray/id6448898396",
-    "deeplink": "foxray://yiguo.dev/sub/add/?url={url_b64}#{name}"
+    "url": "https://apps.apple.com/app/v2raytun/id6476628951",
+    "deeplink": "v2raytun://import/{url}"
   },
   {
     "name": "v2rayNG",
     "platform": "Android",
     "url": "https://github.com/2dust/v2rayNG/releases/latest",
-    "urls": {
-      "Android": "https://play.google.com/store/apps/details?id=com.v2ray.ang"
-    },
     "deeplink": "v2rayng://install-sub?url={url}&name={name}"
   },
   {
@@ -45,24 +30,20 @@
     "deeplink": "sn://subscription?url={url}&name={name}"
   },
   {
-    "name": "Happ",
+    "name": "FlClash",
     "platform": "All platforms",
-    "url": "https://happ.su/",
-    "urls": {
-      "iOS": "https://apps.apple.com/app/happ-proxy-utility/id6504287215",
-      "Android": "https://play.google.com/store/apps/details?id=com.happproxy"
-    },
-    "deeplink": "happ://add/{url_raw}"
+    "url": "https://github.com/chen08209/FlClash/releases/latest",
+    "deeplink": "flclash://install-config?url={url}"
   },
   {
-    "name": "Karing",
+    "name": "sing-box",
     "platform": "All platforms",
-    "url": "https://github.com/KaringX/karing/releases/latest",
+    "url": "https://github.com/SagerNet/sing-box/releases/latest",
     "urls": {
-      "iOS": "https://apps.apple.com/app/karing/id6472431552",
-      "Android": "https://play.google.com/store/apps/details?id=com.nebula.karing"
+      "iOS": "https://apps.apple.com/app/sing-box-vt/id6673731168",
+      "Android": "https://play.google.com/store/apps/details?id=io.nekohasekai.sfa"
     },
-    "deeplink": "karing://install-config?url={url}&name={name}"
+    "deeplink": "sing-box://import-remote-profile?url={url}#{name}"
   },
   {
     "name": "Hiddify",
@@ -75,24 +56,44 @@
     "deeplink": "hiddify://install-config/?url={url}"
   },
   {
-    "name": "sing-box",
+    "name": "Karing",
     "platform": "All platforms",
-    "url": "https://github.com/SagerNet/sing-box/releases/latest",
+    "url": "https://github.com/KaringX/karing/releases/latest",
     "urls": {
-      "iOS": "https://apps.apple.com/app/sing-box/id6451272673",
-      "Android": "https://play.google.com/store/apps/details?id=io.nekohasekai.sfa"
+      "iOS": "https://apps.apple.com/app/karing/id6472431552",
+      "Android": "https://play.google.com/store/apps/details?id=com.nebula.karing"
     },
-    "deeplink": "sing-box://import-remote-profile?url={url}#{name}"
+    "deeplink": "karing://install-config?url={url}&name={name}"
   },
   {
-    "name": "FlClash",
+    "name": "V2Box",
     "platform": "All platforms",
-    "url": "https://github.com/chen08209/FlClash/releases/latest",
-    "deeplink": "flclash://install-config?url={url}"
+    "url": "https://apps.apple.com/app/v2box-v2ray-client/id6446814690",
+    "urls": {
+      "iOS": "https://apps.apple.com/app/v2box-v2ray-client/id6446814690",
+      "Android": "https://play.google.com/store/apps/details?id=dev.hexasoftware.v2box"
+    },
+    "deeplink": "v2box://install-sub?url={url_b64}&name={name}"
+  },
+  {
+    "name": "Happ",
+    "platform": "All platforms",
+    "url": "https://happ.su/",
+    "urls": {
+      "iOS": "https://apps.apple.com/app/happ-proxy-utility/id6504287215",
+      "Android": "https://play.google.com/store/apps/details?id=com.happproxy"
+    },
+    "deeplink": "happ://add/{url_raw}"
   },
   {
     "name": "v2rayN",
     "platform": "Windows",
     "url": "https://github.com/2dust/v2rayN/releases/latest"
+  },
+  {
+    "name": "Clash Verge Rev",
+    "platform": "Windows",
+    "url": "https://github.com/clash-verge-rev/clash-verge-rev/releases/latest",
+    "deeplink": "clash://install-config?url={url}"
   }
 ]
