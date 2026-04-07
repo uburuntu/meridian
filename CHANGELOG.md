@@ -4,6 +4,15 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.11.2] - 2026-04-07
+
+### Added
+- **Subscription QR code** — connection page now shows a QR code for the subscription URL. Scanning it imports all protocols at once instead of requiring per-protocol QR scans.
+- **Version-level update warnings** — patch updates install silently, minor versions note possible behavior changes, major versions highlight breaking changes and recommend redeploying.
+
+### Fixed
+- **Docker compose on pre-installed Docker** — servers with `docker.io` (not `docker-ce`) lacked the compose plugin. Now detected and installed automatically.
+
 ## [3.11.1] - 2026-04-07
 
 ### Fixed
