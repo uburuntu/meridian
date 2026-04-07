@@ -499,86 +499,23 @@ def _render_stats_script(panel_internal_port: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# InstallNginx (replaces InstallHAProxy + InstallCaddy)
+# InstallNginx — install nginx binary, stream module, and acme.sh
 # ---------------------------------------------------------------------------
 
 
 class InstallNginx:
-    """Install nginx and deploy SNI routing + TLS + web serving configuration.
+    """Install nginx, stream module, and acme.sh.
 
-    Combines the previous InstallHAProxy (SNI routing) and InstallCaddy
-    (TLS termination + web serving) into a single nginx process.
-
-    nginx stream module handles SNI routing on port 443 (no TLS termination).
-    nginx http module handles TLS + reverse proxy + static files on internal port.
-    acme.sh handles certificate issuance and renewal.
-
-    On upgrade from HAProxy+Caddy, stops and disables the old services.
+    Handles upgrade path from old HAProxy+Caddy stack, version
+    requirements (>=1.16), and the nginx.org official repo fallback.
     """
 
     name = "Install nginx"
 
-    def __init__(
-        self,
-        domain: str,
-        reality_sni: str | None = None,
-        reality_backend_port: int | None = None,
-        nginx_internal_port: int = 8443,
-        ws_path: str | None = None,
-        wss_internal_port: int | None = None,
-        panel_web_base_path: str | None = None,
-        panel_internal_port: int | None = None,
-        info_page_path: str | None = None,
-        email: str = "",
-        server_ip: str | None = None,
-        skip_dns_check: bool = False,
-        ip_mode: bool = False,
-        xhttp_path: str | None = None,
-        xhttp_internal_port: int | None = None,
-    ) -> None:
-        self.domain = domain
-        self.reality_sni = reality_sni
-        self.reality_backend_port = reality_backend_port
-        self.nginx_internal_port = nginx_internal_port
-        self.ws_path = ws_path
-        self.wss_internal_port = wss_internal_port
-        self.panel_web_base_path = panel_web_base_path
-        self.panel_internal_port = panel_internal_port
-        self.info_page_path = info_page_path
+    def __init__(self, email: str = "") -> None:
         self.email = email
-        self.server_ip = server_ip
-        self.skip_dns_check = skip_dns_check
-        self.ip_mode = ip_mode
-        self.xhttp_path = xhttp_path
-        self.xhttp_internal_port = xhttp_internal_port
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
-        # Resolve runtime values from context (populated by ConfigurePanel).
-        # None = "not provided by caller, use context". Explicit values
-        # (including falsy ones like 0 or "") are respected as-is.
-        def _r(val, fallback):  # noqa: ANN001, ANN202
-            return val if val is not None else fallback
-
-        panel_web_base_path = _r(self.panel_web_base_path, ctx.get("web_base_path", ""))
-        info_page_path = _r(self.info_page_path, ctx.get("info_page_path", ""))
-        panel_internal_port = _r(self.panel_internal_port, ctx.panel_port)
-        server_ip = _r(self.server_ip, ctx.ip)
-        xhttp_path = _r(self.xhttp_path, ctx.get("xhttp_path", ""))
-        xhttp_internal_port = _r(
-            self.xhttp_internal_port,
-            ctx.xhttp_port if ctx.xhttp_enabled else 0,
-        )
-        ws_path = _r(self.ws_path, ctx.get("ws_path", ""))
-        wss_internal_port = _r(self.wss_internal_port, ctx.wss_port)
-        reality_sni = _r(self.reality_sni, ctx.sni)
-        reality_backend_port = _r(self.reality_backend_port, ctx.reality_port)
-
-        # -- DNS pre-check (domain mode only) --
-        if not self.ip_mode and not self.skip_dns_check:
-            dns_result = _check_domain_dns(conn, self.domain, server_ip)
-            if dns_result is not None:
-                return StepResult(name=self.name, status="failed", detail=dns_result)
-
         # -- Upgrade path: stop old HAProxy and Caddy if present --
         conn.run(
             "systemctl stop haproxy 2>/dev/null; systemctl disable haproxy 2>/dev/null; true",
@@ -645,8 +582,7 @@ class InstallNginx:
             # Ensure keyrings directory exists (missing on Ubuntu < 22.04)
             conn.run("mkdir -p /etc/apt/keyrings && chmod 755 /etc/apt/keyrings", timeout=15)
 
-            # Add nginx.org signing key (download directly like Docker step,
-            # avoiding gpg dependency on minimal images)
+            # Add nginx.org signing key
             result = conn.run(
                 "curl -fsSL https://nginx.org/keys/nginx_signing.key"
                 " -o /etc/apt/keyrings/nginx.asc"
@@ -699,16 +635,10 @@ class InstallNginx:
             )
 
         # -- Ensure stream module is available --
-        # On Ubuntu/Debian, nginx compiles stream as a dynamic module
-        # (--with-stream=dynamic). The .so file ships in libnginx-mod-stream,
-        # which is NOT pulled in by the base nginx package. Install it
-        # unconditionally (apt is idempotent) to cover both fresh installs
-        # and upgrades from HAProxy+Caddy where it was never needed.
         conn.run(
             "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libnginx-mod-stream 2>/dev/null; true",
             timeout=120,
         )
-        # Verify the module .so exists (compile flags ≠ runtime availability)
         check = conn.run(
             "test -f /usr/lib/nginx/modules/ngx_stream_module.so || nginx -V 2>&1 | grep -q 'with-stream '",
             timeout=15,
@@ -729,7 +659,6 @@ class InstallNginx:
         )
 
         # -- Ensure webmanifest MIME type is registered --
-        # nginx doesn't know .webmanifest by default; PWA manifests need it.
         conn.run(
             "grep -q webmanifest /etc/nginx/mime.types || "
             r"sed -i '/^}/i \    application/manifest+json  webmanifest;' /etc/nginx/mime.types",
@@ -751,6 +680,85 @@ class InstallNginx:
                     status="failed",
                     detail=f"Failed to install acme.sh: {result.stderr.strip()}",
                 )
+
+        return StepResult(name=self.name, status="changed")
+
+
+# ---------------------------------------------------------------------------
+# ConfigureNginx — deploy configs, validate, start/reload
+# ---------------------------------------------------------------------------
+
+
+def _resolve_ctx(val: object, fallback: object) -> object:
+    """Resolve a constructor value with context fallback.
+
+    None = "not provided by caller, use context". Explicit values
+    (including falsy ones like 0 or "") are respected as-is.
+    """
+    return val if val is not None else fallback
+
+
+class ConfigureNginx:
+    """Deploy nginx stream + http configs, validate, and start/reload.
+
+    Reads context values set by ConfigurePanel for paths and ports.
+    """
+
+    name = "Configure nginx"
+
+    def __init__(
+        self,
+        domain: str,
+        reality_sni: str | None = None,
+        reality_backend_port: int | None = None,
+        nginx_internal_port: int = 8443,
+        ws_path: str | None = None,
+        wss_internal_port: int | None = None,
+        panel_web_base_path: str | None = None,
+        panel_internal_port: int | None = None,
+        info_page_path: str | None = None,
+        server_ip: str | None = None,
+        skip_dns_check: bool = False,
+        ip_mode: bool = False,
+        xhttp_path: str | None = None,
+        xhttp_internal_port: int | None = None,
+    ) -> None:
+        self.domain = domain
+        self.reality_sni = reality_sni
+        self.reality_backend_port = reality_backend_port
+        self.nginx_internal_port = nginx_internal_port
+        self.ws_path = ws_path
+        self.wss_internal_port = wss_internal_port
+        self.panel_web_base_path = panel_web_base_path
+        self.panel_internal_port = panel_internal_port
+        self.info_page_path = info_page_path
+        self.server_ip = server_ip
+        self.skip_dns_check = skip_dns_check
+        self.ip_mode = ip_mode
+        self.xhttp_path = xhttp_path
+        self.xhttp_internal_port = xhttp_internal_port
+
+    def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
+        # Resolve runtime values from context (populated by ConfigurePanel).
+        panel_web_base_path = _resolve_ctx(self.panel_web_base_path, ctx.get("web_base_path", ""))
+        info_page_path = _resolve_ctx(self.info_page_path, ctx.get("info_page_path", ""))
+        panel_internal_port = _resolve_ctx(self.panel_internal_port, ctx.panel_port)
+        server_ip = _resolve_ctx(self.server_ip, ctx.ip)
+        xhttp_path = _resolve_ctx(self.xhttp_path, ctx.get("xhttp_path", ""))
+        xhttp_internal_port = _resolve_ctx(
+            self.xhttp_internal_port,
+            ctx.xhttp_port if ctx.xhttp_enabled else 0,
+        )
+        ws_path = _resolve_ctx(self.ws_path, ctx.get("ws_path", ""))
+        wss_internal_port = _resolve_ctx(self.wss_internal_port, ctx.wss_port)
+        reality_sni = _resolve_ctx(self.reality_sni, ctx.sni)
+        reality_backend_port = _resolve_ctx(self.reality_backend_port, ctx.reality_port)
+
+        # -- DNS pre-check (domain mode only) --
+        if not self.ip_mode and not self.skip_dns_check:
+            dns_result = _check_domain_dns(conn, self.domain, server_ip)
+            if dns_result is not None:
+                return StepResult(name=self.name, status="failed", detail=dns_result)
 
         # -- Bootstrap: generate self-signed cert so nginx can start --
         check = conn.run("test -f /etc/ssl/meridian/fullchain.pem", timeout=15)
@@ -798,7 +806,6 @@ class InstallNginx:
                 panel_web_base_path=panel_web_base_path,
                 panel_internal_port=panel_internal_port,
                 info_page_path=info_page_path,
-                email=self.email,
                 xhttp_path=xhttp_path,
                 xhttp_internal_port=xhttp_internal_port,
             )
@@ -811,7 +818,6 @@ class InstallNginx:
                 panel_web_base_path=panel_web_base_path,
                 panel_internal_port=panel_internal_port,
                 info_page_path=info_page_path,
-                email=self.email,
                 xhttp_path=xhttp_path,
                 xhttp_internal_port=xhttp_internal_port,
             )
@@ -828,13 +834,8 @@ class InstallNginx:
             )
 
         # -- Ensure nginx.conf has a stream block --
-        # The default nginx.conf only has an http{} block with
-        # include conf.d/*.conf. We need a top-level stream{} block
-        # for SNI routing. Stream config lives in stream.d/ to avoid
-        # being included inside http{} by the default conf.d/*.conf glob.
         check = conn.run("grep -q 'stream {' /etc/nginx/nginx.conf", timeout=15)
         if check.returncode != 0:
-            # Append stream block at the end of nginx.conf (outside http{})
             stream_block = "\\nstream {\\n    include /etc/nginx/stream.d/*.conf;\\n}\\n"
             conn.run(
                 f"printf '{stream_block}' >> /etc/nginx/nginx.conf",
@@ -872,7 +873,41 @@ class InstallNginx:
                 detail=f"Failed to start nginx: {result.stderr.strip()}",
             )
 
-        # -- Issue real TLS certificate via acme.sh --
+        host = server_ip if self.ip_mode else self.domain
+        return StepResult(
+            name=self.name,
+            status="changed",
+            detail=f"nginx configured for {host}:{self.nginx_internal_port}",
+        )
+
+
+# ---------------------------------------------------------------------------
+# IssueTLSCert — issue real TLS certificate via acme.sh
+# ---------------------------------------------------------------------------
+
+
+class IssueTLSCert:
+    """Issue a real TLS certificate via acme.sh and install it.
+
+    Uses the webroot method against the running nginx. On failure, nginx
+    continues running with a self-signed bootstrap cert — Reality VPN
+    works regardless since it uses its own encryption.
+    """
+
+    name = "Issue TLS certificate"
+
+    def __init__(
+        self,
+        domain: str,
+        ip_mode: bool = False,
+        server_ip: str | None = None,
+    ) -> None:
+        self.domain = domain
+        self.ip_mode = ip_mode
+        self.server_ip = server_ip
+
+    def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
+        server_ip = _resolve_ctx(self.server_ip, ctx.ip)
         cert_host = server_ip if self.ip_mode else self.domain
         q_cert_host = shlex.quote(cert_host)
         profile_flag = " --certificate-profile shortlived" if self.ip_mode else ""
@@ -897,22 +932,24 @@ class InstallNginx:
             # Reload to pick up the real cert
             conn.run("systemctl reload nginx", timeout=15)
 
-        host = server_ip if self.ip_mode else self.domain
         if cert_issued:
-            cert_note = "TLS cert issued"
-        else:
-            # ACME failed — server runs with self-signed cert.
-            # Reality VPN works regardless (own encryption), but connection
-            # pages will show browser cert warnings until resolved.
-            cert_note = (
-                "WARNING: TLS cert failed — using self-signed. "
-                "Connection pages will show cert warnings. "
-                "Check port 80 is open and domain resolves correctly"
+            return StepResult(
+                name=self.name,
+                status="changed",
+                detail=f"TLS cert issued for {cert_host}",
             )
+
+        # ACME failed — server runs with self-signed cert.
+        # Reality VPN works regardless (own encryption), but connection
+        # pages will show browser cert warnings until resolved.
         return StepResult(
             name=self.name,
             status="changed",
-            detail=f"nginx configured for {host}:{self.nginx_internal_port} ({cert_note})",
+            detail=(
+                f"WARNING: TLS cert failed for {cert_host} — using self-signed. "
+                "Connection pages will show cert warnings. "
+                "Check port 80 is open and domain resolves correctly"
+            ),
         )
 
 

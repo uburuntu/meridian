@@ -346,8 +346,8 @@ class TestContextKeyConsistency:
             )
 
     def test_nginx_resolves_paths_from_context(self, tmp_path: Path) -> None:
-        """InstallNginx with empty constructor args resolves from ctx."""
-        from meridian.provision.services import InstallNginx
+        """ConfigureNginx with empty constructor args resolves from ctx."""
+        from meridian.provision.services import ConfigureNginx
 
         ctx = ProvisionContext(
             ip="198.51.100.1",
@@ -364,18 +364,17 @@ class TestContextKeyConsistency:
         ctx["ws_path"] = "wspath"
 
         conn = MockConnection()
-        conn.when("dpkg -l nginx", stdout="ii  nginx\n")
         conn.when("systemctl", rc=0)
         conn.when("nginx -t", rc=0)
 
-        # InstallNginx is created with empty paths — must resolve from ctx
-        step = InstallNginx(domain="")
+        # ConfigureNginx is created with empty paths — must resolve from ctx
+        step = ConfigureNginx(domain="")
 
         try:
             step.run(conn, ctx)
         except KeyError as e:
             raise AssertionError(
-                f"InstallNginx couldn't resolve '{e}' from context. ConfigurePanel must set this key."
+                f"ConfigureNginx couldn't resolve '{e}' from context. ConfigurePanel must set this key."
             ) from e
 
         # Verify the resolved paths were used in the nginx config

@@ -67,6 +67,8 @@ class TestMinimalPipeline:
     def test_no_services_without_domain_or_hosted_page(self, base_ctx: ProvisionContext):
         names = step_names(base_ctx)
         assert "Install nginx" not in names
+        assert "Configure nginx" not in names
+        assert "Issue TLS certificate" not in names
         assert "Deploy connection page" not in names
 
 
@@ -105,6 +107,8 @@ class TestDomainMode:
         names = step_names(ctx)
         assert "Create WSS inbound" in names
         assert "Install nginx" in names
+        assert "Configure nginx" in names
+        assert "Issue TLS certificate" in names
         assert "Deploy PWA assets" in names
         assert "Deploy connection page" in names
 
@@ -114,6 +118,8 @@ class TestHostedPage:
         base_ctx.hosted_page = True
         names = step_names(base_ctx)
         assert "Install nginx" in names
+        assert "Configure nginx" in names
+        assert "Issue TLS certificate" in names
         assert "Deploy PWA assets" in names
         assert "Deploy connection page" in names
 
@@ -121,10 +127,10 @@ class TestHostedPage:
 class TestFullPipeline:
     def test_full_pipeline_step_count(self, domain_ctx: ProvisionContext):
         """All flags on: disk check + common(3) + harden(2) + BBR + docker(2) + panel(2)
-        + reality + xhttp + wss + disable logs + verify + nginx + pwa assets + connection page = 19."""
+        + reality + xhttp + wss + disable logs + verify + nginx(3) + pwa assets + connection page = 21."""
         steps = build_setup_steps(domain_ctx)
         names = [s.name for s in steps]
-        assert len(steps) == 19, f"Expected 19 full steps, got {len(steps)}: {names}"
+        assert len(steps) == 21, f"Expected 21 full steps, got {len(steps)}: {names}"
 
 
 class TestStepOrdering:
@@ -148,5 +154,7 @@ class TestStepOrdering:
         assert_before("Disable Xray logs", "Verify Xray configuration")
         # Verify before services
         assert_before("Verify Xray configuration", "Install nginx")
-        assert_before("Install nginx", "Deploy PWA assets")
+        assert_before("Install nginx", "Configure nginx")
+        assert_before("Configure nginx", "Issue TLS certificate")
+        assert_before("Issue TLS certificate", "Deploy PWA assets")
         assert_before("Deploy PWA assets", "Deploy connection page")

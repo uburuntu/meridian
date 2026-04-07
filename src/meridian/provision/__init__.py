@@ -123,22 +123,28 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     # nginx + connection page (domain mode or hosted page)
     if ctx.needs_web_server:
         from meridian.provision.services import (
+            ConfigureNginx,
             DeployConnectionPage,
             DeployPWAAssets,
             InstallNginx,
+            IssueTLSCert,
         )
 
+        steps.append(InstallNginx())
+
         if ctx.domain_mode:
-            steps.append(InstallNginx(domain=ctx.domain, reality_backend_port=ctx.reality_port))
+            steps.append(ConfigureNginx(domain=ctx.domain, reality_backend_port=ctx.reality_port))
+            steps.append(IssueTLSCert(domain=ctx.domain))
         else:
             steps.append(
-                InstallNginx(
+                ConfigureNginx(
                     domain="",
                     ip_mode=True,
                     server_ip=ctx.ip,
                     reality_backend_port=ctx.reality_port,
                 )
             )
+            steps.append(IssueTLSCert(domain="", ip_mode=True, server_ip=ctx.ip))
 
         steps.append(DeployPWAAssets())
         steps.append(DeployConnectionPage(server_ip=ctx.ip))

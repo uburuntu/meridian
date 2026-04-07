@@ -5,9 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from meridian.provision.services import (
+    ConfigureNginx,
     DeployConnectionPage,
     DeployPWAAssets,
     InstallNginx,
+    IssueTLSCert,
     _render_nginx_http_config,
     _render_nginx_ip_config,
     _render_nginx_stream_config,
@@ -683,35 +685,71 @@ class TestNginxFingerprinting:
 
 
 class TestInstallNginx:
-    def test_already_installed_deploys_config(self, tmp_path: Path):
+    def test_already_installed_succeeds(self, tmp_path: Path):
         conn = MockConnection()
         # nginx installed, stream module available
         conn.when("dpkg -l nginx", stdout="ii  nginx")
         conn.when("nginx -V", stdout="--with-stream_ssl_preread_module")
         # acme.sh installed
         conn.when("test -f /root/.acme.sh/acme.sh", stdout="", rc=0)
-        # cert exists
-        conn.when("test -f /etc/ssl/meridian/fullchain.pem", stdout="", rc=0)
         # All other commands succeed
         conn.when("mkdir", stdout="")
         conn.when("chown", stdout="")
+        conn.when("rm -f", stdout="")
+        # Stop old services
+        conn.when("systemctl stop haproxy", stdout="")
+        conn.when("systemctl stop caddy", stdout="")
+        conn.when("systemctl", stdout="")
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = InstallNginx()
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+
+
+# ---------------------------------------------------------------------------
+# ConfigureNginx step
+# ---------------------------------------------------------------------------
+
+
+class TestConfigureNginx:
+    def test_deploys_config(self, tmp_path: Path):
+        conn = MockConnection()
+        # cert exists
+        conn.when("test -f /etc/ssl/meridian/fullchain.pem", stdout="", rc=0)
+        # All other commands succeed
         conn.when("printf", stdout="")
         conn.when("grep", stdout="stream {", rc=0)
         conn.when("rm -f", stdout="")
         conn.when("nginx -t", stdout="syntax is ok")
         conn.when("systemctl", stdout="")
-        # acme.sh issue (cert already valid)
-        conn.when("acme.sh --issue", stdout="", rc=2)
-        conn.when("acme.sh --install-cert", stdout="")
-        # Stop old services
-        conn.when("systemctl stop haproxy", stdout="")
-        conn.when("systemctl stop caddy", stdout="")
+        conn.when("mkdir", stdout="")
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
-        step = InstallNginx(domain="", ip_mode=True, server_ip="198.51.100.1")
+        step = ConfigureNginx(domain="", ip_mode=True, server_ip="198.51.100.1")
         result = step.run(conn, ctx)
         assert result.status == "changed"
         assert "nginx" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# IssueTLSCert step
+# ---------------------------------------------------------------------------
+
+
+class TestIssueTLSCert:
+    def test_cert_already_valid(self, tmp_path: Path):
+        conn = MockConnection()
+        # acme.sh issue (cert already valid)
+        conn.when("acme.sh --issue", stdout="", rc=2)
+        conn.when("acme.sh --install-cert", stdout="")
+        conn.when("systemctl", stdout="")
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = IssueTLSCert(domain="", ip_mode=True, server_ip="198.51.100.1")
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+        assert "TLS cert issued" in result.detail
 
 
 # ---------------------------------------------------------------------------
