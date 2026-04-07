@@ -7,6 +7,7 @@ Certificate management via acme.sh.
 
 from __future__ import annotations
 
+import re
 import shlex
 import textwrap
 
@@ -619,20 +620,83 @@ class InstallNginx:
             timeout=15,
         )
 
-        # -- Check if nginx is already installed --
+        # -- Check if nginx is already installed and meets version requirement --
         check = conn.run("dpkg -l nginx 2>/dev/null | grep -q '^ii'", timeout=15)
         already_installed = check.returncode == 0
+        needs_official_repo = False
 
-        if not already_installed:
+        if already_installed:
+            ver_check = conn.run("nginx -v 2>&1", timeout=15)
+            ver_output = ver_check.stdout + ver_check.stderr
+            m = re.search(r"nginx/(\d+)\.(\d+)", ver_output)
+            if m and (int(m.group(1)), int(m.group(2))) < (1, 16):
+                needs_official_repo = True
+        else:
+            # Not installed — try distro repo first, upgrade if too old
             result = conn.run(
                 "DEBIAN_FRONTEND=noninteractive apt-get install -y nginx",
+                timeout=180,
+            )
+            if result.returncode != 0:
+                # Distro install failed — fall through to official repo
+                needs_official_repo = True
+            else:
+                ver_check = conn.run("nginx -v 2>&1", timeout=15)
+                ver_output = ver_check.stdout + ver_check.stderr
+                m = re.search(r"nginx/(\d+)\.(\d+)", ver_output)
+                if m and (int(m.group(1)), int(m.group(2))) < (1, 16):
+                    needs_official_repo = True
+
+        if needs_official_repo:
+            # Install from official nginx.org repo (mirrors Docker pattern)
+            distro = conn.run("bash -c '. /etc/os-release && echo $ID'", timeout=15)
+            distro_name = distro.stdout.strip().lower() if distro.returncode == 0 else "ubuntu"
+
+            codename = conn.run("bash -c '. /etc/os-release && echo $VERSION_CODENAME'", timeout=15)
+            distro_codename = codename.stdout.strip() if codename.returncode == 0 else "jammy"
+
+            # Add nginx.org signing key
+            result = conn.run(
+                "curl -fsSL https://nginx.org/keys/nginx_signing.key"
+                " | gpg --dearmor -o /etc/apt/keyrings/nginx.gpg"
+                " && chmod 644 /etc/apt/keyrings/nginx.gpg",
+                timeout=60,
+            )
+            if result.returncode != 0:
+                return StepResult(
+                    name=self.name,
+                    status="failed",
+                    detail=f"Failed to add nginx signing key: {result.stderr.strip()[:200]}",
+                )
+
+            # Add nginx.org stable repo
+            repo_line = (
+                f"deb [signed-by=/etc/apt/keyrings/nginx.gpg] "
+                f"https://nginx.org/packages/{distro_name} "
+                f"{distro_codename} nginx"
+            )
+            conn.run(
+                f"echo {shlex.quote(repo_line)} > /etc/apt/sources.list.d/nginx-official.list",
+                timeout=15,
+            )
+
+            # Pin official repo higher to override distro packages
+            conn.run(
+                "printf 'Package: *\\nPin: origin nginx.org\\nPin: release o=nginx\\n"
+                "Pin-Priority: 900\\n' > /etc/apt/preferences.d/99nginx",
+                timeout=15,
+            )
+
+            result = conn.run(
+                "DEBIAN_FRONTEND=noninteractive apt-get update -qq"
+                " && DEBIAN_FRONTEND=noninteractive apt-get install -y nginx",
                 timeout=180,
             )
             if result.returncode != 0:
                 return StepResult(
                     name=self.name,
                     status="failed",
-                    detail=f"Failed to install nginx: {result.stderr.strip()}",
+                    detail=f"Failed to install nginx from official repo: {result.stderr.strip()[:200]}",
                 )
 
         # -- Ensure stream module is available --
