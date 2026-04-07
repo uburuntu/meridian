@@ -68,6 +68,31 @@ meridian client list --server finland
 
 If you have only one server, it's auto-selected.
 
+## Where credentials are stored
+
+When you run `meridian deploy` from your laptop, Meridian saves server credentials locally:
+
+```
+~/.meridian/credentials/<IP>/proxy.yml   # keys, UUIDs, panel access
+~/.meridian/servers                      # server registry
+```
+
+On the server itself, the same data lives in `/etc/meridian/proxy.yml`. Meridian syncs between them automatically after `client add` and `client remove`.
+
+This is why `meridian client add alice` works without specifying the server — Meridian looks it up in the local registry. If you have multiple servers, use `--server NAME`.
+
+If credentials get out of sync (e.g. you added a client from a different machine), `client show` will recover the data from the server panel automatically.
+
+## Web panel
+
+Meridian deploys a 3x-ui management panel for traffic monitoring. Access it at the secret HTTPS path shown in your credentials:
+
+```
+cat ~/.meridian/credentials/<IP>/proxy.yml | grep -A5 panel
+```
+
+The panel URL, username, and password are listed there. No SSH tunnel needed — nginx reverse-proxies the panel at a randomized HTTPS path.
+
 ## How it works
 
 Client names map to 3x-ui `email` fields with protocol prefixes:

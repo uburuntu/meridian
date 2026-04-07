@@ -18,7 +18,7 @@ We aim to respond within 48 hours and will credit reporters in the fix.
 ## Security design
 
 - **Credentials**: stored with `0600` permissions, secrets never passed through shell commands without `shlex.quote()`, redacted from `meridian doctor` output
-- **Panel access**: reverse-proxied by nginx at a secret HTTPS path in all modes — no SSH tunnel required
+- **Panel access**: reverse-proxied by nginx at a secret HTTPS path in all modes — no SSH tunnel required. Panel URL and credentials are in `~/.meridian/credentials/<IP>/proxy.yml`
 - **SSH**: password authentication disabled by default
 - **Firewall**: UFW configured with deny-all-incoming, only ports 22, 80, and 443 opened
 - **Docker**: 3x-ui image pinned to a tested version

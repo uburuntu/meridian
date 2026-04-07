@@ -30,6 +30,9 @@ meridian deploy 1.2.3.4 --sni www.microsoft.com --name alice --yes
 | `--icon EMOJI_OR_URL` | (нет) | Значок сервера — эмодзи или URL изображения |
 | `--color PALETTE` | ocean | Цветовая палитра (ocean/sunset/forest/lavender/rose/slate) |
 | `--user USER` | root | SSH пользователь (не-root получает sudo автоматически) |
+| `--harden / --no-harden` | включено | Закалка сервера: только SSH-ключи + firewall (пропустите с `--no-harden` если на сервере другие сервисы) |
+| `--server NAME` | | Указать конкретный сервер (для повторных deploy) |
+| `--decoy MODE` | none | Ответ-обманка для неизвестных путей (`none` / `403`) |
 | `--yes` | | Пропустить подтверждающие подсказки |
 
 ## Брендирование
@@ -88,6 +91,24 @@ meridian deploy 1.2.3.4 --user ubuntu
 ```
 
 Не-root пользователи получают `sudo` автоматически. Пользователь должен иметь доступ к sudo без пароля.
+
+## Локальное развёртывание
+
+Если вы запускаете Meridian прямо на сервере (залогинены по SSH под root):
+
+```
+meridian deploy local
+```
+
+SSH пропускается, все команды выполняются локально. Ключевое слово `local` работает со всеми командами:
+
+```
+meridian client add alice local
+meridian preflight local
+meridian scan local
+```
+
+Полезно когда SSH на себя не работает (нет ключей, правила firewall), для повторного развёртывания на том же сервере, или в cloud-init скриптах.
 
 ## Добавление релейного узла
 

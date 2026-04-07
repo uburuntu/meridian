@@ -68,6 +68,31 @@ meridian client list --server finland
 
 如果您只有一个服务器，它会自动选择。
 
+## 凭证存储位置
+
+当您从笔记本电脑运行 `meridian deploy` 时，Meridian 会在本地保存服务器凭证：
+
+```
+~/.meridian/credentials/<IP>/proxy.yml   # 密钥、UUID、面板访问
+~/.meridian/servers                      # 服务器注册表
+```
+
+在服务器上，相同的数据存储在 `/etc/meridian/proxy.yml`。Meridian 在 `client add` 和 `client remove` 后自动同步。
+
+因此 `meridian client add alice` 不需要指定服务器 — Meridian 会在本地注册表中查找。如果有多个服务器，使用 `--server NAME`。
+
+如果凭证不同步（例如从另一台机器添加了客户端），`client show` 会自动从服务器面板恢复数据。
+
+## Web 管理面板
+
+Meridian 部署 3x-ui 管理面板用于流量监控。通过凭证中显示的秘密 HTTPS 路径访问：
+
+```
+cat ~/.meridian/credentials/<IP>/proxy.yml | grep -A5 panel
+```
+
+面板 URL、用户名和密码列在其中。不需要 SSH 隧道 — nginx 通过随机 HTTPS 路径反向代理面板。
+
 ## 工作原理
 
 客户端名称映射到带有协议前缀的 3x-ui `email` 字段：
