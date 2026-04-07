@@ -274,21 +274,12 @@ def run_add(
         )
         creds.save(resolved.creds_dir / "proxy.yml")
 
-        # Find XHTTP port for URL building
-        xhttp_proto = get_protocol("xhttp")
-        xhttp_port = 0
-        if xhttp_proto is not None:
-            xhttp_ib = xhttp_proto.find_inbound(inbounds)
-            if xhttp_ib is not None:
-                xhttp_port = xhttp_ib.port
-
         # Generate output files
         protocol_urls = build_protocol_urls(
             name=name,
             reality_uuid=reality_uuid,
             wss_uuid=wss_uuid,
             creds=creds,
-            xhttp_port=xhttp_port,
         )
 
         # Build relay URL sets (if exit has relays)

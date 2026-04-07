@@ -18,8 +18,6 @@ def build_protocol_urls(
     reality_uuid: str,
     wss_uuid: str,
     creds: ServerCredentials,
-    *,
-    xhttp_port: int = 0,
 ) -> list[ProtocolURL]:
     """Build VLESS connection URLs for a client across all active protocols.
 
@@ -33,8 +31,6 @@ def build_protocol_urls(
         reality_uuid: UUID for Reality and XHTTP connections.
         wss_uuid: UUID for WSS connection (empty if not domain mode).
         creds: Server credentials with protocol configs.
-        xhttp_port: XHTTP inbound port (0 = no XHTTP). Kept for legacy
-            callers; the XHTTP path is read from creds.xhttp.xhttp_path.
 
     Returns:
         Ordered list of ``ProtocolURL`` objects, one per active protocol.
@@ -65,7 +61,7 @@ def build_protocol_urls(
         if key == "reality":
             url = proto.build_url(reality_uuid, name, **reality_kwargs)
         elif key == "xhttp":
-            if xhttp_path or xhttp_port > 0:
+            if xhttp_path:
                 url = proto.build_url(
                     reality_uuid,
                     name,
