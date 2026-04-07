@@ -11,6 +11,7 @@ import typer
 from meridian.commands.resolve import (
     _check_version_mismatch,
     _warned_servers,
+    fetch_credentials,
     is_local_keyword,
     resolve_server,
 )
@@ -284,3 +285,17 @@ class TestVersionMismatchCheck:
         with patch("meridian.__version__", "3.5.7"):
             _check_version_mismatch("1.2.3.4", proxy)
         assert "1.2.3.4" not in _warned_servers
+
+
+class TestFetchCredentials:
+    """fetch_credentials edge cases."""
+
+    def test_permission_error_on_mkdir_returns_false(self, servers_file: Path) -> None:
+        """Non-root on server: mkdir on /etc/meridian raises PermissionError."""
+        reg = ServerRegistry(servers_file)
+        resolved = resolve_server(reg, explicit_ip="198.51.100.1")
+
+        with patch.object(type(resolved.creds_dir), "mkdir", side_effect=PermissionError):
+            result = fetch_credentials(resolved)
+
+        assert result is False
