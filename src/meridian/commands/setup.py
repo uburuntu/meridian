@@ -36,6 +36,7 @@ def run(
     color: str = "",
     decoy: str = "",
     pq: bool = False,
+    warp: bool = False,
 ) -> None:
     """Deploy a VLESS+Reality proxy server."""
     # --decoy is deprecated (403/404 is now always the default).
@@ -83,9 +84,10 @@ def run(
             icon=icon,
             color=color,
             pq=pq,
+            warp=warp,
         )
         server_ip, ssh_user, sni, domain, harden = wizard_result[:5]
-        client_name, server_name, icon, color, pq = wizard_result[5:]
+        client_name, server_name, icon, color, pq, warp = wizard_result[5:]
 
     # Validate IP (skip for 'local' keyword — resolve_server handles it)
     if not is_local_keyword(server_ip) and not is_ipv4(server_ip):
@@ -155,7 +157,7 @@ def run(
             )
         creds.save(proxy_file)
 
-    _run_provisioner(resolved, domain, sni, client_name, harden, pq=pq)
+    _run_provisioner(resolved, domain, sni, client_name, harden, pq=pq, warp=warp)
 
     # Register server
     registry.add(ServerEntry(host=resolved.ip, user=resolved.user))
@@ -177,7 +179,8 @@ def _interactive_wizard(
     icon: str = "",
     color: str = "",
     pq: bool = False,
-) -> tuple[str, str, str, str, bool, str, str, str, str, bool]:
+    warp: bool = False,
+) -> tuple[str, str, str, str, bool, str, str, str, str, bool, bool]:
     """Interactive deployment wizard.
 
     Returns (ip, user, sni, domain, harden,
@@ -261,8 +264,10 @@ def _interactive_wizard(
     if not sni:
         err_console.print()
         err_console.print("  [bold]Camouflage target[/bold]")
-        err_console.print("  [dim]Your server pretends to be a real website. Targets on the[/dim]")
-        err_console.print("  [dim]same network are hardest for censors to distinguish.[/dim]")
+        err_console.print("  [dim]Pick any popular website (you don't need to own it).[/dim]")
+        err_console.print("  [dim]Your server will impersonate it — censors probing see[/dim]")
+        err_console.print("  [dim]that real site's certificate. Scanning finds targets on[/dim]")
+        err_console.print("  [dim]the same network, which are hardest to distinguish.[/dim]")
         err_console.print()
 
         # Check for previously scanned SNI
@@ -459,6 +464,35 @@ def _interactive_wizard(
         if choice == 2:
             pq = True
 
+    # --- Cloudflare WARP ---
+    if not yes and not warp:
+        err_console.print()
+        err_console.print("  [bold]Cloudflare WARP[/bold] [dim](optional)[/dim]")
+        err_console.print("  [dim]Routes outgoing traffic through Cloudflare so websites[/dim]")
+        err_console.print("  [dim]see a Cloudflare IP, not your server's real IP.[/dim]")
+        err_console.print()
+        err_console.print("  [dim]Useful when:[/dim]")
+        err_console.print("  [dim]  • Websites block datacenter/VPS IP ranges[/dim]")
+        err_console.print("  [dim]  • You want to hide the VPS IP from destination sites[/dim]")
+        err_console.print()
+        err_console.print("  [dim]Not needed when:[/dim]")
+        err_console.print("  [dim]  • Normal browsing already works fine through the proxy[/dim]")
+        err_console.print("  [dim]  • You want maximum speed (WARP adds an extra hop)[/dim]")
+        err_console.print()
+        err_console.print("  [dim]Technical: installs cloudflare-warp on the server in SOCKS5[/dim]")
+        err_console.print("  [dim]proxy mode. Only outgoing proxy traffic is routed through[/dim]")
+        err_console.print("  [dim]WARP — incoming connections (SSH, etc.) are unaffected.[/dim]")
+        err_console.print()
+        choice = choose(
+            "Choose",
+            [
+                "No \u2014 direct connection [dim](default, fastest)[/dim]",
+                "Yes \u2014 route through Cloudflare WARP",
+            ],
+        )
+        if choice == 2:
+            warp = True
+
     # --- Summary panel ---
     from rich.panel import Panel
 
@@ -469,6 +503,10 @@ def _interactive_wizard(
     encryption_line = ""
     if pq:
         encryption_line = "\nEncryption: Post-quantum (ML-KEM-768 hybrid) [dim]experimental[/dim]"
+
+    warp_line = ""
+    if warp:
+        warp_line = "\nWARP:       Outgoing traffic via Cloudflare"
 
     icon_display = icon if icon and not icon.startswith("data:") else ""
     branding_line = ""
@@ -492,6 +530,7 @@ def _interactive_wizard(
         f"Client:     {client_name}\n"
         f"Mode:       {'Domain mode (best stealth + CDN fallback)' if domain else 'IP-only (works without a domain)'}"
         f"{encryption_line}"
+        f"{warp_line}"
         f"{branding_line}"
     )
 
@@ -507,7 +546,7 @@ def _interactive_wizard(
             confirm(f"Deploy to {ssh_user}@{server_ip}?")
     err_console.print()
 
-    return server_ip, ssh_user, sni, domain, harden, client_name, server_name, icon, color, pq
+    return server_ip, ssh_user, sni, domain, harden, client_name, server_name, icon, color, pq, warp
 
 
 def _run_provisioner(
@@ -518,6 +557,7 @@ def _run_provisioner(
     harden: bool = True,
     *,
     pq: bool = False,
+    warp: bool = False,
 ) -> None:
     """Run the Python provisioner pipeline."""
     from meridian.provision import ProvisionContext, Provisioner, build_setup_steps
@@ -529,6 +569,7 @@ def _run_provisioner(
         sni=sni or DEFAULT_SNI,
         xhttp_enabled=True,
         pq_encryption=pq,
+        warp=warp,
         hosted_page=True,  # always serve connection pages on server
         harden=harden,
         creds_dir=str(resolved.creds_dir),
@@ -576,6 +617,8 @@ def _run_provisioner(
         info(f"SNI: {sni}")
     if pq:
         info("Post-quantum encryption: enabled (experimental)")
+    if warp:
+        info("Cloudflare WARP: enabled")
     err_console.print()
 
     steps = build_setup_steps(ctx)
