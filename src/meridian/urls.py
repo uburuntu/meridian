@@ -209,7 +209,7 @@ def generate_qr_base64(url: str) -> str:
     try:
         qr = segno.make(url)
         buf = io.BytesIO()
-        qr.save(buf, kind="png", scale=6)
+        qr.save(buf, kind="png", scale=12)
         return base64.b64encode(buf.getvalue()).decode("ascii")
     except Exception:
         return ""
