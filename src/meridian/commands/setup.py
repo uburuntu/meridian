@@ -694,6 +694,13 @@ def _print_success(resolved: ResolvedServer, client_name: str, domain: str) -> N
 
     err_console.print()
     line()
+
+    # Panel access for advanced users
+    if proxy_file.exists() and creds.panel.url and creds.panel.username:
+        err_console.print(f"\n  [dim]3x-ui panel (advanced — monitor traffic, manage inbounds):[/dim]")
+        err_console.print(f"  [dim]  {creds.panel.url}[/dim]")
+        err_console.print(f"  [dim]  {creds.panel.username} / {creds.panel.password}[/dim]")
+
     err_console.print("\n  [dim]Feedback & issues: https://github.com/uburuntu/meridian/issues[/dim]\n")
 
 
