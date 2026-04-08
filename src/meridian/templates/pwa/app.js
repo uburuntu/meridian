@@ -220,24 +220,9 @@ function tryOpenIOS(index) {
  * ----------------------------------------------------------------------- */
 function copyToClipboard(text) {
   if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(showToast).catch(function() {
-      fallbackCopy(text);
-    });
-  } else {
-    fallbackCopy(text);
+    navigator.clipboard.writeText(text).then(showToast);
   }
   if ('vibrate' in navigator) navigator.vibrate(30);
-}
-
-function fallbackCopy(text) {
-  var ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.cssText = 'position:fixed;opacity:0';
-  document.body.appendChild(ta);
-  ta.select();
-  document.execCommand('copy');
-  document.body.removeChild(ta);
-  showToast();
 }
 
 function showToast() {

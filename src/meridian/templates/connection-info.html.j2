@@ -292,7 +292,6 @@ body{
 function cp(el){
   var u=el.getAttribute('data-url');if(!u)return;
   if(navigator.clipboard)navigator.clipboard.writeText(u).then(flash);
-  else{var t=document.createElement('textarea');t.value=u;t.style.cssText='position:fixed;opacity:0';document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);flash()}
 }
 function flash(){var t=document.getElementById('toast');t.classList.add('show');setTimeout(function(){t.classList.remove('show')},1200)}
 /* i18n — auto-detect browser language */
