@@ -263,6 +263,42 @@ class HardenSSH:
         return StepResult(name=self.name, status="changed")
 
 
+class ConfigureFail2ban:
+    """Install and enable fail2ban with sshd jail for brute-force protection."""
+
+    name = "Configure fail2ban"
+
+    def run(self, conn: ServerConnection, ctx: StepContext) -> StepResult:
+        check = conn.run("which fail2ban-server 2>/dev/null", timeout=15)
+        installed = check.returncode == 0
+
+        if not installed:
+            result = conn.run(
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq fail2ban",
+                timeout=120,
+            )
+            if result.returncode != 0:
+                return StepResult(
+                    name=self.name,
+                    status="failed",
+                    detail=f"apt-get install failed: {result.stderr.strip()[:200]}",
+                )
+
+        # Ensure service is enabled and running
+        conn.run("systemctl enable fail2ban", timeout=15)
+        start = conn.run("systemctl restart fail2ban", timeout=30)
+        if start.returncode != 0:
+            return StepResult(
+                name=self.name,
+                status="failed",
+                detail=f"failed to start fail2ban: {start.stderr.strip()[:200]}",
+            )
+
+        if not installed:
+            return StepResult(name=self.name, status="changed", detail="installed and started")
+        return StepResult(name=self.name, status="ok", detail="already installed")
+
+
 class ConfigureBBR:
     """Enable BBR congestion control via sysctl."""
 

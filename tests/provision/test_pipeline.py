@@ -77,12 +77,13 @@ class TestHardenSteps:
         names_without = step_names(base_ctx)
         base_ctx.harden = True
         names_with = step_names(base_ctx)
-        # harden=True replaces EnsurePort443 with HardenSSH + ConfigureFirewall (+1 net)
+        # harden=True replaces EnsurePort443 with HardenSSH + ConfigureFail2ban + ConfigureFirewall (+2 net)
         assert "Harden SSH configuration" in names_with
+        assert "Configure fail2ban" in names_with
         assert "Configure firewall" in names_with
         assert "Ensure port 443" not in names_with
         assert "Ensure port 443" in names_without
-        assert len(names_with) == len(names_without) + 1
+        assert len(names_with) == len(names_without) + 2
 
 
 class TestXHTTPStep:
@@ -126,12 +127,12 @@ class TestHostedPage:
 
 class TestFullPipeline:
     def test_full_pipeline_step_count(self, domain_ctx: ProvisionContext):
-        """All flags on: disk check + common(3) + harden(2) + BBR + docker(2) + panel(2)
+        """All flags on: disk check + common(3) + harden(3) + BBR + docker(2) + panel(2)
         + reality + xhttp + wss + disable logs + geo-blocking + verify
-        + nginx(3) + pwa assets + connection page = 22."""
+        + nginx(3) + pwa assets + connection page = 23."""
         steps = build_setup_steps(domain_ctx)
         names = [s.name for s in steps]
-        assert len(steps) == 22, f"Expected 22 full steps, got {len(steps)}: {names}"
+        assert len(steps) == 23, f"Expected 23 full steps, got {len(steps)}: {names}"
 
 
 class TestStepOrdering:

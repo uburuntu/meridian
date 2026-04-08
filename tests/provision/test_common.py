@@ -10,6 +10,7 @@ from meridian.provision.common import (
     _AUTO_UPGRADES_CONF,
     REQUIRED_PACKAGES,
     ConfigureBBR,
+    ConfigureFail2ban,
     ConfigureFirewall,
     EnableAutoUpgrades,
     HardenSSH,
@@ -155,6 +156,56 @@ class TestHardenSSH:
 
         assert result.status == "failed"
         assert "validation failed" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# ConfigureFail2ban
+# ---------------------------------------------------------------------------
+
+
+class TestConfigureFail2ban:
+    def test_already_installed_returns_ok(self, mock_conn: MockConnection, base_ctx):
+        """When fail2ban is already installed and running, status is ok."""
+        mock_conn.when("which fail2ban-server", rc=0)
+        mock_conn.when("systemctl enable fail2ban", rc=0)
+        mock_conn.when("systemctl restart fail2ban", rc=0)
+
+        result = ConfigureFail2ban().run(mock_conn, base_ctx)
+
+        assert result.status == "ok"
+
+    def test_installs_when_missing_returns_changed(self, mock_conn: MockConnection, base_ctx):
+        """When fail2ban is not installed, it is installed and started."""
+        mock_conn.when("which fail2ban-server", rc=1)
+        mock_conn.when("apt-get install", rc=0)
+        mock_conn.when("systemctl enable fail2ban", rc=0)
+        mock_conn.when("systemctl restart fail2ban", rc=0)
+
+        result = ConfigureFail2ban().run(mock_conn, base_ctx)
+
+        assert result.status == "changed"
+        mock_conn.assert_called_with_pattern("apt-get install")
+
+    def test_install_failure_returns_failed(self, mock_conn: MockConnection, base_ctx):
+        """When apt-get install fails, status is failed."""
+        mock_conn.when("which fail2ban-server", rc=1)
+        mock_conn.when("apt-get install", rc=1, stderr="E: Unable to locate package")
+
+        result = ConfigureFail2ban().run(mock_conn, base_ctx)
+
+        assert result.status == "failed"
+        assert "apt-get install failed" in result.detail
+
+    def test_service_start_failure_returns_failed(self, mock_conn: MockConnection, base_ctx):
+        """When systemctl restart fails, status is failed."""
+        mock_conn.when("which fail2ban-server", rc=0)
+        mock_conn.when("systemctl enable fail2ban", rc=0)
+        mock_conn.when("systemctl restart fail2ban", rc=1, stderr="Unit not found")
+
+        result = ConfigureFail2ban().run(mock_conn, base_ctx)
+
+        assert result.status == "failed"
+        assert "failed to start" in result.detail
 
 
 # ---------------------------------------------------------------------------

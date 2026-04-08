@@ -63,6 +63,8 @@ class Uninstall:
             # UFW rules
             "ufw delete allow 443/tcp 2>/dev/null; true",
             "ufw delete allow 80/tcp 2>/dev/null; true",
+            # fail2ban
+            "systemctl stop fail2ban 2>/dev/null; systemctl disable fail2ban 2>/dev/null; true",
         ]
 
         # XHTTP port cleanup

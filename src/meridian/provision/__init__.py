@@ -26,6 +26,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     from meridian.provision.common import (
         CheckDiskSpace,
         ConfigureBBR,
+        ConfigureFail2ban,
         ConfigureFirewall,
         EnableAutoUpgrades,
         EnsurePort443,
@@ -57,6 +58,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     # Server hardening (optional — skip for shared servers with existing services)
     if ctx.harden:
         steps.append(HardenSSH())
+        steps.append(ConfigureFail2ban())
 
     steps.extend(
         [
