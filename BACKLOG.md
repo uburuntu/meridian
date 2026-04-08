@@ -58,15 +58,15 @@ Things that require human action outside the codebase.
 
 - [ ] **SSH password auth not hardened during provisioning** — cloud-init drops `PasswordAuthentication yes` in `/etc/ssh/sshd_config.d/`, overriding main config. Provisioner should disable password auth and restart sshd after confirming key access works
 - [x] **`manifest.webmanifest.j2` no autoescape** — client name with `"` breaks JSON
-- [ ] **SW cache never invalidates** — hardcoded `CACHE_VERSION`. Embed hash during deployment
+- [x] **SW cache never invalidates** — hardcoded `CACHE_VERSION`. Embed hash during deployment
 - [x] **Silent template failures return `""`** — catch bare `Exception`, deploy empty HTML
 - [x] **`_sync_credentials_to_server()` ignores SCP failures** — credentials silently not synced
-- [ ] **Wizard no SSH user validation** — shell metacharacters accepted (injection risk)
+- [x] **Wizard no SSH user validation** — shell metacharacters accepted (injection risk)
 
 ### Anti-censorship
 
 - [ ] **Default SNI `www.microsoft.com` monitored** — ASN mismatch detection. Make `meridian scan` the default
-- [ ] **`spiderX: "/"` hardcoded** — fingerprint-able. Randomize or derive from camouflage target
+- [x] **`spiderX: "/"` hardcoded** — fingerprint-able. Randomize or derive from camouflage target
 
 ### Product
 
@@ -119,7 +119,7 @@ Things that require human action outside the codebase.
 
 ### Reliability
 
-- [ ] **SSH `ConnectTimeout=5` too aggressive** — increase to 10s or add retry
+- [x] **SSH `ConnectTimeout=5` too aggressive** — increase to 10s or add retry
 - [ ] **`_wait_for_panel` SSH vs panel confusion** — polling breaks on transient SSH issues
 
 ### UX
