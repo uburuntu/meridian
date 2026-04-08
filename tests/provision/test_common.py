@@ -164,15 +164,25 @@ class TestHardenSSH:
 
 
 class TestConfigureFail2ban:
-    def test_already_installed_returns_ok(self, mock_conn: MockConnection, base_ctx):
-        """When fail2ban is already installed and running, status is ok."""
+    def test_already_running_returns_ok(self, mock_conn: MockConnection, base_ctx):
+        """When fail2ban is installed and active, status is ok without restart."""
         mock_conn.when("which fail2ban-server", rc=0)
+        mock_conn.when("systemctl is-active fail2ban", stdout="active")
+
+        result = ConfigureFail2ban().run(mock_conn, base_ctx)
+
+        assert result.status == "ok"
+
+    def test_installed_but_stopped_restarts(self, mock_conn: MockConnection, base_ctx):
+        """When fail2ban is installed but not running, it is restarted."""
+        mock_conn.when("which fail2ban-server", rc=0)
+        mock_conn.when("systemctl is-active fail2ban", rc=3, stdout="inactive")
         mock_conn.when("systemctl enable fail2ban", rc=0)
         mock_conn.when("systemctl restart fail2ban", rc=0)
 
         result = ConfigureFail2ban().run(mock_conn, base_ctx)
 
-        assert result.status == "ok"
+        assert result.status == "changed"
 
     def test_installs_when_missing_returns_changed(self, mock_conn: MockConnection, base_ctx):
         """When fail2ban is not installed, it is installed and started."""
@@ -196,9 +206,21 @@ class TestConfigureFail2ban:
         assert result.status == "failed"
         assert "apt-get install failed" in result.detail
 
+    def test_enable_failure_returns_failed(self, mock_conn: MockConnection, base_ctx):
+        """When systemctl enable fails, status is failed."""
+        mock_conn.when("which fail2ban-server", rc=0)
+        mock_conn.when("systemctl is-active fail2ban", rc=3, stdout="inactive")
+        mock_conn.when("systemctl enable fail2ban", rc=1, stderr="Failed to enable")
+
+        result = ConfigureFail2ban().run(mock_conn, base_ctx)
+
+        assert result.status == "failed"
+        assert "failed to enable" in result.detail
+
     def test_service_start_failure_returns_failed(self, mock_conn: MockConnection, base_ctx):
         """When systemctl restart fails, status is failed."""
         mock_conn.when("which fail2ban-server", rc=0)
+        mock_conn.when("systemctl is-active fail2ban", rc=3, stdout="inactive")
         mock_conn.when("systemctl enable fail2ban", rc=0)
         mock_conn.when("systemctl restart fail2ban", rc=1, stderr="Unit not found")
 

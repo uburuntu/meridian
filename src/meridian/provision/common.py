@@ -272,6 +272,12 @@ class ConfigureFail2ban:
         check = conn.run("which fail2ban-server 2>/dev/null", timeout=15)
         installed = check.returncode == 0
 
+        if installed:
+            # Already installed — verify it's running
+            active = conn.run("systemctl is-active fail2ban", timeout=15)
+            if active.returncode == 0 and active.stdout.strip() == "active":
+                return StepResult(name=self.name, status="ok", detail="already running")
+
         if not installed:
             result = conn.run(
                 "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq fail2ban",
@@ -284,8 +290,14 @@ class ConfigureFail2ban:
                     detail=f"apt-get install failed: {result.stderr.strip()[:200]}",
                 )
 
-        # Ensure service is enabled and running
-        conn.run("systemctl enable fail2ban", timeout=15)
+        # Enable and start service
+        enable = conn.run("systemctl enable fail2ban", timeout=15)
+        if enable.returncode != 0:
+            return StepResult(
+                name=self.name,
+                status="failed",
+                detail=f"failed to enable fail2ban: {enable.stderr.strip()[:200]}",
+            )
         start = conn.run("systemctl restart fail2ban", timeout=30)
         if start.returncode != 0:
             return StepResult(
@@ -294,9 +306,7 @@ class ConfigureFail2ban:
                 detail=f"failed to start fail2ban: {start.stderr.strip()[:200]}",
             )
 
-        if not installed:
-            return StepResult(name=self.name, status="changed", detail="installed and started")
-        return StepResult(name=self.name, status="ok", detail="already installed")
+        return StepResult(name=self.name, status="changed", detail="installed and started")
 
 
 class ConfigureBBR:
