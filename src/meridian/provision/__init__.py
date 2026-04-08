@@ -124,6 +124,14 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
 
     steps.append(DisableXrayLogs())
     steps.append(ConfigureGeoBlocking())
+
+    # WARP outbound (optional — routes egress through Cloudflare)
+    if ctx.warp:
+        from meridian.provision.warp import ConfigureWarpOutbound, InstallWarp
+
+        steps.append(InstallWarp())
+        steps.append(ConfigureWarpOutbound())
+
     steps.append(VerifyXray())
 
     # nginx + connection page (domain mode or hosted page)

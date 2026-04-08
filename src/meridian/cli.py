@@ -101,6 +101,11 @@ def deploy_cmd(
         "--pq/--no-pq",
         help="Post-quantum encryption — ML-KEM-768 hybrid (experimental)",
     ),
+    warp: bool = typer.Option(
+        False,
+        "--warp/--no-warp",
+        help="Route outgoing traffic through Cloudflare WARP",
+    ),
 ) -> None:
     """Deploy a VLESS+Reality proxy server. Interactive wizard if no IP provided.
 
@@ -126,6 +131,7 @@ def deploy_cmd(
         color=color,
         decoy=decoy,
         pq=pq,
+        warp=warp,
     )
 
 

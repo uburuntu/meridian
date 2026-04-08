@@ -194,3 +194,20 @@ class TestBuildTestConfigs:
         )
         configs = build_test_configs(creds)
         assert configs == []
+
+    def test_warp_disables_ip_match(self) -> None:
+        """WARP routes through Cloudflare — exit IP won't match server IP."""
+        from meridian.credentials import PanelConfig, RealityConfig, ServerConfig, ServerCredentials, XHTTPConfig
+
+        creds = ServerCredentials(
+            panel=PanelConfig(username="admin", password="pass", port=2053),
+            server=ServerConfig(ip="198.51.100.1", sni="www.microsoft.com", warp=True),
+            protocols={
+                "reality": RealityConfig(uuid="uuid-1", public_key="pbk", short_id="sid", private_key="priv"),
+                "xhttp": XHTTPConfig(xhttp_path="xp"),
+            },
+        )
+        configs = build_test_configs(creds)
+        # With WARP, no protocol should expect IP match
+        for label, _config, expect_ip_match in configs:
+            assert expect_ip_match is False, f"{label} should not expect IP match with WARP"

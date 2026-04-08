@@ -192,6 +192,8 @@ def _run_connection_tests(creds: ServerCredentials, server_ip: str) -> None:
     err_console.print()
     err_console.print("  [bold]Connection[/bold]")
     err_console.print("  [dim]Testing actual proxy traffic through this device[/dim]")
+    if creds.server.warp:
+        err_console.print("  [dim]WARP enabled — exit IP will be Cloudflare, not server IP[/dim]")
     err_console.print()
 
     info("Checking xray client binary...")

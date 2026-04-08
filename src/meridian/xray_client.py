@@ -371,6 +371,7 @@ def build_test_configs(creds: ServerCredentials) -> list[tuple[str, dict, bool]]
     ip = creds.server.ip or ""
     sni = creds.server.sni or DEFAULT_SNI
     domain = creds.server.domain or ""
+    warp = creds.server.warp
     public_key = creds.reality.public_key or ""
     short_id = creds.reality.short_id or ""
     reality_uuid = creds.reality.uuid or ""
@@ -387,7 +388,7 @@ def build_test_configs(creds: ServerCredentials) -> list[tuple[str, dict, bool]]
             (
                 "Reality (TCP)",
                 build_reality_config(port, ip, reality_uuid, sni, public_key, short_id, encryption),
-                True,
+                not warp,  # WARP: exit IP is Cloudflare, not server
             )
         )
 
@@ -398,7 +399,7 @@ def build_test_configs(creds: ServerCredentials) -> list[tuple[str, dict, bool]]
             (
                 "XHTTP",
                 build_xhttp_config(port, host, reality_uuid, xhttp_path),
-                not domain,  # IP mode: expect match. Domain mode: CDN may differ.
+                not domain and not warp,  # IP mode without WARP: expect match
             )
         )
 

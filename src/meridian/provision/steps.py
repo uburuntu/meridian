@@ -41,6 +41,7 @@ class ProvisionContext:
     sni: str = DEFAULT_SNI
     xhttp_enabled: bool = True
     pq_encryption: bool = False  # post-quantum VLESS encryption (experimental)
+    warp: bool = False  # route egress through Cloudflare WARP (SOCKS5 proxy mode)
     hosted_page: bool = False  # serve connection pages via HTTPS on server
     harden: bool = True  # enable SSH hardening + firewall (skip for shared servers)
     creds_dir: str = ""  # local credentials directory path
