@@ -21,6 +21,8 @@ curl -sSf https://getmeridian.org/install.sh | bash
 
 This installs the `meridian` command via [uv](https://docs.astral.sh/uv/) (preferred) or pipx.
 
+You can run this on your local machine or directly on the VPS. A local machine is recommended — it lets you run `meridian test` from outside the server and keeps credentials on your own device.
+
 ## Deploy
 
 ```
