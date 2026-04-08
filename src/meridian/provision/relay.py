@@ -8,6 +8,7 @@ VLESS+Reality encryption between the client and the exit.
 from __future__ import annotations
 
 import shlex
+import time
 from dataclasses import dataclass, field
 
 from meridian.config import (
@@ -289,10 +290,16 @@ class VerifyRelay:
     name = "Verify relay connectivity"
 
     def run(self, conn: ServerConnection, ctx: RelayContext) -> StepResult:
-        # Check service is running
-        status_result = conn.run(f"systemctl is-active {RELAY_SERVICE_NAME}", timeout=15)
-        if status_result.returncode != 0 or status_result.stdout.strip() != "active":
-            # Collect journal for diagnosis
+        # Check service is running — retry because Realm needs time to bind
+        max_retries = 4
+        for attempt in range(max_retries):
+            status_result = conn.run(f"systemctl is-active {RELAY_SERVICE_NAME}", timeout=15)
+            if status_result.returncode == 0 and status_result.stdout.strip() == "active":
+                break
+            if attempt < max_retries - 1:
+                time.sleep(2)
+        else:
+            # All retries exhausted
             logs = conn.run(f"journalctl -u {RELAY_SERVICE_NAME} --no-pager -n 10", timeout=15)
             detail = logs.stdout.strip()[-200:] if logs.returncode == 0 else "service not active"
             return StepResult(name=self.name, status="failed", detail=detail)
