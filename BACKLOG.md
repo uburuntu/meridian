@@ -43,12 +43,12 @@ Things that require human action outside the codebase.
 
 ### Product
 
-- [ ] **`meridian client show NAME`** — regenerate/re-display connection info without recreating client
+- [x] **`meridian client show NAME`** — regenerate/re-display connection info without recreating client
 - [ ] **Client migration for rebuilds** — `meridian rebuild NEW_IP --from OLD_IP` or `meridian client migrate`
 
 ### Code quality
 
-- [ ] **Magic email-prefix in stats script** — hardcodes `startswith('reality-')` instead of using `INBOUND_TYPES`
+- [x] **Magic email-prefix in stats script** — hardcodes `startswith('reality-')` instead of using `INBOUND_TYPES`
 
 ---
 
@@ -87,8 +87,8 @@ Things that require human action outside the codebase.
 
 ### UX
 
-- [ ] **`--sni` flag ignored during deploy** — user passes `--sni` but deploy still uses microsoft.com. Flag not plumbed through to config
-- [ ] **`document.execCommand('copy')` deprecated** — broken on iOS 16.4+
+- [x] **`--sni` flag ignored during deploy** — user passes `--sni` but deploy still uses microsoft.com. Flag not plumbed through to config
+- [x] **`document.execCommand('copy')` deprecated** — broken on iOS 16.4+
 
 ---
 
