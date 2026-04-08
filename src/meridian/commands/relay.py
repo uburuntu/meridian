@@ -143,8 +143,15 @@ def _regenerate_client_pages(
             reality_uuid=client.reality_uuid,
             wss_uuid=client.wss_uuid,
             creds=creds,
+            server_name=creds.branding.server_name,
         )
-        relay_url_sets = build_all_relay_urls(client.name, client.reality_uuid, client.wss_uuid, creds)
+        relay_url_sets = build_all_relay_urls(
+            client.name,
+            client.reality_uuid,
+            client.wss_uuid,
+            creds,
+            server_name=creds.branding.server_name,
+        )
 
         server_ip = creds.server.ip or resolved_exit.ip
         domain = creds.server.domain or ""

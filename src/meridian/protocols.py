@@ -154,6 +154,11 @@ class Protocol(ABC):
         """Suffix appended to client name in the URL fragment (e.g., '-XHTTP')."""
         return ""
 
+    def _build_fragment(self, name: str, server_name: str = "") -> str:
+        """Build the URL fragment (after #) for a connection URL."""
+        base = f"{name} @ {server_name}" if server_name else name
+        return f"#{base}{self.url_suffix}"
+
 
 class RealityProtocol(Protocol):
     """VLESS + Reality + TCP — primary protocol, always present."""
@@ -176,13 +181,14 @@ class RealityProtocol(Protocol):
         public_key = kwargs.get("public_key", "")
         short_id = kwargs.get("short_id", "")
         fingerprint = kwargs.get("fingerprint", DEFAULT_FINGERPRINT)
+        fragment = self._build_fragment(name, kwargs.get("server_name", ""))
         return (
             f"vless://{uuid}@{ip}:443"
             f"?encryption=none&flow=xtls-rprx-vision"
             f"&security=reality&sni={sni}&fp={fingerprint}"
             f"&pbk={public_key}&sid={short_id}"
             f"&type=tcp&headerType=none"
-            f"#{name}"
+            f"{fragment}"
         )
 
 
@@ -216,10 +222,11 @@ class XHTTPProtocol(Protocol):
         fingerprint = kwargs.get("fingerprint", DEFAULT_FINGERPRINT)
         # Use domain if available, otherwise IP
         host = domain or ip
+        fragment = self._build_fragment(name, kwargs.get("server_name", ""))
         return (
             f"vless://{uuid}@{host}:443"
             f"?encryption=none&security=tls&sni={host}&fp={fingerprint}"
-            f"&type=xhttp&path=%2F{xhttp_path}#{name}-XHTTP"
+            f"&type=xhttp&path=%2F{xhttp_path}{fragment}"
         )
 
 
@@ -249,11 +256,12 @@ class WSSProtocol(Protocol):
     def build_url(self, uuid: str, name: str, **kwargs: Any) -> str:
         domain = kwargs["domain"]
         ws_path = kwargs.get("ws_path", "")
+        fragment = self._build_fragment(name, kwargs.get("server_name", ""))
         return (
             f"vless://{uuid}@{domain}:443"
             f"?encryption=none&security=tls&sni={domain}"
             f"&type=ws&host={domain}&path=%2F{ws_path}"
-            f"#{name}-WSS"
+            f"{fragment}"
         )
 
 

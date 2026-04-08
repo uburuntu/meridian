@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -219,6 +219,25 @@ class TestBuildRelayUrls:
         results = build_all_relay_urls("alice", uuid, "", creds)
         assert results == []
 
+    def test_build_relay_urls_with_server_name(self, sample_proxy_with_relays: Path) -> None:
+        from meridian.urls import build_relay_urls
+
+        creds = ServerCredentials.load(sample_proxy_with_relays)
+        uuid = "550e8400-e29b-41d4-a716-446655440000"
+        wss_uuid = "660e8400-e29b-41d4-a716-446655440001"
+
+        result = build_relay_urls(
+            "alice",
+            uuid,
+            wss_uuid,
+            creds,
+            "1.2.3.4",
+            "ru-moscow",
+            server_name="My VPN",
+        )
+        reality_url = next(u for u in result.urls if u.key == "reality")
+        assert "#alice @ My VPN-via-ru-moscow" in reality_url.url
+
 
 # ---------------------------------------------------------------------------
 # RelayURLSet model tests
@@ -311,13 +330,40 @@ class TestRelayProvisioner:
         conn = MagicMock()
         conn.run = MagicMock(
             side_effect=[
-                MagicMock(returncode=3, stdout="inactive\n", stderr=""),  # systemctl is-active
+                # 4 retries of systemctl is-active, all inactive
+                MagicMock(returncode=3, stdout="inactive\n", stderr=""),
+                MagicMock(returncode=3, stdout="inactive\n", stderr=""),
+                MagicMock(returncode=3, stdout="inactive\n", stderr=""),
+                MagicMock(returncode=3, stdout="inactive\n", stderr=""),
                 MagicMock(returncode=0, stdout="", stderr=""),  # journalctl
             ]
         )
 
-        result = step.run(conn, ctx)
+        with patch("meridian.provision.relay.time.sleep"):
+            result = step.run(conn, ctx)
         assert result.status == "failed"
+
+    def test_verify_relay_retries_until_active(self) -> None:
+        """Service becomes active on third attempt — should succeed."""
+        from meridian.provision.relay import RelayContext, VerifyRelay
+
+        step = VerifyRelay()
+        ctx = RelayContext(relay_ip="1.2.3.4", exit_ip="5.6.7.8")
+
+        conn = MagicMock()
+        conn.run = MagicMock(
+            side_effect=[
+                MagicMock(returncode=3, stdout="inactive\n", stderr=""),  # attempt 1
+                MagicMock(returncode=3, stdout="inactive\n", stderr=""),  # attempt 2
+                MagicMock(returncode=0, stdout="active\n", stderr=""),  # attempt 3 — success
+                MagicMock(returncode=0, stdout="", stderr=""),  # TCP test
+            ]
+        )
+
+        with patch("meridian.provision.relay.time.sleep") as mock_sleep:
+            result = step.run(conn, ctx)
+        assert result.status == "ok"
+        assert mock_sleep.call_count == 2  # slept before attempt 2 and 3
 
     def test_install_realm_verifies_checksum(self) -> None:
         """InstallRealm should reject a binary with mismatched SHA256."""

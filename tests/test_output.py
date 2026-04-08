@@ -137,6 +137,32 @@ class TestBuildProtocolURLs:
         assert isinstance(urls, list)
         assert all(isinstance(u, ProtocolURL) for u in urls)
 
+    def test_server_name_in_reality_fragment(self) -> None:
+        """Server name appears in URL fragment when set."""
+        creds = _make_creds()
+        urls = build_protocol_urls("alice", "uuid-1", "", creds, server_name="My VPN")
+        reality = _find_url(urls, "reality")
+        assert "#alice @ My VPN" in reality
+
+    def test_server_name_in_all_protocol_fragments(self) -> None:
+        """Server name appears in all protocol URL fragments."""
+        creds = _make_creds(domain="example.com", ws_path="ws", xhttp_path="xp")
+        urls = build_protocol_urls("alice", "r-uuid", "w-uuid", creds, server_name="My VPN")
+        reality = _find_url(urls, "reality")
+        xhttp = _find_url(urls, "xhttp")
+        wss = _find_url(urls, "wss")
+        assert "#alice @ My VPN" in reality
+        assert "#alice @ My VPN-XHTTP" in xhttp
+        assert "#alice @ My VPN-WSS" in wss
+
+    def test_no_server_name_omits_at_sign(self) -> None:
+        """Without server_name, fragments are just the client name."""
+        creds = _make_creds()
+        urls = build_protocol_urls("alice", "uuid-1", "", creds)
+        reality = _find_url(urls, "reality")
+        assert reality.endswith("#alice")
+        assert " @ " not in reality
+
 
 class TestBuildProtocolURLsEdgeCases:
     """Additional URL building edge case tests."""

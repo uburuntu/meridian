@@ -280,10 +280,17 @@ def run_add(
             reality_uuid=reality_uuid,
             wss_uuid=wss_uuid,
             creds=creds,
+            server_name=creds.branding.server_name,
         )
 
         # Build relay URL sets (if exit has relays)
-        relay_url_sets = build_all_relay_urls(name, reality_uuid, wss_uuid, creds)
+        relay_url_sets = build_all_relay_urls(
+            name,
+            reality_uuid,
+            wss_uuid,
+            creds,
+            server_name=creds.branding.server_name,
+        )
 
         server_ip = creds.server.ip or resolved.ip
         file_prefix = f"{resolved.ip}-{name}"
@@ -411,10 +418,17 @@ def run_show(
         reality_uuid=client_entry.reality_uuid,
         wss_uuid=client_entry.wss_uuid,
         creds=creds,
+        server_name=creds.branding.server_name,
     )
 
     # Build relay URL sets (if exit has relays)
-    relay_url_sets = build_all_relay_urls(name, client_entry.reality_uuid, client_entry.wss_uuid, creds)
+    relay_url_sets = build_all_relay_urls(
+        name,
+        client_entry.reality_uuid,
+        client_entry.wss_uuid,
+        creds,
+        server_name=creds.branding.server_name,
+    )
 
     server_ip = creds.server.ip or resolved.ip
 
