@@ -112,7 +112,7 @@ def _sync_exit_credentials_to_server(resolved_exit: ResolvedServer) -> None:
     if resolved_exit.local_mode:
         return
     try:
-        subprocess.run(
+        result = subprocess.run(
             [
                 "scp",
                 *SSH_OPTS,
@@ -125,6 +125,8 @@ def _sync_exit_credentials_to_server(resolved_exit: ResolvedServer) -> None:
             timeout=15,
             stdin=subprocess.DEVNULL,
         )
+        if result.returncode != 0:
+            warn("Could not sync credentials to exit server")
     except (subprocess.TimeoutExpired, FileNotFoundError):
         warn("Could not sync credentials to exit server")
 

@@ -81,7 +81,7 @@ def _sync_credentials_to_server(resolved: ResolvedServer) -> None:
 
     # SCP the credentials directory to the server
     try:
-        subprocess.run(
+        result = subprocess.run(
             [
                 "scp",
                 *SSH_OPTS,
@@ -94,6 +94,8 @@ def _sync_credentials_to_server(resolved: ResolvedServer) -> None:
             timeout=15,
             stdin=subprocess.DEVNULL,
         )
+        if result.returncode != 0:
+            warn("Could not sync credentials to server")
     except (subprocess.TimeoutExpired, FileNotFoundError):
         warn("Could not sync credentials to server")
 
