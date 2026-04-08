@@ -208,7 +208,6 @@ class TestConfigureFirewall:
         mock_conn.when("apt-get update", stdout="")
         mock_conn.when("apt-get install", stdout="")
         mock_conn.when("ufw status", stdout="Status: inactive")
-        mock_conn.when("ufw limit", stdout="Rule added")
         mock_conn.when("ufw allow", stdout="Rule added")
         mock_conn.when("ufw delete", rc=0, stdout="Could not")
         mock_conn.when("ufw default", rc=0)
@@ -222,9 +221,8 @@ class TestConfigureFirewall:
     def test_already_active_returns_ok(self, mock_conn: MockConnection, base_ctx):
         """When ufw is active and rules already exist, status is ok."""
         mock_conn.when("which ufw", rc=0)
-        mock_conn.when("ufw status", stdout="Status: active\n22/tcp LIMIT\n443/tcp ALLOW")
-        # All ufw limit/allow commands return "Skipping" (rule exists)
-        mock_conn.when("ufw limit", stdout="Skipping adding existing rule")
+        mock_conn.when("ufw status", stdout="Status: active\n22/tcp ALLOW\n443/tcp ALLOW")
+        # All ufw allow commands return "Skipping" (rule exists)
         mock_conn.when("ufw allow", stdout="Skipping adding existing rule")
         mock_conn.when("ufw delete", rc=0, stdout="Skipping")
         mock_conn.when("ufw default", rc=0)
@@ -238,7 +236,6 @@ class TestConfigureFirewall:
         """When ufw is inactive, it is enabled and status is changed."""
         mock_conn.when("which ufw", rc=0)
         mock_conn.when("ufw status", stdout="Status: inactive")
-        mock_conn.when("ufw limit", stdout="Rule added")
         mock_conn.when("ufw allow", stdout="Rule added")
         mock_conn.when("ufw delete", rc=0, stdout="Could not")
         mock_conn.when("ufw default", rc=0)
@@ -254,9 +251,7 @@ class TestConfigureFirewall:
 
         mock_conn.when("which ufw", rc=0)
         mock_conn.when("ufw status", stdout="Status: active")
-        mock_conn.when("ufw limit", stdout="Skipping adding existing rule")
         mock_conn.when("ufw allow", stdout="Skipping adding existing rule")
-        mock_conn.when("ufw delete", rc=0, stdout="Skipping")
         mock_conn.when("ufw default", rc=0)
         mock_conn.when("ufw reload", rc=0)
 

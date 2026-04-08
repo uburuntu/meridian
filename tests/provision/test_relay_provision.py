@@ -144,7 +144,6 @@ class TestConfigureRelayFirewall:
         conn.when("apt-get update", stdout="")
         conn.when("apt-get install", stdout="")
         conn.when("ufw status", stdout="Status: inactive")
-        conn.when("ufw limit", stdout="Rule added")
         conn.when("ufw allow", stdout="Rule added")
         conn.when("ufw default", rc=0)
         conn.when("ufw enable", stdout="Firewall is active")
@@ -158,10 +157,8 @@ class TestConfigureRelayFirewall:
         """When ufw is present and rules already exist, status is ok."""
         conn = MockConnection()
         conn.when("which ufw", rc=0)
-        conn.when("ufw status", stdout="Status: active\n22/tcp LIMIT\n443/tcp ALLOW")
-        conn.when("ufw limit", stdout="Skipping adding existing rule")
+        conn.when("ufw status", stdout="Status: active\n22/tcp ALLOW\n443/tcp ALLOW")
         conn.when("ufw allow", stdout="Skipping adding existing rule")
-        conn.when("ufw delete", rc=0, stdout="Skipping")
         conn.when("ufw default", rc=0)
         conn.when("ufw reload", rc=0)
 

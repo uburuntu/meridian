@@ -353,16 +353,13 @@ class ConfigureFirewall:
         ufw_status = conn.run("ufw status", timeout=15)
         ufw_active = ufw_status.returncode == 0 and "Status: active" in ufw_status.stdout
 
-        # Rate-limit SSH (6 connections in 30s) — protects against brute-force
-        # Delete any existing allow rule first (transition from older deploys)
-        conn.run("ufw delete allow 22/tcp 2>/dev/null", timeout=15)
-        conn.run("ufw delete allow 22/tcp 2>/dev/null", timeout=15)  # v6 rule
-        result = conn.run("ufw limit 22/tcp", timeout=15)
+        # Allow SSH (port 22)
+        result = conn.run("ufw allow 22/tcp", timeout=15)
         if result.returncode != 0:
             return StepResult(
                 name=self.name,
                 status="failed",
-                detail=f"failed to rate-limit SSH: {result.stderr.strip()[:200]}",
+                detail=f"failed to allow SSH: {result.stderr.strip()[:200]}",
             )
         if "Skipping" not in result.stdout:
             changed = True
@@ -407,7 +404,7 @@ class ConfigureFirewall:
 
             for line in result.stdout.splitlines():
                 # Match lines like "8443/tcp    ALLOW IN    Anywhere"
-                m = re.match(r"(\d+)/tcp\s+(?:ALLOW|LIMIT)", line.strip())
+                m = re.match(r"(\d+)/tcp\s+ALLOW", line.strip())
                 if m and m.group(1) not in allowed_ports:
                     port = m.group(1)
                     conn.run(f"ufw delete allow {port}/tcp", timeout=15)
