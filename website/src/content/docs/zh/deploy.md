@@ -96,3 +96,28 @@ meridian deploy 1.2.3.4 --user ubuntu
 ```bash
 meridian relay deploy RELAY_IP --exit YOUR_EXIT_IP
 ```
+
+## 管理面板
+
+Meridian 部署 [3x-ui](https://github.com/MHSanaei/3x-ui) 作为 Xray 的 Web 管理面板。您可以在浏览器中直接访问，监控流量、查看入站配置和检查服务器状态。
+
+面板 URL 和凭据存储在本地凭据文件中：
+
+```
+cat ~/.meridian/credentials/<IP>/proxy.yml
+```
+
+`panel` 部分包含所有必要信息：
+
+```yaml
+panel:
+  username: a1b2c3d4e5f6
+  password: Xk9mP2qR7vW4nL8jF3hT6yBs
+  web_base_path: n7kx2m9qp4wj8vh3rf6tby5e
+```
+
+在浏览器中打开 `https://<您的服务器IP>/<web_base_path>/`，使用上述用户名和密码登录。
+
+面板路径是随机生成的安全措施——请像对待密码一样保护它。所有 `meridian` CLI 命令底层使用相同的面板 API，因此 CLI 中能做的一切在面板中也能看到。
+
+> **注意：** 如果您直接在面板中修改设置，下次运行 `meridian deploy` 时可能会被覆盖。

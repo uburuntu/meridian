@@ -87,6 +87,47 @@ Meridian manages 3x-ui entirely via its REST API:
 - `POST /panel/setting/update` — configure panel settings
 - `POST /panel/setting/updateUser` — change panel credentials
 
+## Management panel (3x-ui)
+
+Meridian uses [3x-ui](https://github.com/MHSanaei/3x-ui) as its management panel for Xray. While the CLI handles everything automatically, you can also access the web panel directly for monitoring and advanced configuration.
+
+### How to access
+
+The panel is reverse-proxied by nginx at a randomized secret HTTPS path — no SSH tunnel needed. Find the URL and credentials in your local credentials file:
+
+```
+cat ~/.meridian/credentials/<IP>/proxy.yml
+```
+
+Look for the `panel` section:
+
+```yaml
+panel:
+  username: a1b2c3d4e5f6
+  password: Xk9mP2qR7vW4nL8jF3hT6yBs
+  web_base_path: n7kx2m9qp4wj8vh3rf6tby5e
+  port: 2053
+```
+
+The panel URL is:
+
+```
+https://<your-server-ip>/n7kx2m9qp4wj8vh3rf6tby5e/
+```
+
+### What you can do
+
+- **Monitor traffic** — per-client upload/download stats
+- **View inbounds** — see all configured VLESS protocols (Reality, XHTTP, WSS)
+- **Check Xray status** — verify the proxy engine is running
+- **Advanced config** — modify Xray settings directly (for power users)
+
+### Important notes
+
+- The `web_base_path` is a random string — this is your panel's security. Don't share it.
+- All management via `meridian` CLI (adding clients, relay setup, etc.) uses this same panel API under the hood.
+- If you change settings in the panel directly, they may be overwritten on the next `meridian deploy`.
+
 ## nginx configuration pattern
 
 Meridian writes to `/etc/nginx/conf.d/meridian-stream.conf` and `/etc/nginx/conf.d/meridian-http.conf` (never the main nginx.conf). This allows Meridian to coexist with user's own nginx configuration.

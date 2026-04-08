@@ -87,6 +87,47 @@ Meridian 完全通过 REST API 管理 3x-ui：
 - `POST /panel/setting/update` — 配置面板设置
 - `POST /panel/setting/updateUser` — 更改面板凭据
 
+## 管理面板 (3x-ui)
+
+Meridian 使用 [3x-ui](https://github.com/MHSanaei/3x-ui) 作为 Xray 的 Web 管理面板。CLI 会自动处理一切，但您也可以直接访问 Web 面板进行监控和高级配置。
+
+### 如何访问
+
+面板通过 nginx 反向代理在随机的 HTTPS 秘密路径上提供服务——无需 SSH 隧道。URL 和凭据存储在本地凭据文件中：
+
+```
+cat ~/.meridian/credentials/<IP>/proxy.yml
+```
+
+查找 `panel` 部分：
+
+```yaml
+panel:
+  username: a1b2c3d4e5f6
+  password: Xk9mP2qR7vW4nL8jF3hT6yBs
+  web_base_path: n7kx2m9qp4wj8vh3rf6tby5e
+  port: 2053
+```
+
+面板 URL：
+
+```
+https://<您的服务器IP>/n7kx2m9qp4wj8vh3rf6tby5e/
+```
+
+### 功能
+
+- **流量监控** — 按客户端查看上传/下载统计
+- **查看入站配置** — 所有已配置的 VLESS 协议（Reality、XHTTP、WSS）
+- **Xray 状态** — 验证代理引擎是否正在运行
+- **高级配置** — 直接修改 Xray 设置（适合高级用户）
+
+### 注意事项
+
+- `web_base_path` 是随机字符串——这是面板的安全保障。请勿分享给他人。
+- 所有 `meridian` CLI 命令底层使用相同的面板 API。
+- 如果您直接在面板中修改设置，下次运行 `meridian deploy` 时可能会被覆盖。
+
 ## nginx 配置模式
 
 Meridian 写入 `/etc/nginx/conf.d/meridian-stream.conf` 和 `/etc/nginx/conf.d/meridian-http.conf`（从不修改主 nginx.conf）。这允许 Meridian 与用户自己的 nginx 配置共存。

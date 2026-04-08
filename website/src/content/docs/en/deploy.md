@@ -117,3 +117,28 @@ After deploying your exit server, add a relay node for resilience when the exit 
 ```bash
 meridian relay deploy RELAY_IP --exit YOUR_EXIT_IP
 ```
+
+## Management panel
+
+Meridian deploys [3x-ui](https://github.com/MHSanaei/3x-ui) as the web management panel for Xray. You can access it directly in your browser to monitor traffic, view inbound configs, and check server status.
+
+The panel URL and credentials are stored in your local credentials file:
+
+```
+cat ~/.meridian/credentials/<IP>/proxy.yml
+```
+
+The `panel` section contains everything you need:
+
+```yaml
+panel:
+  username: a1b2c3d4e5f6
+  password: Xk9mP2qR7vW4nL8jF3hT6yBs
+  web_base_path: n7kx2m9qp4wj8vh3rf6tby5e
+```
+
+Open `https://<your-server-ip>/<web_base_path>/` in your browser and log in with the username and password.
+
+The panel path is randomized for security — treat it like a password. All `meridian` CLI commands use this same panel API under the hood, so anything you can do in the CLI is also visible in the panel.
+
+> **Note:** If you modify settings directly in the panel, they may be overwritten on the next `meridian deploy`.

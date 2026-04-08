@@ -87,6 +87,47 @@ Meridian 3x-ui را کاملاً از طریق REST API مدیریت می‌کن
 - `POST /panel/setting/update` — پیکربندی تنظیمات پنل
 - `POST /panel/setting/updateUser` — تغییر اعتبارنامه‌های پنل
 
+## پنل مدیریت (3x-ui)
+
+Meridian از [3x-ui](https://github.com/MHSanaei/3x-ui) به عنوان پنل مدیریت وب Xray استفاده می‌کند. CLI همه چیز را به صورت خودکار انجام می‌دهد، اما شما می‌توانید مستقیماً به پنل وب برای نظارت و پیکربندی پیشرفته دسترسی داشته باشید.
+
+### نحوه دسترسی
+
+پنل از طریق nginx در یک مسیر HTTPS مخفی تصادفی قابل دسترسی است — نیازی به تونل SSH نیست. آدرس و اطلاعات ورود در فایل محلی ذخیره شده‌اند:
+
+```
+cat ~/.meridian/credentials/<IP>/proxy.yml
+```
+
+بخش `panel` را پیدا کنید:
+
+```yaml
+panel:
+  username: a1b2c3d4e5f6
+  password: Xk9mP2qR7vW4nL8jF3hT6yBs
+  web_base_path: n7kx2m9qp4wj8vh3rf6tby5e
+  port: 2053
+```
+
+آدرس پنل:
+
+```
+https://<آی‌پی-سرور-شما>/n7kx2m9qp4wj8vh3rf6tby5e/
+```
+
+### امکانات
+
+- **نظارت بر ترافیک** — آمار آپلود/دانلود هر کلاینت
+- **مشاهده inboundها** — تمام پروتکل‌های VLESS پیکربندی شده (Reality، XHTTP، WSS)
+- **وضعیت Xray** — بررسی اجرای موتور پراکسی
+- **پیکربندی پیشرفته** — تغییر مستقیم تنظیمات Xray (برای کاربران حرفه‌ای)
+
+### نکات مهم
+
+- `web_base_path` یک رشته تصادفی است — این امنیت پنل شماست. آن را به اشتراک نگذارید.
+- تمام دستورات `meridian` CLI از همین API پنل استفاده می‌کنند.
+- اگر تنظیمات را مستقیماً در پنل تغییر دهید، ممکن است در اجرای بعدی `meridian deploy` بازنویسی شوند.
+
 ## الگوی پیکربندی nginx
 
 Meridian در `/etc/nginx/conf.d/meridian-stream.conf` و `/etc/nginx/conf.d/meridian-http.conf` می‌نویسد (هرگز در nginx.conf اصلی). این اجازه می‌دهد Meridian با پیکربندی خود کاربر همزیستی کند.
