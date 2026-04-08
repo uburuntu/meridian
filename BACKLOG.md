@@ -83,7 +83,7 @@ Things that require human action outside the codebase.
 
 ### Reliability
 
-- [ ] **`InstallDocker` skips regardless of image version** — no `docker compose pull` on re-deploy
+- [x] **`InstallDocker` skips regardless of image version** — no `docker compose pull` on re-deploy
 
 ### UX
 
@@ -96,12 +96,12 @@ Things that require human action outside the codebase.
 
 ### Security
 
-- [ ] **Panel cookie predictable path** — shared across concurrent processes. Use `tempfile.mkstemp`
+- [x] **Panel cookie predictable path** — shared across concurrent processes. Use `tempfile.mkstemp`
 - [ ] **`innerHTML` XSS surface** — risk if translations ever loaded externally
 
 ### Anti-censorship
 
-- [ ] **DNS `8.8.8.8` during provisioning** — monitored by censors. Use system resolver
+- [x] **DNS `8.8.8.8` during provisioning** — monitored by censors. Use system resolver
 
 ### Product
 
@@ -128,7 +128,7 @@ Things that require human action outside the codebase.
 - [x] **`<title>` not updated on language switch** — stays English
 - [ ] **`index.html` not in SW precache** — first offline visit fails
 - [ ] **`apple-touch-icon` uses SVG** — iOS needs PNG
-- [ ] **QR 200x200px marginal on Retina** — generate 400x400px
+- [x] **QR 200x200px marginal on Retina** — generate 400x400px
 - [ ] **Wizard `_confirm_scan()` fails silently on WSL**
 
 ### Website
