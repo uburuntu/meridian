@@ -1196,7 +1196,7 @@ def _check_domain_dns(conn: ServerConnection, domain: str, server_ip: str) -> st
     Returns an error message if DNS check fails, None if OK.
     """
     q_domain = shlex.quote(domain)
-    result = conn.run(f"dig +short {q_domain} @8.8.8.8", timeout=15)
+    result = conn.run(f"dig +short {q_domain}", timeout=15)
     resolved = result.stdout.strip() if result.returncode == 0 else ""
 
     if not resolved:
