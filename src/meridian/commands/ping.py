@@ -166,9 +166,6 @@ def run(
     err_console.print()
     if issues == 0:
         err_console.print(f"  [ok]All {checks} checks passed.[/ok] Server is reachable from this device.")
-        err_console.print("  [dim]If your VPN client can't connect, the issue is likely:[/dim]")
-        err_console.print("  [dim]  - Incorrect connection link (re-scan the QR code)[/dim]")
-        err_console.print("  [dim]  - VPN app misconfiguration (try v2rayNG or Hiddify)[/dim]")
     else:
         err_console.print(
             f"  [error]{issues} issue(s) found.[/error] The server is not fully reachable from this device."
@@ -180,7 +177,54 @@ def run(
         err_console.print("  [dim]  - Open port 443/TCP in your cloud provider's firewall[/dim]")
         err_console.print("  [dim]  - Try from a different network (mobile data, another Wi-Fi)[/dim]")
         err_console.print("  [dim]  - Your ISP may be blocking this server's IP -- try a different server[/dim]")
+
+    # --- Connection tests (actual traffic through proxy) ---
+    if issues == 0 and proxy_file.exists():
+        _run_connection_tests(creds, resolved.ip)
+
     err_console.print()
+
+
+def _run_connection_tests(creds: ServerCredentials, server_ip: str) -> None:
+    """Test actual proxy connections using a local xray client."""
+    from meridian.xray_client import build_test_configs, ensure_xray_binary, test_connection
+
+    err_console.print()
+    err_console.print("  [bold]Connection[/bold]")
+    err_console.print("  [dim]Testing actual proxy traffic through this device[/dim]")
+    err_console.print()
+
+    info("Checking xray client binary...")
+    xray_bin = ensure_xray_binary()
+    if xray_bin is None:
+        warn("Could not download xray client — connection tests skipped")
+        err_console.print("       [dim]Check your internet connection and try again.[/dim]")
+        return
+    ok(f"xray ready ({xray_bin.name})")
+
+    configs = build_test_configs(creds)
+    if not configs:
+        warn("No active protocols found in credentials")
+        return
+
+    passed = 0
+    failed = 0
+    for label, config, expect_ip_match in configs:
+        socks_port = config["inbounds"][0]["port"]
+        info(f"Testing {label}...")
+        success, detail = test_connection(xray_bin, config, server_ip, socks_port, label, expect_ip_match)
+        if success:
+            ok(f"{label} OK — {detail}")
+            passed += 1
+        else:
+            warn(f"{label} failed — {detail}")
+            failed += 1
+
+    err_console.print()
+    if failed == 0:
+        err_console.print(f"  [ok]All {passed} protocol(s) verified.[/ok] Proxy is fully operational.")
+    else:
+        err_console.print(f"  [error]{failed} protocol(s) failed, {passed} passed.[/error]")
 
 
 def _parse_http_date(date_str: str) -> int | None:

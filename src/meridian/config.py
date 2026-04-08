@@ -36,6 +36,16 @@ REALM_SHA256: dict[str, str] = {
 }
 RELAY_CONFIG_PATH = "/etc/meridian/realm.toml"
 
+# Xray client binary (for connection verification)
+XRAY_VERSION = "26.2.6"  # matches xray bundled in 3x-ui 2.8.11
+XRAY_GITHUB_URL = "https://github.com/XTLS/Xray-core/releases/download"
+XRAY_ASSET_MAP: dict[tuple[str, str], str] = {
+    ("Darwin", "arm64"): "Xray-macos-arm64-v8a.zip",
+    ("Darwin", "x86_64"): "Xray-macos-64.zip",
+    ("Linux", "x86_64"): "Xray-linux-64.zip",
+    ("Linux", "aarch64"): "Xray-linux-arm64-v8a.zip",
+}
+
 
 def is_ipv4(s: str) -> bool:
     """Check if string looks like an IPv4 address."""
