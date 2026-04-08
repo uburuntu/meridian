@@ -73,6 +73,7 @@ Things that require human action outside the codebase.
 - [ ] **VPS provider guide** — first blocker for Tier 1 "tech friends"
 - [ ] **Auto SSH key setup** — when VPS only has password auth, auto-generate key, copy via `ssh-copy-id`, and proceed. Eliminates manual key setup step before deploy
 - [ ] **Telegram bot for client management** — add/revoke clients, view stats without SSH. Mobile-friendly for "not at computer" use case
+- [ ] **Post-deploy Cloudflare setup guidance** — after domain mode deploy, print step-by-step Cloudflare DNS/SSL setup in CLI output
 - [ ] **Add Happ and ShadowRocket to connection page** — popular cross-platform clients, already support VLESS subscription URLs
 - [ ] **Wizard hardening before SSH key validation** — can lock out password-only users
 - [ ] **Connection page plain-language intro** — 2-3 trust-building sentences before "scan QR"
