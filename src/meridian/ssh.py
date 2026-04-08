@@ -13,7 +13,7 @@ SSH_OPTS: list[str] = [
     "-o",
     "BatchMode=yes",
     "-o",
-    "ConnectTimeout=5",
+    "ConnectTimeout=10",
     "-o",
     "StrictHostKeyChecking=yes",
 ]

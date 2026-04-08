@@ -69,7 +69,7 @@ class TestServerConnectionRun:
             call_args = mock_run.call_args
             cmd = call_args[0][0]
             assert "BatchMode=yes" in cmd
-            assert "ConnectTimeout=5" in cmd
+            assert "ConnectTimeout=10" in cmd
             assert "StrictHostKeyChecking=yes" in cmd
 
     def test_stdin_devnull(self) -> None:
