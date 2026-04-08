@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,8 @@ LOCAL_KEYWORDS = ("local", "locally")
 
 # Servers that have already shown a version mismatch warning this session
 _warned_servers: set[str] = set()
+
+_VALID_SSH_USER = re.compile(r"^[a-zA-Z0-9._-]+$")
 
 
 def is_local_keyword(value: str) -> bool:
@@ -169,6 +172,13 @@ def resolve_server(
 
     # Resolve user: explicit flag > registry > default root
     resolved_user = user or registry_user or "root"
+
+    if not _VALID_SSH_USER.match(resolved_user):
+        fail(
+            f"SSH user '{resolved_user}' is invalid",
+            hint="Use letters, numbers, dots, hyphens, and underscores.",
+            hint_type="user",
+        )
 
     # Determine creds_dir
     if local_mode:

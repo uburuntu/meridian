@@ -226,7 +226,13 @@ def _interactive_wizard(
             ssh_user = "root"
         else:
             # --- SSH user ---
-            ssh_user = prompt("SSH user", default="root")
+            import re
+
+            while True:
+                ssh_user = prompt("SSH user", default="root")
+                if re.match(r"^[a-zA-Z0-9._-]+$", ssh_user):
+                    break
+                err_console.print("  [error]Use letters, numbers, dots, hyphens, and underscores only[/error]")
             if ssh_user != "root":
                 err_console.print("  [dim](sudo will be used for privileged operations)[/dim]")
 
