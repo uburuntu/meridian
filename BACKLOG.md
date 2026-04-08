@@ -57,10 +57,10 @@ Things that require human action outside the codebase.
 ### Security
 
 - [ ] **SSH password auth not hardened during provisioning** — cloud-init drops `PasswordAuthentication yes` in `/etc/ssh/sshd_config.d/`, overriding main config. Provisioner should disable password auth and restart sshd after confirming key access works
-- [ ] **`manifest.webmanifest.j2` no autoescape** — client name with `"` breaks JSON
+- [x] **`manifest.webmanifest.j2` no autoescape** — client name with `"` breaks JSON
 - [ ] **SW cache never invalidates** — hardcoded `CACHE_VERSION`. Embed hash during deployment
-- [ ] **Silent template failures return `""`** — catch bare `Exception`, deploy empty HTML
-- [ ] **`_sync_credentials_to_server()` ignores SCP failures** — credentials silently not synced
+- [x] **Silent template failures return `""`** — catch bare `Exception`, deploy empty HTML
+- [x] **`_sync_credentials_to_server()` ignores SCP failures** — credentials silently not synced
 - [ ] **Wizard no SSH user validation** — shell metacharacters accepted (injection risk)
 
 ### Anti-censorship
