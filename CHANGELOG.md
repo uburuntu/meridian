@@ -4,6 +4,11 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.14.1] - 2026-04-08
+
+### Improved
+- **Panel URL in deploy output** — post-deploy now shows the 3x-ui panel URL and credentials for advanced users.
+
 ## [3.14.0] - 2026-04-08
 
 ### Added
