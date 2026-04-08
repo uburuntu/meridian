@@ -89,7 +89,9 @@ meridian scan [IP] [--server NAME]
 
 ### meridian test
 
-从客户端设备测试代理可达性。无需 SSH。
+测试代理可达性并验证来自客户端设备的实际连接。无需 SSH。
+
+首先检查基本可达性（TCP、TLS 握手、domain HTTPS）。然后下载本地 xray 客户端二进制文件（首次使用后缓存），通过代理为每个活跃协议（Reality、XHTTP、WSS）连接，并确认流量端到端流动。
 
 ```
 meridian test [IP] [--server NAME]

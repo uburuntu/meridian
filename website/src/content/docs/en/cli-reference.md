@@ -89,7 +89,9 @@ meridian scan [IP] [--server NAME]
 
 ### meridian test
 
-Test proxy reachability from the client device. No SSH needed.
+Test proxy reachability and verify actual connections from the client device. No SSH needed.
+
+First checks basic reachability (TCP, TLS handshake, domain HTTPS). Then downloads a local xray client binary (cached after first use), connects through the proxy for each active protocol (Reality, XHTTP, WSS), and confirms traffic flows end-to-end.
 
 ```
 meridian test [IP] [--server NAME]
