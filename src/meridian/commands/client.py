@@ -75,10 +75,10 @@ def _make_panel(creds: ServerCredentials, conn: ServerConnection) -> PanelClient
     return panel
 
 
-def _sync_credentials_to_server(resolved: ResolvedServer) -> None:
+def _sync_credentials_to_server(resolved: ResolvedServer) -> bool:
     """Sync local credentials back to the server's /etc/meridian/."""
     if resolved.local_mode:
-        return  # Already on the server
+        return True  # Already on the server
 
     # SCP the credentials directory to the server
     try:
@@ -95,10 +95,47 @@ def _sync_credentials_to_server(resolved: ResolvedServer) -> None:
             timeout=15,
             stdin=subprocess.DEVNULL,
         )
-        if result.returncode != 0:
-            warn("Could not sync credentials to server")
+        return result.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
-        warn("Could not sync credentials to server")
+        return False
+
+
+def _refresh_credentials_or_fail(resolved: ResolvedServer, *, action: str) -> None:
+    """Force-refresh credentials before mutating local state."""
+    if fetch_credentials(resolved, force=True):
+        return
+    fail(
+        f"Could not refresh credentials before {action}",
+        hint="Check SSH/SCP and retry. Meridian will not mutate cached state without a fresh server read.",
+        hint_type="system",
+    )
+
+
+def _save_credentials_with_sync(
+    resolved: ResolvedServer,
+    creds: ServerCredentials,
+    *,
+    recovery_hint: str,
+) -> None:
+    """Persist credentials locally and fail closed if server sync fails."""
+    proxy_file = resolved.creds_dir / "proxy.yml"
+    original_bytes = proxy_file.read_bytes() if proxy_file.exists() else None
+
+    creds.save(proxy_file)
+    if _sync_credentials_to_server(resolved):
+        return
+
+    if original_bytes is None:
+        proxy_file.unlink(missing_ok=True)
+    else:
+        proxy_file.write_bytes(original_bytes)
+        proxy_file.chmod(0o600)
+
+    fail(
+        "Could not sync updated credentials to server",
+        hint=recovery_hint,
+        hint_type="system",
+    )
 
 
 def _deploy_client_page(
@@ -181,7 +218,7 @@ def run_add(
     registry = ServerRegistry(SERVERS_FILE)
     resolved = resolve_server(registry, requested_server=requested_server, user=user)
     resolved = ensure_server_connection(resolved)
-    fetch_credentials(resolved)
+    _refresh_credentials_or_fail(resolved, action=f"adding client '{name}'")
 
     creds = _load_creds(resolved.creds_dir)
     info(f"Adding client '{name}'...")
@@ -307,7 +344,14 @@ def run_add(
                 wss_uuid=wss_uuid,
             )
         )
-        creds.save(resolved.creds_dir / "proxy.yml")
+        _save_credentials_with_sync(
+            resolved,
+            creds,
+            recovery_hint=(
+                f"The client may already exist on the panel. Once SSH/SCP works, run: "
+                f"meridian client show {name} --server {resolved.ip}"
+            ),
+        )
 
         # Generate output files
         protocol_urls = build_protocol_urls(
@@ -336,9 +380,6 @@ def run_add(
             domain=domain,
             relay_entries=relay_url_sets,
         )
-
-        # Sync credentials to server
-        _sync_credentials_to_server(resolved)
 
         # Deploy server-hosted connection page (if enabled)
         hosted_page_url = ""
@@ -379,7 +420,7 @@ def run_show(
     registry = ServerRegistry(SERVERS_FILE)
     resolved = resolve_server(registry, requested_server=requested_server, user=user)
     resolved = ensure_server_connection(resolved)
-    fetch_credentials(resolved)
+    _refresh_credentials_or_fail(resolved, action=f"showing client '{name}'")
 
     creds = _load_creds(resolved.creds_dir)
 
@@ -443,8 +484,14 @@ def run_show(
                 wss_uuid=wss_uuid,
             )
             creds.clients.append(client_entry)
-            creds.save(resolved.creds_dir / "proxy.yml")
-            _sync_credentials_to_server(resolved)
+            _save_credentials_with_sync(
+                resolved,
+                creds,
+                recovery_hint=(
+                    f"The client was found on the panel but Meridian could not publish refreshed credentials. "
+                    f"Once SSH/SCP works, run: meridian client show {name} --server {resolved.ip}"
+                ),
+            )
             warn(f"Client '{name}' recovered from panel (credentials synced)")
 
     # Build protocol URLs
@@ -526,7 +573,7 @@ def run_remove(
     registry = ServerRegistry(SERVERS_FILE)
     resolved = resolve_server(registry, requested_server=requested_server, user=user)
     resolved = ensure_server_connection(resolved)
-    fetch_credentials(resolved)
+    _refresh_credentials_or_fail(resolved, action=f"removing client '{name}'")
 
     creds = _load_creds(resolved.creds_dir)
     info(f"Removing client '{name}'...")
@@ -558,6 +605,7 @@ def run_remove(
         if not client_found:
             fail(f"Client '{name}' not found", hint="Check client name with: meridian client list", hint_type="user")
 
+        removal_failures: list[str] = []
         # Remove from each active protocol's inbound
         for proto in PROTOCOLS.values():
             email = f"{proto.email_prefix}{name}"
@@ -572,7 +620,14 @@ def run_remove(
                         try:
                             panel.remove_client(ib.id, client_uuid)
                         except PanelError as e:
-                            warn(f"Failed to remove from {proto.remark}: {e}")
+                            removal_failures.append(f"{proto.remark}: {e}")
+
+        if removal_failures:
+            fail(
+                f"Failed to remove client '{name}' from all inbounds",
+                hint="No local state was changed. Retry once the panel is healthy.",
+                hint_type="system",
+            )
 
         ok(f"Client '{name}' removed from panel")
 
@@ -593,13 +648,24 @@ def run_remove(
                     if client_uuid:
                         try:
                             panel.remove_client(relay_ib.id, client_uuid)
-                        except PanelError:
-                            pass  # best-effort
+                        except PanelError as e:
+                            fail(
+                                f"Failed to remove client '{name}' from relay inbound {remark}",
+                                hint=f"No local state was changed. Retry once the panel is healthy: {e}",
+                                hint_type="system",
+                            )
                     break
 
         # Update credentials file
         creds.clients = [c for c in creds.clients if c.name != name]
-        creds.save(resolved.creds_dir / "proxy.yml")
+        _save_credentials_with_sync(
+            resolved,
+            creds,
+            recovery_hint=(
+                f"The client may already be removed from the panel. Once SSH/SCP works, run: "
+                f"meridian client show {name} --server {resolved.ip} to confirm recovery state."
+            ),
+        )
 
         # Delete local output files
         for pattern in [
@@ -611,9 +677,6 @@ def run_remove(
         # Remove server-hosted connection page (if enabled)
         if creds.server.hosted_page:
             _remove_client_page(resolved, creds, name)
-
-        # Sync credentials to server
-        _sync_credentials_to_server(resolved)
 
         err_console.print(f"\n  Client '{name}' has been removed from all active inbounds.\n")
 

@@ -296,6 +296,19 @@ class TestFetchCredentials:
         resolved = resolve_server(reg, explicit_ip="198.51.100.1")
 
         with patch.object(type(resolved.creds_dir), "mkdir", side_effect=PermissionError):
-            result = fetch_credentials(resolved)
+            result = fetch_credentials(resolved, force=True)
 
         assert result is False
+
+    def test_force_refresh_ignores_cached_proxy(self, servers_file: Path, tmp_path: Path) -> None:
+        reg = ServerRegistry(servers_file)
+        resolved = resolve_server(reg, explicit_ip="198.51.100.1")
+        cached = resolved.creds_dir / "proxy.yml"
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_text("version: 2\nserver:\n  ip: 198.51.100.1\n")
+
+        with patch.object(resolved.conn, "fetch_credentials", return_value=True) as mock_fetch:
+            result = fetch_credentials(resolved, force=True)
+
+        assert result is True
+        mock_fetch.assert_called_once_with(resolved.creds_dir)

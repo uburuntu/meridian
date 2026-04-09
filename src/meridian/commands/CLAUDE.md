@@ -28,11 +28,10 @@
 ## What's done well
 
 - **`local` keyword everywhere** — `deploy local`, `check local`, `--server local` all work. Case-insensitive. Same code path.
-- **Credential sync** — modify locally first, SCP back to server. No lockout on network failure.
 
 ## Pitfalls
 
 - **Local mode has two entry points** — `local` keyword and root auto-detect. They converge on `local_mode=True` but differ on `creds_dir`.
-- **SCP sync is fire-and-forget** — if SCP fails, server and local creds diverge silently.
+- **Write commands must fail closed on refresh/sync** — if a command mutates credentials, a stale local cache cannot be trusted and a failed post-save sync must abort before success output or handoff artifact generation.
 - **`console.fail()` always exits** — raises `typer.Exit(1)`. Only call from command entry points, never library code.
 - **`dev` subcommand is hidden** — not shown in `--help`. Intentional — developer tools only.

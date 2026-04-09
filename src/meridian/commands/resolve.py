@@ -257,15 +257,21 @@ def ensure_server_connection(resolved: ResolvedServer) -> ResolvedServer:
     return resolved
 
 
-def fetch_credentials(resolved: ResolvedServer) -> bool:
-    """Fetch credentials from server if not available locally."""
+def fetch_credentials(resolved: ResolvedServer, *, force: bool = False) -> bool:
+    """Fetch credentials from server.
+
+    When ``force`` is False, an existing local ``proxy.yml`` short-circuits.
+    Write commands should pass ``force=True`` so the server remains the source
+    of truth before local mutation.
+    """
     proxy_file = resolved.creds_dir / "proxy.yml"
-    try:
-        if proxy_file.is_file():
-            _check_version_mismatch(resolved.ip, proxy_file)
-            return True
-    except (PermissionError, OSError):
-        pass
+    if not force:
+        try:
+            if proxy_file.is_file():
+                _check_version_mismatch(resolved.ip, proxy_file)
+                return True
+        except (PermissionError, OSError):
+            pass
     try:
         resolved.creds_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     except PermissionError:

@@ -134,9 +134,9 @@ class TestRunAdd:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
-            patch("meridian.commands.client._sync_credentials_to_server"),
+            patch("meridian.commands.client._sync_credentials_to_server", return_value=True),
             patch("meridian.commands.client.print_terminal_output"),
             patch("meridian.commands.client.save_connection_html"),
         ):
@@ -164,7 +164,7 @@ class TestRunAdd:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
         ):
             with pytest.raises(typer.Exit) as exc:
@@ -191,7 +191,7 @@ class TestRunAdd:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
         ):
             with pytest.raises(typer.Exit) as exc:
@@ -213,7 +213,7 @@ class TestRunAdd:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
         ):
             with pytest.raises(typer.Exit) as exc:
@@ -235,9 +235,9 @@ class TestRunAdd:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
-            patch("meridian.commands.client._sync_credentials_to_server"),
+            patch("meridian.commands.client._sync_credentials_to_server", return_value=True),
             patch("meridian.commands.client.print_terminal_output"),
             patch("meridian.commands.client.save_connection_html"),
         ):
@@ -263,7 +263,7 @@ class TestRunShow:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client.print_terminal_output") as mock_print,
         ):
             run_show("alice")
@@ -287,7 +287,7 @@ class TestRunShow:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
         ):
             with pytest.raises(typer.Exit) as exc:
@@ -315,8 +315,9 @@ class TestRunShow:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
+            patch("meridian.commands.client._sync_credentials_to_server", return_value=True),
             patch("meridian.commands.client.print_terminal_output") as mock_print,
         ):
             run_show("alice")
@@ -343,7 +344,7 @@ class TestRunShow:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
         ):
             with pytest.raises(typer.Exit) as exc:
@@ -388,9 +389,9 @@ class TestRunRemove:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
-            patch("meridian.commands.client._sync_credentials_to_server"),
+            patch("meridian.commands.client._sync_credentials_to_server", return_value=True),
         ):
             run_remove("alice")
 
@@ -416,7 +417,7 @@ class TestRunRemove:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
         ):
             with pytest.raises(typer.Exit) as exc:
@@ -436,7 +437,7 @@ class TestRunRemove:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
         ):
             with pytest.raises(typer.Exit) as exc:
@@ -472,7 +473,7 @@ class TestRunList:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
         ):
             # Should not raise
@@ -494,7 +495,7 @@ class TestRunList:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
         ):
             run_list()  # Should not raise
@@ -511,7 +512,7 @@ class TestRunList:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
         ):
             with pytest.raises(typer.Exit) as exc:
@@ -551,14 +552,101 @@ class TestValidateClientName:
             patch("meridian.commands.client.ServerRegistry"),
             patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
-            patch("meridian.commands.client.fetch_credentials"),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
-            patch("meridian.commands.client._sync_credentials_to_server"),
+            patch("meridian.commands.client._sync_credentials_to_server", return_value=True),
             patch("meridian.commands.client.print_terminal_output"),
             patch("meridian.commands.client.save_connection_html"),
         ):
             # valid names like "alice123", "my-client", "client_1" should pass validation
             run_add("alice123")
+
+    def test_add_sync_failure_restores_local_credentials_and_fails(self, tmp_home: Path, creds_dir: Path) -> None:
+        _write_proxy_yml(creds_dir)
+        original = (creds_dir / "proxy.yml").read_text()
+
+        inbounds = [
+            _make_inbound(id=1, remark="VLESS-Reality", port=443, clients=[]),
+            _make_inbound(id=2, remark="VLESS-Reality-XHTTP", port=34567, clients=[]),
+        ]
+        mock_panel = _make_mock_panel(inbounds, uuid_seq=["new-uuid-1"])
+        mock_resolved = _make_mock_resolved(creds_dir)
+
+        with (
+            patch("meridian.commands.client.ServerRegistry"),
+            patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
+            patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
+            patch("meridian.commands.client._make_panel", return_value=mock_panel),
+            patch("meridian.commands.client._sync_credentials_to_server", return_value=False),
+            patch("meridian.commands.client.print_terminal_output"),
+            patch("meridian.commands.client.save_connection_html"),
+        ):
+            with pytest.raises(typer.Exit) as exc:
+                run_add("alice")
+        assert exc.value.exit_code == 1
+        assert (creds_dir / "proxy.yml").read_text() == original
+
+    def test_show_recovery_sync_failure_restores_local_credentials_and_fails(self, tmp_home: Path, creds_dir: Path) -> None:
+        _write_proxy_yml(creds_dir)
+        original = (creds_dir / "proxy.yml").read_text()
+        mock_resolved = _make_mock_resolved(creds_dir)
+        inbounds = [
+            _make_inbound(
+                id=1,
+                remark="VLESS-Reality",
+                port=443,
+                clients=[{"id": "recovered-uuid", "email": "reality-alice", "flow": "xtls-rprx-vision"}],
+            ),
+        ]
+        mock_panel = _make_mock_panel(inbounds)
+
+        with (
+            patch("meridian.commands.client.ServerRegistry"),
+            patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
+            patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
+            patch("meridian.commands.client._make_panel", return_value=mock_panel),
+            patch("meridian.commands.client._sync_credentials_to_server", return_value=False),
+        ):
+            with pytest.raises(typer.Exit) as exc:
+                run_show("alice")
+        assert exc.value.exit_code == 1
+        assert (creds_dir / "proxy.yml").read_text() == original
+
+    def test_remove_partial_panel_failure_keeps_local_state(self, tmp_home: Path, creds_dir: Path) -> None:
+        _write_proxy_yml(creds_dir, extra_client="alice")
+        inbounds = [
+            _make_inbound(
+                id=1,
+                remark="VLESS-Reality",
+                port=443,
+                clients=[{"id": "alice-uuid", "email": "reality-alice", "flow": "xtls-rprx-vision"}],
+            ),
+            _make_inbound(
+                id=2,
+                remark="VLESS-Reality-XHTTP",
+                port=34567,
+                clients=[{"id": "alice-uuid", "email": "xhttp-alice", "flow": ""}],
+            ),
+        ]
+        mock_panel = _make_mock_panel(inbounds)
+        mock_panel.remove_client.side_effect = [None, PanelError("backend failed")]
+        mock_resolved = _make_mock_resolved(creds_dir)
+
+        with (
+            patch("meridian.commands.client.ServerRegistry"),
+            patch("meridian.commands.client.resolve_server", return_value=mock_resolved),
+            patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
+            patch("meridian.commands.client.fetch_credentials", return_value=True),
+            patch("meridian.commands.client._make_panel", return_value=mock_panel),
+            patch("meridian.commands.client._sync_credentials_to_server", return_value=True) as mock_sync,
+        ):
+            with pytest.raises(typer.Exit) as exc:
+                run_remove("alice")
+        assert exc.value.exit_code == 1
+        assert "alice" in (creds_dir / "proxy.yml").read_text()
+        mock_sync.assert_not_called()
 
     def test_invalid_name_remove_fails(self, tmp_home: Path) -> None:
         """Invalid name in remove should also fail at validation."""
