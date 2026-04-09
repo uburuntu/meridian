@@ -98,15 +98,9 @@ def print_terminal_output(
         if not purl.url:
             continue
         if first:
-            err_console.print(f"  [info]{purl.label} (Reality):[/info]")
+            err_console.print(f"  [info]{purl.label}:[/info]")
             err_console.print(f"  {purl.url}")
             first = False
-        elif purl.key == "xhttp":
-            err_console.print("\n  [info]XHTTP (enhanced stealth):[/info]")
-            err_console.print(f"  {purl.url}")
-        elif purl.key == "wss":
-            err_console.print("\n  [info]CDN fallback (WSS):[/info]")
-            err_console.print(f"  {purl.url}")
         else:
             err_console.print(f"\n  [info]{purl.label}:[/info]")
             err_console.print(f"  {purl.url}")
