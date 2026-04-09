@@ -125,12 +125,14 @@ Things that require human action outside the codebase.
 - [x] **IPv6 URLs malformed** — added bracket wrapping in Reality and XHTTP URL builders
 - [x] **Redundant condition check** — removed duplicate `if` in `setup.py:147-157`
 - [x] **Missing type annotation** — `list` → `list[ProtocolURL]` in `client.py:106`
-- [ ] **`SystemExit` catch anti-pattern** — `uninstall.py:30-40` catches `SystemExit` from `fail()`. Should use custom exception or optional return
+- [x] **`SystemExit` catch anti-pattern** — added `try_resolve_server()` wrapper in resolve.py
 
 ### Testing
 
-- [ ] **14 source modules (34%) have zero tests** — priority gaps: `branding.py` (233 LOC, emoji/image processing), `xray_client.py` (416 LOC, binary download/verify), `ping.py` (244 LOC, reachability), `render.py` (725 LOC, HTML/QR)
-- [ ] **`test_render_templates.py` tautological** — 2 tests only check templates don't crash, never verify output content, QR embedding, or variable substitution
+- [ ] **12 source modules have zero tests** — remaining gaps: `ping.py` (244 LOC, reachability), `check.py` (260 LOC), `scan.py` (166 LOC), `docker.py` (314 LOC), `config.py`, `display.py`, `ai.py`, `models.py`, `server.py`, `uninstall.py`, `provision/uninstall.py`
+- [x] **`test_render_templates.py` tautological** — added 8 content-assertion tests (QR, URLs, XSS, relays, fallback, WSS visibility)
+- [x] **branding.py untested** — added 37 tests (emoji, color, SSRF, image download)
+- [x] **xray_client.py untested** — added 35 tests (digest parsing, config builders, test configs)
 
 ### UX
 
