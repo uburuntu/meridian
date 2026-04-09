@@ -280,6 +280,18 @@ class CreateInbound:
                     detail=f"{remark} inbound already exists",
                 )
 
+        # Pre-check: ensure port is not already in use by another service
+        if not self.listen:  # binding to all interfaces
+            port_check = conn.run(f"ss -tlnp sport = :{self.port} 2>/dev/null", timeout=10)
+            if port_check.returncode == 0 and f":{self.port}" in port_check.stdout:
+                # Allow if it's already our service (Xray/3x-ui) — re-deploy scenario
+                if not any(svc in port_check.stdout for svc in ["3x-ui", "xray"]):
+                    return StepResult(
+                        name=self.name,
+                        status="failed",
+                        detail=f"Port {self.port} already in use by another service",
+                    )
+
         uuid = self._get_uuid(creds)
         stream_settings = self._build_stream_settings(creds)
         if stream_settings is None:
