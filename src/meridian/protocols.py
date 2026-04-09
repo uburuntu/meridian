@@ -19,6 +19,13 @@ from meridian.config import DEFAULT_FINGERPRINT, DEFAULT_SNI
 from meridian.models import Inbound
 
 
+def _bracket_ipv6(ip: str) -> str:
+    """Wrap IPv6 addresses in brackets for URL construction."""
+    if ":" in ip and not ip.startswith("["):
+        return f"[{ip}]"
+    return ip
+
+
 @dataclass(frozen=True)
 class InboundType:
     """Defines an inbound protocol type in 3x-ui."""
@@ -184,7 +191,7 @@ class RealityProtocol(Protocol):
         encryption = kwargs.get("encryption", "none")
         fragment = self._build_fragment(name, kwargs.get("server_name", ""))
         return (
-            f"vless://{uuid}@{ip}:443"
+            f"vless://{uuid}@{_bracket_ipv6(ip)}:443"
             f"?encryption={encryption}&flow=xtls-rprx-vision"
             f"&security=reality&sni={sni}&fp={fingerprint}"
             f"&pbk={public_key}&sid={short_id}"
@@ -222,7 +229,7 @@ class XHTTPProtocol(Protocol):
         domain = kwargs.get("domain", "")
         fingerprint = kwargs.get("fingerprint", DEFAULT_FINGERPRINT)
         # Use domain if available, otherwise IP
-        host = domain or ip
+        host = domain or _bracket_ipv6(ip)
         fragment = self._build_fragment(name, kwargs.get("server_name", ""))
         return (
             f"vless://{uuid}@{host}:443"
