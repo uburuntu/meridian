@@ -47,9 +47,9 @@ Things that require human action outside the codebase.
 
 ### Deployment correctness
 
-- [ ] **`return 444` invalid in nginx HTTP block** — IP-mode deployments use `return 444;` inside an HTTP server block, but 444 only works in stream context. Causes `nginx -t` failure or detectable footprint. Use `return 403;` instead (`services.py:276-278`)
-- [ ] **nginx stream block `printf` produces literal `\n`** — single-quoted `\n` in `printf` creates malformed nginx.conf instead of actual newlines. Also appends without guarding against duplicates (`services.py:853-859`)
-- [ ] **Socket leak in `tcp_connect()` and `_get_cert_der()`** — sockets not closed on exception path. Repeated connectivity checks (ping, probe) can exhaust file descriptors (`ssh.py:382-394`, `probe.py:88-102`)
+- [x] **`return 444` invalid in nginx HTTP block** — replaced with `return 403;`
+- [x] **nginx stream block `printf` produces literal `\n`** — verified false positive: printf interprets `\n` in format strings
+- [x] **Socket leak in `tcp_connect()` and `_get_cert_der()`** — wrapped in context managers
 
 ---
 
@@ -88,7 +88,7 @@ Things that require human action outside the codebase.
 
 ### Code quality
 
-- [ ] **Unused `import hashlib`** — top-level import in `xray_client.py:9` shadowed by local re-import at line 82. Dead code
+- [x] **Unused `import hashlib`** — verified false positive: no top-level import exists
 
 ---
 
@@ -118,13 +118,13 @@ Things that require human action outside the codebase.
 
 - [ ] **`_wait_for_panel` SSH vs panel confusion** — polling breaks on transient SSH issues
 - [ ] **Xray process accumulation on `test_connection()` timeouts** — orphan processes not cleaned up when `_wait_for_port()` times out (`xray_client.py:305-350`)
-- [ ] **Broad `except Exception` swallows errors** — silent catch-alls in `urls.py`, `probe.py`, `ping.py`, `update.py` make debugging hard. Should use specific exception types or at least log
+- [x] **Broad `except Exception` swallows errors** — narrowed to specific types in urls.py, ping.py, update.py
 
 ### Code quality
 
-- [ ] **IPv6 URLs malformed** — no bracket wrapping in protocol URL builders. `vless://uuid@2001:db8::1:443` is invalid per RFC 3986, needs `[2001:db8::1]` (`protocols.py:178-193`)
-- [ ] **Redundant condition check** — `if server_name or icon or color` checked twice in `setup.py:147-157`, inner check always true
-- [ ] **Missing type annotation** — `protocol_urls: list` in `client.py:106` should be `list[ProtocolURL]` for consistency
+- [x] **IPv6 URLs malformed** — added bracket wrapping in Reality and XHTTP URL builders
+- [x] **Redundant condition check** — removed duplicate `if` in `setup.py:147-157`
+- [x] **Missing type annotation** — `list` → `list[ProtocolURL]` in `client.py:106`
 - [ ] **`SystemExit` catch anti-pattern** — `uninstall.py:30-40` catches `SystemExit` from `fail()`. Should use custom exception or optional return
 
 ### Testing
