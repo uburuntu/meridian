@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from meridian.ssh import SSHError, ServerConnection, _verify_host_key, tcp_connect
+from meridian.ssh import ServerConnection, SSHError, _verify_host_key, tcp_connect
 
 
 class TestServerConnectionInit:

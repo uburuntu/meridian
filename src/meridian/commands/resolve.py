@@ -11,7 +11,7 @@ from meridian.config import CREDS_BASE, SERVER_CREDS_DIR, is_ipv4
 from meridian.console import err_console, fail, info, warn
 from meridian.credentials import ServerCredentials
 from meridian.servers import ServerRegistry
-from meridian.ssh import SSHError, ServerConnection
+from meridian.ssh import ServerConnection, SSHError
 
 LOCAL_KEYWORDS = ("local", "locally")
 

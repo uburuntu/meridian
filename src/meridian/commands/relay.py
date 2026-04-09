@@ -22,7 +22,7 @@ from meridian.config import CREDS_BASE, RELAY_SERVICE_NAME, SERVER_CREDS_DIR, SE
 from meridian.console import confirm, err_console, fail, info, line, ok, warn
 from meridian.credentials import RelayEntry, ServerCredentials
 from meridian.servers import ServerEntry, ServerRegistry
-from meridian.ssh import SSH_OPTS, SSHError, ServerConnection
+from meridian.ssh import SSH_OPTS, ServerConnection, SSHError
 
 # ---------------------------------------------------------------------------
 # Relay inbound helpers

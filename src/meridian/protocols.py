@@ -367,8 +367,6 @@ class XHTTPProtocol(Protocol):
             return ""
         uuid = self._resolve_uuid(reality_uuid, wss_uuid)
         via = f"-via-{relay_name}" if relay_name else f"-via-{relay_ip}"
-        # XHTTP uses domain or exit IP as SNI (nginx cert must match)
-        xhttp_sni = creds.server.domain or creds.server.ip or ""
         return self.build_url(
             uuid,
             name,

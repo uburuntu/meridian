@@ -7,7 +7,7 @@ import shutil
 from meridian.config import CREDS_BASE, SERVERS_FILE
 from meridian.console import err_console, fail, info, line, ok, warn
 from meridian.servers import ServerEntry, ServerRegistry
-from meridian.ssh import SSHError, ServerConnection
+from meridian.ssh import ServerConnection, SSHError
 
 
 def run_add(ip: str, name: str = "", user: str = "root") -> None:
