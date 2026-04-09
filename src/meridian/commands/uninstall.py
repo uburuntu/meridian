@@ -10,6 +10,7 @@ from meridian.commands.resolve import (
     ensure_server_connection,
     fetch_credentials,
     resolve_server,
+    try_resolve_server,
 )
 from meridian.config import CREDS_BASE, RELAY_SERVICE_NAME, SERVERS_FILE
 from meridian.console import err_console, fail, info, ok, prompt, warn
@@ -29,9 +30,8 @@ def run(
 
     # If no IP given and resolution fails, prompt for it
     if not ip:
-        try:
-            resolved = resolve_server(registry, requested_server=requested_server, user=user)
-        except SystemExit:
+        resolved = try_resolve_server(registry, requested_server=requested_server, user=user)
+        if not resolved:
             server_ip = prompt("Server IP to uninstall from")
             if not server_ip:
                 fail("Server IP is required for uninstall", hint_type="user")

@@ -197,6 +197,19 @@ def resolve_server(
     )
 
 
+def try_resolve_server(
+    registry: ServerRegistry,
+    requested_server: str = "",
+    explicit_ip: str = "",
+    user: str = "root",
+) -> ResolvedServer | None:
+    """Like resolve_server but returns None instead of exiting on failure."""
+    try:
+        return resolve_server(registry, requested_server=requested_server, explicit_ip=explicit_ip, user=user)
+    except SystemExit:
+        return None
+
+
 def ensure_server_connection(resolved: ResolvedServer) -> ResolvedServer:
     """Detect local mode if not already set, then verify SSH connectivity.
 
