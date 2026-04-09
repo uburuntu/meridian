@@ -48,7 +48,24 @@ pattern = "(?P<version>.+)"
 packages = ["src/meridian"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/.github", "/docs"]
+exclude = [
+    "/.github",
+    "/docs",
+    "/website",
+    "/tests",
+    "/dist",
+    "*.tar",
+    "*.tar.gz",
+    "/docker-compose.test.yml",
+    "/context7.json",
+    "/Makefile",
+    "/BACKLOG.md",
+    "/CODE_OF_CONDUCT.md",
+    "/CONTRIBUTING.md",
+    "/SECURITY.md",
+    "/uv.lock",
+    "CLAUDE.md",
+]
 
 [tool.ruff]
 target-version = "py310"
