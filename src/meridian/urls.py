@@ -95,6 +95,7 @@ def build_relay_urls(
     relay_name: str = "",
     relay_port: int = 443,
     server_name: str = "",
+    relay_sni: str = "",
 ) -> RelayURLSet:
     """Build connection URLs that route through a relay node.
 
@@ -102,7 +103,8 @@ def build_relay_urls(
     to the exit server.  All protocols work if we set explicit ``sni=``
     parameters pointing to the exit's TLS certificate identity:
 
-    - **Reality**: uses its own handshake — works as-is with relay IP.
+    - **Reality**: uses relay-specific SNI when available (per-relay
+      Xray inbound on exit handles it). Falls back to exit's SNI.
     - **XHTTP**: add ``sni=<exit_ip_or_domain>`` so nginx's cert matches.
     - **WSS**: add ``sni=<domain>`` + ``host=<domain>`` (domain mode only).
 
@@ -114,12 +116,15 @@ def build_relay_urls(
         relay_ip: Relay node IP address (substituted for exit IP).
         relay_name: Friendly relay name (used in URL fragment).
         relay_port: Relay listen port (default 443).
+        relay_sni: Relay-specific SNI for Reality (empty = use exit's SNI).
 
     Returns:
         A ``RelayURLSet`` with all active protocol URLs via this relay.
     """
     exit_ip = creds.server.ip or ""
     sni = creds.server.sni or DEFAULT_SNI
+    # Use relay-specific SNI for Reality when available; XHTTP/WSS keep exit's SNI
+    reality_sni = relay_sni or sni
     public_key = creds.reality.public_key or ""
     short_id = creds.reality.short_id or ""
     domain = creds.server.domain or ""
@@ -132,11 +137,12 @@ def build_relay_urls(
     fragment_base = f"{name} @ {server_name}" if server_name else name
     urls: list[ProtocolURL] = []
 
-    # Reality — end-to-end Reality handshake, relay is fully transparent
+    # Reality — end-to-end Reality handshake, relay is fully transparent.
+    # Uses relay-specific SNI so traffic looks plausible from relay's geography.
     url = (
         f"vless://{reality_uuid}@{relay_ip}:{relay_port}"
         f"?encryption={encryption}&flow=xtls-rprx-vision"
-        f"&security=reality&sni={sni}&fp={DEFAULT_FINGERPRINT}"
+        f"&security=reality&sni={reality_sni}&fp={DEFAULT_FINGERPRINT}"
         f"&pbk={public_key}&sid={short_id}"
         f"&type=tcp&headerType=none"
         f"#{fragment_base}{suffix}"
@@ -188,6 +194,7 @@ def build_all_relay_urls(
             relay.name,
             relay.port,
             server_name=server_name,
+            relay_sni=relay.sni,
         )
         for relay in creds.relays
     ]

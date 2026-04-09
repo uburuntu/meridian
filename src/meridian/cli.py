@@ -355,6 +355,7 @@ def relay_deploy_cmd(
     user: str = typer.Option("root", "--user", "-u", help="SSH user"),
     name: str = typer.Option("", "--name", help="Friendly name for the relay (e.g., ru-moscow)"),
     port: int = typer.Option(443, "--port", "-p", help="Relay listen port"),
+    sni: str = typer.Option("", "--sni", help="Reality SNI target for relay (auto-scanned if omitted)"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
     """Deploy a TCP relay that forwards to an exit server.
@@ -362,10 +363,11 @@ def relay_deploy_cmd(
     [dim]Examples:[/dim]
       [cyan]meridian relay deploy 1.2.3.4 --exit 5.6.7.8[/cyan]
       [cyan]meridian relay deploy 1.2.3.4 --exit myserver --name ru-moscow[/cyan]
+      [cyan]meridian relay deploy 1.2.3.4 --exit 5.6.7.8 --sni yandex.ru[/cyan]
     """
     from meridian.commands.relay import run_deploy
 
-    run_deploy(relay_ip, exit, user, name, port, yes)
+    run_deploy(relay_ip, exit, user, name, port, yes, sni=sni)
 
 
 @relay_app.command("list")

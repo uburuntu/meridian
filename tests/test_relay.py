@@ -52,6 +52,7 @@ relays:
     name: ru-moscow
     port: 443
     added: "2026-03-22T12:00:00Z"
+    sni: yandex.ru
   - ip: 10.20.30.40
     name: ru-spb
     port: 443
@@ -75,12 +76,14 @@ class TestRelayEntry:
         assert entry.name == ""
         assert entry.port == 443
         assert entry.added == ""
+        assert entry.sni == ""
 
     def test_relay_entry_with_values(self) -> None:
-        entry = RelayEntry(ip="1.2.3.4", name="ru-moscow", port=443, added="2026-01-01T00:00:00Z")
+        entry = RelayEntry(ip="1.2.3.4", name="ru-moscow", port=443, added="2026-01-01T00:00:00Z", sni="yandex.ru")
         assert entry.ip == "1.2.3.4"
         assert entry.name == "ru-moscow"
         assert entry.port == 443
+        assert entry.sni == "yandex.ru"
 
 
 class TestCredentialsWithRelays:
@@ -89,8 +92,10 @@ class TestCredentialsWithRelays:
         assert len(creds.relays) == 2
         assert creds.relays[0].ip == "1.2.3.4"
         assert creds.relays[0].name == "ru-moscow"
+        assert creds.relays[0].sni == "yandex.ru"
         assert creds.relays[1].ip == "10.20.30.40"
         assert creds.relays[1].name == "ru-spb"
+        assert creds.relays[1].sni == ""  # no SNI = legacy behavior
 
     def test_load_without_relays(self, sample_proxy_yml: Path) -> None:
         """Old credentials without relays should have empty relay list."""
@@ -159,7 +164,8 @@ class TestBuildRelayUrls:
         # URL should contain exit's Reality parameters
         assert "K6JYbz4MflVPaaxdtRHoWBNp7SHzGMaqp6ohXMfJHUy" in reality_url.url  # public key
         assert "abcd1234" in reality_url.url  # short ID
-        assert "www.microsoft.com" in reality_url.url  # SNI
+        # Without relay_sni, Reality SNI defaults to exit's SNI
+        assert "www.microsoft.com" in reality_url.url
         assert uuid in reality_url.url
 
         # Fragment should include relay identifier
@@ -173,6 +179,53 @@ class TestBuildRelayUrls:
         assert "sni=5.6.7.8" in xhttp_url  # TLS identity is exit IP
         assert "fp=chrome" in xhttp_url  # TLS fingerprint
         assert "xhttp123" in xhttp_url  # path preserved
+
+    def test_build_relay_urls_with_relay_sni(self, sample_proxy_with_relays: Path) -> None:
+        """When relay_sni is set, Reality URL uses it instead of exit's SNI."""
+        from meridian.urls import build_relay_urls
+
+        creds = ServerCredentials.load(sample_proxy_with_relays)
+        uuid = "550e8400-e29b-41d4-a716-446655440000"
+        wss_uuid = "660e8400-e29b-41d4-a716-446655440001"
+
+        result = build_relay_urls(
+            "alice",
+            uuid,
+            wss_uuid,
+            creds,
+            "1.2.3.4",
+            "ru-moscow",
+            relay_sni="yandex.ru",
+        )
+        reality_url = next(u for u in result.urls if u.key == "reality")
+
+        # Reality SNI should be relay-specific
+        assert "sni=yandex.ru" in reality_url.url
+        assert "sni=www.microsoft.com" not in reality_url.url
+
+        # XHTTP should still use exit's IP/domain (not relay SNI)
+        xhttp_urls = [u for u in result.urls if u.key == "xhttp"]
+        if xhttp_urls:
+            assert "sni=5.6.7.8" in xhttp_urls[0].url  # exit IP, not yandex.ru
+
+    def test_build_all_relay_urls_uses_relay_sni(self, sample_proxy_with_relays: Path) -> None:
+        """build_all_relay_urls passes relay.sni from each RelayEntry."""
+        from meridian.urls import build_all_relay_urls
+
+        creds = ServerCredentials.load(sample_proxy_with_relays)
+        uuid = "550e8400-e29b-41d4-a716-446655440000"
+        wss_uuid = "660e8400-e29b-41d4-a716-446655440001"
+
+        results = build_all_relay_urls("alice", uuid, wss_uuid, creds)
+        assert len(results) == 2
+
+        # First relay has sni=yandex.ru → Reality URL uses it
+        r0_reality = next(u for u in results[0].urls if u.key == "reality")
+        assert "sni=yandex.ru" in r0_reality.url
+
+        # Second relay has no sni → Reality URL uses exit's default
+        r1_reality = next(u for u in results[1].urls if u.key == "reality")
+        assert "sni=www.microsoft.com" in r1_reality.url
 
     def test_build_relay_urls_no_name(self, sample_proxy_with_relays: Path) -> None:
         from meridian.urls import build_relay_urls
@@ -515,3 +568,91 @@ class TestRenderingWithRelays:
         content = dest.read_text()
         assert "BACKUP (DIRECT)" not in content
         assert "via relay" not in content
+
+
+# ---------------------------------------------------------------------------
+# Nginx stream config tests
+# ---------------------------------------------------------------------------
+
+
+class TestNginxStreamRelay:
+    def test_stream_config_includes_relay_maps(self) -> None:
+        """Main stream config should include relay-maps directory."""
+        from meridian.provision.services import _render_nginx_stream_config
+
+        config = _render_nginx_stream_config(
+            reality_sni="www.microsoft.com",
+            reality_backend_port=10443,
+            nginx_internal_port=8443,
+            server_ip="5.6.7.8",
+        )
+        assert "include /etc/nginx/stream.d/relay-maps/*.conf;" in config
+
+
+# ---------------------------------------------------------------------------
+# Relay helper tests
+# ---------------------------------------------------------------------------
+
+
+class TestRelayHelpers:
+    def test_relay_label_from_name(self) -> None:
+        from meridian.commands.relay import _relay_label
+
+        entry = RelayEntry(ip="1.2.3.4", name="ru-moscow")
+        assert _relay_label(entry) == "ru-moscow"
+
+    def test_relay_label_from_ip(self) -> None:
+        from meridian.commands.relay import _relay_label
+
+        entry = RelayEntry(ip="1.2.3.4")
+        assert _relay_label(entry) == "1-2-3-4"
+
+    def test_relay_inbound_remark(self) -> None:
+        from meridian.commands.relay import _relay_inbound_remark
+
+        entry = RelayEntry(ip="1.2.3.4", name="ru-moscow")
+        assert _relay_inbound_remark(entry) == "VLESS-Reality-Relay-ru-moscow"
+
+    def test_relay_xray_port_deterministic(self) -> None:
+        from meridian.commands.relay import _relay_xray_port
+
+        port = _relay_xray_port("1.2.3.4")
+        assert 40000 <= port <= 49999
+        assert _relay_xray_port("1.2.3.4") == port  # same input → same output
+
+    def test_relay_xray_port_differs_per_ip(self) -> None:
+        from meridian.commands.relay import _relay_xray_port
+
+        assert _relay_xray_port("1.2.3.4") != _relay_xray_port("5.6.7.8")
+
+
+# ---------------------------------------------------------------------------
+# Relay SNI serialization roundtrip
+# ---------------------------------------------------------------------------
+
+
+class TestRelaySNISerialization:
+    def test_save_load_roundtrip_with_sni(self, tmp_path: Path) -> None:
+        creds = ServerCredentials()
+        creds.relays = [
+            RelayEntry(ip="1.2.3.4", name="ru", port=443, sni="yandex.ru"),
+            RelayEntry(ip="5.6.7.8", name="legacy", port=443),
+        ]
+        path = tmp_path / "proxy.yml"
+        creds.save(path)
+        loaded = ServerCredentials.load(path)
+        assert loaded.relays[0].sni == "yandex.ru"
+        assert loaded.relays[1].sni == ""
+
+    def test_legacy_yaml_without_sni_defaults_empty(self, tmp_path: Path) -> None:
+        """YAML without sni field should load with sni='' (backward compat)."""
+        path = tmp_path / "proxy.yml"
+        path.write_text("""\
+version: 2
+relays:
+  - ip: 1.2.3.4
+    name: test
+    port: 443
+""")
+        creds = ServerCredentials.load(path)
+        assert creds.relays[0].sni == ""

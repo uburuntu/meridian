@@ -266,6 +266,38 @@ def run_add(
 
         ok(f"Client '{name}' added to panel")
 
+        # Add client to relay-specific inbounds (per-relay SNI)
+        for relay in creds.relays:
+            if not relay.sni:
+                continue
+            from meridian.commands.relay import _relay_inbound_remark, _relay_label
+
+            remark = _relay_inbound_remark(relay)
+            relay_ib = panel.find_inbound(remark)
+            if relay_ib is None:
+                continue
+            relay_email = f"relay-{_relay_label(relay)}-{name}"
+            relay_client = {
+                "clients": [
+                    {
+                        "id": reality_uuid,
+                        "flow": "xtls-rprx-vision",
+                        "email": relay_email,
+                        "limitIp": 2,
+                        "totalGB": 0,
+                        "expiryTime": 0,
+                        "enable": True,
+                        "tgId": "",
+                        "subId": "",
+                        "reset": 0,
+                    }
+                ],
+            }
+            try:
+                panel.add_client(relay_ib.id, relay_client)
+            except PanelError:
+                warn(f"Could not add client to relay inbound {remark}")
+
         # Update credentials file
         creds.clients.append(
             ClientEntry(
@@ -543,6 +575,27 @@ def run_remove(
                             warn(f"Failed to remove from {proto.remark}: {e}")
 
         ok(f"Client '{name}' removed from panel")
+
+        # Remove from relay-specific inbounds (per-relay SNI)
+        for relay in creds.relays:
+            if not relay.sni:
+                continue
+            from meridian.commands.relay import _relay_inbound_remark, _relay_label
+
+            remark = _relay_inbound_remark(relay)
+            relay_ib = panel.find_inbound(remark)
+            if relay_ib is None:
+                continue
+            relay_email = f"relay-{_relay_label(relay)}-{name}"
+            for client in relay_ib.clients:
+                if client.get("email") == relay_email:
+                    client_uuid = client.get("id", "")
+                    if client_uuid:
+                        try:
+                            panel.remove_client(relay_ib.id, client_uuid)
+                        except PanelError:
+                            pass  # best-effort
+                    break
 
         # Update credentials file
         creds.clients = [c for c in creds.clients if c.name != name]

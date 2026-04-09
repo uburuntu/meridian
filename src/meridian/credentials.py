@@ -87,6 +87,7 @@ class RelayEntry:
     name: str = ""  # optional friendly name (e.g., "ru-moscow")
     port: int = 443  # relay listen port
     added: str = ""  # ISO8601 timestamp
+    sni: str = ""  # relay-specific SNI target for Reality camouflage
 
 
 @dataclass
@@ -405,6 +406,7 @@ def _load_v2(data: dict[str, Any]) -> ServerCredentials:
                 name=r.get("name", ""),
                 port=r.get("port", 443),
                 added=r.get("added", ""),
+                sni=r.get("sni", ""),
             )
         )
 

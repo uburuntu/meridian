@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
+import shlex
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +23,223 @@ from meridian.console import confirm, err_console, fail, info, line, ok, warn
 from meridian.credentials import RelayEntry, ServerCredentials
 from meridian.servers import ServerEntry, ServerRegistry
 from meridian.ssh import SSH_OPTS, ServerConnection
+
+# ---------------------------------------------------------------------------
+# Relay inbound helpers
+# ---------------------------------------------------------------------------
+
+
+def _relay_label(relay: RelayEntry) -> str:
+    """Derive a filesystem/remark-safe label from a relay entry."""
+    return re.sub(r"[^a-zA-Z0-9_-]", "-", relay.name or relay.ip)
+
+
+def _relay_inbound_remark(relay: RelayEntry) -> str:
+    """3x-ui inbound remark for a relay-specific Reality inbound."""
+    return f"VLESS-Reality-Relay-{_relay_label(relay)}"
+
+
+def _relay_xray_port(relay_ip: str) -> int:
+    """Deterministic Xray port for a relay inbound (range 40000-49999)."""
+    ip_hash = int(hashlib.sha256(relay_ip.encode()).hexdigest()[:8], 16)
+    return 40000 + (ip_hash % 10000)
+
+
+def _create_relay_inbound(
+    exit_conn: ServerConnection,
+    creds: ServerCredentials,
+    relay_sni: str,
+    relay_ip: str,
+    relay_name: str = "",
+) -> bool:
+    """Create a relay-specific Xray Reality inbound on the exit server.
+
+    Uses the same key pair and client list as the main Reality inbound,
+    but with the relay's SNI as dest (so probes see the correct cert).
+
+    Returns True on success, False on failure.
+    """
+    from meridian.panel import PanelClient, PanelError
+    from meridian.provision.xray import SNIFFING_JSON, _reality_stream_settings
+
+    panel = PanelClient(
+        conn=exit_conn,
+        panel_port=creds.panel.port,
+        web_base_path=creds.panel.web_base_path or "",
+    )
+    try:
+        panel.login(creds.panel.username or "", creds.panel.password or "")
+    except PanelError as e:
+        warn(f"Could not connect to exit panel: {e}")
+        return False
+
+    with panel:
+        port = _relay_xray_port(relay_ip)
+        temp_entry = RelayEntry(ip=relay_ip, name=relay_name)
+        remark = _relay_inbound_remark(temp_entry)
+
+        # Check if already exists
+        existing = panel.find_inbound(remark)
+        if existing is not None:
+            ok(f"Relay inbound already exists: {remark}")
+            return True
+
+        # Build stream settings with relay SNI
+        stream_settings = _reality_stream_settings(
+            sni=relay_sni,
+            private_key=creds.reality.private_key or "",
+            public_key=creds.reality.public_key or "",
+            short_id=creds.reality.short_id or "",
+        )
+
+        # Copy client list from main Reality inbound
+        from meridian.protocols import get_protocol
+
+        reality_proto = get_protocol("reality")
+        if reality_proto is None:
+            warn("Reality protocol not registered")
+            return False
+
+        try:
+            inbounds = panel.list_inbounds()
+        except PanelError as e:
+            warn(f"Could not list inbounds: {e}")
+            return False
+
+        main_ib = reality_proto.find_inbound(inbounds)
+        if main_ib is None:
+            warn("Main Reality inbound not found — cannot create relay inbound")
+            return False
+
+        # Build settings with same clients as main inbound
+        clients_list = []
+        for client in main_ib.clients:
+            clients_list.append(
+                {
+                    "id": client.get("id", ""),
+                    "flow": "xtls-rprx-vision",
+                    "email": f"relay-{_relay_label(temp_entry)}-{client.get('email', '').split('-', 1)[-1]}",
+                    "limitIp": client.get("limitIp", 2),
+                    "totalGB": 0,
+                    "expiryTime": 0,
+                    "enable": True,
+                    "tgId": "",
+                    "subId": "",
+                    "reset": 0,
+                }
+            )
+
+        if not clients_list:
+            # No clients yet — create with a placeholder that will be updated
+            # when the first client is added
+            warn("No clients in main inbound — relay inbound will have no clients until next client add")
+
+        settings: dict = {
+            "clients": clients_list,
+            "decryption": "none",
+            "fallbacks": [],
+        }
+        # PQ encryption: match main inbound
+        if creds.reality.encryption_private_key:
+            settings["decryption"] = creds.reality.encryption_private_key
+            del settings["fallbacks"]
+
+        body = {
+            "remark": remark,
+            "enable": True,
+            "listen": "127.0.0.1",  # Behind nginx
+            "port": port,
+            "protocol": "vless",
+            "expiryTime": 0,
+            "total": 0,
+            "settings": json.dumps(settings),
+            "streamSettings": stream_settings,
+            "sniffing": SNIFFING_JSON,
+        }
+
+        try:
+            data = panel.api_post_json("/panel/api/inbounds/add", body)
+        except PanelError as e:
+            warn(f"Failed to create relay inbound: {e}")
+            return False
+
+        if not data.get("success"):
+            warn(f"Failed to create relay inbound: {data.get('msg', 'unknown error')}")
+            return False
+
+        ok(f"Relay inbound created on exit (port {port}, SNI={relay_sni})")
+        return True
+
+
+def _deploy_relay_nginx(
+    exit_conn: ServerConnection,
+    relay_sni: str,
+    relay_ip: str,
+    relay_name: str = "",
+) -> None:
+    """Create per-relay nginx config files on the exit server and reload.
+
+    Creates two files:
+    1. Map entry in relay-maps/ (routes SNI to relay upstream)
+    2. Upstream definition (Xray inbound port for this relay)
+
+    Also ensures the main stream config includes relay-maps (one-time
+    migration for servers deployed before per-relay SNI support).
+    """
+    temp_entry = RelayEntry(ip=relay_ip, name=relay_name)
+    label = _relay_label(temp_entry)
+    port = _relay_xray_port(relay_ip)
+    upstream_name = f"xray_relay_{label}"
+
+    # Ensure main stream config includes relay-maps (migration for pre-existing deploys)
+    exit_conn.run(
+        "grep -q 'relay-maps' /etc/nginx/stream.d/meridian.conf 2>/dev/null || "
+        r"sed -i '/map \$ssl_preread_server_name/a\\    include /etc/nginx/stream.d/relay-maps/*.conf;' "
+        "/etc/nginx/stream.d/meridian.conf",
+        timeout=15,
+    )
+
+    # Map entry: relay_sni -> upstream
+    map_content = f"    {relay_sni}  {upstream_name};\n"
+    q_map = shlex.quote(map_content)
+    exit_conn.run(
+        f"mkdir -p /etc/nginx/stream.d/relay-maps && "
+        f"printf '%s' {q_map} > /etc/nginx/stream.d/relay-maps/{shlex.quote(label)}.conf",
+        timeout=15,
+    )
+
+    # Upstream: relay Xray inbound port
+    upstream_content = f"upstream {upstream_name} {{\n    server 127.0.0.1:{port};\n}}\n"
+    q_upstream = shlex.quote(upstream_content)
+    exit_conn.run(
+        f"printf '%s' {q_upstream} > /etc/nginx/stream.d/meridian-relay-{shlex.quote(label)}.conf",
+        timeout=15,
+    )
+
+    # Validate and reload
+    result = exit_conn.run("nginx -t 2>&1", timeout=15)
+    if result.returncode != 0:
+        warn(f"nginx config validation failed: {result.stderr.strip() or result.stdout.strip()}")
+        return
+    exit_conn.run("systemctl reload nginx", timeout=15)
+    ok(f"nginx updated: SNI={relay_sni} -> port {port}")
+
+
+def _remove_relay_nginx(
+    exit_conn: ServerConnection,
+    relay: RelayEntry,
+) -> None:
+    """Remove per-relay nginx config files from the exit server and reload."""
+    label = _relay_label(relay)
+    q_label = shlex.quote(label)
+    exit_conn.run(
+        f"rm -f /etc/nginx/stream.d/relay-maps/{q_label}.conf /etc/nginx/stream.d/meridian-relay-{q_label}.conf",
+        timeout=15,
+    )
+    result = exit_conn.run("nginx -t 2>&1", timeout=15)
+    if result.returncode == 0:
+        exit_conn.run("systemctl reload nginx", timeout=15)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -223,6 +443,7 @@ def run_deploy(
     relay_name: str = "",
     listen_port: int = 443,
     yes: bool = False,
+    sni: str = "",
 ) -> None:
     """Deploy a relay node that forwards traffic to an exit server."""
     # Validate relay IP
@@ -326,6 +547,45 @@ def run_deploy(
     else:
         ok("Relay -> exit connectivity confirmed")
 
+    # Determine relay SNI target
+    from meridian.config import DEFAULT_SNI
+
+    relay_sni = sni  # from --sni flag
+    if not relay_sni:
+        # Scan for optimal SNI from the relay's network perspective
+        from meridian.commands.scan import scan_for_sni
+
+        err_console.print()
+        err_console.print("  [bold]SNI Scanner[/bold]")
+        err_console.print("  [dim]Finding optimal Reality SNI target near the relay server...[/dim]")
+        err_console.print("  [dim]This makes the relay look like it hosts a nearby website.[/dim]")
+        err_console.print()
+
+        from rich.status import Status
+
+        with Status("  [cyan]\u2192 Scanning relay subnet...[/cyan]", console=err_console, spinner="dots"):
+            candidates = scan_for_sni(relay_conn, relay_ip)
+
+        if candidates:
+            from meridian.console import choose
+
+            err_console.print(f"  Found {len(candidates)} SNI targets near relay:\n")
+            # Show top candidates (max 8)
+            display = candidates[:8]
+            choices = [f"{d}" for d in display]
+            choices.append("Skip (use default)")
+            choice = choose("Select camouflage target for relay", choices, default=1)
+            if choice <= len(display):
+                relay_sni = display[choice - 1]
+                ok(f"Relay SNI target: {relay_sni}")
+            else:
+                relay_sni = DEFAULT_SNI
+                info(f"Using default SNI: {relay_sni}")
+        else:
+            relay_sni = DEFAULT_SNI
+            info(f"No scan results — using default SNI: {relay_sni}")
+        err_console.print()
+
     # Show deployment summary
     from rich.panel import Panel
 
@@ -336,11 +596,12 @@ def run_deploy(
         f"Exit:     {resolved_exit.ip}:443\n"
         f"Engine:   Realm v{REALM_VERSION} (zero-copy TCP forwarder)\n"
         f"Name:     {relay_name or '(auto)'}\n"
+        f"SNI:      {relay_sni} (relay camouflage target)\n"
         f"\n"
         f"How it works:\n"
         f"  Client -> {relay_ip}:{listen_port} -> "
         f"{resolved_exit.ip}:443 -> Internet\n"
-        f"  Censors see: domestic traffic to {relay_ip}\n"
+        f"  Censors see: traffic to {relay_sni} from {relay_ip}\n"
         f"  Encryption: end-to-end (relay cannot read content)"
     )
     err_console.print()
@@ -381,12 +642,28 @@ def run_deploy(
     err_console.print()
     ok("Relay deployed successfully")
 
+    # Create relay-specific Xray inbound on exit server (for per-relay SNI)
+    if relay_sni:
+        info("Creating relay-specific Xray inbound on exit server...")
+        inbound_ok = _create_relay_inbound(
+            resolved_exit.conn,
+            exit_creds,
+            relay_sni,
+            relay_ip,
+            relay_name,
+        )
+        if inbound_ok:
+            _deploy_relay_nginx(resolved_exit.conn, relay_sni, relay_ip, relay_name)
+        else:
+            warn("Relay inbound creation failed — relay will use exit's SNI as fallback")
+
     # Update exit credentials with new relay entry
     relay_entry = RelayEntry(
         ip=relay_ip,
         name=relay_name,
         port=listen_port,
         added=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        sni=relay_sni,
     )
     exit_creds.relays.append(relay_entry)
     exit_creds.save(resolved_exit.creds_dir / "proxy.yml")
@@ -578,6 +855,33 @@ def run_remove(
         ok("Relay service stopped")
     except Exception:
         warn(f"Could not connect to relay {relay_ip} — service may still be running")
+
+    # Clean up relay-specific Xray inbound and nginx config on exit server
+    if relay_entry.sni:
+        info("Removing relay Xray inbound from exit server...")
+        remark = _relay_inbound_remark(relay_entry)
+        try:
+            from meridian.panel import PanelClient, PanelError
+
+            panel = PanelClient(
+                conn=resolved_exit.conn,
+                panel_port=exit_creds.panel.port,
+                web_base_path=exit_creds.panel.web_base_path or "",
+            )
+            panel.login(exit_creds.panel.username or "", exit_creds.panel.password or "")
+            with panel:
+                ib = panel.find_inbound(remark)
+                if ib is not None:
+                    panel.api_post_empty(f"/panel/api/inbounds/del/{ib.id}")
+                    ok(f"Relay inbound '{remark}' deleted")
+                else:
+                    info("Relay inbound not found on panel (already removed)")
+        except (PanelError, Exception) as e:
+            warn(f"Could not remove relay inbound: {e}")
+
+        info("Removing relay nginx config...")
+        _remove_relay_nginx(resolved_exit.conn, relay_entry)
+        ok("Relay nginx config removed")
 
     # Remove relay from exit credentials
     exit_creds.relays = [r for r in exit_creds.relays if r.ip != relay_ip]

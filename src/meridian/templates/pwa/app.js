@@ -670,6 +670,12 @@ function renderProtocolCard(proto, platform, opts) {
     html += '<p class="card-desc" data-t="backup.desc">Fallback — routes through CDN. Use only if both above fail.</p>';
   }
 
+  /* SNI indicator — shows what domain the traffic appears as */
+  var sniMatch = proto.url && proto.url.match(/[?&]sni=([^&#]+)/);
+  if (sniMatch) {
+    html += '<p class="card-sni">Appears as: <strong>' + escapeHtml(decodeURIComponent(sniMatch[1])) + '</strong></p>';
+  }
+
   html += '<div class="card-body">';
 
   /* QR code */

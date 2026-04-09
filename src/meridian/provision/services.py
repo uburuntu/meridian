@@ -39,6 +39,9 @@ def _render_nginx_stream_config(
     """
     # Build SNI → backend map entries
     map_entries = [
+        # Per-relay SNI entries are included from individual files.
+        # Each relay gets its own map file created during relay deploy.
+        "    include /etc/nginx/stream.d/relay-maps/*.conf;",
         f"    {reality_sni}  xray_reality;",
     ]
     if server_ip:
@@ -665,7 +668,7 @@ class InstallNginx:
         # -- Create directories --
         conn.run(
             "mkdir -p /var/www/private /var/www/acme/.well-known/acme-challenge "
-            "/etc/ssl/meridian /etc/nginx/stream.d && "
+            "/etc/ssl/meridian /etc/nginx/stream.d /etc/nginx/stream.d/relay-maps && "
             "chown -R www-data:www-data /var/www/private /var/www/acme",
             timeout=15,
         )
