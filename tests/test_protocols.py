@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from meridian.credentials import (
+    RealityConfig,
+    ServerConfig,
+    ServerCredentials,
+    WSSConfig,
+    XHTTPConfig,
+)
 from meridian.models import Inbound
 from meridian.protocols import (
     INBOUND_TYPES,
@@ -396,3 +403,164 @@ class TestAvailableProtocols:
         result = available_protocols(inbounds, domain="example.com")
         keys = [p.key for p in result]
         assert keys == ["reality", "xhttp", "wss"]
+
+
+# ---------------------------------------------------------------------------
+# Credential-aware URL building
+# ---------------------------------------------------------------------------
+
+
+def _make_test_creds(
+    ip: str = "198.51.100.1",
+    sni: str = "www.microsoft.com",
+    domain: str = "",
+    xhttp_path: str = "",
+    ws_path: str = "",
+    encryption_key: str = "",
+) -> ServerCredentials:
+    """Build test credentials."""
+    creds = ServerCredentials(
+        server=ServerConfig(ip=ip, sni=sni, domain=domain or None),
+        protocols={
+            "reality": RealityConfig(
+                uuid="r-uuid",
+                public_key="testPBK",
+                short_id="ab12",
+                encryption_key=encryption_key or None,
+            ),
+        },
+    )
+    if xhttp_path:
+        creds.protocols["xhttp"] = XHTTPConfig(xhttp_path=xhttp_path)
+    if ws_path:
+        creds.protocols["wss"] = WSSConfig(uuid="w-uuid", ws_path=ws_path)
+    return creds
+
+
+class TestResolveUuid:
+    def test_reality_uses_reality_uuid(self) -> None:
+        proto = RealityProtocol()
+        assert proto._resolve_uuid("r-uuid", "w-uuid") == "r-uuid"
+
+    def test_xhttp_uses_reality_uuid_via_shares(self) -> None:
+        proto = XHTTPProtocol()
+        assert proto._resolve_uuid("r-uuid", "w-uuid") == "r-uuid"
+
+    def test_wss_uses_wss_uuid(self) -> None:
+        proto = WSSProtocol()
+        assert proto._resolve_uuid("r-uuid", "w-uuid") == "w-uuid"
+
+
+class TestBuildUrlFromCreds:
+    def test_reality_builds_url(self) -> None:
+        creds = _make_test_creds()
+        url = RealityProtocol().build_url_from_creds("r-uuid", "", creds, "alice")
+        assert url.startswith("vless://r-uuid@198.51.100.1:443")
+        assert "sni=www.microsoft.com" in url
+        assert "pbk=testPBK" in url
+        assert "sid=ab12" in url
+        assert url.endswith("#alice")
+
+    def test_reality_with_server_name(self) -> None:
+        creds = _make_test_creds()
+        url = RealityProtocol().build_url_from_creds("r-uuid", "", creds, "alice", server_name="My VPN")
+        assert url.endswith("#alice @ My VPN")
+
+    def test_xhttp_builds_url(self) -> None:
+        creds = _make_test_creds(xhttp_path="xp123")
+        url = XHTTPProtocol().build_url_from_creds("r-uuid", "", creds, "bob")
+        assert "vless://r-uuid@" in url
+        assert "type=xhttp" in url
+        assert "path=%2Fxp123" in url
+        assert url.endswith("#bob-XHTTP")
+
+    def test_xhttp_returns_empty_without_path(self) -> None:
+        creds = _make_test_creds()  # no xhttp_path
+        url = XHTTPProtocol().build_url_from_creds("r-uuid", "", creds, "bob")
+        assert url == ""
+
+    def test_wss_builds_url(self) -> None:
+        creds = _make_test_creds(domain="example.com", ws_path="ws789")
+        url = WSSProtocol().build_url_from_creds("", "w-uuid", creds, "carol")
+        assert "vless://w-uuid@example.com:443" in url
+        assert "type=ws" in url
+        assert "host=example.com" in url
+        assert "path=%2Fws789" in url
+        assert url.endswith("#carol-WSS")
+
+    def test_wss_returns_empty_without_domain(self) -> None:
+        creds = _make_test_creds(ws_path="ws789")  # no domain
+        url = WSSProtocol().build_url_from_creds("", "w-uuid", creds, "carol")
+        assert url == ""
+
+    def test_wss_returns_empty_without_uuid(self) -> None:
+        creds = _make_test_creds(domain="example.com", ws_path="ws789")
+        url = WSSProtocol().build_url_from_creds("", "", creds, "carol")
+        assert url == ""
+
+    def test_pq_encryption_in_reality(self) -> None:
+        creds = _make_test_creds(encryption_key="pq-key-123")
+        url = RealityProtocol().build_url_from_creds("r-uuid", "", creds, "alice")
+        assert "encryption=pq-key-123" in url
+
+
+class TestBuildRelayUrl:
+    def test_reality_relay_url(self) -> None:
+        creds = _make_test_creds()
+        url = RealityProtocol().build_relay_url(
+            "r-uuid", "", creds, "alice", "198.51.100.50", 8443, relay_name="moscow"
+        )
+        assert "vless://r-uuid@198.51.100.50:8443" in url
+        assert "sni=www.microsoft.com" in url
+        assert "#alice-via-moscow" in url
+
+    def test_reality_relay_with_relay_sni(self) -> None:
+        creds = _make_test_creds()
+        url = RealityProtocol().build_relay_url(
+            "r-uuid", "", creds, "alice", "198.51.100.50", relay_sni="relay.example.com"
+        )
+        assert "sni=relay.example.com" in url
+
+    def test_reality_relay_with_server_name(self) -> None:
+        creds = _make_test_creds()
+        url = RealityProtocol().build_relay_url(
+            "r-uuid", "", creds, "alice", "198.51.100.50", relay_name="moscow", server_name="My VPN"
+        )
+        assert "#alice @ My VPN-via-moscow" in url
+
+    def test_xhttp_relay_url(self) -> None:
+        creds = _make_test_creds(xhttp_path="xp123")
+        url = XHTTPProtocol().build_relay_url(
+            "r-uuid", "", creds, "bob", "198.51.100.50", 8443, relay_name="moscow"
+        )
+        assert "vless://r-uuid@198.51.100.50:8443" in url
+        assert "sni=198.51.100.1" in url  # exit IP as SNI (no domain)
+        assert "type=xhttp" in url
+        assert "#bob-via-moscow-XHTTP" in url
+
+    def test_xhttp_relay_with_domain(self) -> None:
+        creds = _make_test_creds(domain="example.com", xhttp_path="xp123")
+        url = XHTTPProtocol().build_relay_url(
+            "r-uuid", "", creds, "bob", "198.51.100.50", relay_name="moscow"
+        )
+        assert "sni=example.com" in url
+
+    def test_xhttp_relay_returns_empty_without_path(self) -> None:
+        creds = _make_test_creds()
+        url = XHTTPProtocol().build_relay_url("r-uuid", "", creds, "bob", "198.51.100.50")
+        assert url == ""
+
+    def test_wss_relay_url(self) -> None:
+        creds = _make_test_creds(domain="example.com", ws_path="ws789")
+        url = WSSProtocol().build_relay_url(
+            "", "w-uuid", creds, "carol", "198.51.100.50", 8443, relay_name="moscow"
+        )
+        assert "vless://w-uuid@198.51.100.50:8443" in url
+        assert "sni=example.com" in url
+        assert "host=example.com" in url
+        assert "#carol-via-moscow-WSS" in url
+
+    def test_wss_relay_returns_empty_without_domain(self) -> None:
+        creds = _make_test_creds(ws_path="ws789")
+        url = WSSProtocol().build_relay_url("", "w-uuid", creds, "carol", "198.51.100.50")
+        assert url == ""

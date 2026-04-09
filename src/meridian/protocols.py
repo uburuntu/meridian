@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from meridian.config import DEFAULT_FINGERPRINT, DEFAULT_SNI
+from meridian.credentials import ServerCredentials
 from meridian.models import Inbound
 
 
@@ -161,10 +162,57 @@ class Protocol(ABC):
         """Suffix appended to client name in the URL fragment (e.g., '-XHTTP')."""
         return ""
 
-    def _build_fragment(self, name: str, server_name: str = "") -> str:
+    def _build_fragment(self, name: str, server_name: str = "", extra_suffix: str = "") -> str:
         """Build the URL fragment (after #) for a connection URL."""
         base = f"{name} @ {server_name}" if server_name else name
-        return f"#{base}{self.url_suffix}"
+        return f"#{base}{extra_suffix}{self.url_suffix}"
+
+    def _resolve_uuid(self, reality_uuid: str, wss_uuid: str) -> str:
+        """Pick the correct UUID for this protocol.
+
+        Reality and protocols sharing Reality's UUID use reality_uuid.
+        Protocols with their own UUID (like WSS) use wss_uuid.
+        """
+        if self.key == "reality" or self.shares_uuid_with is not None:
+            return reality_uuid
+        return wss_uuid
+
+    def build_url_from_creds(
+        self,
+        reality_uuid: str,
+        wss_uuid: str,
+        creds: ServerCredentials,
+        name: str,
+        *,
+        server_name: str = "",
+    ) -> str:
+        """Build a connection URL using server credentials.
+
+        Each subclass extracts its own parameters from creds and delegates
+        to build_url(). Returns empty string if required data is missing
+        (e.g., WSS without a domain, XHTTP without a path).
+        """
+        return ""
+
+    def build_relay_url(
+        self,
+        reality_uuid: str,
+        wss_uuid: str,
+        creds: ServerCredentials,
+        name: str,
+        relay_ip: str,
+        relay_port: int = 443,
+        *,
+        relay_sni: str = "",
+        relay_name: str = "",
+        server_name: str = "",
+    ) -> str:
+        """Build a connection URL routed through a relay node.
+
+        Relay URLs substitute the relay's IP/port for the exit server's.
+        Returns empty string if the protocol is not available.
+        """
+        return ""
 
 
 class RealityProtocol(Protocol):
@@ -184,19 +232,64 @@ class RealityProtocol(Protocol):
 
     def build_url(self, uuid: str, name: str, **kwargs: Any) -> str:
         ip = kwargs["ip"]
+        port = kwargs.get("port", 443)
         sni = kwargs.get("sni", DEFAULT_SNI)
         public_key = kwargs.get("public_key", "")
         short_id = kwargs.get("short_id", "")
         fingerprint = kwargs.get("fingerprint", DEFAULT_FINGERPRINT)
         encryption = kwargs.get("encryption", "none")
-        fragment = self._build_fragment(name, kwargs.get("server_name", ""))
+        extra_suffix = kwargs.get("extra_suffix", "")
+        fragment = self._build_fragment(name, kwargs.get("server_name", ""), extra_suffix)
         return (
-            f"vless://{uuid}@{_bracket_ipv6(ip)}:443"
+            f"vless://{uuid}@{_bracket_ipv6(ip)}:{port}"
             f"?encryption={encryption}&flow=xtls-rprx-vision"
             f"&security=reality&sni={sni}&fp={fingerprint}"
             f"&pbk={public_key}&sid={short_id}"
             f"&type=tcp&headerType=none"
             f"{fragment}"
+        )
+
+    def build_url_from_creds(
+        self, reality_uuid: str, wss_uuid: str, creds: ServerCredentials, name: str, *, server_name: str = ""
+    ) -> str:
+        uuid = self._resolve_uuid(reality_uuid, wss_uuid)
+        return self.build_url(
+            uuid,
+            name,
+            ip=creds.server.ip or "",
+            sni=creds.server.sni or DEFAULT_SNI,
+            public_key=creds.reality.public_key or "",
+            short_id=creds.reality.short_id or "",
+            encryption=creds.reality.encryption_key or "none",
+            server_name=server_name,
+        )
+
+    def build_relay_url(
+        self,
+        reality_uuid: str,
+        wss_uuid: str,
+        creds: ServerCredentials,
+        name: str,
+        relay_ip: str,
+        relay_port: int = 443,
+        *,
+        relay_sni: str = "",
+        relay_name: str = "",
+        server_name: str = "",
+    ) -> str:
+        uuid = self._resolve_uuid(reality_uuid, wss_uuid)
+        via = f"-via-{relay_name}" if relay_name else f"-via-{relay_ip}"
+        return self.build_url(
+            uuid,
+            name,
+            ip=relay_ip,
+            port=relay_port,
+            sni=relay_sni or creds.server.sni or DEFAULT_SNI,
+            public_key=creds.reality.public_key or "",
+            short_id=creds.reality.short_id or "",
+            encryption=creds.reality.encryption_key or "none",
+            server_name=server_name,
+            extra_suffix=via,
         )
 
 
@@ -225,16 +318,67 @@ class XHTTPProtocol(Protocol):
 
     def build_url(self, uuid: str, name: str, **kwargs: Any) -> str:
         ip = kwargs["ip"]
+        port = kwargs.get("port", 443)
         xhttp_path = kwargs.get("xhttp_path", "")
         domain = kwargs.get("domain", "")
         fingerprint = kwargs.get("fingerprint", DEFAULT_FINGERPRINT)
-        # Use domain if available, otherwise IP
-        host = domain or _bracket_ipv6(ip)
-        fragment = self._build_fragment(name, kwargs.get("server_name", ""))
+        extra_suffix = kwargs.get("extra_suffix", "")
+        # connect_host overrides the @host in the URL (for relay connections)
+        sni_host = domain or _bracket_ipv6(ip)
+        connect_host = kwargs.get("connect_host", sni_host)
+        fragment = self._build_fragment(name, kwargs.get("server_name", ""), extra_suffix)
         return (
-            f"vless://{uuid}@{host}:443"
-            f"?encryption=none&security=tls&sni={host}&fp={fingerprint}"
+            f"vless://{uuid}@{connect_host}:{port}"
+            f"?encryption=none&security=tls&sni={sni_host}&fp={fingerprint}"
             f"&type=xhttp&path=%2F{xhttp_path}{fragment}"
+        )
+
+    def build_url_from_creds(
+        self, reality_uuid: str, wss_uuid: str, creds: ServerCredentials, name: str, *, server_name: str = ""
+    ) -> str:
+        xhttp_path = creds.xhttp.xhttp_path or ""
+        if not xhttp_path:
+            return ""
+        uuid = self._resolve_uuid(reality_uuid, wss_uuid)
+        return self.build_url(
+            uuid,
+            name,
+            ip=creds.server.ip or "",
+            xhttp_path=xhttp_path,
+            domain=creds.server.domain or "",
+            server_name=server_name,
+        )
+
+    def build_relay_url(
+        self,
+        reality_uuid: str,
+        wss_uuid: str,
+        creds: ServerCredentials,
+        name: str,
+        relay_ip: str,
+        relay_port: int = 443,
+        *,
+        relay_sni: str = "",
+        relay_name: str = "",
+        server_name: str = "",
+    ) -> str:
+        xhttp_path = creds.xhttp.xhttp_path or ""
+        if not xhttp_path:
+            return ""
+        uuid = self._resolve_uuid(reality_uuid, wss_uuid)
+        via = f"-via-{relay_name}" if relay_name else f"-via-{relay_ip}"
+        # XHTTP uses domain or exit IP as SNI (nginx cert must match)
+        xhttp_sni = creds.server.domain or creds.server.ip or ""
+        return self.build_url(
+            uuid,
+            name,
+            ip=creds.server.ip or "",
+            port=relay_port,
+            xhttp_path=xhttp_path,
+            domain=creds.server.domain or "",
+            connect_host=_bracket_ipv6(relay_ip),
+            server_name=server_name,
+            extra_suffix=via,
         )
 
 
@@ -263,13 +407,62 @@ class WSSProtocol(Protocol):
 
     def build_url(self, uuid: str, name: str, **kwargs: Any) -> str:
         domain = kwargs["domain"]
+        port = kwargs.get("port", 443)
         ws_path = kwargs.get("ws_path", "")
-        fragment = self._build_fragment(name, kwargs.get("server_name", ""))
+        # connect_host overrides the @host in the URL (for relay connections)
+        connect_host = kwargs.get("connect_host", domain)
+        extra_suffix = kwargs.get("extra_suffix", "")
+        fragment = self._build_fragment(name, kwargs.get("server_name", ""), extra_suffix)
         return (
-            f"vless://{uuid}@{domain}:443"
+            f"vless://{uuid}@{connect_host}:{port}"
             f"?encryption=none&security=tls&sni={domain}"
             f"&type=ws&host={domain}&path=%2F{ws_path}"
             f"{fragment}"
+        )
+
+    def build_url_from_creds(
+        self, reality_uuid: str, wss_uuid: str, creds: ServerCredentials, name: str, *, server_name: str = ""
+    ) -> str:
+        domain = creds.server.domain or ""
+        uuid = self._resolve_uuid(reality_uuid, wss_uuid)
+        if not domain or not uuid:
+            return ""
+        return self.build_url(
+            uuid,
+            name,
+            domain=domain,
+            ws_path=creds.wss.ws_path or "",
+            server_name=server_name,
+        )
+
+    def build_relay_url(
+        self,
+        reality_uuid: str,
+        wss_uuid: str,
+        creds: ServerCredentials,
+        name: str,
+        relay_ip: str,
+        relay_port: int = 443,
+        *,
+        relay_sni: str = "",
+        relay_name: str = "",
+        server_name: str = "",
+    ) -> str:
+        domain = creds.server.domain or ""
+        uuid = self._resolve_uuid(reality_uuid, wss_uuid)
+        ws_path = creds.wss.ws_path or ""
+        if not domain or not uuid or not ws_path:
+            return ""
+        via = f"-via-{relay_name}" if relay_name else f"-via-{relay_ip}"
+        return self.build_url(
+            uuid,
+            name,
+            domain=domain,
+            port=relay_port,
+            ws_path=ws_path,
+            connect_host=relay_ip,
+            server_name=server_name,
+            extra_suffix=via,
         )
 
 
