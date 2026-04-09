@@ -106,7 +106,12 @@ def run(
 
     resolved = ensure_server_connection(resolved)
     _check_ports(resolved.conn, resolved.ip, yes)
-    fetch_credentials(resolved)
+    if not fetch_credentials(resolved):
+        fail(
+            "Could not fetch credentials from server",
+            hint="Check SSH connectivity and try again",
+            hint_type="system",
+        )
 
     # Migrate v1 credentials to v2
     proxy_file = resolved.creds_dir / "proxy.yml"
