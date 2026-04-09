@@ -38,6 +38,7 @@ class ServerConfig:
     hosted_page: bool = False
     deployed_with: str = ""  # Meridian CLI version that last deployed this server
     warp: bool = False  # outgoing traffic routed through Cloudflare WARP
+    geo_block: bool = True  # block Russian domains/IPs at Xray routing level
     decoy: str = ""  # Decoy response: "" = silent drop, "403" = realistic nginx (403 root + 404 paths)
 
 
@@ -358,6 +359,7 @@ def _load_v2(data: dict[str, Any]) -> ServerCredentials:
         hosted_page=bool(server_data.get("hosted_page", False)),
         deployed_with=server_data.get("deployed_with", ""),
         warp=bool(server_data.get("warp", False)),
+        geo_block=bool(server_data.get("geo_block", True)),
         decoy=server_data.get("decoy", ""),
     )
 

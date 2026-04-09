@@ -137,6 +137,10 @@ class ConfigurePanel:
                         creds.server.warp = ctx.warp
                         changed = True
 
+                    if creds.server.geo_block != ctx.geo_block:
+                        creds.server.geo_block = ctx.geo_block
+                        changed = True
+
                     from meridian import __version__
 
                     if creds.server.deployed_with != __version__:
@@ -197,6 +201,7 @@ class ConfigurePanel:
 
         creds.server.deployed_with = __version__
         creds.server.warp = ctx.warp
+        creds.server.geo_block = ctx.geo_block
 
         creds.panel.username = panel_username
         creds.panel.password = panel_password

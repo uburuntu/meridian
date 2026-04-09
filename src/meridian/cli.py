@@ -106,6 +106,11 @@ def deploy_cmd(
         "--warp/--no-warp",
         help="Route outgoing traffic through Cloudflare WARP",
     ),
+    geo_block: bool = typer.Option(
+        True,
+        "--geo-block/--no-geo-block",
+        help="Block Russian domains and IPs (geosite:category-ru + geoip:ru)",
+    ),
 ) -> None:
     """Deploy a VLESS+Reality proxy server. Interactive wizard if no IP provided.
 
@@ -132,6 +137,7 @@ def deploy_cmd(
         decoy=decoy,
         pq=pq,
         warp=warp,
+        geo_block=geo_block,
     )
 
 

@@ -24,6 +24,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     5. connection page: QR codes, stats, HTML (domain mode or hosted page)
     """
     from meridian.provision.common import (
+        REQUIRED_PACKAGES,
         CheckDiskSpace,
         ConfigureBBR,
         ConfigureFail2ban,
@@ -32,7 +33,6 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
         EnsurePort443,
         HardenSSH,
         InstallPackages,
-        REQUIRED_PACKAGES,
         SetTimezone,
     )
     from meridian.provision.docker import Deploy3xui, InstallDocker
@@ -40,6 +40,7 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     from meridian.provision.xray import (
         ConfigureGeoBlocking,
         CreateInbound,
+        DisableGeoBlocking,
         DisableXrayLogs,
         VerifyXray,
     )
@@ -124,7 +125,10 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
         )
 
     steps.append(DisableXrayLogs())
-    steps.append(ConfigureGeoBlocking())
+    if ctx.geo_block:
+        steps.append(ConfigureGeoBlocking())
+    else:
+        steps.append(DisableGeoBlocking())
 
     # WARP outbound (optional — routes egress through Cloudflare)
     if ctx.warp:

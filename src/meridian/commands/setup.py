@@ -45,6 +45,7 @@ def run(
     decoy: str = "",
     pq: bool = False,
     warp: bool = False,
+    geo_block: bool = True,
 ) -> None:
     """Deploy a VLESS+Reality proxy server."""
     # --decoy is deprecated (403/404 is now always the default).
@@ -93,9 +94,10 @@ def run(
             color=color,
             pq=pq,
             warp=warp,
+            geo_block=geo_block,
         )
         server_ip, ssh_user, sni, domain, harden = wizard_result[:5]
-        client_name, server_name, icon, color, pq, warp = wizard_result[5:]
+        client_name, server_name, icon, color, pq, warp, geo_block = wizard_result[5:]
 
     # Validate IP (skip for 'local' keyword — resolve_server handles it)
     if not is_local_keyword(server_ip) and not is_ip(server_ip):
@@ -164,7 +166,7 @@ def run(
         )
         creds.save(proxy_file)
 
-    _run_provisioner(resolved, domain, sni, client_name, harden, pq=pq, warp=warp)
+    _run_provisioner(resolved, domain, sni, client_name, harden, pq=pq, warp=warp, geo_block=geo_block)
 
     # Register server
     registry.add(ServerEntry(host=resolved.ip, user=resolved.user))
@@ -187,11 +189,12 @@ def _interactive_wizard(
     color: str = "",
     pq: bool = False,
     warp: bool = False,
-) -> tuple[str, str, str, str, bool, str, str, str, str, bool, bool]:
+    geo_block: bool = True,
+) -> tuple[str, str, str, str, bool, str, str, str, str, bool, bool, bool]:
     """Interactive deployment wizard.
 
     Returns (ip, user, sni, domain, harden,
-             client_name, server_name, icon, color, pq).
+             client_name, server_name, icon, color, pq, warp, geo_block).
     """
     import os
 
@@ -500,6 +503,33 @@ def _interactive_wizard(
         if choice == 2:
             warp = True
 
+    # --- Geo-blocking ---
+    if not yes and geo_block:
+        err_console.print()
+        err_console.print("  [bold]Geo-blocking[/bold]")
+        err_console.print("  [dim]Blocks access to Russian websites and IPs through[/dim]")
+        err_console.print("  [dim]the proxy (geosite:category-ru + geoip:ru).[/dim]")
+        err_console.print()
+        err_console.print("  [dim]Why enable:[/dim]")
+        err_console.print("  [dim]  • Prevents your VPN server IP from appearing in logs[/dim]")
+        err_console.print("  [dim]    of Russian services — reduces risk of it being blocked[/dim]")
+        err_console.print("  [dim]  • Russian sites work fine without a VPN anyway[/dim]")
+        err_console.print()
+        err_console.print("  [dim]Why disable:[/dim]")
+        err_console.print("  [dim]  • You need to access .ru sites through the proxy[/dim]")
+        err_console.print("  [dim]  • You want all traffic to go through the VPN with no[/dim]")
+        err_console.print("  [dim]    exceptions[/dim]")
+        err_console.print()
+        choice = choose(
+            "Choose",
+            [
+                "Yes \u2014 block Russian traffic [dim](recommended, protects server IP)[/dim]",
+                "No \u2014 allow all traffic [dim](Russian sites accessible through proxy)[/dim]",
+            ],
+        )
+        if choice == 2:
+            geo_block = False
+
     # --- Summary panel ---
     from rich.panel import Panel
 
@@ -514,6 +544,10 @@ def _interactive_wizard(
     warp_line = ""
     if warp:
         warp_line = "\nWARP:       Outgoing traffic via Cloudflare"
+
+    geo_block_line = ""
+    if not geo_block:
+        geo_block_line = "\nGeo-block:  Disabled (Russian sites accessible)"
 
     icon_display = icon if icon and not icon.startswith("data:") else ""
     branding_line = ""
@@ -538,6 +572,7 @@ def _interactive_wizard(
         f"Mode:       {'Domain mode (best stealth + CDN fallback)' if domain else 'IP-only (works without a domain)'}"
         f"{encryption_line}"
         f"{warp_line}"
+        f"{geo_block_line}"
         f"{branding_line}"
     )
 
@@ -553,7 +588,7 @@ def _interactive_wizard(
             confirm(f"Deploy to {ssh_user}@{server_ip}?")
     err_console.print()
 
-    return server_ip, ssh_user, sni, domain, harden, client_name, server_name, icon, color, pq, warp
+    return server_ip, ssh_user, sni, domain, harden, client_name, server_name, icon, color, pq, warp, geo_block
 
 
 def _run_provisioner(
@@ -565,6 +600,7 @@ def _run_provisioner(
     *,
     pq: bool = False,
     warp: bool = False,
+    geo_block: bool = True,
 ) -> None:
     """Run the Python provisioner pipeline."""
     from meridian.provision import ProvisionContext, Provisioner, build_setup_steps
@@ -577,6 +613,7 @@ def _run_provisioner(
         xhttp_enabled=True,
         pq_encryption=pq,
         warp=warp,
+        geo_block=geo_block,
         hosted_page=True,  # always serve connection pages on server
         harden=harden,
         creds_dir=str(resolved.creds_dir),
@@ -626,6 +663,8 @@ def _run_provisioner(
         info("Post-quantum encryption: enabled (experimental)")
     if warp:
         info("Cloudflare WARP: enabled")
+    if not geo_block:
+        info("Geo-blocking: disabled (Russian sites accessible)")
     err_console.print()
 
     steps = build_setup_steps(ctx)

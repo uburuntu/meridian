@@ -543,3 +543,129 @@ class TestConfigureGeoBlocking:
         # Geo-block rules come first, existing rule is last
         assert rules[-1] == existing_rule
         assert rules[0]["outboundTag"] == "blocked"
+
+
+# ---------------------------------------------------------------------------
+# DisableGeoBlocking
+# ---------------------------------------------------------------------------
+
+
+class TestDisableGeoBlocking:
+    """Tests for the DisableGeoBlocking step."""
+
+    def _make_xray_template(self, outbounds=None, routing=None):
+        """Build a fake Xray config template as returned by the panel API."""
+        template = {"log": {}, "outbounds": outbounds or [{"protocol": "freedom", "tag": "direct"}]}
+        if routing is not None:
+            template["routing"] = routing
+        return template
+
+    def _panel_returning(self, template):
+        from unittest.mock import MagicMock
+
+        panel = MagicMock()
+        xray_setting = json.dumps(template)
+        wrapper = json.dumps({"xraySetting": xray_setting})
+        panel.api_post_empty.return_value = {"success": True, "obj": wrapper}
+        panel.api_post_form.return_value = {"success": True}
+        return panel
+
+    def _run_step(self, panel):
+        from meridian.provision.steps import ProvisionContext
+        from meridian.provision.xray import DisableGeoBlocking
+        from tests.provision.conftest import MockConnection
+
+        step = DisableGeoBlocking()
+        conn = MockConnection()
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp")
+        ctx["panel"] = panel
+        return step.run(conn, ctx)
+
+    def test_removes_geo_rules_and_blocked_outbound(self):
+        """Removes blocked outbound and geo-block rules when present."""
+        template = self._make_xray_template(
+            outbounds=[
+                {"protocol": "freedom", "tag": "direct"},
+                _BLOCKED_OUTBOUND,
+            ],
+            routing={"rules": list(_GEO_BLOCK_RULES)},
+        )
+        panel = self._panel_returning(template)
+
+        result = self._run_step(panel)
+        assert result.status == "changed"
+
+        from urllib.parse import unquote
+
+        form_data = panel.api_post_form.call_args[0][1]
+        saved_json = unquote(form_data.split("xraySetting=")[1])
+        saved = json.loads(saved_json)
+
+        outbound_tags = [o.get("tag") for o in saved.get("outbounds", [])]
+        assert "blocked" not in outbound_tags
+
+        rules = saved.get("routing", {}).get("rules", [])
+        assert len(rules) == 0
+
+    def test_idempotent_when_already_disabled(self):
+        """Skip when no blocked outbound and no geo rules exist."""
+        template = self._make_xray_template()
+        panel = self._panel_returning(template)
+
+        result = self._run_step(panel)
+        assert result.status == "ok"
+        assert "already disabled" in result.detail
+        panel.api_post_form.assert_not_called()
+
+    def test_preserves_other_routing_rules(self):
+        """Non-geo routing rules are kept intact."""
+        other_rule = {"type": "field", "outboundTag": "direct", "domain": ["geosite:category-ads"]}
+        template = self._make_xray_template(
+            outbounds=[
+                {"protocol": "freedom", "tag": "direct"},
+                _BLOCKED_OUTBOUND,
+            ],
+            routing={"rules": list(_GEO_BLOCK_RULES) + [other_rule]},
+        )
+        panel = self._panel_returning(template)
+
+        result = self._run_step(panel)
+        assert result.status == "changed"
+
+        from urllib.parse import unquote
+
+        form_data = panel.api_post_form.call_args[0][1]
+        saved_json = unquote(form_data.split("xraySetting=")[1])
+        saved = json.loads(saved_json)
+
+        rules = saved.get("routing", {}).get("rules", [])
+        assert len(rules) == 1
+        assert rules[0] == other_rule
+
+    def test_keeps_blocked_outbound_if_other_rules_use_it(self):
+        """Blocked outbound is kept if non-geo rules reference it."""
+        custom_blocked_rule = {"type": "field", "outboundTag": "blocked", "domain": ["ads.example.com"]}
+        template = self._make_xray_template(
+            outbounds=[
+                {"protocol": "freedom", "tag": "direct"},
+                _BLOCKED_OUTBOUND,
+            ],
+            routing={"rules": list(_GEO_BLOCK_RULES) + [custom_blocked_rule]},
+        )
+        panel = self._panel_returning(template)
+
+        result = self._run_step(panel)
+        assert result.status == "changed"
+
+        from urllib.parse import unquote
+
+        form_data = panel.api_post_form.call_args[0][1]
+        saved_json = unquote(form_data.split("xraySetting=")[1])
+        saved = json.loads(saved_json)
+
+        outbound_tags = [o.get("tag") for o in saved.get("outbounds", [])]
+        assert "blocked" in outbound_tags
+
+        rules = saved.get("routing", {}).get("rules", [])
+        assert len(rules) == 1
+        assert rules[0] == custom_blocked_rule
