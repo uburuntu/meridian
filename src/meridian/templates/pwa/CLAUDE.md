@@ -27,6 +27,9 @@ This layout serves both sides of the UX: end-users scan the QR and go, power use
 - **`config.json` decoupling** — credentials change without HTML redeploy.
 - **SW scope trick** — registered with `{scope: '../'}` to control sibling client dirs. Requires nginx `Service-Worker-Allowed: "/"` header.
 - **Graceful offline** — SW caches shell (cache-first), fetches config fresh (network-first with 503 fallback).
+- **Color palettes** — six curated presets (ocean, sunset, forest, lavender, rose, slate) with auto dark/light variants. Selected via `config.color`, switches on system theme change.
+- **Clock skew detection** — warns if device clock is >2min behind server. Critical for Reality/XHTTP which need tight time sync. Skipped if page was cached >1h to avoid false positives.
+- **Relay routing** — per-relay protocol cards marked with a star, direct connections labeled as backup. Relay names are HTML-escaped.
 
 ## Pitfalls
 
@@ -35,3 +38,6 @@ This layout serves both sides of the UX: end-users scan the QR and go, power use
 - **SW caches stale files** — use `--watch` mode during dev (disables SW, injects reload script).
 - **`_PWA_APPS` must match `apps.json`** — platform strings must be identical. CI validates.
 - **Stats path** — `/stats/{uuid}.json` (sibling, not child of client dir).
+- **Wake lock** — keeps screen on while page is visible (mobile QR scanning). Fails gracefully on unsupported browsers.
+- **PWA install banner** — captures `beforeinstallprompt` event. Auto-dismisses after user action.
+- **Skeleton loading** — placeholder shimmer while `config.json` loads. "Taking longer than expected" message after 10s timeout.

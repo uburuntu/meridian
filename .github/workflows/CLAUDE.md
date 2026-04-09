@@ -2,9 +2,9 @@
 
 ## Design decisions
 
-**Two-stage pipeline** — CI validates on every push/PR (9 parallel jobs). Release triggers only on CI success on main via `workflow_run`. Prevents accidental releases from failed builds.
+**Two-stage pipeline** — CI validates on every push/PR. Release triggers only on CI success on main via `workflow_run`. Prevents accidental releases from failed builds.
 
-**CI jobs**: Python Tests (3.10 + 3.12 matrix), Lint, Type Check, Validate (templates + app links + VERSION + CHANGELOG), Shell (shellcheck), Integration (3x-ui Docker), E2E Provisioner, Website Build.
+**CI jobs**: Python Tests (3.10 + 3.12 matrix), Lint, Type Check, Validate (templates + app links + VERSION + CHANGELOG + deploy CLI flags + PWA demo), Shell (shellcheck), Integration (3x-ui Docker), E2E Provisioner, Website Build.
 
 **VERSION-driven releases** — read VERSION file, check if git tag exists. If missing: detect semver change, extract CHANGELOG section, push tag, create Release. Idempotent — safe to re-run.
 
@@ -12,8 +12,9 @@
 
 ## What's done well
 
-- **Validate job** — single job checks templates render, app links match across surfaces, VERSION is valid semver, CHANGELOG has an entry. Catches drift between docs and code.
+- **Validate job** — single job checks templates render, app links match across surfaces, VERSION is valid semver, CHANGELOG has an entry, deploy CLI flags are documented in cli-reference.md. Catches drift between docs and code.
 - **E2E depends on lint+test** — syntax must be clean before spinning up Docker. Saves CI minutes on obvious failures.
+- **PWA demo validation** — CI generates a demo PWA page and verifies all required files exist, SW is disabled for static hosting, and client HTML renders correctly.
 
 ## Pitfalls
 

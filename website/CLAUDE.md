@@ -25,3 +25,5 @@ cd website && npm install && npm run build   # Astro + Pagefind
 - **Single language picker** — one LanguagePicker in the nav header handles all pages. On docs pages it reads available locales from `#docs-locales` JSON and navigates to locale-specific URLs. On landing page it does client-side DOM swap.
 - **Language switch reload asymmetry** — EN reloads page (build-time HTML), non-EN does client-side DOM swap. Consolidating would simplify but requires shipping EN translations.
 - **Early `<head>` scripts** — detect lang + theme from localStorage before paint. Prevents RTL layout shift and dark mode flash.
+- **SEO structured data** — JSON-LD schemas (FAQPage, Organization, BreadcrumbList, Article) are baked at build time. Hreflang links on docs pages connect locale variants for search engines.
+- **Sitemap i18n** — Astro sitemap integration generates entries for all locale paths.

@@ -12,6 +12,10 @@
 
 **Protocol-generic assembly** — `build_setup_steps()` loops over `PROTOCOLS` registry. Adding a protocol doesn't require editing pipeline code.
 
+**Relay pipeline is separate** — relay nodes use `RelayContext` (not `ProvisionContext`) and a completely different step sequence. No Docker, no 3x-ui — just Realm TCP forwarding. IP validation prevents shell/config injection.
+
+**WARP provisioning** — installs Cloudflare WARP client for server egress. Manages APT repository, systemd service, and CLI registration. warp-cli syntax differs between versions — code tries both.
+
 ## What's done well
 
 - **Credential lockout prevention** — save locally BEFORE changing remote password. If API fails, user has recovery data.

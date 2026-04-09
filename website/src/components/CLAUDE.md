@@ -8,7 +8,7 @@
 
 **Copy-to-clipboard pattern** — `CopyButton.astro` shared by `CodeBlock` and `CommandBuilder`. Clipboard API with `execCommand` fallback. State tracked via `[data-copied]` CSS attribute.
 
-**Fast animations, always visible** — all CSS transitions must be under 100ms to feel instant. Never hide interactive elements behind hover — components must be visible at all times. Hover states are for visual feedback, not for revealing content.
+**Fast animations, always visible** — CSS transitions should feel instant (most under 100ms; decorative transforms like accordion chevron rotation can be slightly longer). Never hide interactive elements behind hover — components must be visible at all times. Hover states are for visual feedback, not for revealing content.
 
 ## What's done well
 
