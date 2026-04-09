@@ -59,7 +59,7 @@ Things that require human action outside the codebase.
 
 - [ ] **SSH password auth not hardened during provisioning** — cloud-init drops `PasswordAuthentication yes` in `/etc/ssh/sshd_config.d/`, overriding main config. Provisioner should disable password auth and restart sshd after confirming key access works
 - [ ] **Firewall cleanup deletes user's custom rules** — `ConfigureFirewall` removes ALL TCP ports not in `{22, 443, 80}`, silently deleting alternate SSH ports, monitoring, or relay listen ports. Should only delete Meridian-managed ports or warn before removing unexpected rules (`common.py:441-458`)
-- [ ] **SSRF in icon download** — `urllib.request.urlopen()` in `branding.py:140` doesn't restrict to public IP ranges. Deployer could point at `http://127.0.0.1:2053` to probe internal services. Low risk (deployer-initiated), but should block private/loopback IPs
+- [x] **SSRF in icon download** — added private/loopback IP check before urlopen()
 
 ### Anti-censorship
 
@@ -81,10 +81,10 @@ Things that require human action outside the codebase.
 
 ### Reliability
 
-- [ ] **WARP `systemctl enable` and `warp-cli connect` unchecked** — return codes ignored, deployment claims success but WARP not running. Breaks egress routing on WARP-enabled deploys (`warp.py:62, 84, 87`)
-- [ ] **`ufw default deny/allow` return codes unchecked** — firewall left in inconsistent state on failure (`common.py:461-462`, `relay.py:117-118`)
-- [ ] **Reality port conflict not pre-checked** — in standalone mode (no nginx), Xray binds `0.0.0.0:443` without checking if port is already in use. Panel API succeeds but Xray fails to bind (`xray.py:96, 301`)
-- [ ] **`fetch_credentials()` return value ignored** — `setup.py:109` doesn't check SCP result, subsequent code assumes credentials exist
+- [x] **WARP `systemctl enable` and `warp-cli connect` unchecked** — return codes now checked, step fails on error
+- [x] **`ufw default deny/allow` return codes unchecked** — return codes now checked in common.py and relay.py
+- [x] **Reality port conflict not pre-checked** — added ss port check before CreateInbound in standalone mode
+- [x] **`fetch_credentials()` return value ignored** — now fails with actionable hint on SCP failure
 
 ### Code quality
 
