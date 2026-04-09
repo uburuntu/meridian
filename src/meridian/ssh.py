@@ -384,10 +384,9 @@ def tcp_connect(host: str, port: int, timeout: int = 5) -> bool:
     import socket as _socket
 
     try:
-        sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-        sock.settimeout(timeout)
-        sock.connect((host, port))
-        sock.close()
-        return True
+        with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            sock.connect((host, port))
+            return True
     except (OSError, _socket.timeout):
         return False

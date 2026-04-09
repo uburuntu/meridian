@@ -92,11 +92,10 @@ def _get_cert_der(ip: str, sni: str, timeout: int = 5) -> bytes:
     """
     try:
         ctx = _ssl_context()
-        sock = socket.create_connection((ip, 443), timeout=timeout)
-        ssock = ctx.wrap_socket(sock, server_hostname=sni)
-        der = ssock.getpeercert(binary_form=True)
-        ssock.close()
-        return der or b""
+        with socket.create_connection((ip, 443), timeout=timeout) as sock:
+            with ctx.wrap_socket(sock, server_hostname=sni) as ssock:
+                der = ssock.getpeercert(binary_form=True)
+                return der or b""
     except Exception:
         return b""
 
