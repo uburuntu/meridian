@@ -45,12 +45,6 @@ Things that require human action outside the codebase.
 
 - [ ] **Client migration for rebuilds** — `meridian rebuild NEW_IP --from OLD_IP` or `meridian client migrate`
 
-### Deployment correctness
-
-- [x] **`return 444` invalid in nginx HTTP block** — replaced with `return 403;`
-- [x] **nginx stream block `printf` produces literal `\n`** — verified false positive: printf interprets `\n` in format strings
-- [x] **Socket leak in `tcp_connect()` and `_get_cert_der()`** — wrapped in context managers
-
 ---
 
 ## P1 — High
@@ -59,7 +53,6 @@ Things that require human action outside the codebase.
 
 - [ ] **SSH password auth not hardened during provisioning** — cloud-init drops `PasswordAuthentication yes` in `/etc/ssh/sshd_config.d/`, overriding main config. Provisioner should disable password auth and restart sshd after confirming key access works
 - [ ] **Firewall cleanup deletes user's custom rules** — `ConfigureFirewall` removes ALL TCP ports not in `{22, 443, 80}`, silently deleting alternate SSH ports, monitoring, or relay listen ports. Should only delete Meridian-managed ports or warn before removing unexpected rules (`common.py:441-458`)
-- [x] **SSRF in icon download** — added private/loopback IP check before urlopen()
 
 ### Anti-censorship
 
@@ -79,17 +72,6 @@ Things that require human action outside the codebase.
 - [ ] **Proactive IP block detection** — server self-checks via ping endpoint, notifies via webhook/Telegram
 - [ ] **Rebuild state transfer** — `meridian deploy NEW_IP --from OLD_IP` copies SNI, domain, clients
 
-### Reliability
-
-- [x] **WARP `systemctl enable` and `warp-cli connect` unchecked** — return codes now checked, step fails on error
-- [x] **`ufw default deny/allow` return codes unchecked** — return codes now checked in common.py and relay.py
-- [x] **Reality port conflict not pre-checked** — added ss port check before CreateInbound in standalone mode
-- [x] **`fetch_credentials()` return value ignored** — now fails with actionable hint on SCP failure
-
-### Code quality
-
-- [x] **Unused `import hashlib`** — verified false positive: no top-level import exists
-
 ---
 
 ## P2 — Medium
@@ -97,8 +79,6 @@ Things that require human action outside the codebase.
 ### Security
 
 - [ ] **`innerHTML` XSS surface** — risk if translations ever loaded externally
-
-### Anti-censorship
 
 ### Product
 
@@ -118,21 +98,10 @@ Things that require human action outside the codebase.
 
 - [ ] **`_wait_for_panel` SSH vs panel confusion** — polling breaks on transient SSH issues
 - [ ] **Xray process accumulation on `test_connection()` timeouts** — orphan processes not cleaned up when `_wait_for_port()` times out (`xray_client.py:305-350`)
-- [x] **Broad `except Exception` swallows errors** — narrowed to specific types in urls.py, ping.py, update.py
-
-### Code quality
-
-- [x] **IPv6 URLs malformed** — added bracket wrapping in Reality and XHTTP URL builders
-- [x] **Redundant condition check** — removed duplicate `if` in `setup.py:147-157`
-- [x] **Missing type annotation** — `list` → `list[ProtocolURL]` in `client.py:106`
-- [x] **`SystemExit` catch anti-pattern** — added `try_resolve_server()` wrapper in resolve.py
 
 ### Testing
 
-- [ ] **12 source modules have zero tests** — remaining gaps: `ping.py` (244 LOC, reachability), `check.py` (260 LOC), `scan.py` (166 LOC), `docker.py` (314 LOC), `config.py`, `display.py`, `ai.py`, `models.py`, `server.py`, `uninstall.py`, `provision/uninstall.py`
-- [x] **`test_render_templates.py` tautological** — added 8 content-assertion tests (QR, URLs, XSS, relays, fallback, WSS visibility)
-- [x] **branding.py untested** — added 37 tests (emoji, color, SSRF, image download)
-- [x] **xray_client.py untested** — added 35 tests (digest parsing, config builders, test configs)
+- [ ] **12 source modules have zero tests** — remaining gaps: `ping.py`, `check.py`, `scan.py`, `docker.py`, `config.py`, `display.py`, `ai.py`, `models.py`, `server.py`, `uninstall.py`, `provision/uninstall.py`
 
 ### UX
 
@@ -170,3 +139,4 @@ Collapsed — see [CHANGELOG.md](CHANGELOG.md) for details.
 - **3.8.1** — Deploy version tracking, SECURITY.md, CODE_OF_CONDUCT, PWA sub-url toggle + clock warning, trust bar cleanup
 - **3.8.0** — PWA security/a11y/i18n (40 tests), landing page, install.sh, architecture SVG, reduced-motion
 - **3.7** — Local mode, security hardening (19 items), Caddy/HAProxy fixes, website, provisioner hardening
+- **Code quality sprint** — socket leaks, nginx 444, IPv6 URLs, WARP/ufw return codes, port conflict check, SSRF guard, exception handlers, SystemExit refactor, 80 new tests (branding, xray_client, render templates)
