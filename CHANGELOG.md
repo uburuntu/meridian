@@ -4,6 +4,17 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.14.4] - 2026-04-09
+
+### Fixed
+- **`--server-name` flag drift** — deploy docs (all 4 locales) and README still referenced `--server-name` after it was renamed to `--display-name` in v3.9.0. FA/ZH flag tables also had stale `--email`, `--xhttp`, `--name` flags.
+- **PyPI sdist bloat** — source distribution was 38MB because it included blog hero images, website/, tests/, and build artifacts. Now 176KB.
+
+### Added
+- **CI drift validators** — `validate_cli_docs.py` checks all 19 commands' flags are documented in cli-reference.md (replaces deploy-only check). `validate_apps_sync.py` validates `_PWA_APPS` in render.py matches apps.json.
+- **Global flags in cli-reference** — `--user`, `--server`, `--sni`, `--domain` documented once in Global flags section instead of repeated per command.
+- **CLAUDE.md coverage** — updated all 15 existing files, created 3 new ones (layouts, i18n, content/docs). Added missing features: WARP, post-quantum, relay routing, color palettes, clock skew detection.
+
 ## [3.14.3] - 2026-04-09
 
 ### Fixed
