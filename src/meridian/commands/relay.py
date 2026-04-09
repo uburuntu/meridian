@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 
 import yaml
 
@@ -14,7 +15,7 @@ from meridian.commands.resolve import (
     fetch_credentials,
     resolve_server,
 )
-from meridian.config import CREDS_BASE, RELAY_SERVICE_NAME, SERVERS_FILE, is_ipv4
+from meridian.config import CREDS_BASE, RELAY_SERVICE_NAME, SERVER_CREDS_DIR, SERVERS_FILE, is_ipv4
 from meridian.console import confirm, err_console, fail, info, line, ok, warn
 from meridian.credentials import RelayEntry, ServerCredentials
 from meridian.servers import ServerEntry, ServerRegistry
@@ -59,13 +60,28 @@ def _resolve_exit(
     return resolved
 
 
+def _find_proxy_file(host: str) -> Path | None:
+    """Find proxy.yml for a server, checking both remote and local-mode paths."""
+    remote = CREDS_BASE / host / "proxy.yml"
+    if remote.is_file():
+        return remote
+    local = SERVER_CREDS_DIR / "proxy.yml"
+    try:
+        if local.is_file():
+            creds = ServerCredentials.load(local)
+            if creds.server.ip == host:
+                return local
+    except (PermissionError, OSError):
+        pass
+    return None
+
+
 def _find_exit_for_relay(relay_ip: str) -> tuple[ServerRegistry, ResolvedServer] | None:
     """Find which exit server a relay belongs to by scanning credentials."""
     registry = ServerRegistry(SERVERS_FILE)
     for entry in registry.list():
-        creds_dir = CREDS_BASE / entry.host
-        proxy_file = creds_dir / "proxy.yml"
-        if not proxy_file.exists():
+        proxy_file = _find_proxy_file(entry.host)
+        if proxy_file is None:
             continue
         creds = ServerCredentials.load(proxy_file)
         for relay in creds.relays:
@@ -188,7 +204,8 @@ def _regenerate_client_pages(
                 relay_entries=relay_url_sets,
                 page_url=page_url,
             )
-            if not upload_client_files(resolved_exit.conn, client.reality_uuid, client_files):
+            upload_error = upload_client_files(resolved_exit.conn, client.reality_uuid, client_files)
+            if upload_error:
                 from meridian.console import warn
 
                 warn(f"Could not update connection page for client '{client.name}'")
@@ -472,9 +489,8 @@ def run_list(
     # List all relays across all exits
     all_relays: list[tuple[str, RelayEntry]] = []
     for entry in registry.list():
-        creds_dir = CREDS_BASE / entry.host
-        proxy_file = creds_dir / "proxy.yml"
-        if not proxy_file.exists():
+        proxy_file = _find_proxy_file(entry.host)
+        if proxy_file is None:
             continue
         creds = ServerCredentials.load(proxy_file)
         for relay in creds.relays:
