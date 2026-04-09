@@ -162,6 +162,18 @@ def run(
             warn(f"Domain returned HTTP {http_code}")
             issues += 1
 
+    # 4. Relay reachability checks
+    if proxy_file.exists():
+        for relay in creds.relays:
+            relay_label = relay.name or relay.ip
+            info(f"Connecting to relay {relay_label} ({relay.ip}:{relay.port})...")
+            checks += 1
+            if tcp_connect(relay.ip, relay.port, timeout=5):
+                ok(f"Relay {relay_label} is reachable")
+            else:
+                warn(f"Relay {relay_label} ({relay.ip}:{relay.port}) is not reachable")
+                issues += 1
+
     # Summary
     err_console.print()
     if issues == 0:

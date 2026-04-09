@@ -129,6 +129,7 @@ def build_reality_config(
     short_id: str,
     encryption: str = "none",
     fingerprint: str = DEFAULT_FINGERPRINT,
+    server_port: int = 443,
 ) -> dict:
     """Build xray client config for VLESS+Reality."""
     return {
@@ -141,7 +142,7 @@ def build_reality_config(
                     "vnext": [
                         {
                             "address": server_ip,
-                            "port": 443,
+                            "port": server_port,
                             "users": [
                                 {
                                     "id": uuid,
@@ -173,6 +174,7 @@ def build_xhttp_config(
     uuid: str,
     xhttp_path: str,
     fingerprint: str = DEFAULT_FINGERPRINT,
+    server_port: int = 443,
 ) -> dict:
     """Build xray client config for VLESS+XHTTP (TLS)."""
     return {
@@ -185,7 +187,7 @@ def build_xhttp_config(
                     "vnext": [
                         {
                             "address": host,
-                            "port": 443,
+                            "port": server_port,
                             "users": [{"id": uuid, "encryption": "none"}],
                         }
                     ]
@@ -414,5 +416,44 @@ def build_test_configs(creds: ServerCredentials) -> list[tuple[str, dict, bool]]
                 False,  # CDN exit IP differs from server
             )
         )
+
+    # Relay configs — test each relay's Reality and XHTTP paths
+    for relay in creds.relays:
+        relay_label = relay.name or relay.ip
+        relay_sni = relay.sni or sni
+
+        if reality_uuid and public_key:
+            port = _find_free_port()
+            configs.append(
+                (
+                    f"Reality via {relay_label}",
+                    build_reality_config(
+                        port,
+                        relay.ip,
+                        reality_uuid,
+                        relay_sni,
+                        public_key,
+                        short_id,
+                        encryption,
+                        server_port=relay.port,
+                    ),
+                    not warp,
+                )
+            )
+
+        if xhttp_path and reality_uuid:
+            xhttp_host = domain or ip
+            port = _find_free_port()
+            # XHTTP via relay: connect to relay_ip:relay_port, TLS sni=exit
+            cfg = build_xhttp_config(port, xhttp_host, reality_uuid, xhttp_path, server_port=relay.port)
+            # Override address to relay IP (TLS serverName stays as exit)
+            cfg["outbounds"][0]["settings"]["vnext"][0]["address"] = relay.ip
+            configs.append(
+                (
+                    f"XHTTP via {relay_label}",
+                    cfg,
+                    not domain and not warp,
+                )
+            )
 
     return configs
