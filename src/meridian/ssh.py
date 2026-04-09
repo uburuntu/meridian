@@ -262,8 +262,6 @@ class ServerConnection:
                 err_console.print("  [dim]3. Different user:     meridian deploy IP --user ubuntu[/dim]")
                 raise SSHError(f"SSH connection failed to {self.user}@{self.ip}", hint_type="system")
             ok("SSH connection successful")
-        except SSHError:
-            raise
         except subprocess.TimeoutExpired:
             raise SSHError(f"SSH connection timed out (10s) to {self.user}@{self.ip}", hint_type="system")
         except FileNotFoundError:

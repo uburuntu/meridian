@@ -140,6 +140,8 @@ class ConfigureWarpOutbound:
         from meridian.panel import PanelError
 
         panel = ctx.panel
+        if panel is None:
+            return StepResult(name=self.name, status="failed", detail="No panel client in context")
 
         try:
             data = panel.api_post_empty("/panel/xray/")

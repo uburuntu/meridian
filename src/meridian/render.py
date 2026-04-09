@@ -52,7 +52,7 @@ def save_connection_html(
         replace(p, qr_b64=generate_qr_base64(p.url)) if p.url and not p.qr_b64 else p for p in protocol_urls
     ]
 
-    # Build template variables — local-save uses *_local QR variable names.
+    # Build template variables.
     variables = _build_template_variables(
         protocol_urls=urls_with_qr,
         server_ip=server_ip,

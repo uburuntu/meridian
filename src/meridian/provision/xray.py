@@ -377,6 +377,8 @@ class DisableXrayLogs:
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         panel = ctx.panel
+        if panel is None:
+            return StepResult(name=self.name, status="failed", detail="No panel client in context")
 
         # Fetch current Xray config template
         try:
@@ -458,6 +460,8 @@ class ConfigureGeoBlocking:
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         panel = ctx.panel
+        if panel is None:
+            return StepResult(name=self.name, status="failed", detail="No panel client in context")
 
         try:
             data = panel.api_post_empty("/panel/xray/")
