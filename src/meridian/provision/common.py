@@ -458,8 +458,20 @@ class ConfigureFirewall:
                     changed = True
 
         # Set default policies and enable
-        conn.run("ufw default deny incoming", timeout=15)
-        conn.run("ufw default allow outgoing", timeout=15)
+        result = conn.run("ufw default deny incoming", timeout=15)
+        if result.returncode != 0:
+            return StepResult(
+                name=self.name,
+                status="failed",
+                detail=f"ufw default deny incoming failed: {result.stderr.strip()[:200]}",
+            )
+        result = conn.run("ufw default allow outgoing", timeout=15)
+        if result.returncode != 0:
+            return StepResult(
+                name=self.name,
+                status="failed",
+                detail=f"ufw default allow outgoing failed: {result.stderr.strip()[:200]}",
+            )
 
         # Enable ufw (non-interactive) -- only counts as changed if it wasn't active
         if not ufw_active:

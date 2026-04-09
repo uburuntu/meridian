@@ -114,8 +114,12 @@ class ConfigureRelayFirewall:
         if "Skipping" not in result.stdout:
             changed = True
 
-        conn.run("ufw default deny incoming", timeout=15)
-        conn.run("ufw default allow outgoing", timeout=15)
+        result = conn.run("ufw default deny incoming", timeout=15)
+        if result.returncode != 0:
+            return StepResult(name=self.name, status="failed", detail=f"ufw default deny incoming failed: {result.stderr.strip()[:200]}")
+        result = conn.run("ufw default allow outgoing", timeout=15)
+        if result.returncode != 0:
+            return StepResult(name=self.name, status="failed", detail=f"ufw default allow outgoing failed: {result.stderr.strip()[:200]}")
 
         if not ufw_active:
             result = conn.run("echo y | ufw enable", timeout=30)
