@@ -92,7 +92,7 @@ After `meridian deploy 1.2.3.4`, credentials are cached at `~/.meridian/` on you
 Managing multiple servers? Use names:
 
 ```bash
-meridian deploy 1.2.3.4 --server-name finland
+meridian deploy 1.2.3.4 --display-name finland
 meridian client add alice --server finland
 ```
 

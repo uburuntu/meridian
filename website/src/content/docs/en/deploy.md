@@ -32,19 +32,19 @@ meridian deploy 1.2.3.4 --sni www.microsoft.com --name alice --yes
 | `--user USER` | root | SSH user (non-root gets sudo automatically) |
 | `--harden / --no-harden` | enabled | Harden SSH + firewall (disable with `--no-harden` if other services share the server) |
 | `--server NAME` | | Target server (name or IP) |
-| `--decoy MODE` | none | Decoy response for unknown paths (`none` / `403`) |
 | `--yes` | | Skip confirmation prompts |
 | `--warp / --no-warp` | disabled | Route outgoing traffic through Cloudflare WARP |
+| `--pq / --no-pq` | disabled | Post-quantum encryption — ML-KEM-768 hybrid (experimental) |
 
 ## Branding
 
 Personalize connection pages so recipients know who set up their VPN:
 
 ```
-meridian deploy 1.2.3.4 --server-name "Alice's VPN" --icon 🚀 --color sunset
+meridian deploy 1.2.3.4 --display-name "Alice's VPN" --icon 🚀 --color sunset
 ```
 
-- **`--server-name`** — appears in the trust bar and page title. Use your name or a friendly label.
+- **`--display-name`** — appears in the trust bar and page title. Use your name or a friendly label.
 - **`--icon`** — an emoji or image URL shown at the top of the connection page.
 - **`--color`** — sets the accent color palette. Options: `ocean` (default), `sunset`, `forest`, `lavender`, `rose`, `slate`.
 

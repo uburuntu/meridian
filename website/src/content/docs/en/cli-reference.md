@@ -52,6 +52,10 @@ meridian server list
 meridian server remove NAME
 ```
 
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--name NAME` | (auto) | Display name for the server |
+
 ### meridian relay
 
 Manage relay nodes — lightweight TCP forwarders that route traffic through a domestic server to an exit server abroad.
@@ -144,9 +148,14 @@ meridian -v
 
 ## Global flags
 
+These flags are available on most commands that interact with a server:
+
 | Flag | Description |
 |------|-------------|
 | `--server NAME` | Target a specific named server |
+| `--user/-u USER` | SSH user (default: root, non-root gets sudo automatically) |
+| `--sni HOST` | TLS camouflage target (used by deploy, preflight, test, doctor) |
+| `--domain DOMAIN` | Cloudflare CDN fallback domain (used by deploy, preflight, test) |
 
 ## Server resolution
 

@@ -14,7 +14,7 @@ meridian deploy 1.2.3.4
 向导会指导您完成配置。或者预先指定所有内容：
 
 ```
-meridian deploy 1.2.3.4 --sni www.microsoft.com --name alice --yes
+meridian deploy 1.2.3.4 --sni www.microsoft.com --client-name alice --yes
 ```
 
 ## 所有标志
@@ -23,24 +23,26 @@ meridian deploy 1.2.3.4 --sni www.microsoft.com --name alice --yes
 |------|---------|-------------|
 | `--sni HOST` | www.microsoft.com | Reality 伪装的站点 |
 | `--domain DOMAIN` | （无） | 启用带有 CDN 回退的域名模式 |
-| `--email EMAIL` | （无） | TLS 证书的电子邮件（可选） |
-| `--xhttp / --no-xhttp` | 启用 | XHTTP 传输（通过 nginx 的端口 443） |
-| `--name NAME` | default | 第一个客户端的名称 |
-| `--server-name NAME` | （无） | 连接页面上的显示名称（如 "Alice 的 VPN"） |
+| `--client-name NAME` | default | 第一个客户端的名称 |
+| `--display-name NAME` | （无） | 连接页面上的显示名称（如 "Alice 的 VPN"） |
 | `--icon EMOJI_OR_URL` | （无） | 服务器图标 — 表情符号或图片 URL |
 | `--color PALETTE` | ocean | 颜色方案（ocean/sunset/forest/lavender/rose/slate） |
 | `--user USER` | root | SSH 用户（非 root 用户自动获得 sudo） |
+| `--harden / --no-harden` | 启用 | 加固 SSH + 防火墙（如果其他服务共享该服务器则禁用） |
+| `--server NAME` | | 目标服务器（名称或 IP） |
 | `--yes` | | 跳过确认提示 |
+| `--warp / --no-warp` | 禁用 | 通过 Cloudflare WARP 路由出站流量 |
+| `--pq / --no-pq` | 禁用 | 后量子加密 — ML-KEM-768 混合（实验性） |
 
 ## 品牌定制
 
 个性化连接页面，让接收者知道谁设置了 VPN：
 
 ```
-meridian deploy 1.2.3.4 --server-name "Alice 的 VPN" --icon 🚀 --color sunset
+meridian deploy 1.2.3.4 --display-name "Alice 的 VPN" --icon 🚀 --color sunset
 ```
 
-- **`--server-name`** — 显示在信任栏和页面标题中。使用您的名字或友好的标签。
+- **`--display-name`** — 显示在信任栏和页面标题中。使用您的名字或友好的标签。
 - **`--icon`** — 连接页面顶部显示的表情符号或图片 URL。
 - **`--color`** — 设置强调色方案。选项：`ocean`（默认）、`sunset`、`forest`、`lavender`、`rose`、`slate`。
 

@@ -14,7 +14,7 @@ meridian deploy 1.2.3.4
 جادوگر شما را از طریق پیکربندی هدایت می‌کند. یا هر چیز را از قبل مشخص کنید:
 
 ```
-meridian deploy 1.2.3.4 --sni www.microsoft.com --name alice --yes
+meridian deploy 1.2.3.4 --sni www.microsoft.com --client-name alice --yes
 ```
 
 ## تمام پرچم‌ها
@@ -23,24 +23,26 @@ meridian deploy 1.2.3.4 --sni www.microsoft.com --name alice --yes
 |------|---------|-------------|
 | `--sni HOST` | www.microsoft.com | سایتی که Reality شخصیت‌سازی می‌کند |
 | `--domain DOMAIN` | (هیچ) | فعال کردن حالت دامنه با fallback CDN |
-| `--email EMAIL` | (هیچ) | ایمیل برای گواهی‌های TLS (اختیاری) |
-| `--xhttp / --no-xhttp` | فعال | XHTTP transport (از طریق پورت 443 via nginx) |
-| `--name NAME` | default | نام برای کلاینت اول |
-| `--server-name NAME` | (هیچ) | نام نمایشی در صفحات اتصال (مثلاً "VPN علی") |
+| `--client-name NAME` | default | نام برای کلاینت اول |
+| `--display-name NAME` | (هیچ) | نام نمایشی در صفحات اتصال (مثلاً "VPN علی") |
 | `--icon EMOJI_OR_URL` | (هیچ) | آیکون سرور — اموجی یا URL تصویر |
 | `--color PALETTE` | ocean | پالت رنگی (ocean/sunset/forest/lavender/rose/slate) |
 | `--user USER` | root | کاربر SSH (non-root به‌طور خودکار sudo دریافت می‌کند) |
+| `--harden / --no-harden` | فعال | تقویت SSH + firewall (غیرفعال کنید اگر سرویس‌های دیگر روی سرور هستند) |
+| `--server NAME` | | سرور مقصد (نام یا IP) |
 | `--yes` | | پرسش‌های تأیید را رد کنید |
+| `--warp / --no-warp` | غیرفعال | مسیریابی ترافیک خروجی از طریق Cloudflare WARP |
+| `--pq / --no-pq` | غیرفعال | رمزنگاری پسا-کوانتومی — ML-KEM-768 هیبرید (آزمایشی) |
 
 ## شخصی‌سازی
 
 صفحات اتصال را شخصی‌سازی کنید تا دریافت‌کنندگان بدانند چه کسی VPN را راه‌اندازی کرده:
 
 ```
-meridian deploy 1.2.3.4 --server-name "VPN علی" --icon 🚀 --color sunset
+meridian deploy 1.2.3.4 --display-name "VPN علی" --icon 🚀 --color sunset
 ```
 
-- **`--server-name`** — در نوار اعتماد و عنوان صفحه نمایش داده می‌شود. نام خود یا یک برچسب دوستانه استفاده کنید.
+- **`--display-name`** — در نوار اعتماد و عنوان صفحه نمایش داده می‌شود. نام خود یا یک برچسب دوستانه استفاده کنید.
 - **`--icon`** — اموجی یا URL تصویر در بالای صفحه اتصال.
 - **`--color`** — پالت رنگی را تنظیم می‌کند. گزینه‌ها: `ocean` (پیش‌فرض)، `sunset`، `forest`، `lavender`، `rose`، `slate`.
 
