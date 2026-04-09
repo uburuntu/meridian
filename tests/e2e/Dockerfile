@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl wget openssl iproute2 qrencode dnsutils \
     ca-certificates gnupg sudo iptables ufw jq \
     socat unzip apt-transport-https \
-    unattended-upgrades apt-listchanges \
+    unattended-upgrades apt-listchanges fail2ban \
     nginx libnginx-mod-stream \
     && rm -rf /var/lib/apt/lists/*
 
