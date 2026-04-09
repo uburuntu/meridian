@@ -55,7 +55,7 @@ def _should_check() -> bool:
 
 
 def check_for_update(current_version: str) -> None:
-    """Check PyPI for updates. Auto-upgrade patches, prompt for minor/major."""
+    """Check PyPI for updates and surface them without auto-upgrading."""
     if not _should_check():
         return
 
@@ -73,11 +73,12 @@ def check_for_update(current_version: str) -> None:
         return  # running dev/pre-release, don't downgrade
 
     if current.major == remote.major and current.minor == remote.minor:
-        # Patch: auto-upgrade silently
-        if do_upgrade():
-            ok(f"Auto-updated: v{current_version} → v{latest}")
-            # Re-exec so new version runs
-            os.execvp(sys.argv[0], sys.argv)
+        err_console.print(f"\n  [warn]v{latest} available[/warn]")
+        err_console.print(f"  [dim]Patch release: {_RELEASES_URL}[/dim]")
+        err_console.print(
+            "  [dim]Run[/dim] [bold]meridian update[/bold] [dim]when ready, then[/dim] "
+            "[bold]meridian deploy[/bold] [dim]to apply[/dim]\n"
+        )
     elif current.major != remote.major:
         # Major: review before updating
         err_console.print(f"\n  [bold red]v{latest} available (major release)[/bold red]")

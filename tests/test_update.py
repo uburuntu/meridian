@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from meridian.update import _should_check
+from meridian.update import _should_check, check_for_update
 
 
 class TestShouldCheck:
@@ -57,3 +57,28 @@ class TestVersionComparison:
         current = Version("2.0.0")
         remote = Version("1.2.5")
         assert remote <= current
+
+
+class TestCheckForUpdate:
+    def test_patch_bump_does_not_auto_upgrade(self) -> None:
+        with (
+            patch("meridian.update._should_check", return_value=True),
+            patch("meridian.update.get_pypi_latest", return_value="1.2.6"),
+            patch("meridian.update.do_upgrade") as mock_upgrade,
+            patch("meridian.update.err_console.print") as mock_print,
+        ):
+            check_for_update("1.2.5")
+
+        mock_upgrade.assert_not_called()
+        rendered = " ".join(str(call.args[0]) for call in mock_print.call_args_list if call.args)
+        assert "meridian update" in rendered
+
+    def test_same_version_no_output(self) -> None:
+        with (
+            patch("meridian.update._should_check", return_value=True),
+            patch("meridian.update.get_pypi_latest", return_value="1.2.5"),
+            patch("meridian.update.err_console.print") as mock_print,
+        ):
+            check_for_update("1.2.5")
+
+        mock_print.assert_not_called()
