@@ -112,6 +112,17 @@ class TestRenderConfigJson:
         assert "iOS" in platforms
         assert "Android" in platforms
 
+    def test_subscription_url_and_qr_included_when_provided(self, protocol_urls: list[ProtocolURL]) -> None:
+        result = json.loads(
+            render_config_json(
+                protocol_urls,
+                "198.51.100.1",
+                subscription_url="https://example.com/custom/subscription.txt",
+            )
+        )
+        assert result["subscription_url"] == "https://example.com/custom/subscription.txt"
+        assert result["subscription_qr_b64"]
+
 
 # ---------------------------------------------------------------------------
 # TestRenderSubscription
@@ -400,3 +411,9 @@ class TestUnicodeClientNames:
         result = render_subscription(protocol_urls)
         decoded = base64.b64decode(result).decode()
         assert "vless://" in decoded
+
+
+class TestPWATemplateSource:
+    def test_app_js_prefers_canonical_subscription_url(self) -> None:
+        app_js = Path("src/meridian/templates/pwa/app.js").read_text()
+        assert "config.subscription_url" in app_js

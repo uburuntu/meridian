@@ -334,7 +334,10 @@ function loadStats(uuid) {
 /* -----------------------------------------------------------------------
  * Subscription URL
  * ----------------------------------------------------------------------- */
-function getSubscriptionUrl() {
+function getSubscriptionUrl(config) {
+  if (config && config.subscription_url) {
+    return config.subscription_url;
+  }
   var path = location.pathname.replace(/\/?$/, '');
   return location.origin + path + '/sub.txt';
 }
@@ -530,7 +533,7 @@ function renderPage(config) {
   html += '</div>';
 
   /* ---- Subscription QR hero ---- */
-  var subUrl = getSubscriptionUrl();
+  var subUrl = getSubscriptionUrl(config);
   var serverLabel = config.server_name || 'Meridian';
   html += renderImportCard(config.apps, subUrl, platform, serverLabel, config.subscription_qr_b64);
 
