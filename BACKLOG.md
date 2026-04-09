@@ -40,10 +40,20 @@ Things that require human action outside the codebase.
 
 - [ ] **Relay SNI mismatch** — relay in RU zone inherits exit node's SNI (e.g. microsoft.com). Client connecting to a Russian IP with Microsoft SNI is unrealistic and detectable. Relay deploy should scan its own IP range and pick a locally plausible SNI, independent of exit node
 - [ ] **IP cert fingerprinting via nginx catch-all** — active probers get Let's Encrypt IP cert on non-Reality SNI. Need cert strategy that mimics camouflage target or drops connection
+- [ ] **Fix XHTTP nginx path mismatch** — align URL generation, Xray config, and nginx routing so both exact-path and slash-path requests hit the XHTTP upstream instead of falling through to stock 404s
 
 ### Product
 
 - [ ] **Client migration for rebuilds** — `meridian rebuild NEW_IP --from OLD_IP` or `meridian client migrate`
+- [ ] **Eliminate state split-brain between local cache and server** — local `proxy.yml` currently becomes authoritative once present, causing stale overwrites across multiple machines and non-root on-server divergence between `~/.meridian` and `/etc/meridian`. Define a single source of truth, refresh before mutation, and make sync failures blocking for write commands
+- [ ] **Redeploy must update live state before publishing new handoff state** — fix paths where redeploy updates saved credentials/pages without updating the live server: Reality SNI changes, relay SNI routing failures, and other config drift cases. Never hand out URLs/pages the server is not actually serving
+- [ ] **Partial panel recovery must preserve existing clients and relays** — `ConfigurePanel` recovery currently nukes 3x-ui state and recreates only baseline inbounds. Recovery should reconstruct all known clients, relay inbounds, and hosted pages from credentials instead of silently deleting working access
+
+### Security / Supply Chain
+
+- [ ] **Pin release artifacts to the CI-passed commit** — `release.yml` triggered by `workflow_run` must checkout `github.event.workflow_run.head_sha` for Pages, tags, and PyPI publishing so a newer untested `main` commit cannot be released
+- [ ] **Replace mutable install/update trust chain with pinned, verified artifacts** — stop relying on branch-tip `curl | bash`, raw GitHub fallback, and silent patch auto-upgrades. Tie install/update to release artifacts with checksum verification, and make upgrades explicit instead of auto-exec during normal CLI use
+- [ ] **Stop executing unsigned remote scanner binaries as root** — `meridian scan` should use a pinned release plus cryptographic verification, or vendor the scanner. Current ELF/size checks are not enough for a hardening tool
 
 ---
 
@@ -53,10 +63,12 @@ Things that require human action outside the codebase.
 
 - [ ] **SSH password auth not hardened during provisioning** — cloud-init drops `PasswordAuthentication yes` in `/etc/ssh/sshd_config.d/`, overriding main config. Provisioner should disable password auth and restart sshd after confirming key access works
 - [ ] **Firewall cleanup deletes user's custom rules** — `ConfigureFirewall` removes ALL TCP ports not in `{22, 443, 80}`, silently deleting alternate SSH ports, monitoring, or relay listen ports. Should only delete Meridian-managed ports or warn before removing unexpected rules (`common.py:441-458`)
+- [ ] **Remove public 3x-ui management from the shared 443 identity** — hiding the panel behind a random path is weaker than removing it from the public nginx identity entirely. Move management off the main camouflage surface or require an explicit operator-only access path
 
 ### Anti-censorship
 
 - [ ] **Default SNI `www.microsoft.com` monitored** — ASN mismatch detection. Make `meridian scan` the default
+- [ ] **Make probe/check tooling mode-aware** — domain mode intentionally serves a real domain cert, but current verification treats that as a stealth leak. Align `probe` and TLS checks with supported deployment modes so users do not get false alarms from valid configs
 
 ### Product
 
@@ -71,6 +83,25 @@ Things that require human action outside the codebase.
 - [ ] **`client disable`/`client enable`** — panel API supports it, just needs CLI exposure
 - [ ] **Proactive IP block detection** — server self-checks via ping endpoint, notifies via webhook/Telegram
 - [ ] **Rebuild state transfer** — `meridian deploy NEW_IP --from OLD_IP` copies SNI, domain, clients
+- [ ] **Make destructive mutations transactional** — `client remove`, `relay remove`, and teardown should not delete local state or print success after partial remote failures. Either complete remote cleanup or stop and leave state unchanged with a recovery path
+- [ ] **Require explicit server identity for risky commands** — enforce unique server aliases, separate deployer aliasing from recipient-facing branding, and add clearer target confirmation for destructive/stateful commands. Current implicit auto-select/local-mode behavior is too easy to mis-target
+- [ ] **Regenerate all hosted client pages when shared server state changes** — branding, domain, SNI, relay topology, and other handoff-affecting redeploy changes must update every existing hosted page/subscription, not just the first/default client
+- [ ] **Unify deployer-facing and recipient-facing naming** — `--display-name` and `--server` currently model different identities but docs and UX blur them together. Either unify them or expose the distinction clearly in commands and docs
+- [ ] **Hosted connection page must stay self-hosted in recovery flows** — remove `getmeridian.org/ping` dependence and external App Store fallback from the critical handoff path so troubleshooting/import does not leak server metadata to a third-party domain
+
+### Reliability
+
+- [ ] **WARP must be health-gated and reversible** — only insert WARP as the default outbound once it is actually connected, support full rollback on `--no-warp`, and avoid leaving users in a false-success state where clients connect but outbound traffic is dead
+- [ ] **Domain mode must support safe steady-state redeploys behind orange-cloud** — current redeploy logic expects the DNS record to point directly at the server IP, conflicting with the docs' normal post-deploy Cloudflare setup
+- [ ] **Persist relay SSH user across lifecycle commands** — `relay check` and `relay remove` should reuse the stored relay user by default so non-root relay deploys remain manageable
+- [ ] **Preserve forward-compatible nested credential fields** — `_extra` currently only protects unknown top-level YAML keys. Unknown nested fields under server/panel/protocols/clients/relays/branding should round-trip cleanly across CLI versions
+
+### Testing
+
+- [ ] **Make E2E fail on idempotency and redeploy regressions** — the current shell E2E run explicitly tolerates failures in the repo's core promise: safe re-run and clean redeploy. These paths should be hard failures in CI
+- [ ] **Add real-host coverage for production-sensitive branches** — current E2E bypasses cert issuance, systemd management, nginx bootstrap, and other documented sharp edges. Add coverage that exercises the real operational branches instead of the stubs
+- [ ] **Add end-to-end coverage for domain mode, WARP, and relay migration** — these features are currently validated mostly via mocks/render tests, which is not enough for deployment-changing behavior
+- [ ] **Add dedicated tests for recovery and migration paths** — especially `ConfigurePanel` partial recovery, relay nginx migration for pre-existing servers, and stale-state conflict resolution
 
 ---
 
@@ -84,7 +115,7 @@ Things that require human action outside the codebase.
 
 - [ ] **Batch client add** — `meridian client add alice bob charlie`
 - [ ] **Per-client traffic/IP limits** — `--limit-gb`, `--limit-ip` flags
-- [ ] **Self-hosted ping endpoint** — for when `getmeridian.org` is blocked
+- [ ] **Self-hosted ping endpoint** — make this the default troubleshooting path from hosted client pages so connection testing still works when `getmeridian.org` is blocked and doesn't leak server metadata externally
 - [ ] **Windows WSL setup guide** — doc page
 - [ ] **`meridian server status`** — multi-server overview
 - [ ] **`meridian test --via RELAY_IP`** — E2E test through relay
@@ -109,12 +140,14 @@ Things that require human action outside the codebase.
 - [ ] **`index.html` not in SW precache** — first offline visit fails
 - [ ] **`apple-touch-icon` uses SVG** — iOS needs PNG
 - [ ] **Wizard `_confirm_scan()` fails silently on WSL**
+- [ ] **Use canonical `subscription_url` in the PWA** — frontend currently reconstructs `sub.txt` from `location.pathname` instead of honoring the server-provided canonical URL, which is brittle under alternate routing or proxy setups
 
 ### Website
 
 - [ ] **Live GitHub stars in trust bar** — shields.io badge or API fetch
 - [ ] **Dark mode toggle** — system-preference only, no manual override
 - [ ] **Docs sidebar on mobile** — no nav below 860px
+- [ ] **Validate executable docs examples, not just flag tables** — CI currently misses broken README/deploy-guide commands and translated-doc drift. Add validation for high-traffic command examples and behavior claims across docs surfaces
 
 ---
 

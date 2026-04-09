@@ -15,7 +15,7 @@ tags:
 readingTime: 18
 ---
 
-![The tech friend's guide to sharing internet access](./hero.png)
+![The tech friend's guide to sharing internet access](./hero.webp)
 
 If you work in technology, you are likely familiar with the message. It arrives through various messaging apps or as a call from an unrecognized number. It might be a relative, an old friend from university, or a colleague of your parent. The request is consistently the same: “Hello, I know you are skilled with computers. Can you assist me in setting up a VPN?”
 

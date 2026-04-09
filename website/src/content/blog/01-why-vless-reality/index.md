@@ -14,7 +14,7 @@ tags:
 readingTime: 12
 ---
 
-![Why VLESS+Reality is the last VPN protocol you'll need](./hero.png)
+![Why VLESS+Reality is the last VPN protocol you'll need](./hero.webp)
 
 For years, a quiet battle has been waged across the global internet. On one side, state-level censorship systems, armed with sophisticated Deep Packet Inspection (DPI) technology, work to control and restrict the flow of information. On the other, developers and users of circumvention tools constantly innovate to keep access open. This technological arms race has seen protocols rise and fall, each new method of detection met with a new method of evasion. Today, that race has reached a new stage, and the tools that worked yesterday are no longer sufficient.
 

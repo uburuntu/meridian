@@ -8,7 +8,7 @@ description: Most proxy setup guides stop at installation. Here's what a properl
 readingTime: 15
 ---
 
-![Hardening a proxy server in 2026](./hero.png)
+![Hardening a proxy server in 2026](./hero.webp)
 
 Most tutorials for setting up a self-hosted proxy end the moment the connection works. You get a QR code, the client connects, and the guide declares victory with a triumphant "it works!" This approach is a dangerous trap. A working proxy is not a secure proxy, and the internet of 2026 is a far more hostile environment than many users realize. Within minutes of a new server going online, it is bombarded by automated scanners probing for any weakness. Leaving a server in its default, post-installation state is like leaving your front door unlocked and wide open with a welcome mat for these automated attackers. The real work of securing your server begins *after* the proxy is running, and it involves a deliberate process of shrinking your server's visibility and closing potential entry points.
 

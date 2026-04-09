@@ -15,7 +15,7 @@ description: "Not all VPS providers are equal when it comes to running a proxy. 
 readingTime: 12
 ---
 
-![Choosing the right VPS for a proxy server](./hero.png)
+![Choosing the right VPS for a proxy server](./hero.webp)
 
 When you decide to run your own proxy server, the first decision you face is where to host it. The internet is flooded with offers for virtual private servers (VPS) for as little as five dollars a month. It is tempting to assume that cheaper is better, especially when the task of running a proxy does not seem to demand much in terms of raw computing power. This assumption, however, is a common pitfall that can lead to a frustrating experience and a poorly performing proxy.
 

@@ -14,7 +14,7 @@ tags:
 readingTime: 12
 ---
 
-![Anatomy of Meridian's architecture](./hero.png)
+![Anatomy of Meridian's architecture](./hero.webp)
 
 When building a personal proxy server, the simplest approach seems obvious: just run a proxy process like Xray on port 443 and forward the configuration to your clients. This setup can work, but it presents immediate problems. Without a real web server, anyone visiting your server's IP address in a browser gets a connection error. This is a red flag for any curious observer. It also means you cannot easily host connection pages for your users or access a web-based management panel over standard HTTPS.
 
