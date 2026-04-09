@@ -43,12 +43,13 @@ Things that require human action outside the codebase.
 
 ### Product
 
-- [x] **`meridian client show NAME`** — regenerate/re-display connection info without recreating client
 - [ ] **Client migration for rebuilds** — `meridian rebuild NEW_IP --from OLD_IP` or `meridian client migrate`
 
-### Code quality
+### Deployment correctness
 
-- [x] **Magic email-prefix in stats script** — hardcodes `startswith('reality-')` instead of using `INBOUND_TYPES`
+- [ ] **`return 444` invalid in nginx HTTP block** — IP-mode deployments use `return 444;` inside an HTTP server block, but 444 only works in stream context. Causes `nginx -t` failure or detectable footprint. Use `return 403;` instead (`services.py:276-278`)
+- [ ] **nginx stream block `printf` produces literal `\n`** — single-quoted `\n` in `printf` creates malformed nginx.conf instead of actual newlines. Also appends without guarding against duplicates (`services.py:853-859`)
+- [ ] **Socket leak in `tcp_connect()` and `_get_cert_der()`** — sockets not closed on exception path. Repeated connectivity checks (ping, probe) can exhaust file descriptors (`ssh.py:382-394`, `probe.py:88-102`)
 
 ---
 
@@ -57,16 +58,12 @@ Things that require human action outside the codebase.
 ### Security
 
 - [ ] **SSH password auth not hardened during provisioning** — cloud-init drops `PasswordAuthentication yes` in `/etc/ssh/sshd_config.d/`, overriding main config. Provisioner should disable password auth and restart sshd after confirming key access works
-- [x] **`manifest.webmanifest.j2` no autoescape** — client name with `"` breaks JSON
-- [x] **SW cache never invalidates** — hardcoded `CACHE_VERSION`. Embed hash during deployment
-- [x] **Silent template failures return `""`** — catch bare `Exception`, deploy empty HTML
-- [x] **`_sync_credentials_to_server()` ignores SCP failures** — credentials silently not synced
-- [x] **Wizard no SSH user validation** — shell metacharacters accepted (injection risk)
+- [ ] **Firewall cleanup deletes user's custom rules** — `ConfigureFirewall` removes ALL TCP ports not in `{22, 443, 80}`, silently deleting alternate SSH ports, monitoring, or relay listen ports. Should only delete Meridian-managed ports or warn before removing unexpected rules (`common.py:441-458`)
+- [ ] **SSRF in icon download** — `urllib.request.urlopen()` in `branding.py:140` doesn't restrict to public IP ranges. Deployer could point at `http://127.0.0.1:2053` to probe internal services. Low risk (deployer-initiated), but should block private/loopback IPs
 
 ### Anti-censorship
 
 - [ ] **Default SNI `www.microsoft.com` monitored** — ASN mismatch detection. Make `meridian scan` the default
-- [x] **`spiderX: "/"` hardcoded** — fingerprint-able. Randomize or derive from camouflage target
 
 ### Product
 
@@ -84,12 +81,14 @@ Things that require human action outside the codebase.
 
 ### Reliability
 
-- [x] **`InstallDocker` skips regardless of image version** — no `docker compose pull` on re-deploy
+- [ ] **WARP `systemctl enable` and `warp-cli connect` unchecked** — return codes ignored, deployment claims success but WARP not running. Breaks egress routing on WARP-enabled deploys (`warp.py:62, 84, 87`)
+- [ ] **`ufw default deny/allow` return codes unchecked** — firewall left in inconsistent state on failure (`common.py:461-462`, `relay.py:117-118`)
+- [ ] **Reality port conflict not pre-checked** — in standalone mode (no nginx), Xray binds `0.0.0.0:443` without checking if port is already in use. Panel API succeeds but Xray fails to bind (`xray.py:96, 301`)
+- [ ] **`fetch_credentials()` return value ignored** — `setup.py:109` doesn't check SCP result, subsequent code assumes credentials exist
 
-### UX
+### Code quality
 
-- [x] **`--sni` flag ignored during deploy** — user passes `--sni` but deploy still uses microsoft.com. Flag not plumbed through to config
-- [x] **`document.execCommand('copy')` deprecated** — broken on iOS 16.4+
+- [ ] **Unused `import hashlib`** — top-level import in `xray_client.py:9` shadowed by local re-import at line 82. Dead code
 
 ---
 
@@ -97,12 +96,9 @@ Things that require human action outside the codebase.
 
 ### Security
 
-- [x] **Panel cookie predictable path** — shared across concurrent processes. Use `tempfile.mkstemp`
 - [ ] **`innerHTML` XSS surface** — risk if translations ever loaded externally
 
 ### Anti-censorship
-
-- [x] **DNS `8.8.8.8` during provisioning** — monitored by censors. Use system resolver
 
 ### Product
 
@@ -120,22 +116,32 @@ Things that require human action outside the codebase.
 
 ### Reliability
 
-- [x] **SSH `ConnectTimeout=5` too aggressive** — increase to 10s or add retry
 - [ ] **`_wait_for_panel` SSH vs panel confusion** — polling breaks on transient SSH issues
+- [ ] **Xray process accumulation on `test_connection()` timeouts** — orphan processes not cleaned up when `_wait_for_port()` times out (`xray_client.py:305-350`)
+- [ ] **Broad `except Exception` swallows errors** — silent catch-alls in `urls.py`, `probe.py`, `ping.py`, `update.py` make debugging hard. Should use specific exception types or at least log
+
+### Code quality
+
+- [ ] **IPv6 URLs malformed** — no bracket wrapping in protocol URL builders. `vless://uuid@2001:db8::1:443` is invalid per RFC 3986, needs `[2001:db8::1]` (`protocols.py:178-193`)
+- [ ] **Redundant condition check** — `if server_name or icon or color` checked twice in `setup.py:147-157`, inner check always true
+- [ ] **Missing type annotation** — `protocol_urls: list` in `client.py:106` should be `list[ProtocolURL]` for consistency
+- [ ] **`SystemExit` catch anti-pattern** — `uninstall.py:30-40` catches `SystemExit` from `fail()`. Should use custom exception or optional return
+
+### Testing
+
+- [ ] **14 source modules (34%) have zero tests** — priority gaps: `branding.py` (233 LOC, emoji/image processing), `xray_client.py` (416 LOC, binary download/verify), `ping.py` (244 LOC, reachability), `render.py` (725 LOC, HTML/QR)
+- [ ] **`test_render_templates.py` tautological** — 2 tests only check templates don't crash, never verify output content, QR embedding, or variable substitution
 
 ### UX
 
 - [ ] **Multi-protocol jargon** — "XHTTP" meaningless to non-tech. Use "Connection 1 / 2"
-- [x] **`<title>` not updated on language switch** — stays English
 - [ ] **`index.html` not in SW precache** — first offline visit fails
 - [ ] **`apple-touch-icon` uses SVG** — iOS needs PNG
-- [x] **QR 200x200px marginal on Retina** — generate 400x400px
 - [ ] **Wizard `_confirm_scan()` fails silently on WSL**
 
 ### Website
 
 - [ ] **Live GitHub stars in trust bar** — shields.io badge or API fetch
-- [x] **Sitemap i18n hreflang** — `i18n` option in `sitemap()` config
 - [ ] **Dark mode toggle** — system-preference only, no manual override
 - [ ] **Docs sidebar on mobile** — no nav below 860px
 
@@ -158,9 +164,7 @@ Things that require human action outside the codebase.
 
 Collapsed — see [CHANGELOG.md](CHANGELOG.md) for details.
 
-- **3.8.1** — Deploy version tracking + CLI/server mismatch warning, SECURITY.md fix, README docs alignment, CODE_OF_CONDUCT, homepage relay section + og:locale, PWA sub-url toggle + clock warning + flag emoji removal, trust bar cleanup, BACKLOG compaction
-- **3.8.0** — PWA security/a11y/i18n (40 tests), landing page restructure, README positioning, install.sh fix, architecture SVG, locale links, reduced-motion, GitHub topics/discussions
-- **3.7.4** — Caddy `handle_path` fix for PWA cache headers, mypy/lint fixes
-- **3.7.2** — local mode, security hardening, reliability (19 items)
-- **3.7.1** — HAProxy port fix
-- **3.7.0** — website, provisioner hardening (9 items)
+- **3.14** — `client show`, WARP flag, stats script fix, `--sni` plumbing, docker pull on re-deploy
+- **3.8.1** — Deploy version tracking, SECURITY.md, CODE_OF_CONDUCT, PWA sub-url toggle + clock warning, trust bar cleanup
+- **3.8.0** — PWA security/a11y/i18n (40 tests), landing page, install.sh, architecture SVG, reduced-motion
+- **3.7** — Local mode, security hardening (19 items), Caddy/HAProxy fixes, website, provisioner hardening
