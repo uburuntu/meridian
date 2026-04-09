@@ -530,9 +530,7 @@ class TestBuildRelayUrl:
 
     def test_xhttp_relay_url(self) -> None:
         creds = _make_test_creds(xhttp_path="xp123")
-        url = XHTTPProtocol().build_relay_url(
-            "r-uuid", "", creds, "bob", "198.51.100.50", 8443, relay_name="moscow"
-        )
+        url = XHTTPProtocol().build_relay_url("r-uuid", "", creds, "bob", "198.51.100.50", 8443, relay_name="moscow")
         assert "vless://r-uuid@198.51.100.50:8443" in url
         assert "sni=198.51.100.1" in url  # exit IP as SNI (no domain)
         assert "type=xhttp" in url
@@ -540,9 +538,7 @@ class TestBuildRelayUrl:
 
     def test_xhttp_relay_with_domain(self) -> None:
         creds = _make_test_creds(domain="example.com", xhttp_path="xp123")
-        url = XHTTPProtocol().build_relay_url(
-            "r-uuid", "", creds, "bob", "198.51.100.50", relay_name="moscow"
-        )
+        url = XHTTPProtocol().build_relay_url("r-uuid", "", creds, "bob", "198.51.100.50", relay_name="moscow")
         assert "sni=example.com" in url
 
     def test_xhttp_relay_returns_empty_without_path(self) -> None:
@@ -552,9 +548,7 @@ class TestBuildRelayUrl:
 
     def test_wss_relay_url(self) -> None:
         creds = _make_test_creds(domain="example.com", ws_path="ws789")
-        url = WSSProtocol().build_relay_url(
-            "", "w-uuid", creds, "carol", "198.51.100.50", 8443, relay_name="moscow"
-        )
+        url = WSSProtocol().build_relay_url("", "w-uuid", creds, "carol", "198.51.100.50", 8443, relay_name="moscow")
         assert "vless://w-uuid@198.51.100.50:8443" in url
         assert "sni=example.com" in url
         assert "host=example.com" in url

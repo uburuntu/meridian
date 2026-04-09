@@ -23,6 +23,7 @@ class SSHError(Exception):
         self.hint = hint
         self.hint_type = hint_type
 
+
 SSH_OPTS: list[str] = [
     "-o",
     "BatchMode=yes",
