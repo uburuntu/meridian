@@ -11,7 +11,7 @@ import subprocess
 from dataclasses import dataclass, field
 
 from meridian.commands.resolve import is_local_keyword, resolve_server
-from meridian.config import SERVERS_FILE, is_ipv4
+from meridian.config import SERVERS_FILE, is_ip
 from meridian.console import err_console, info, line, ok, warn
 from meridian.servers import ServerRegistry
 from meridian.ssh import tcp_connect
@@ -262,12 +262,15 @@ def check_tls_certificate(ip: str) -> CheckResult:
 def _get_cert_text_via_openssl(ip: str) -> str:
     """Get certificate text using openssl subprocess. Returns empty string on failure."""
     q_ip = shlex.quote(ip)
+    # openssl -connect requires brackets for IPv6: [2001:db8::1]:443
+    connect_host = f"[{ip}]" if ":" in ip else ip
+    q_connect = shlex.quote(f"{connect_host}:443")
     try:
         proc = subprocess.run(
             [
                 "bash",
                 "-c",
-                f"echo | openssl s_client -connect {q_ip}:443 -servername {q_ip} 2>/dev/null"
+                f"echo | openssl s_client -connect {q_connect} -servername {q_ip} 2>/dev/null"
                 " | openssl x509 -text -noout 2>/dev/null",
             ],
             capture_output=True,
@@ -515,9 +518,17 @@ def _tls_version_accepted(ip: str, version: ssl.TLSVersion) -> bool:
 
 
 def _resolve_domain(domain: str) -> str:
-    """Resolve a domain name to an IPv4 address. Returns empty string on failure."""
+    """Resolve a domain name to an IP address. Prefers IPv4, falls back to IPv6."""
+    # Try IPv4 first
     try:
         results = socket.getaddrinfo(domain, 443, socket.AF_INET, socket.SOCK_STREAM)
+        if results:
+            return str(results[0][4][0])
+    except (socket.gaierror, OSError):
+        pass
+    # Fall back to IPv6
+    try:
+        results = socket.getaddrinfo(domain, 443, socket.AF_INET6, socket.SOCK_STREAM)
         if results:
             return str(results[0][4][0])
     except (socket.gaierror, OSError):
@@ -539,7 +550,7 @@ def run(
     domain = ""
 
     # Resolve domain to IP if needed
-    if target and not is_ipv4(target) and not is_local_keyword(target):
+    if target and not is_ip(target) and not is_local_keyword(target):
         resolved_ip = _resolve_domain(target)
         if resolved_ip:
             domain = target

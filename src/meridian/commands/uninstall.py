@@ -12,7 +12,7 @@ from meridian.commands.resolve import (
     resolve_server,
     try_resolve_server,
 )
-from meridian.config import CREDS_BASE, RELAY_SERVICE_NAME, SERVERS_FILE
+from meridian.config import CREDS_BASE, RELAY_SERVICE_NAME, SERVERS_FILE, sanitize_ip_for_path
 from meridian.console import err_console, fail, info, ok, prompt, warn
 from meridian.credentials import ServerCredentials
 from meridian.servers import ServerRegistry
@@ -74,7 +74,7 @@ def run(
                 except Exception:
                     warn(f"Could not reach relay {relay.ip} — service may still be running")
                 # Clean up local relay metadata
-                relay_creds_dir = CREDS_BASE / relay.ip
+                relay_creds_dir = CREDS_BASE / sanitize_ip_for_path(relay.ip)
                 relay_file = relay_creds_dir / "relay.yml"
                 if relay_file.exists():
                     relay_file.unlink()
@@ -102,7 +102,7 @@ def run(
     registry.remove(resolved.ip)
 
     # Remove local credentials
-    creds_dir = CREDS_BASE / resolved.ip
+    creds_dir = CREDS_BASE / sanitize_ip_for_path(resolved.ip)
     if creds_dir.exists():
         shutil.rmtree(creds_dir)
 

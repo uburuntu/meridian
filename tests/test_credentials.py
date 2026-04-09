@@ -279,3 +279,11 @@ class TestCredsPath:
     def test_creds_path(self, tmp_path: Path) -> None:
         result = creds_path(tmp_path, "1.2.3.4")
         assert result == tmp_path / "1.2.3.4" / "proxy.yml"
+
+    def test_creds_path_ipv6_sanitized(self, tmp_path: Path) -> None:
+        result = creds_path(tmp_path, "2001:db8::1")
+        assert result == tmp_path / "2001-db8--1" / "proxy.yml"
+
+    def test_creds_path_ipv4_unchanged(self, tmp_path: Path) -> None:
+        result = creds_path(tmp_path, "198.51.100.1")
+        assert result == tmp_path / "198.51.100.1" / "proxy.yml"

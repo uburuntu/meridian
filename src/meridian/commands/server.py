@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 
-from meridian.config import CREDS_BASE, SERVERS_FILE
+from meridian.config import CREDS_BASE, SERVERS_FILE, sanitize_ip_for_path
 from meridian.console import err_console, fail, info, line, ok, warn
 from meridian.servers import ServerEntry, ServerRegistry
 from meridian.ssh import ServerConnection, SSHError
@@ -25,7 +25,7 @@ def run_add(ip: str, name: str = "", user: str = "root") -> None:
         fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
 
     # Fetch credentials from server
-    creds_dir = CREDS_BASE / ip
+    creds_dir = CREDS_BASE / sanitize_ip_for_path(ip)
     creds_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     if conn.fetch_credentials(creds_dir):
         ok("Fetched credentials from server")
@@ -46,11 +46,11 @@ def run_list() -> None:
         return
 
     err_console.print()
-    err_console.print(f"  [bold]{'NAME':<15s}  {'IP':<15s}  {'USER':<8s}[/bold]")
+    err_console.print(f"  [bold]{'NAME':<15s}  {'IP':<39s}  {'USER':<8s}[/bold]")
     line()
     for entry in entries:
         label = entry.name if entry.name else "--"
-        err_console.print(f"  {label:<15s}  {entry.host:<15s}  {entry.user:<8s}")
+        err_console.print(f"  {label:<15s}  {entry.host:<39s}  {entry.user:<8s}")
     err_console.print()
 
 
@@ -66,7 +66,7 @@ def run_remove(query: str) -> None:
     registry.remove(query)
 
     # Remove local credentials
-    creds_dir = CREDS_BASE / host
+    creds_dir = CREDS_BASE / sanitize_ip_for_path(host)
     if creds_dir.exists():
         shutil.rmtree(creds_dir)
 

@@ -34,6 +34,13 @@ SSH_OPTS: list[str] = [
 ]
 
 
+def scp_host(ip: str) -> str:
+    """Format IP for SCP host:path syntax (brackets IPv6)."""
+    if ":" in ip and not ip.startswith("["):
+        return f"[{ip}]"
+    return ip
+
+
 def _host_key_known(ip: str) -> bool:
     """Check if the host key for this IP is already in known_hosts."""
     try:
@@ -162,6 +169,13 @@ class ServerConnection:
     @property
     def _ssh_opts(self) -> list[str]:
         return SSH_OPTS
+
+    @property
+    def _scp_host(self) -> str:
+        """Host string for SCP commands (brackets IPv6 addresses)."""
+        if ":" in self.ip and not self.ip.startswith("["):
+            return f"[{self.ip}]"
+        return self.ip
 
     def run(self, command: str, timeout: int = 30, *, sudo: bool | None = None) -> subprocess.CompletedProcess[str]:
         """Run a command on the remote server via SSH.
@@ -317,7 +331,7 @@ class ServerConnection:
                 [
                     "scp",
                     *self._ssh_opts,
-                    f"{self.user}@{self.ip}:/etc/meridian/proxy.yml",
+                    f"{self.user}@{self._scp_host}:/etc/meridian/proxy.yml",
                     str(local_creds_dir / "proxy.yml"),
                 ],
                 capture_output=True,
@@ -381,17 +395,21 @@ class ServerConnection:
 
 def _is_on_server(ip: str) -> bool:
     """Check if our public IP matches the target server's IP."""
-    try:
-        result = subprocess.run(
-            ["curl", "-4", "-s", "--max-time", "3", "https://ifconfig.me"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            stdin=subprocess.DEVNULL,
-        )
-        return result.returncode == 0 and result.stdout.strip() == ip
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False
+    flag = "-6" if ":" in ip else "-4"
+    for url in ("https://ifconfig.me", "https://api64.ipify.org"):
+        try:
+            result = subprocess.run(
+                ["curl", flag, "-s", "--max-time", "3", url],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                stdin=subprocess.DEVNULL,
+            )
+            if result.returncode == 0 and result.stdout.strip() == ip:
+                return True
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+    return False
 
 
 def tcp_connect(host: str, port: int, timeout: int = 5) -> bool:
@@ -399,9 +417,8 @@ def tcp_connect(host: str, port: int, timeout: int = 5) -> bool:
     import socket as _socket
 
     try:
-        with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as sock:
-            sock.settimeout(timeout)
-            sock.connect((host, port))
-            return True
+        conn = _socket.create_connection((host, port), timeout=timeout)
+        conn.close()
+        return True
     except (OSError, _socket.timeout):
         return False

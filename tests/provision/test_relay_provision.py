@@ -28,6 +28,11 @@ class TestRelayContextValidation:
         assert ctx.relay_ip == "198.51.100.10"
         assert ctx.exit_ip == "198.51.100.1"
 
+    def test_ipv6_ips_accepted(self):
+        ctx = RelayContext(relay_ip="2001:db8::1", exit_ip="2001:db8::2")
+        assert ctx.relay_ip == "2001:db8::1"
+        assert ctx.exit_ip == "2001:db8::2"
+
     def test_invalid_relay_ip_raises(self):
         with pytest.raises(ValueError, match="Invalid IP address for relay_ip"):
             RelayContext(relay_ip="not-an-ip", exit_ip="198.51.100.1")
@@ -212,6 +217,29 @@ class TestConfigureRealm:
         conn.assert_called_with_pattern("systemctl restart")
         # Verify the exit IP appears in a call (config content)
         conn.assert_called_with_pattern(ctx.exit_ip)
+
+    def test_ipv6_exit_brackets_remote(self):
+        conn = MockConnection()
+        ctx = _make_ctx(exit_ip="2001:db8::2")
+        result = ConfigureRealm().run(conn, ctx)
+        assert result.status == "changed"
+        # Verify IPv6 exit is bracketed in config
+        conn.assert_called_with_pattern("[2001:db8::2]:443")
+
+    def test_ipv6_relay_listens_dualstack(self):
+        conn = MockConnection()
+        ctx = _make_ctx(relay_ip="2001:db8::1", exit_ip="2001:db8::2")
+        result = ConfigureRealm().run(conn, ctx)
+        assert result.status == "changed"
+        # Verify dual-stack listen for IPv6 relay
+        conn.assert_called_with_pattern("[::]:")
+
+    def test_ipv4_listen_unchanged(self):
+        conn = MockConnection()
+        ctx = _make_ctx()
+        result = ConfigureRealm().run(conn, ctx)
+        assert result.status == "changed"
+        conn.assert_called_with_pattern("0.0.0.0:")
 
 
 # ---------------------------------------------------------------------------

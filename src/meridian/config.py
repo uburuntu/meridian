@@ -53,3 +53,25 @@ def is_ipv4(s: str) -> bool:
     if len(parts) != 4:
         return False
     return all(p.isdigit() and 0 <= int(p) <= 255 for p in parts)
+
+
+def is_ip(s: str) -> bool:
+    """Check if string is a valid IPv4 or IPv6 address."""
+    import ipaddress
+
+    try:
+        ipaddress.ip_address(s)
+        return True
+    except ValueError:
+        return False
+
+
+def sanitize_ip_for_path(ip: str) -> str:
+    """Convert an IP address to a filesystem-safe directory name.
+
+    IPv4 addresses are returned unchanged (backward compatible).
+    IPv6 colons are replaced with hyphens: 2001:db8::1 -> 2001-db8--1
+    """
+    if ":" in ip:
+        return ip.replace(":", "-")
+    return ip

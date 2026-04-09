@@ -14,7 +14,15 @@ from meridian.commands.resolve import (
     is_local_keyword,
     resolve_server,
 )
-from meridian.config import CREDS_BASE, DEFAULT_PANEL_PORT, DEFAULT_SNI, SERVER_CREDS_DIR, SERVERS_FILE, is_ipv4
+from meridian.config import (
+    CREDS_BASE,
+    DEFAULT_PANEL_PORT,
+    DEFAULT_SNI,
+    SERVER_CREDS_DIR,
+    SERVERS_FILE,
+    is_ip,
+    sanitize_ip_for_path,
+)
 from meridian.console import choose, confirm, err_console, fail, info, line, ok, prompt, warn
 from meridian.credentials import ServerCredentials
 from meridian.servers import ServerEntry, ServerRegistry
@@ -59,7 +67,7 @@ def run(
         else:
             entry = registry.find(requested_server)
             if not entry:
-                if is_ipv4(requested_server):
+                if is_ip(requested_server):
                     server_ip = requested_server
                 else:
                     fail(
@@ -90,10 +98,10 @@ def run(
         client_name, server_name, icon, color, pq, warp = wizard_result[5:]
 
     # Validate IP (skip for 'local' keyword — resolve_server handles it)
-    if not is_local_keyword(server_ip) and not is_ipv4(server_ip):
+    if not is_local_keyword(server_ip) and not is_ip(server_ip):
         fail(
             f"Invalid IP address: {server_ip}",
-            hint="Enter a valid IPv4 address (e.g. meridian deploy 123.45.67.89)",
+            hint="Enter a valid IP address (e.g. meridian deploy 123.45.67.89)",
             hint_type="user",
         )
 
@@ -219,9 +227,9 @@ def _interactive_wizard(
     if not is_local:
         while True:
             server_ip = prompt("Server IP address", default=detected_ip)
-            if is_ipv4(server_ip) or is_local_keyword(server_ip):
+            if is_ip(server_ip) or is_local_keyword(server_ip):
                 break
-            err_console.print("  [error]Enter a valid IPv4 address (e.g. 123.45.67.89)[/error]")
+            err_console.print("  [error]Enter a valid IP address (e.g. 123.45.67.89)[/error]")
 
         if is_local_keyword(server_ip):
             is_local = True
@@ -274,7 +282,7 @@ def _interactive_wizard(
         if is_local:
             creds_dir = SERVER_CREDS_DIR
         else:
-            creds_dir = CREDS_BASE / server_ip
+            creds_dir = CREDS_BASE / sanitize_ip_for_path(server_ip)
         if (creds_dir / "proxy.yml").exists():
             saved_creds = ServerCredentials.load(creds_dir / "proxy.yml")
             saved_scanned_sni = saved_creds.server.scanned_sni or ""
@@ -358,7 +366,7 @@ def _interactive_wizard(
         if is_local:
             domain_creds_dir = SERVER_CREDS_DIR
         else:
-            domain_creds_dir = CREDS_BASE / server_ip
+            domain_creds_dir = CREDS_BASE / sanitize_ip_for_path(server_ip)
         if (domain_creds_dir / "proxy.yml").exists():
             saved_creds = ServerCredentials.load(domain_creds_dir / "proxy.yml")
             suggested_domain = saved_creds.server.domain or ""
@@ -762,7 +770,7 @@ def _offer_relay(resolved: ResolvedServer, yes: bool) -> None:
         return
 
     relay_ip = prompt("Relay server IP")
-    if not is_ipv4(relay_ip):
+    if not is_ip(relay_ip):
         warn(f"Invalid IP. Set up later: meridian relay deploy RELAY_IP --exit {resolved.ip}")
         return
 

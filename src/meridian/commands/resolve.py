@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from meridian.config import CREDS_BASE, SERVER_CREDS_DIR, is_ipv4
+from meridian.config import CREDS_BASE, SERVER_CREDS_DIR, is_ip, sanitize_ip_for_path
 from meridian.console import err_console, fail, info, warn
 from meridian.credentials import ServerCredentials
 from meridian.servers import ServerRegistry
@@ -27,7 +27,8 @@ def is_local_keyword(value: str) -> bool:
 
 
 def detect_public_ip() -> str:
-    """Detect the machine's public IPv4 address."""
+    """Detect the machine's public IP address (prefers IPv4)."""
+    # Try IPv4 first (most common, backward compatible)
     for url in ("https://ifconfig.me", "https://api.ipify.org"):
         try:
             result = subprocess.run(
@@ -38,7 +39,22 @@ def detect_public_ip() -> str:
                 stdin=subprocess.DEVNULL,
             )
             ip = result.stdout.strip()
-            if is_ipv4(ip):
+            if is_ip(ip):
+                return ip
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+    # Fall back to IPv6
+    for url in ("https://ifconfig.me", "https://api64.ipify.org"):
+        try:
+            result = subprocess.run(
+                ["curl", "-6", "-s", "--max-time", "3", url],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                stdin=subprocess.DEVNULL,
+            )
+            ip = result.stdout.strip()
+            if is_ip(ip):
                 return ip
         except (subprocess.TimeoutExpired, FileNotFoundError):
             continue
@@ -134,7 +150,7 @@ def resolve_server(
             if entry:
                 ip = entry.host
                 registry_user = entry.user
-            elif is_ipv4(requested_server):
+            elif is_ip(requested_server):
                 ip = requested_server
             else:
                 fail(
@@ -184,7 +200,7 @@ def resolve_server(
     if local_mode:
         creds_dir = SERVER_CREDS_DIR
     else:
-        creds_dir = CREDS_BASE / ip
+        creds_dir = CREDS_BASE / sanitize_ip_for_path(ip)
 
     conn = ServerConnection(ip=ip, user=resolved_user, local_mode=local_mode)
 
@@ -226,7 +242,7 @@ def ensure_server_connection(resolved: ResolvedServer) -> ResolvedServer:
                 new_creds_dir = SERVER_CREDS_DIR
             else:
                 # Non-root on server — use user-local creds dir
-                new_creds_dir = CREDS_BASE / resolved.ip
+                new_creds_dir = CREDS_BASE / sanitize_ip_for_path(resolved.ip)
             resolved = ResolvedServer(
                 ip=resolved.ip,
                 user=resolved.user,

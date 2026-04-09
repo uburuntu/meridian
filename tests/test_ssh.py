@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from meridian.ssh import ServerConnection, SSHError, _verify_host_key, tcp_connect
+from meridian.ssh import ServerConnection, SSHError, _verify_host_key, scp_host, tcp_connect
 
 
 class TestServerConnectionInit:
@@ -27,6 +27,14 @@ class TestServerConnectionInit:
     def test_local_mode(self) -> None:
         conn = ServerConnection(ip="1.2.3.4", local_mode=True)
         assert conn.local_mode is True
+
+    def test_scp_host_ipv4(self) -> None:
+        conn = ServerConnection(ip="1.2.3.4")
+        assert conn._scp_host == "1.2.3.4"
+
+    def test_scp_host_ipv6_bracketed(self) -> None:
+        conn = ServerConnection(ip="2001:db8::1")
+        assert conn._scp_host == "[2001:db8::1]"
 
 
 class TestServerConnectionRun:
@@ -82,47 +90,47 @@ class TestServerConnectionRun:
 
 class TestTcpConnect:
     def test_returns_true_on_success(self) -> None:
-        mock_sock = MagicMock()
-        mock_sock.__enter__ = MagicMock(return_value=mock_sock)
-        mock_sock.__exit__ = MagicMock(return_value=False)
-        with patch("socket.socket", return_value=mock_sock):
+        mock_conn = MagicMock()
+        with patch("socket.create_connection", return_value=mock_conn):
             assert tcp_connect("1.2.3.4", 443) is True
-            mock_sock.settimeout.assert_called_once_with(5)
-            mock_sock.connect.assert_called_once_with(("1.2.3.4", 443))
+            mock_conn.close.assert_called_once()
 
     def test_returns_false_on_connection_refused(self) -> None:
-        mock_sock = MagicMock()
-        mock_sock.__enter__ = MagicMock(return_value=mock_sock)
-        mock_sock.__exit__ = MagicMock(return_value=False)
-        mock_sock.connect.side_effect = ConnectionRefusedError
-        with patch("socket.socket", return_value=mock_sock):
+        with patch("socket.create_connection", side_effect=ConnectionRefusedError):
             assert tcp_connect("1.2.3.4", 443) is False
 
     def test_returns_false_on_timeout(self) -> None:
         import socket
 
-        mock_sock = MagicMock()
-        mock_sock.__enter__ = MagicMock(return_value=mock_sock)
-        mock_sock.__exit__ = MagicMock(return_value=False)
-        mock_sock.connect.side_effect = socket.timeout
-        with patch("socket.socket", return_value=mock_sock):
+        with patch("socket.create_connection", side_effect=socket.timeout):
             assert tcp_connect("1.2.3.4", 443) is False
 
     def test_returns_false_on_os_error(self) -> None:
-        mock_sock = MagicMock()
-        mock_sock.__enter__ = MagicMock(return_value=mock_sock)
-        mock_sock.__exit__ = MagicMock(return_value=False)
-        mock_sock.connect.side_effect = OSError("Network unreachable")
-        with patch("socket.socket", return_value=mock_sock):
+        with patch("socket.create_connection", side_effect=OSError("Network unreachable")):
             assert tcp_connect("1.2.3.4", 443) is False
 
     def test_custom_timeout(self) -> None:
-        mock_sock = MagicMock()
-        mock_sock.__enter__ = MagicMock(return_value=mock_sock)
-        mock_sock.__exit__ = MagicMock(return_value=False)
-        with patch("socket.socket", return_value=mock_sock):
+        mock_conn = MagicMock()
+        with patch("socket.create_connection", return_value=mock_conn) as mock_create:
             tcp_connect("1.2.3.4", 80, timeout=10)
-            mock_sock.settimeout.assert_called_once_with(10)
+            mock_create.assert_called_once_with(("1.2.3.4", 80), timeout=10)
+
+    def test_ipv6_address(self) -> None:
+        mock_conn = MagicMock()
+        with patch("socket.create_connection", return_value=mock_conn) as mock_create:
+            assert tcp_connect("2001:db8::1", 443) is True
+            mock_create.assert_called_once_with(("2001:db8::1", 443), timeout=5)
+
+
+class TestScpHost:
+    def test_ipv4_unchanged(self) -> None:
+        assert scp_host("1.2.3.4") == "1.2.3.4"
+
+    def test_ipv6_bracketed(self) -> None:
+        assert scp_host("2001:db8::1") == "[2001:db8::1]"
+
+    def test_already_bracketed_unchanged(self) -> None:
+        assert scp_host("[2001:db8::1]") == "[2001:db8::1]"
 
 
 class TestCheckSSH:

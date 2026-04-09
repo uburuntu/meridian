@@ -225,6 +225,18 @@ class ConfigureRealm:
     def run(self, conn: ServerConnection, ctx: RelayContext) -> StepResult:
         # IPs are validated in RelayContext.__post_init__, safe for config interpolation
 
+        # Listen on all interfaces — dual-stack [::] for IPv6, 0.0.0.0 for IPv4
+        if ":" in ctx.relay_ip:
+            listen_addr = f"[::]:{ctx.listen_port}"
+        else:
+            listen_addr = f"0.0.0.0:{ctx.listen_port}"
+
+        # Remote address: bracket IPv6 for host:port notation
+        if ":" in ctx.exit_ip:
+            remote_addr = f"[{ctx.exit_ip}]:{ctx.exit_port}"
+        else:
+            remote_addr = f"{ctx.exit_ip}:{ctx.exit_port}"
+
         # Write Realm config
         config_content = (
             "[network]\n"
@@ -232,8 +244,8 @@ class ConfigureRealm:
             "use_udp = false\n"
             "\n"
             "[[endpoints]]\n"
-            f'listen = "0.0.0.0:{ctx.listen_port}"\n'
-            f'remote = "{ctx.exit_ip}:{ctx.exit_port}"\n'
+            f'listen = "{listen_addr}"\n'
+            f'remote = "{remote_addr}"\n'
         )
 
         conn.run("mkdir -p /etc/meridian", timeout=15)

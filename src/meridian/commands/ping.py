@@ -93,10 +93,12 @@ def run(
     info(f"Checking TLS handshake (Reality -> {sni_host})...")
     checks += 1
     q_sni = shlex.quote(sni_host)
-    q_ip = shlex.quote(resolved.ip)
+    # openssl -connect requires brackets for IPv6: [2001:db8::1]:443
+    connect_host = f"[{resolved.ip}]" if ":" in resolved.ip else resolved.ip
+    q_connect = shlex.quote(f"{connect_host}:443")
     try:
         tls_result = subprocess.run(
-            ["bash", "-c", f"echo | openssl s_client -connect {q_ip}:443 -servername {q_sni} 2>/dev/null"],
+            ["bash", "-c", f"echo | openssl s_client -connect {q_connect} -servername {q_sni} 2>/dev/null"],
             capture_output=True,
             text=True,
             timeout=8,

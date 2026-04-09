@@ -254,7 +254,9 @@ class ServerCredentials:
 
 def creds_path(creds_base: Path, server_ip: str) -> Path:
     """Return the proxy.yml path for a given server IP."""
-    return creds_base / server_ip / "proxy.yml"
+    from meridian.config import sanitize_ip_for_path
+
+    return creds_base / sanitize_ip_for_path(server_ip) / "proxy.yml"
 
 
 # --- V1 → V2 migration ---

@@ -558,3 +558,61 @@ class TestBuildRelayUrl:
         creds = _make_test_creds(ws_path="ws789")
         url = WSSProtocol().build_relay_url("", "w-uuid", creds, "carol", "198.51.100.50")
         assert url == ""
+
+
+# ---------------------------------------------------------------------------
+# IPv6 URL construction
+# ---------------------------------------------------------------------------
+
+
+class TestIPv6URLConstruction:
+    """Verify that IPv6 addresses are properly bracketed in VLESS URLs."""
+
+    def test_reality_ipv6_brackets(self) -> None:
+        proto = RealityProtocol()
+        url = proto.build_url(
+            "test-uuid",
+            "alice",
+            ip="2001:db8::1",
+            sni="www.microsoft.com",
+            public_key="myPBK",
+            short_id="abc123",
+        )
+        assert "vless://test-uuid@[2001:db8::1]:443" in url
+        assert "security=reality" in url
+        assert "sni=www.microsoft.com" in url
+
+    def test_xhttp_ipv6_brackets_no_domain(self) -> None:
+        proto = XHTTPProtocol()
+        url = proto.build_url(
+            "test-uuid",
+            "bob",
+            ip="2001:db8::1",
+            xhttp_path="mypath",
+        )
+        assert "vless://test-uuid@[2001:db8::1]:443" in url
+        assert "sni=[2001:db8::1]" in url
+
+    def test_xhttp_ipv6_with_domain_uses_domain(self) -> None:
+        proto = XHTTPProtocol()
+        url = proto.build_url(
+            "test-uuid",
+            "bob",
+            ip="2001:db8::1",
+            xhttp_path="mypath",
+            domain="example.com",
+        )
+        assert "vless://test-uuid@example.com:443" in url
+        assert "sni=example.com" in url
+        # IPv6 should NOT appear when domain is set
+        assert "[2001:db8::1]" not in url
+
+    def test_reality_ipv4_no_brackets(self) -> None:
+        proto = RealityProtocol()
+        url = proto.build_url(
+            "test-uuid",
+            "alice",
+            ip="198.51.100.1",
+        )
+        assert "vless://test-uuid@198.51.100.1:443" in url
+        assert "[198.51.100.1]" not in url

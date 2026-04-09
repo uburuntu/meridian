@@ -18,11 +18,18 @@ from meridian.commands.resolve import (
     fetch_credentials,
     resolve_server,
 )
-from meridian.config import CREDS_BASE, RELAY_SERVICE_NAME, SERVER_CREDS_DIR, SERVERS_FILE, is_ipv4
+from meridian.config import (
+    CREDS_BASE,
+    RELAY_SERVICE_NAME,
+    SERVER_CREDS_DIR,
+    SERVERS_FILE,
+    is_ip,
+    sanitize_ip_for_path,
+)
 from meridian.console import confirm, err_console, fail, info, line, ok, warn
 from meridian.credentials import RelayEntry, ServerCredentials
 from meridian.servers import ServerEntry, ServerRegistry
-from meridian.ssh import SSH_OPTS, ServerConnection, SSHError
+from meridian.ssh import SSH_OPTS, ServerConnection, SSHError, scp_host
 
 # ---------------------------------------------------------------------------
 # Relay inbound helpers
@@ -252,7 +259,7 @@ def _resolve_exit(
     user: str,
 ) -> ResolvedServer:
     """Resolve and validate the exit server."""
-    if is_ipv4(exit_arg):
+    if is_ip(exit_arg):
         resolved = resolve_server(registry, explicit_ip=exit_arg, user=user)
     else:
         resolved = resolve_server(registry, requested_server=exit_arg, user=user)
@@ -282,7 +289,7 @@ def _resolve_exit(
 
 def _find_proxy_file(host: str) -> Path | None:
     """Find proxy.yml for a server, checking both remote and local-mode paths."""
-    remote = CREDS_BASE / host / "proxy.yml"
+    remote = CREDS_BASE / sanitize_ip_for_path(host) / "proxy.yml"
     if remote.is_file():
         return remote
     local = SERVER_CREDS_DIR / "proxy.yml"
@@ -318,7 +325,7 @@ def _save_relay_local(relay_ip: str, exit_ip: str, exit_port: int, listen_port: 
     import os
     import tempfile
 
-    relay_creds_dir = CREDS_BASE / relay_ip
+    relay_creds_dir = CREDS_BASE / sanitize_ip_for_path(relay_ip)
     relay_creds_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     relay_meta = {
         "role": "relay",
@@ -354,7 +361,7 @@ def _sync_exit_credentials_to_server(resolved_exit: ResolvedServer) -> None:
                 *SSH_OPTS,
                 "-r",
                 f"{resolved_exit.creds_dir}/",
-                f"{resolved_exit.user}@{resolved_exit.ip}:/etc/meridian/",
+                f"{resolved_exit.user}@{scp_host(resolved_exit.ip)}:/etc/meridian/",
             ],
             capture_output=True,
             text=True,
@@ -447,8 +454,8 @@ def run_deploy(
 ) -> None:
     """Deploy a relay node that forwards traffic to an exit server."""
     # Validate relay IP
-    if not is_ipv4(relay_ip):
-        fail(f"Invalid relay IP: {relay_ip}", hint="Enter a valid IPv4 address", hint_type="user")
+    if not is_ip(relay_ip):
+        fail(f"Invalid relay IP: {relay_ip}", hint="Enter a valid IP address", hint_type="user")
 
     if relay_name and not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", relay_name):
         fail(f"Invalid relay name: {relay_name}", hint="Use letters, numbers, hyphens, underscores", hint_type="user")
@@ -815,8 +822,8 @@ def run_remove(
     yes: bool = False,
 ) -> None:
     """Remove a relay node."""
-    if not is_ipv4(relay_ip):
-        fail(f"Invalid relay IP: {relay_ip}", hint="Enter a valid IPv4 address", hint_type="user")
+    if not is_ip(relay_ip):
+        fail(f"Invalid relay IP: {relay_ip}", hint="Enter a valid IP address", hint_type="user")
 
     registry = ServerRegistry(SERVERS_FILE)
 
@@ -895,7 +902,7 @@ def run_remove(
     _sync_exit_credentials_to_server(resolved_exit)
 
     # Clean up local relay credentials
-    relay_creds_dir = CREDS_BASE / relay_ip
+    relay_creds_dir = CREDS_BASE / sanitize_ip_for_path(relay_ip)
     relay_file = relay_creds_dir / "relay.yml"
     if relay_file.exists():
         relay_file.unlink()
@@ -923,8 +930,8 @@ def run_check(
     user: str = "",
 ) -> None:
     """Check health of a relay node."""
-    if not is_ipv4(relay_ip):
-        fail(f"Invalid relay IP: {relay_ip}", hint="Enter a valid IPv4 address", hint_type="user")
+    if not is_ip(relay_ip):
+        fail(f"Invalid relay IP: {relay_ip}", hint="Enter a valid IP address", hint_type="user")
 
     registry = ServerRegistry(SERVERS_FILE)
 
