@@ -40,6 +40,14 @@ _BBR_SETTINGS = {
     "net.ipv4.tcp_congestion_control": "bbr",
 }
 
+_SSH_HARDENING_DROPIN_PATH = "/etc/ssh/sshd_config.d/99-meridian.conf"
+_SSH_HARDENING_DROPIN = """\
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+DebianBanner no
+"""
+
 
 class CheckDiskSpace:
     """Verify sufficient disk space before deployment."""
@@ -178,69 +186,27 @@ class SetTimezone:
 
 
 class HardenSSH:
-    """Disable SSH password authentication and restart sshd."""
+    """Install an authoritative sshd drop-in and restart sshd."""
 
     name = "Harden SSH configuration"
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         changed = False
-
-        # Disable PasswordAuthentication
-        check_pa = conn.run("grep -qE '^PasswordAuthentication no$' /etc/ssh/sshd_config", timeout=15)
-        if check_pa.returncode != 0:
-            result = conn.run(
-                "sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config",
-                timeout=15,
+        check = conn.run(f"cat {_SSH_HARDENING_DROPIN_PATH} 2>/dev/null", timeout=15)
+        if check.returncode != 0 or check.stdout.strip() != _SSH_HARDENING_DROPIN.strip():
+            write_cmd = (
+                "mkdir -p /etc/ssh/sshd_config.d && "
+                f"cat > {_SSH_HARDENING_DROPIN_PATH} << 'MERIDIAN_EOF'\n{_SSH_HARDENING_DROPIN}MERIDIAN_EOF"
             )
+            result = conn.run(write_cmd, timeout=15)
             if result.returncode != 0:
                 return StepResult(
                     name=self.name,
                     status="failed",
-                    detail=f"failed to set PasswordAuthentication: {result.stderr.strip()[:200]}",
+                    detail=f"failed to write sshd hardening drop-in: {result.stderr.strip()[:200]}",
                 )
+            conn.run(f"chmod 644 {_SSH_HARDENING_DROPIN_PATH}", timeout=15)
             changed = True
-
-        # Disable KbdInteractiveAuthentication (challenge-response)
-        check_kbd = conn.run("grep -qE '^KbdInteractiveAuthentication no$' /etc/ssh/sshd_config", timeout=15)
-        if check_kbd.returncode != 0:
-            # Replace either ChallengeResponseAuthentication or KbdInteractiveAuthentication
-            kbd_sed = (
-                "sed -i "
-                "'s/^#\\?ChallengeResponseAuthentication.*"
-                "\\|^#\\?KbdInteractiveAuthentication.*"
-                "/KbdInteractiveAuthentication no/' "
-                "/etc/ssh/sshd_config"
-            )
-            result = conn.run(kbd_sed, timeout=15)
-            if result.returncode != 0:
-                return StepResult(
-                    name=self.name,
-                    status="failed",
-                    detail=f"failed to set KbdInteractiveAuthentication: {result.stderr.strip()[:200]}",
-                )
-            changed = True
-
-        # Strip OS version from SSH banner (DebianBanner appends distro info)
-        check_banner = conn.run("grep -qE '^DebianBanner no$' /etc/ssh/sshd_config", timeout=15)
-        if check_banner.returncode != 0:
-            result = conn.run(
-                "sed -i 's/^#\\?DebianBanner.*/DebianBanner no/' /etc/ssh/sshd_config",
-                timeout=15,
-            )
-            if result.returncode != 0:
-                return StepResult(
-                    name=self.name,
-                    status="failed",
-                    detail=f"failed to set DebianBanner: {result.stderr.strip()[:200]}",
-                )
-            # If sed matched nothing (no existing line), append it
-            verify = conn.run("grep -qE '^DebianBanner no$' /etc/ssh/sshd_config", timeout=15)
-            if verify.returncode != 0:
-                conn.run("printf '\\nDebianBanner no\\n' >> /etc/ssh/sshd_config", timeout=15)
-            changed = True
-
-        if not changed:
-            return StepResult(name=self.name, status="ok", detail="already hardened")
 
         # Validate config before restarting
         validate = conn.run("sshd -t", timeout=15)
@@ -250,6 +216,19 @@ class HardenSSH:
                 status="failed",
                 detail=f"sshd config validation failed: {validate.stderr.strip()[:200]}",
             )
+
+        # Validate effective settings too — cloud-init drop-ins can override the main file.
+        for setting in ("passwordauthentication no", "kbdinteractiveauthentication no", "debianbanner no"):
+            effective = conn.run(f"sshd -T | grep -q '^{setting}$'", timeout=15)
+            if effective.returncode != 0:
+                return StepResult(
+                    name=self.name,
+                    status="failed",
+                    detail=f"effective sshd setting mismatch: expected '{setting}'",
+                )
+
+        if not changed:
+            return StepResult(name=self.name, status="ok", detail="already hardened")
 
         # Restart sshd (service is named "sshd" on some distros, "ssh" on others)
         restart = conn.run("systemctl restart sshd 2>/dev/null || systemctl restart ssh", timeout=15)

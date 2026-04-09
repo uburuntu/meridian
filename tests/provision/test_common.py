@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from meridian.provision.common import (
     _AUTO_UPGRADES_CONF,
+    _SSH_HARDENING_DROPIN,
     REQUIRED_PACKAGES,
     ConfigureBBR,
     ConfigureFail2ban,
@@ -128,19 +129,21 @@ class TestSetTimezone:
 
 class TestHardenSSH:
     def test_already_hardened_returns_ok(self, mock_conn: MockConnection, base_ctx):
-        """When PasswordAuthentication and KbdInteractive are already off, status is ok."""
-        # Both grep checks succeed (rc=0 means pattern found)
-        mock_conn.when("grep", rc=0)
+        """When Meridian's drop-in is present and effective config matches, status is ok."""
+        mock_conn.when("cat /etc/ssh/sshd_config.d/99-meridian.conf", stdout=_SSH_HARDENING_DROPIN.strip())
+        mock_conn.when("sshd -t", rc=0)
+        mock_conn.when("sshd -T", rc=0)
 
         result = HardenSSH().run(mock_conn, base_ctx)
 
         assert result.status == "ok"
 
     def test_hardens_ssh_returns_changed(self, mock_conn: MockConnection, base_ctx):
-        """When password auth is enabled, SSH is hardened and sshd restarted."""
-        # grep fails (pattern not found) -> needs hardening
-        mock_conn.when("grep", rc=1)
-        # sed, sshd -t, systemctl all succeed (default rc=0)
+        """When drop-in is missing, SSH is hardened and sshd restarted."""
+        mock_conn.when("cat /etc/ssh/sshd_config.d/99-meridian.conf", rc=1)
+        mock_conn.when("mkdir -p /etc/ssh/sshd_config.d", rc=0)
+        mock_conn.when("sshd -t", rc=0)
+        mock_conn.when("sshd -T", rc=0)
 
         result = HardenSSH().run(mock_conn, base_ctx)
 
@@ -149,13 +152,24 @@ class TestHardenSSH:
 
     def test_sshd_validation_fails_returns_failed(self, mock_conn: MockConnection, base_ctx):
         """When sshd -t validation fails, status is failed."""
-        mock_conn.when("grep", rc=1)
+        mock_conn.when("cat /etc/ssh/sshd_config.d/99-meridian.conf", rc=1)
         mock_conn.when("sshd -t", rc=1, stderr="sshd_config: bad configuration")
 
         result = HardenSSH().run(mock_conn, base_ctx)
 
         assert result.status == "failed"
         assert "validation failed" in result.detail
+
+    def test_effective_setting_mismatch_returns_failed(self, mock_conn: MockConnection, base_ctx):
+        """When sshd -T still reports password auth enabled, fail clearly."""
+        mock_conn.when("cat /etc/ssh/sshd_config.d/99-meridian.conf", stdout=_SSH_HARDENING_DROPIN.strip())
+        mock_conn.when("sshd -t", rc=0)
+        mock_conn.when("sshd -T | grep -q '^passwordauthentication no$'", rc=1)
+
+        result = HardenSSH().run(mock_conn, base_ctx)
+
+        assert result.status == "failed"
+        assert "effective sshd setting mismatch" in result.detail
 
 
 # ---------------------------------------------------------------------------
