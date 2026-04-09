@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import typer
 
 from meridian.credentials import RelayEntry, ServerCredentials
 from meridian.models import ProtocolURL, RelayURLSet
@@ -515,6 +516,136 @@ class TestRelayCLI:
         assert "RELAY_IP" in result.output
         assert "Exit server" in result.output
 
+
+class TestRelayRemoveTransactional:
+    def test_remove_sync_failure_restores_local_credentials(self, sample_proxy_with_relays: Path) -> None:
+        from meridian.commands.relay import run_remove
+
+        creds_dir = sample_proxy_with_relays.parent
+        original = sample_proxy_with_relays.read_text()
+        resolved_exit = MagicMock()
+        resolved_exit.ip = "5.6.7.8"
+        resolved_exit.user = "root"
+        resolved_exit.local_mode = False
+        resolved_exit.creds_dir = creds_dir
+        resolved_exit.conn = MagicMock()
+
+        registry = MagicMock()
+        relay_conn = MagicMock()
+        panel = MagicMock()
+        panel.login.return_value = None
+        panel.find_inbound.return_value = MagicMock(id=42)
+        panel.api_post_empty.return_value = None
+
+        with (
+            patch("meridian.commands.relay._resolve_exit", return_value=resolved_exit),
+            patch("meridian.commands.relay.fetch_credentials", return_value=True),
+            patch("meridian.commands.relay.ServerRegistry", return_value=registry),
+            patch("meridian.commands.relay.ServerConnection", return_value=relay_conn),
+            patch("meridian.commands.relay._sync_exit_credentials_to_server", return_value=False),
+            patch("meridian.panel.PanelClient", return_value=panel),
+        ):
+            with pytest.raises(typer.Exit):
+                run_remove("1.2.3.4", exit_arg="5.6.7.8", yes=True)
+
+        assert sample_proxy_with_relays.read_text() == original
+        registry.remove.assert_not_called()
+
+    def test_remove_panel_failure_keeps_local_state(self, sample_proxy_with_relays: Path) -> None:
+        from meridian.commands.relay import run_remove
+        from meridian.panel import PanelError
+
+        creds_dir = sample_proxy_with_relays.parent
+        original = sample_proxy_with_relays.read_text()
+        resolved_exit = MagicMock()
+        resolved_exit.ip = "5.6.7.8"
+        resolved_exit.user = "root"
+        resolved_exit.local_mode = False
+        resolved_exit.creds_dir = creds_dir
+        resolved_exit.conn = MagicMock()
+
+        registry = MagicMock()
+        relay_conn = MagicMock()
+        panel = MagicMock()
+        panel.login.return_value = None
+        panel.find_inbound.return_value = MagicMock(id=42)
+        panel.api_post_empty.side_effect = PanelError("backend failed")
+
+        with (
+            patch("meridian.commands.relay._resolve_exit", return_value=resolved_exit),
+            patch("meridian.commands.relay.fetch_credentials", return_value=True),
+            patch("meridian.commands.relay.ServerRegistry", return_value=registry),
+            patch("meridian.commands.relay.ServerConnection", return_value=relay_conn),
+            patch("meridian.panel.PanelClient", return_value=panel),
+        ):
+            with pytest.raises(typer.Exit):
+                run_remove("1.2.3.4", exit_arg="5.6.7.8", yes=True)
+
+        assert sample_proxy_with_relays.read_text() == original
+        registry.remove.assert_not_called()
+
+
+class TestRelayStoredUser:
+    def test_remove_uses_registry_user_by_default(self, sample_proxy_with_relays: Path) -> None:
+        from meridian.commands.relay import run_remove
+
+        creds_dir = sample_proxy_with_relays.parent
+        resolved_exit = MagicMock()
+        resolved_exit.ip = "5.6.7.8"
+        resolved_exit.user = "root"
+        resolved_exit.local_mode = False
+        resolved_exit.creds_dir = creds_dir
+        resolved_exit.conn = MagicMock()
+
+        registry = MagicMock()
+        registry.find.return_value = MagicMock(user="ubuntu")
+        relay_conn = MagicMock()
+        panel = MagicMock()
+        panel.login.return_value = None
+        panel.find_inbound.return_value = None
+
+        with (
+            patch("meridian.commands.relay._resolve_exit", return_value=resolved_exit),
+            patch("meridian.commands.relay.fetch_credentials", return_value=True),
+            patch("meridian.commands.relay.ServerRegistry", return_value=registry),
+            patch("meridian.commands.relay.ServerConnection", return_value=relay_conn) as mock_conn_cls,
+            patch("meridian.commands.relay._sync_exit_credentials_to_server", return_value=True),
+            patch("meridian.commands.relay._remove_relay_nginx", return_value=True),
+            patch("meridian.panel.PanelClient", return_value=panel),
+        ):
+            run_remove("1.2.3.4", exit_arg="5.6.7.8", yes=True)
+
+        relay_conn.check_ssh.assert_called_once()
+        mock_conn_cls.assert_called_once_with(ip="1.2.3.4", user="ubuntu")
+
+    def test_check_uses_registry_user_by_default(self, sample_proxy_with_relays: Path) -> None:
+        from meridian.commands.relay import run_check
+
+        creds_dir = sample_proxy_with_relays.parent
+        resolved_exit = MagicMock()
+        resolved_exit.ip = "5.6.7.8"
+        resolved_exit.user = "root"
+        resolved_exit.local_mode = False
+        resolved_exit.creds_dir = creds_dir
+        resolved_exit.conn = MagicMock()
+
+        registry = MagicMock()
+        registry.find.return_value = MagicMock(user="ubuntu")
+        relay_conn = MagicMock()
+        relay_conn.run.side_effect = [
+            MagicMock(returncode=0, stdout="active\n", stderr=""),
+            MagicMock(returncode=0, stdout="", stderr=""),
+        ]
+
+        with (
+            patch("meridian.commands.relay._find_exit_for_relay", return_value=(registry, resolved_exit)),
+            patch("meridian.commands.relay.ServerRegistry", return_value=registry),
+            patch("meridian.commands.relay.ServerConnection", return_value=relay_conn) as mock_conn_cls,
+            patch("meridian.ssh.tcp_connect", return_value=True),
+        ):
+            run_check("1.2.3.4")
+
+        mock_conn_cls.assert_called_once_with(ip="1.2.3.4", user="ubuntu")
 
 # ---------------------------------------------------------------------------
 # Rendering tests

@@ -183,7 +183,7 @@ def _deploy_relay_nginx(
     relay_sni: str,
     relay_ip: str,
     relay_name: str = "",
-) -> None:
+) -> bool:
     """Create per-relay nginx config files on the exit server and reload.
 
     Creates two files:
@@ -227,15 +227,19 @@ def _deploy_relay_nginx(
     result = exit_conn.run("nginx -t 2>&1", timeout=15)
     if result.returncode != 0:
         warn(f"nginx config validation failed: {result.stderr.strip() or result.stdout.strip()}")
-        return
-    exit_conn.run("systemctl reload nginx", timeout=15)
+        return False
+    reload_result = exit_conn.run("systemctl reload nginx", timeout=15)
+    if reload_result.returncode != 0:
+        warn(f"nginx reload failed: {reload_result.stderr.strip() or reload_result.stdout.strip()}")
+        return False
     ok(f"nginx updated: SNI={relay_sni} -> port {port}")
+    return True
 
 
 def _remove_relay_nginx(
     exit_conn: ServerConnection,
     relay: RelayEntry,
-) -> None:
+) -> bool:
     """Remove per-relay nginx config files from the exit server and reload."""
     label = _relay_label(relay)
     q_label = shlex.quote(label)
@@ -244,8 +248,14 @@ def _remove_relay_nginx(
         timeout=15,
     )
     result = exit_conn.run("nginx -t 2>&1", timeout=15)
-    if result.returncode == 0:
-        exit_conn.run("systemctl reload nginx", timeout=15)
+    if result.returncode != 0:
+        warn(f"nginx config validation failed after relay removal: {result.stderr.strip() or result.stdout.strip()}")
+        return False
+    reload_result = exit_conn.run("systemctl reload nginx", timeout=15)
+    if reload_result.returncode != 0:
+        warn(f"nginx reload failed after relay removal: {reload_result.stderr.strip() or reload_result.stdout.strip()}")
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +267,8 @@ def _resolve_exit(
     registry: ServerRegistry,
     exit_arg: str,
     user: str,
+    *,
+    force_refresh: bool = False,
 ) -> ResolvedServer:
     """Resolve and validate the exit server."""
     if is_ip(exit_arg):
@@ -265,7 +277,7 @@ def _resolve_exit(
         resolved = resolve_server(registry, requested_server=exit_arg, user=user)
 
     resolved = ensure_server_connection(resolved)
-    fetch_credentials(resolved)
+    fetch_credentials(resolved, force=force_refresh)
 
     # Verify exit is deployed
     proxy_file = resolved.creds_dir / "proxy.yml"
@@ -303,7 +315,7 @@ def _find_proxy_file(host: str) -> Path | None:
     return None
 
 
-def _find_exit_for_relay(relay_ip: str) -> tuple[ServerRegistry, ResolvedServer] | None:
+def _find_exit_for_relay(relay_ip: str, *, force_refresh: bool = False) -> tuple[ServerRegistry, ResolvedServer] | None:
     """Find which exit server a relay belongs to by scanning credentials."""
     registry = ServerRegistry(SERVERS_FILE)
     for entry in registry.list():
@@ -315,9 +327,19 @@ def _find_exit_for_relay(relay_ip: str) -> tuple[ServerRegistry, ResolvedServer]
             if relay.ip == relay_ip:
                 resolved = resolve_server(registry, explicit_ip=entry.host, user=entry.user)
                 resolved = ensure_server_connection(resolved)
-                fetch_credentials(resolved)
+                fetch_credentials(resolved, force=force_refresh)
                 return registry, resolved
     return None
+
+
+def _relay_registry_user(registry: ServerRegistry, relay_ip: str, explicit_user: str) -> str:
+    """Pick the relay SSH user from explicit flag or the stored registry entry."""
+    if explicit_user:
+        return explicit_user
+    entry = registry.find(relay_ip)
+    if entry and entry.user:
+        return entry.user
+    return "root"
 
 
 def _save_relay_local(relay_ip: str, exit_ip: str, exit_port: int, listen_port: int) -> None:
@@ -353,7 +375,7 @@ def _save_relay_local(relay_ip: str, exit_ip: str, exit_port: int, listen_port: 
 def _sync_exit_credentials_to_server(resolved_exit: ResolvedServer) -> None:
     """Sync exit server credentials back to /etc/meridian/ after relay changes."""
     if resolved_exit.local_mode:
-        return
+        return True
     try:
         result = subprocess.run(
             [
@@ -368,10 +390,47 @@ def _sync_exit_credentials_to_server(resolved_exit: ResolvedServer) -> None:
             timeout=15,
             stdin=subprocess.DEVNULL,
         )
-        if result.returncode != 0:
-            warn("Could not sync credentials to exit server")
+        return result.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
-        warn("Could not sync credentials to exit server")
+        return False
+
+
+def _refresh_exit_credentials_or_fail(resolved_exit: ResolvedServer, *, action: str) -> None:
+    """Force-refresh exit credentials before mutating relay state."""
+    if fetch_credentials(resolved_exit, force=True):
+        return
+    fail(
+        f"Could not refresh exit credentials before {action}",
+        hint="Check SSH/SCP and retry. Meridian will not mutate cached relay state without a fresh server read.",
+        hint_type="system",
+    )
+
+
+def _save_exit_credentials_with_sync(
+    resolved_exit: ResolvedServer,
+    creds: ServerCredentials,
+    *,
+    recovery_hint: str,
+) -> None:
+    """Persist exit credentials and fail closed if sync back to the server fails."""
+    proxy_file = resolved_exit.creds_dir / "proxy.yml"
+    original_bytes = proxy_file.read_bytes() if proxy_file.exists() else None
+
+    creds.save(proxy_file)
+    if _sync_exit_credentials_to_server(resolved_exit):
+        return
+
+    if original_bytes is None:
+        proxy_file.unlink(missing_ok=True)
+    else:
+        proxy_file.write_bytes(original_bytes)
+        proxy_file.chmod(0o600)
+
+    fail(
+        "Could not sync updated relay credentials to exit server",
+        hint=recovery_hint,
+        hint_type="system",
+    )
 
 
 def _regenerate_client_pages(
@@ -473,7 +532,7 @@ def run_deploy(
 
     # Resolve exit server
     info(f"Resolving exit server: {exit_arg}")
-    resolved_exit = _resolve_exit(registry, exit_arg, user)
+    resolved_exit = _resolve_exit(registry, exit_arg, user, force_refresh=True)
     exit_creds = ServerCredentials.load(resolved_exit.creds_dir / "proxy.yml")
 
     # Check if relay already registered
@@ -662,10 +721,18 @@ def run_deploy(
             relay_ip,
             relay_name,
         )
-        if inbound_ok:
-            _deploy_relay_nginx(resolved_exit.conn, relay_sni, relay_ip, relay_name)
-        else:
-            warn("Relay inbound creation failed — relay will use exit's SNI as fallback")
+        if not inbound_ok:
+            fail(
+                "Relay inbound creation failed on the exit server",
+                hint="The relay node was provisioned, but Meridian did not save relay state locally. Fix the exit panel and retry.",
+                hint_type="system",
+            )
+        if not _deploy_relay_nginx(resolved_exit.conn, relay_sni, relay_ip, relay_name):
+            fail(
+                "Relay nginx routing update failed on the exit server",
+                hint="The relay node was provisioned, but Meridian did not save relay state locally. Fix nginx on the exit and retry.",
+                hint_type="system",
+            )
 
     # Update exit credentials with new relay entry
     relay_entry = RelayEntry(
@@ -676,10 +743,14 @@ def run_deploy(
         sni=relay_sni,
     )
     exit_creds.relays.append(relay_entry)
-    exit_creds.save(resolved_exit.creds_dir / "proxy.yml")
-
-    # Sync credentials to exit server
-    _sync_exit_credentials_to_server(resolved_exit)
+    _save_exit_credentials_with_sync(
+        resolved_exit,
+        exit_creds,
+        recovery_hint=(
+            f"The relay may already be provisioned remotely. Once SSH/SCP works, rerun: "
+            f"meridian relay deploy {relay_ip} --exit {resolved_exit.ip}"
+        ),
+    )
 
     # Save relay metadata locally
     _save_relay_local(relay_ip, resolved_exit.ip, 443, listen_port)
@@ -829,9 +900,9 @@ def run_remove(
 
     # Find the exit server for this relay
     if exit_arg:
-        resolved_exit = _resolve_exit(registry, exit_arg, user)
+        resolved_exit = _resolve_exit(registry, exit_arg, user, force_refresh=True)
     else:
-        result = _find_exit_for_relay(relay_ip)
+        result = _find_exit_for_relay(relay_ip, force_refresh=True)
         if result is None:
             fail(
                 f"Relay {relay_ip} not found in any exit server's configuration",
@@ -840,6 +911,7 @@ def run_remove(
             )
         registry, resolved_exit = result
 
+    _refresh_exit_credentials_or_fail(resolved_exit, action=f"removing relay {relay_ip}")
     exit_creds = ServerCredentials.load(resolved_exit.creds_dir / "proxy.yml")
 
     # Find relay entry
@@ -855,16 +927,22 @@ def run_remove(
         relay_label = relay_entry.name or relay_ip
         confirm(f"Remove relay {relay_label} from exit {resolved_exit.ip}?")
 
+    relay_user = _relay_registry_user(registry, relay_ip, user)
+
     # Stop service on relay
     info(f"Stopping relay service on {relay_ip}...")
     try:
-        relay_conn = ServerConnection(ip=relay_ip, user=user or "root")
+        relay_conn = ServerConnection(ip=relay_ip, user=relay_user)
         relay_conn.check_ssh()
         relay_conn.run(f"systemctl stop {RELAY_SERVICE_NAME} 2>/dev/null", timeout=15)
         relay_conn.run(f"systemctl disable {RELAY_SERVICE_NAME} 2>/dev/null", timeout=10)
         ok("Relay service stopped")
-    except Exception:
-        warn(f"Could not connect to relay {relay_ip} — service may still be running")
+    except Exception as exc:
+        fail(
+            f"Could not connect to relay {relay_ip}",
+            hint=f"No local state was changed. Retry with the correct relay SSH user ({relay_user}) or restore access. {exc}",
+            hint_type="system",
+        )
 
     # Clean up relay-specific Xray inbound and nginx config on exit server
     if relay_entry.sni:
@@ -887,19 +965,32 @@ def run_remove(
                 else:
                     info("Relay inbound not found on panel (already removed)")
         except (PanelError, Exception) as e:
-            warn(f"Could not remove relay inbound: {e}")
+            fail(
+                f"Could not remove relay inbound '{remark}'",
+                hint=f"No local state was changed. Retry once the panel is healthy: {e}",
+                hint_type="system",
+            )
 
         info("Removing relay nginx config...")
-        _remove_relay_nginx(resolved_exit.conn, relay_entry)
+        if not _remove_relay_nginx(resolved_exit.conn, relay_entry):
+            fail(
+                "Could not remove relay nginx config",
+                hint="No local state was changed. Fix nginx on the exit and retry.",
+                hint_type="system",
+            )
         ok("Relay nginx config removed")
 
     # Remove relay from exit credentials
     exit_creds.relays = [r for r in exit_creds.relays if r.ip != relay_ip]
-    exit_creds.save(resolved_exit.creds_dir / "proxy.yml")
+    _save_exit_credentials_with_sync(
+        resolved_exit,
+        exit_creds,
+        recovery_hint=(
+            f"The relay may already be partly removed from the exit server. Once SSH/SCP works, run: "
+            f"meridian relay check {relay_ip} --exit {resolved_exit.ip}"
+        ),
+    )
     ok(f"Relay {relay_ip} removed from exit configuration")
-
-    # Sync credentials to exit server
-    _sync_exit_credentials_to_server(resolved_exit)
 
     # Clean up local relay credentials
     relay_creds_dir = CREDS_BASE / sanitize_ip_for_path(relay_ip)
@@ -959,10 +1050,11 @@ def run_check(
     err_console.print()
 
     all_ok = True
+    relay_user = _relay_registry_user(registry, relay_ip, user)
 
     # 1. SSH connectivity to relay
     try:
-        relay_conn = ServerConnection(ip=relay_ip, user=user or "root")
+        relay_conn = ServerConnection(ip=relay_ip, user=relay_user)
         relay_conn.check_ssh()
         ok("SSH to relay: connected")
     except Exception:
