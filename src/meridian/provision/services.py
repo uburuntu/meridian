@@ -275,7 +275,7 @@ def _render_nginx_server_block(
     if redirect_http:
         http_default = "return 301 https://$host$request_uri;"
     else:
-        http_default = "return 444;"
+        http_default = "return 403;"
 
     return textwrap.dedent(f"""\
         # Meridian Proxy Configuration ({mode_comment})

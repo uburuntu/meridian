@@ -626,7 +626,7 @@ class TestNginxFingerprinting:
         assert "/.well-known/acme-challenge/" in cfg
         # Port 80 non-ACME should silently close
         http_block = cfg.split("listen 80")[1] if "listen 80" in cfg else ""
-        assert "return 444" in http_block
+        assert "return 403" in http_block
 
     def test_domain_mode_keeps_http_redirect(self):
         """Domain mode SHOULD redirect HTTP→HTTPS (has real content)."""
