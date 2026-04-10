@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -276,7 +277,20 @@ def run(
     registry.add(ServerEntry(host=resolved.ip, user=resolved.user))
 
     # Success output
-    _print_success(resolved, client_name, domain)
+    redeploy_cmd = _build_redeploy_command(
+        resolved,
+        sni=sni,
+        domain=domain,
+        client_name=client_name,
+        harden=harden,
+        server_name=server_name,
+        icon=icon,
+        color=color,
+        pq=pq,
+        warp=warp,
+        geo_block=geo_block,
+    )
+    _print_success(resolved, client_name, domain, redeploy_cmd=redeploy_cmd)
 
     # Offer relay setup
     _offer_relay(resolved, yes)
@@ -789,7 +803,57 @@ def _run_provisioner(
     ok("All steps completed successfully")
 
 
-def _print_success(resolved: ResolvedServer, client_name: str, domain: str) -> None:
+def _build_redeploy_command(
+    resolved: ResolvedServer,
+    *,
+    sni: str,
+    domain: str,
+    client_name: str,
+    harden: bool,
+    server_name: str,
+    icon: str,
+    color: str,
+    pq: bool,
+    warp: bool,
+    geo_block: bool,
+) -> str:
+    """Build a non-interactive meridian deploy command that reproduces the current config."""
+    parts = ["meridian deploy", shlex.quote(resolved.ip)]
+
+    if resolved.user != "root":
+        parts.append(f"--user {shlex.quote(resolved.user)}")
+    if sni and sni != DEFAULT_SNI:
+        parts.append(f"--sni {shlex.quote(sni)}")
+    if domain:
+        parts.append(f"--domain {shlex.quote(domain)}")
+    if client_name and client_name != "default":
+        parts.append(f"--client-name {shlex.quote(client_name)}")
+    if not harden:
+        parts.append("--no-harden")
+    if pq:
+        parts.append("--pq")
+    if warp:
+        parts.append("--warp")
+    if not geo_block:
+        parts.append("--no-geo-block")
+    if server_name:
+        parts.append(f"--display-name {shlex.quote(server_name)}")
+    if icon:
+        parts.append(f"--icon {shlex.quote(icon)}")
+    if color and color != "ocean":
+        parts.append(f"--color {shlex.quote(color)}")
+    parts.append("--yes")
+
+    return " ".join(parts)
+
+
+def _print_success(
+    resolved: ResolvedServer,
+    client_name: str,
+    domain: str,
+    *,
+    redeploy_cmd: str,
+) -> None:
     """Print success output after deployment."""
     client_label = client_name or "default"
     creds_dir = resolved.creds_dir
@@ -857,6 +921,10 @@ def _print_success(resolved: ResolvedServer, client_name: str, domain: str) -> N
 
     err_console.print()
     line()
+
+    # Redeploy command
+    err_console.print(f"\n  [dim]Re-deploy with the same settings:[/dim]")
+    err_console.print(f"  [dim]  {redeploy_cmd}[/dim]")
 
     # Panel access for advanced users
     if proxy_file.exists() and creds.panel.url and creds.panel.username:

@@ -11,7 +11,12 @@ import pytest
 import typer
 
 from meridian.commands.resolve import detect_public_ip
-from meridian.commands.setup import _print_success, _regenerate_connection_pages_after_deploy, run
+from meridian.commands.setup import (
+    _build_redeploy_command,
+    _print_success,
+    _regenerate_connection_pages_after_deploy,
+    run,
+)
 from meridian.config import is_ipv4
 from meridian.credentials import ClientEntry, ServerCredentials
 
@@ -349,7 +354,7 @@ class TestSuccessOutput:
         self._write_proxy(creds_dir, domain="example.com")
         resolved = SimpleNamespace(ip="1.2.3.4", creds_dir=creds_dir)
 
-        _print_success(resolved, "default", "example.com")
+        _print_success(resolved, "default", "example.com", redeploy_cmd="meridian deploy 1.2.3.4 --yes")
 
         out = capsys.readouterr().err
         assert "Cloudflare setup" in out
@@ -364,7 +369,7 @@ class TestSuccessOutput:
         self._write_proxy(creds_dir)
         resolved = SimpleNamespace(ip="1.2.3.4", creds_dir=creds_dir)
 
-        _print_success(resolved, "default", "")
+        _print_success(resolved, "default", "", redeploy_cmd="meridian deploy 1.2.3.4 --yes")
 
         out = capsys.readouterr().err
         assert "getmeridian.org/ping" not in out
@@ -378,7 +383,7 @@ class TestSuccessOutput:
         self._write_proxy(creds_dir, geo_block=True)
         resolved = SimpleNamespace(ip="1.2.3.4", creds_dir=creds_dir)
 
-        _print_success(resolved, "default", "")
+        _print_success(resolved, "default", "", redeploy_cmd="meridian deploy 1.2.3.4 --yes")
 
         out = capsys.readouterr().err
         assert "Geo-blocking is ON" in out
@@ -418,3 +423,44 @@ class TestIsIPv4:
         assert is_ipv4("abc.def.ghi.jkl") is False
         assert is_ipv4("not-an-ip") is False
         assert is_ipv4("1.2.3.-1") is False
+
+
+class TestBuildRedeployCommand:
+    def test_minimal_defaults(self) -> None:
+        resolved = SimpleNamespace(ip="1.2.3.4", user="root")
+        cmd = _build_redeploy_command(
+            resolved, sni="", domain="", client_name="default", harden=True,
+            server_name="", icon="", color="", pq=False, warp=False, geo_block=True,
+        )
+        assert cmd == "meridian deploy 1.2.3.4 --yes"
+
+    def test_full_options(self) -> None:
+        resolved = SimpleNamespace(ip="198.51.100.1", user="armenqa")
+        cmd = _build_redeploy_command(
+            resolved, sni="cdn.example.net", domain="vpn.example.com",
+            client_name="ARMIK", harden=False, server_name="My VPN", icon="🛡️",
+            color="sunset", pq=True, warp=True, geo_block=False,
+        )
+        assert "198.51.100.1" in cmd
+        assert "--user armenqa" in cmd
+        assert "--sni cdn.example.net" in cmd
+        assert "--domain vpn.example.com" in cmd
+        assert "--client-name ARMIK" in cmd
+        assert "--no-harden" in cmd
+        assert "--pq" in cmd
+        assert "--warp" in cmd
+        assert "--no-geo-block" in cmd
+        assert "--display-name 'My VPN'" in cmd
+        assert "--color sunset" in cmd
+        assert "--yes" in cmd
+
+    def test_default_sni_omitted(self) -> None:
+        from meridian.config import DEFAULT_SNI
+
+        resolved = SimpleNamespace(ip="1.2.3.4", user="root")
+        cmd = _build_redeploy_command(
+            resolved, sni=DEFAULT_SNI, domain="", client_name="", harden=True,
+            server_name="", icon="", color="ocean", pq=False, warp=False, geo_block=True,
+        )
+        assert "--sni" not in cmd
+        assert "--color" not in cmd
