@@ -19,6 +19,11 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [x] **P1 · Deploy page fanout** — deploy/redeploy now regenerates saved client handoff pages after provisioning, so branding/domain/SNI changes fan out to existing clients instead of leaving stale local/hosted pages behind.
 - [x] **P1 · Relay SNI fail-closed** — new relay deploys no longer silently fall back to a global default SNI when subnet scanning finds nothing or the operator declines the scanned choices.
 
+## Agent Pass 3
+
+- [x] **P1 · Firewall safety** — `ConfigureFirewall` no longer deletes arbitrary user-managed TCP rules; cleanup is limited to Meridian-owned public ports instead of silently removing custom SSH/monitoring access.
+- [x] **P1 · Handoff page self-containment** — generated HTML/PWA handoff surfaces no longer point users at `getmeridian.org/ping`; troubleshooting text is now self-contained and keeps the critical connection handoff path local.
+
 ---
 
 ## P0 — Critical
@@ -46,7 +51,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Security
 
-- [ ] **Firewall cleanup deletes user's custom rules** — limit cleanup to Meridian-managed rules or require explicit confirmation for unexpected ports
+- [x] **Firewall cleanup deletes user's custom rules** — cleanup is now limited to Meridian-managed ports instead of deleting arbitrary user TCP rules
 - [ ] **Remove public 3x-ui management from the shared 443 identity** — move the operator surface off the public camouflage identity or require an explicit operator-only access path
 
 ### Anti-censorship
@@ -61,7 +66,7 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [ ] **Rebuild state transfer UX** — once `--from` exists, make the CLI explain what is being copied, what is live, and what still needs redeploy
 - [ ] **Make destructive mutations transactional** — keep remote cleanup, local credential mutation, registry writes, and hosted page updates in one fail-closed transaction boundary
 - [x] **Regenerate all hosted client pages when shared server state changes** — relay changes already regenerated pages; deploy/redeploy now also refreshes saved client pages after branding/domain/SNI changes
-- [ ] **Hosted connection page must stay self-hosted in recovery flows** — remove `getmeridian.org/ping` and other third-party dependencies from the critical handoff path
+- [ ] **Hosted connection page must stay self-hosted in recovery flows** — generated handoff pages no longer depend on `getmeridian.org/ping`; remaining work is to remove other third-party recovery/install dependencies from the critical path
 
 ### Reliability
 
@@ -82,4 +87,5 @@ Collapsed — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 - **Review loop (current pass)** — XHTTP exact/slash nginx routing fixed in the worktree, deploy now force-refreshes credentials before provisioning, provision sharp-edge documented, focused setup/provisioning tests passing
 - **Review loop (wave 2)** — deploy success output now includes Cloudflare setup steps, deploy/redeploy regenerates saved client handoff pages, new relay deploys fail closed when no relay-local SNI is available, targeted setup/relay tests passing
+- **Review loop (wave 3)** — firewall cleanup no longer deletes unknown user TCP rules, generated HTML/PWA handoff pages dropped the external ping dependency, focused provision/render/template tests passing
 - **Review loop (worktree)** — release workflow pinned to CI-passed SHA, nested credential field round-tripping preserved, PWA honors canonical `subscription_url`, client + relay remove paths fail closed on refresh/sync, silent patch auto-upgrade removed, sshd hardening moved to an authoritative drop-in with `sshd -T` validation, relay lifecycle commands reuse stored relay SSH users
