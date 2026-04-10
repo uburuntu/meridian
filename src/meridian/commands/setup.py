@@ -923,7 +923,7 @@ def _print_success(
     line()
 
     # Redeploy command
-    err_console.print(f"\n  [dim]Re-deploy with the same settings:[/dim]")
+    err_console.print("\n  [dim]Re-deploy with the same settings:[/dim]")
     err_console.print(f"  [dim]  {redeploy_cmd}[/dim]")
 
     # Panel access for advanced users
