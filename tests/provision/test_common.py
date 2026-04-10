@@ -319,3 +319,16 @@ class TestConfigureFirewall:
         ConfigureFirewall().run(mock_conn, base_ctx)
 
         mock_conn.assert_called_with_pattern("ufw allow 80/tcp")
+
+    def test_preserves_user_managed_tcp_rules(self, mock_conn: MockConnection, base_ctx):
+        """Custom non-Meridian ports must not be deleted during cleanup."""
+        mock_conn.when("which ufw", rc=0)
+        mock_conn.when("ufw status", stdout="Status: active\n22/tcp ALLOW\n443/tcp ALLOW\n9100/tcp ALLOW")
+        mock_conn.when("ufw allow", stdout="Skipping adding existing rule")
+        mock_conn.when("ufw delete", rc=0, stdout="Skipping")
+        mock_conn.when("ufw default", rc=0)
+        mock_conn.when("ufw reload", rc=0)
+
+        ConfigureFirewall().run(mock_conn, base_ctx)
+
+        mock_conn.assert_not_called_with_pattern("ufw delete allow 9100/tcp")

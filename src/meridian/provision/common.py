@@ -403,24 +403,9 @@ class ConfigureFirewall:
             if result.returncode == 0 and "Skipping" not in result.stdout and "Could not" not in result.stdout:
                 changed = True
 
-        # Clean up stale rules: delete any port that isn't in the allowed set.
-        # Previous deploys or other tooling (3x-ui, Realm relays) may have
-        # opened random high ports that are no longer needed.
-        allowed_ports = {"22", "443"}
-        if ctx.needs_web_server:
-            allowed_ports.add("80")
-        result = conn.run("ufw status", timeout=15)
-        if result.returncode == 0:
-            import re
-
-            for line in result.stdout.splitlines():
-                # Match lines like "8443/tcp    ALLOW IN    Anywhere"
-                m = re.match(r"(\d+)/tcp\s+ALLOW", line.strip())
-                if m and m.group(1) not in allowed_ports:
-                    port = m.group(1)
-                    conn.run(f"ufw delete allow {port}/tcp", timeout=15)
-                    conn.run(f"ufw delete allow {port}/tcp", timeout=15)  # v6 rule
-                    changed = True
+        # Do not delete arbitrary user-managed rules. Meridian only owns the
+        # standard public ports it opens itself (22/80/443), so cleanup is
+        # limited to the stale port-80 rule above when web serving is disabled.
 
         # Set default policies and enable
         result = conn.run("ufw default deny incoming", timeout=15)
