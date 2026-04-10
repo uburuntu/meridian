@@ -13,6 +13,12 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 - [ ] **P0 · Rebuild migration analyst** — there is no rebuild/migrate command yet; the closest current path is `meridian deploy` in `src/meridian/commands/setup.py`, which can already load prior credentials but cannot transfer a server to a new IP safely. Next: design `deploy --from OLD_IP` around existing `ServerCredentials` data, with explicit source refresh and transactional publish.
 - [ ] **P1 · Relay stealth analyst** — fresh relay deploys already scan the relay network and persist a relay-local SNI when `--sni` is omitted in `src/meridian/commands/relay.py`. Residual gap: legacy relays with empty `relay.sni` still fall back to the exit SNI in generated URLs/pages. Next: add a backfill/migration path and regenerate affected client pages.
 
+## Agent Pass 2
+
+- [x] **P1 · Domain deploy UX** — domain-mode deploy success output now prints explicit Cloudflare DNS/SSL/WebSocket steps instead of sending users to rediscover the flow after deploy.
+- [x] **P1 · Deploy page fanout** — deploy/redeploy now regenerates saved client handoff pages after provisioning, so branding/domain/SNI changes fan out to existing clients instead of leaving stale local/hosted pages behind.
+- [x] **P1 · Relay SNI fail-closed** — new relay deploys no longer silently fall back to a global default SNI when subnet scanning finds nothing or the operator declines the scanned choices.
+
 ---
 
 ## P0 — Critical
@@ -45,16 +51,16 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Anti-censorship
 
-- [ ] **Legacy relays need SNI backfill** — relays created before per-relay SNI scanning can still generate unrealistic relay URLs until `relay.sni` is backfilled and hosted pages are regenerated
+- [ ] **Legacy relays need SNI backfill** — new relay deploys now fail closed without a relay-local SNI; remaining work is to repair legacy relay entries with blank `relay.sni` and regenerate affected hosted pages
 - [ ] **Default SNI `www.microsoft.com` monitored** — make scanning the normal path, not the exceptional one
 - [ ] **Make probe/check tooling mode-aware** — domain mode intentionally serves a real domain cert; verification must distinguish that from an IP-mode stealth leak
 
 ### Product
 
-- [ ] **Post-deploy Cloudflare setup guidance** — print explicit DNS / SSL steps after domain-mode deploy
+- [x] **Post-deploy Cloudflare setup guidance** — domain-mode deploy now prints the DNS-only → proxied and SSL/WebSocket steps in CLI success output
 - [ ] **Rebuild state transfer UX** — once `--from` exists, make the CLI explain what is being copied, what is live, and what still needs redeploy
 - [ ] **Make destructive mutations transactional** — keep remote cleanup, local credential mutation, registry writes, and hosted page updates in one fail-closed transaction boundary
-- [ ] **Regenerate all hosted client pages when shared server state changes** — branding, domain, SNI, and relay topology updates must fan out to every client page/subscription
+- [x] **Regenerate all hosted client pages when shared server state changes** — relay changes already regenerated pages; deploy/redeploy now also refreshes saved client pages after branding/domain/SNI changes
 - [ ] **Hosted connection page must stay self-hosted in recovery flows** — remove `getmeridian.org/ping` and other third-party dependencies from the critical handoff path
 
 ### Reliability
@@ -75,4 +81,5 @@ Version history is in [CHANGELOG.md](CHANGELOG.md).
 Collapsed — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 - **Review loop (current pass)** — XHTTP exact/slash nginx routing fixed in the worktree, deploy now force-refreshes credentials before provisioning, provision sharp-edge documented, focused setup/provisioning tests passing
+- **Review loop (wave 2)** — deploy success output now includes Cloudflare setup steps, deploy/redeploy regenerates saved client handoff pages, new relay deploys fail closed when no relay-local SNI is available, targeted setup/relay tests passing
 - **Review loop (worktree)** — release workflow pinned to CI-passed SHA, nested credential field round-tripping preserved, PWA honors canonical `subscription_url`, client + relay remove paths fail closed on refresh/sync, silent patch auto-upgrade removed, sshd hardening moved to an authoritative drop-in with `sshd -T` validation, relay lifecycle commands reuse stored relay SSH users
