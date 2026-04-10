@@ -165,6 +165,28 @@ class TestServerCredentials:
         assert data["relays"][0]["future_relay_flag"] == "keep_relay"
         assert data["branding"]["future_branding_flag"] == "keep_branding"
 
+    def test_save_preserves_falsy_unknown_branding_fields(self, tmp_path: Path) -> None:
+        path = tmp_path / "proxy.yml"
+        path.write_text(
+            "version: 2\n"
+            "branding:\n"
+            "  server_name: Test\n"
+            "  future_branding_bool: false\n"
+            "  future_branding_zero: 0\n"
+            "  future_branding_list: []\n"
+        )
+
+        creds = ServerCredentials.load(path)
+        creds.branding.color = "ocean"
+        creds.save(path)
+
+        import yaml
+
+        data = yaml.safe_load(path.read_text())
+        assert data["branding"]["future_branding_bool"] is False
+        assert data["branding"]["future_branding_zero"] == 0
+        assert data["branding"]["future_branding_list"] == []
+
     def test_save_preserves_unknown_protocol_blocks(self, tmp_path: Path) -> None:
         path = tmp_path / "proxy.yml"
         path.write_text(

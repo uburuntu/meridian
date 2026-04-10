@@ -189,8 +189,11 @@ class ServerCredentials:
 
         # Branding
         branding_dict = _serialize_dataclass(self.branding)
-        # Strip empty strings too — only store non-empty branding values
-        branding_dict = {k: v for k, v in branding_dict.items() if v}
+        # Known branding fields use empty string as "unset", but preserved
+        # forward-compat fields may legitimately be falsy.
+        for field_name in ("server_name", "icon", "color"):
+            if branding_dict.get(field_name) == "":
+                branding_dict.pop(field_name, None)
         if branding_dict:
             out["branding"] = branding_dict
 

@@ -16,6 +16,7 @@
 
 - **Credential lockout prevention** — save locally BEFORE changing remote password. If API fails, user has recovery data.
 - **Forward-compatible YAML** — `_extra` dict means newer server versions don't corrupt older CLI reads.
+- **Falsiness matters in `_extra`** — preserved forward-compat fields may legitimately be `false`, `0`, or `[]`. Only strip known empty-string placeholders; never drop unknown fields just because they are falsy.
 - **Single QR warning** — warns once per session if `qrencode` missing, then silently degrades. No spam.
 
 ## Pitfalls
