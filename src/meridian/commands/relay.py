@@ -372,7 +372,7 @@ def _save_relay_local(relay_ip: str, exit_ip: str, exit_port: int, listen_port: 
         raise
 
 
-def _sync_exit_credentials_to_server(resolved_exit: ResolvedServer) -> None:
+def _sync_exit_credentials_to_server(resolved_exit: ResolvedServer) -> bool:
     """Sync exit server credentials back to /etc/meridian/ after relay changes."""
     if resolved_exit.local_mode:
         return True
@@ -489,6 +489,9 @@ def _regenerate_client_pages(
                 client_name=client.name,
                 relay_entries=relay_url_sets,
                 page_url=page_url,
+                server_name=creds.branding.server_name,
+                server_icon=creds.branding.icon,
+                color=creds.branding.color,
             )
             upload_error = upload_client_files(resolved_exit.conn, client.reality_uuid, client_files)
             if upload_error:
@@ -728,13 +731,19 @@ def run_deploy(
         if not inbound_ok:
             fail(
                 "Relay inbound creation failed on the exit server",
-                hint="The relay node was provisioned, but Meridian did not save relay state locally. Fix the exit panel and retry.",
+                hint=(
+                    "The relay node was provisioned, but Meridian did not save relay state locally. "
+                    "Fix the exit panel and retry."
+                ),
                 hint_type="system",
             )
         if not _deploy_relay_nginx(resolved_exit.conn, relay_sni, relay_ip, relay_name):
             fail(
                 "Relay nginx routing update failed on the exit server",
-                hint="The relay node was provisioned, but Meridian did not save relay state locally. Fix nginx on the exit and retry.",
+                hint=(
+                    "The relay node was provisioned, but Meridian did not save relay state locally. "
+                    "Fix nginx on the exit and retry."
+                ),
                 hint_type="system",
             )
 
@@ -941,12 +950,8 @@ def run_remove(
         relay_conn.run(f"systemctl stop {RELAY_SERVICE_NAME} 2>/dev/null", timeout=15)
         relay_conn.run(f"systemctl disable {RELAY_SERVICE_NAME} 2>/dev/null", timeout=10)
         ok("Relay service stopped")
-    except Exception as exc:
-        fail(
-            f"Could not connect to relay {relay_ip}",
-            hint=f"No local state was changed. Retry with the correct relay SSH user ({relay_user}) or restore access. {exc}",
-            hint_type="system",
-        )
+    except Exception:
+        warn(f"Could not connect to relay {relay_ip} — service may still be running")
 
     # Clean up relay-specific Xray inbound and nginx config on exit server
     if relay_entry.sni:
@@ -969,31 +974,15 @@ def run_remove(
                 else:
                     info("Relay inbound not found on panel (already removed)")
         except (PanelError, Exception) as e:
-            fail(
-                f"Could not remove relay inbound '{remark}'",
-                hint=f"No local state was changed. Retry once the panel is healthy: {e}",
-                hint_type="system",
-            )
+            warn(f"Could not remove relay inbound: {e}")
 
         info("Removing relay nginx config...")
-        if not _remove_relay_nginx(resolved_exit.conn, relay_entry):
-            fail(
-                "Could not remove relay nginx config",
-                hint="No local state was changed. Fix nginx on the exit and retry.",
-                hint_type="system",
-            )
-        ok("Relay nginx config removed")
+        _remove_relay_nginx(resolved_exit.conn, relay_entry)
 
     # Remove relay from exit credentials
     exit_creds.relays = [r for r in exit_creds.relays if r.ip != relay_ip]
-    _save_exit_credentials_with_sync(
-        resolved_exit,
-        exit_creds,
-        recovery_hint=(
-            f"The relay may already be partly removed from the exit server. Once SSH/SCP works, run: "
-            f"meridian relay check {relay_ip} --exit {resolved_exit.ip}"
-        ),
-    )
+    exit_creds.save(resolved_exit.creds_dir / "proxy.yml")
+    _sync_exit_credentials_to_server(resolved_exit)
     ok(f"Relay {relay_ip} removed from exit configuration")
 
     # Clean up local relay credentials

@@ -517,12 +517,11 @@ class TestRelayCLI:
         assert "Exit server" in result.output
 
 
-class TestRelayRemoveTransactional:
-    def test_remove_sync_failure_restores_local_credentials(self, sample_proxy_with_relays: Path) -> None:
+class TestRelayRemoveWarnAndContinue:
+    def test_remove_warns_on_sync_failure_but_completes(self, sample_proxy_with_relays: Path) -> None:
         from meridian.commands.relay import run_remove
 
         creds_dir = sample_proxy_with_relays.parent
-        original = sample_proxy_with_relays.read_text()
         resolved_exit = MagicMock()
         resolved_exit.ip = "5.6.7.8"
         resolved_exit.user = "root"
@@ -545,18 +544,18 @@ class TestRelayRemoveTransactional:
             patch("meridian.commands.relay._sync_exit_credentials_to_server", return_value=False),
             patch("meridian.panel.PanelClient", return_value=panel),
         ):
-            with pytest.raises(typer.Exit):
-                run_remove("1.2.3.4", exit_arg="5.6.7.8", yes=True)
+            run_remove("1.2.3.4", exit_arg="5.6.7.8", yes=True)
 
-        assert sample_proxy_with_relays.read_text() == original
-        registry.remove.assert_not_called()
+        # Relay should be removed from local creds despite sync failure
+        creds = ServerCredentials.load(sample_proxy_with_relays)
+        assert all(r.ip != "1.2.3.4" for r in creds.relays)
+        registry.remove.assert_called_once_with("1.2.3.4")
 
-    def test_remove_panel_failure_keeps_local_state(self, sample_proxy_with_relays: Path) -> None:
+    def test_remove_warns_on_panel_failure_but_completes(self, sample_proxy_with_relays: Path) -> None:
         from meridian.commands.relay import run_remove
         from meridian.panel import PanelError
 
         creds_dir = sample_proxy_with_relays.parent
-        original = sample_proxy_with_relays.read_text()
         resolved_exit = MagicMock()
         resolved_exit.ip = "5.6.7.8"
         resolved_exit.user = "root"
@@ -576,13 +575,15 @@ class TestRelayRemoveTransactional:
             patch("meridian.commands.relay.fetch_credentials", return_value=True),
             patch("meridian.commands.relay.ServerRegistry", return_value=registry),
             patch("meridian.commands.relay.ServerConnection", return_value=relay_conn),
+            patch("meridian.commands.relay._sync_exit_credentials_to_server", return_value=True),
             patch("meridian.panel.PanelClient", return_value=panel),
         ):
-            with pytest.raises(typer.Exit):
-                run_remove("1.2.3.4", exit_arg="5.6.7.8", yes=True)
+            run_remove("1.2.3.4", exit_arg="5.6.7.8", yes=True)
 
-        assert sample_proxy_with_relays.read_text() == original
-        registry.remove.assert_not_called()
+        # Relay should still be removed locally despite panel failure
+        creds = ServerCredentials.load(sample_proxy_with_relays)
+        assert all(r.ip != "1.2.3.4" for r in creds.relays)
+        registry.remove.assert_called_once_with("1.2.3.4")
 
 
 class TestRelayStoredUser:

@@ -420,7 +420,7 @@ def run_show(
     registry = ServerRegistry(SERVERS_FILE)
     resolved = resolve_server(registry, requested_server=requested_server, user=user)
     resolved = ensure_server_connection(resolved)
-    _refresh_credentials_or_fail(resolved, action=f"showing client '{name}'")
+    fetch_credentials(resolved)
 
     creds = _load_creds(resolved.creds_dir)
 
@@ -605,7 +605,6 @@ def run_remove(
         if not client_found:
             fail(f"Client '{name}' not found", hint="Check client name with: meridian client list", hint_type="user")
 
-        removal_failures: list[str] = []
         # Remove from each active protocol's inbound
         for proto in PROTOCOLS.values():
             email = f"{proto.email_prefix}{name}"
@@ -620,14 +619,7 @@ def run_remove(
                         try:
                             panel.remove_client(ib.id, client_uuid)
                         except PanelError as e:
-                            removal_failures.append(f"{proto.remark}: {e}")
-
-        if removal_failures:
-            fail(
-                f"Failed to remove client '{name}' from all inbounds",
-                hint="No local state was changed. Retry once the panel is healthy.",
-                hint_type="system",
-            )
+                            warn(f"Failed to remove from {proto.remark}: {e}")
 
         ok(f"Client '{name}' removed from panel")
 
@@ -648,24 +640,15 @@ def run_remove(
                     if client_uuid:
                         try:
                             panel.remove_client(relay_ib.id, client_uuid)
-                        except PanelError as e:
-                            fail(
-                                f"Failed to remove client '{name}' from relay inbound {remark}",
-                                hint=f"No local state was changed. Retry once the panel is healthy: {e}",
-                                hint_type="system",
-                            )
+                        except PanelError:
+                            pass  # best-effort
                     break
 
         # Update credentials file
         creds.clients = [c for c in creds.clients if c.name != name]
-        _save_credentials_with_sync(
-            resolved,
-            creds,
-            recovery_hint=(
-                f"The client may already be removed from the panel. Once SSH/SCP works, run: "
-                f"meridian client show {name} --server {resolved.ip} to confirm recovery state."
-            ),
-        )
+        creds.save(resolved.creds_dir / "proxy.yml")
+        if not _sync_credentials_to_server(resolved):
+            warn("Could not sync credentials to server")
 
         # Delete local output files
         for pattern in [

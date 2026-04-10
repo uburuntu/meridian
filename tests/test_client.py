@@ -614,7 +614,7 @@ class TestValidateClientName:
         assert exc.value.exit_code == 1
         assert (creds_dir / "proxy.yml").read_text() == original
 
-    def test_remove_partial_panel_failure_keeps_local_state(self, tmp_home: Path, creds_dir: Path) -> None:
+    def test_remove_partial_panel_failure_warns_but_completes(self, tmp_home: Path, creds_dir: Path) -> None:
         _write_proxy_yml(creds_dir, extra_client="alice")
         inbounds = [
             _make_inbound(
@@ -640,13 +640,11 @@ class TestValidateClientName:
             patch("meridian.commands.client.ensure_server_connection", return_value=mock_resolved),
             patch("meridian.commands.client.fetch_credentials", return_value=True),
             patch("meridian.commands.client._make_panel", return_value=mock_panel),
-            patch("meridian.commands.client._sync_credentials_to_server", return_value=True) as mock_sync,
+            patch("meridian.commands.client._sync_credentials_to_server", return_value=True),
         ):
-            with pytest.raises(typer.Exit) as exc:
-                run_remove("alice")
-        assert exc.value.exit_code == 1
-        assert "alice" in (creds_dir / "proxy.yml").read_text()
-        mock_sync.assert_not_called()
+            run_remove("alice")
+        # Client should be removed from local creds despite partial panel failure
+        assert "alice" not in (creds_dir / "proxy.yml").read_text()
 
     def test_invalid_name_remove_fails(self, tmp_home: Path) -> None:
         """Invalid name in remove should also fail at validation."""
