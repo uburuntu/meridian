@@ -64,6 +64,7 @@ Things that require human action outside the codebase.
 - [x] **SSH password auth not hardened during provisioning** — sshd hardening now uses an authoritative drop-in with `sshd -T` validation, overriding cloud-init
 - [x] **Firewall cleanup deletes user's custom rules** — cleanup is now limited to Meridian-managed ports instead of deleting arbitrary user TCP rules
 - [ ] **Remove public 3x-ui management from the shared 443 identity** — move the operator surface off the public camouflage identity or require an explicit operator-only access path
+- [ ] **Stop contradicting the self-hosted / no-tracking trust story on docs pages** — the website promises "Open source. No tracking. No accounts." and the repo vision says self-host everything, but docs currently load a third-party widget. For a censorship-resistance product this is not a cosmetic inconsistency; it weakens the core trust claim right when users are evaluating operational discipline. Either remove the external dependency or narrow the public promise so the product does not overstate its privacy posture
 
 ### Anti-censorship
 
@@ -87,8 +88,16 @@ Things that require human action outside the codebase.
 - [ ] **Make destructive mutations transactional** — keep remote cleanup, local credential mutation, registry writes, and hosted page updates in one fail-closed transaction boundary
 - [ ] **Require explicit server identity for risky commands** — enforce unique server aliases, separate deployer aliasing from recipient-facing branding, and add clearer target confirmation for destructive/stateful commands. Current implicit auto-select/local-mode behavior is too easy to mis-target
 - [x] **Regenerate all hosted client pages when shared server state changes** — deploy/redeploy now also refreshes saved client pages after branding/domain/SNI changes
-- [ ] **Unify deployer-facing and recipient-facing naming** — `--display-name` and `--server` currently model different identities but docs and UX blur them together. Either unify them or expose the distinction clearly in commands and docs
+- [ ] **Unify deployer-facing and recipient-facing naming** — `--display-name` and `--server` currently model different identities but docs and UX blur them together badly enough that the documented multi-server flow is wrong (`--display-name finland` is presented as if it creates a `--server finland` alias). Either unify the concepts or make the distinction explicit everywhere: deploy flags, registry model, README, CLI help, and docs examples
 - [x] **Hosted connection page must stay self-hosted in recovery flows** — generated handoff pages no longer depend on `getmeridian.org/ping`; remaining work is to remove other third-party recovery/install dependencies from the critical path
+- [ ] **Make docs, README, command builder, and CLI behavior agree exactly** — several first-run surfaces drift independently today: broken deploy examples, stale/deprecated flags in docs, command-builder omissions, and claims like "supports all Meridian CLI operations" that are not true. For a product selling correctness, product-surface drift is a real trust bug, not just a docs bug
+- [ ] **Recalibrate onboarding promises to the real setup cost** — public copy currently leans on "one command", "three steps", and "two minutes" while the actual flow still requires VPS selection, SSH key access, terminal use, and mode choices. Keep the strong positioning, but make the promise precise: guided, hardened deployment once prerequisites are in place
+- [ ] **Add an orientation layer before procedural docs** — `/docs/` currently drops straight into Getting Started, which works for one path but not for a product with standalone, domain, relay, and family-sharing modes. Add a "choose your path" / "is this for you?" page so new users understand which deployment model fits before they start copying commands
+- [ ] **Clarify the product stance on standalone vs domain mode** — marketing frames `meridian deploy` as the complete secure path, while the wizard treats domain mode as strongly recommended for a more plausible HTTPS profile and CDN fallback. Decide whether domain mode is optional convenience or the preferred "done right" path, then make website, wizard, and docs tell the same story
+- [ ] **Trust-first handoff link previews** — shared connection pages need sender-recognizable metadata before the recipient opens them. Replace generic OG/title/description values like "Connection Setup" with deployer/server identity and plain-language safety cues so chat previews feel intentional instead of phishing-adjacent
+- [ ] **Install-aware recipient handoff flow** — the primary "Add to App" path assumes the target app is already installed and can fail as a dead deep link. Detect likely missing-app cases, provide explicit fallback to install, and keep the import path recoverable on first use. The handoff page should feel self-explanatory even when the recipient has never heard of these apps
+- [ ] **Opinionated recommended app path per platform** — the current handoff page exposes too many equal-weight client choices, including GitHub-release and external-site downloads. Preserve advanced options, but for non-technical recipients default to one recommended app per platform and demote the rest under advanced/other platforms. Trust improves when the product makes fewer decisions on the user's behalf
+- [ ] **Make recipient-side troubleshooting plain-language and self-contained** — handoff pages currently fall back to deployer jargon like "ask the server owner to run `meridian test`". Replace that with clearer user-facing recovery copy, a copyable problem report, or a simpler escalation path so the two-sided UX does not collapse into CLI terminology when something goes wrong
 
 ### Reliability
 
@@ -125,6 +134,7 @@ Things that require human action outside the codebase.
 - [ ] **Relay on server with existing nginx** — support deploying relay alongside an existing web server on port 443
 - [ ] **WebRTC leak warning on connection page** — WebRTC leaks are client-side (browser discovers local IPs via OS APIs, bypassing the proxy entirely). Server-side fixes don't help — traffic never reaches Xray. Add amber warning box to connection page with: 1) link to browserleaks.com/webrtc leak test, 2) per-app guidance (v2rayNG: Global mode, Hiddify: route all connections), 3) browser extension recommendation. Same pattern as clock-sync warning
 - [ ] **Replace `qrencode` binary with Python `segno` package** — eliminates system dependency
+- [ ] **Usable no-JS / failed-config fallback for handoff pages** — the hosted connection page currently depends on JavaScript and `config.json`; the noscript/error state is mostly a dead end. Add a minimal static fallback with subscription URL, manual instructions, and enough context that recipients are not stuck if scripting or fetch fails
 
 ### Reliability
 
@@ -149,6 +159,7 @@ Things that require human action outside the codebase.
 - [ ] **Dark mode toggle** — system-preference only, no manual override
 - [ ] **Docs sidebar on mobile** — no nav below 860px
 - [ ] **Validate executable docs examples, not just flag tables** — CI currently misses broken README/deploy-guide commands and translated-doc drift. Add validation for high-traffic command examples and behavior claims across docs surfaces
+- [ ] **Move bounded trust earlier on the landing page** — the homepage currently reaches the command builder and absolute anti-detection claims before it clearly frames scope, limitations, and why the implementation should be trusted. Re-sequence the page so threat-model and trust boundaries arrive earlier than configuration widgets
 
 ---
 
