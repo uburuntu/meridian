@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import subprocess
 from pathlib import Path
 
 from meridian.commands.resolve import (
@@ -24,7 +25,7 @@ from meridian.config import (
 from meridian.console import choose, confirm, err_console, fail, info, line, ok, prompt, warn
 from meridian.credentials import ServerCredentials
 from meridian.servers import ServerEntry, ServerRegistry
-from meridian.ssh import ServerConnection
+from meridian.ssh import SSH_OPTS, ServerConnection, scp_host
 
 
 def _remote_meridian_state_exists(resolved: ResolvedServer) -> bool | None:
@@ -75,6 +76,37 @@ def _refresh_credentials_before_deploy(resolved: ResolvedServer) -> None:
         hint="Check SSH/SCP and retry. Meridian will not redeploy when remote state is unknown.",
         hint_type="system",
     )
+
+
+def _sync_credentials_to_server(resolved: ResolvedServer) -> bool:
+    """Push local proxy.yml to the server's /etc/meridian/.
+
+    Server-side credentials are needed for cron scripts (update-stats.py) and
+    for fail-closed refresh in client mutation commands.
+    """
+    if getattr(resolved, "local_mode", False):
+        return True
+
+    proxy_file = resolved.creds_dir / "proxy.yml"
+    if not proxy_file.exists():
+        return False
+
+    try:
+        result = subprocess.run(
+            [
+                "scp",
+                *SSH_OPTS,
+                str(proxy_file),
+                f"{resolved.user}@{scp_host(resolved.ip)}:/etc/meridian/proxy.yml",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            stdin=subprocess.DEVNULL,
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
 
 
 def run(
@@ -215,6 +247,8 @@ def run(
         creds.save(proxy_file)
 
     _run_provisioner(resolved, domain, sni, client_name, harden, pq=pq, warp=warp, geo_block=geo_block)
+    if not _sync_credentials_to_server(resolved):
+        warn("Could not sync credentials to server — client commands may need a redeploy")
     try:
         _regenerate_connection_pages_after_deploy(resolved)
     except Exception as exc:
