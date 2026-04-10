@@ -787,3 +787,30 @@ relays:
 """)
         creds = ServerCredentials.load(path)
         assert creds.relays[0].sni == ""
+
+
+class TestRelayDeploySNISelection:
+    def test_deploy_fails_when_scan_finds_no_local_sni(self, sample_proxy_yml: Path) -> None:
+        from meridian.commands.relay import run_deploy
+
+        resolved_exit = MagicMock()
+        resolved_exit.ip = "1.2.3.4"
+        resolved_exit.user = "root"
+        resolved_exit.local_mode = False
+        resolved_exit.creds_dir = sample_proxy_yml.parent
+        resolved_exit.conn = MagicMock()
+
+        relay_conn = MagicMock()
+        relay_conn.run.side_effect = [
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout="", stderr=""),
+        ]
+
+        with (
+            patch("meridian.commands.relay._resolve_exit", return_value=resolved_exit),
+            patch("meridian.commands.relay.ServerRegistry"),
+            patch("meridian.commands.relay.ServerConnection", return_value=relay_conn),
+            patch("meridian.commands.scan.scan_for_sni", return_value=[]),
+            pytest.raises(typer.Exit),
+        ):
+            run_deploy("2.3.4.5", "1.2.3.4", yes=True)

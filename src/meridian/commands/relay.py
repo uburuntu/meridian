@@ -617,8 +617,6 @@ def run_deploy(
         ok("Relay -> exit connectivity confirmed")
 
     # Determine relay SNI target
-    from meridian.config import DEFAULT_SNI
-
     relay_sni = sni  # from --sni flag
     if not relay_sni:
         # Scan for optimal SNI from the relay's network perspective
@@ -642,17 +640,23 @@ def run_deploy(
             # Show top candidates (max 8)
             display = candidates[:8]
             choices = [f"{d}" for d in display]
-            choices.append("Skip (use default)")
+            choices.append("Abort (rerun with --sni)")
             choice = choose("Select camouflage target for relay", choices, default=1)
             if choice <= len(display):
                 relay_sni = display[choice - 1]
                 ok(f"Relay SNI target: {relay_sni}")
             else:
-                relay_sni = DEFAULT_SNI
-                info(f"Using default SNI: {relay_sni}")
+                fail(
+                    "Relay deploy requires a relay-local SNI target",
+                    hint="Re-run and choose one of the scanned targets, or pass --sni explicitly.",
+                    hint_type="user",
+                )
         else:
-            relay_sni = DEFAULT_SNI
-            info(f"No scan results — using default SNI: {relay_sni}")
+            fail(
+                "Could not find a relay-local SNI target",
+                hint="Pass --sni explicitly for this relay, or retry from a relay network with scannable targets.",
+                hint_type="system",
+            )
         err_console.print()
 
     # Show deployment summary
