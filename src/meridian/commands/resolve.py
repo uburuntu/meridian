@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -198,7 +199,10 @@ def resolve_server(
 
     # Determine creds_dir
     if local_mode:
-        creds_dir = SERVER_CREDS_DIR
+        if os.geteuid() == 0:
+            creds_dir = SERVER_CREDS_DIR
+        else:
+            creds_dir = CREDS_BASE / sanitize_ip_for_path(ip)
     else:
         creds_dir = CREDS_BASE / sanitize_ip_for_path(ip)
 

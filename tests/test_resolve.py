@@ -143,11 +143,24 @@ class TestLocalMode:
             "meridian.commands.resolve._detect_local_mode_from_creds",
             lambda: "10.0.0.1",
         )
+        monkeypatch.setattr("meridian.commands.resolve.os.geteuid", lambda: 0)
         reg = ServerRegistry(servers_file)
         result = resolve_server(reg)
         assert result.ip == "10.0.0.1"
         assert result.local_mode is True
         assert result.creds_dir == SERVER_CREDS_DIR
+
+    def test_local_mode_non_root_uses_user_creds_dir(self, servers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "meridian.commands.resolve._detect_local_mode_from_creds",
+            lambda: "10.0.0.1",
+        )
+        monkeypatch.setattr("meridian.commands.resolve.os.geteuid", lambda: 1000)
+        reg = ServerRegistry(servers_file)
+        result = resolve_server(reg)
+        assert result.ip == "10.0.0.1"
+        assert result.local_mode is True
+        assert result.creds_dir != SERVER_CREDS_DIR
 
 
 class TestLocalKeyword:
@@ -167,6 +180,7 @@ class TestLocalKeyword:
             "meridian.commands.resolve.detect_public_ip",
             lambda: "203.0.113.10",
         )
+        monkeypatch.setattr("meridian.commands.resolve.os.geteuid", lambda: 0)
         reg = ServerRegistry(servers_file)
         result = resolve_server(reg, explicit_ip="local")
         assert result.ip == "203.0.113.10"
