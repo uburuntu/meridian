@@ -4,6 +4,16 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.16.1] - 2026-04-10
+
+### Fixed
+- **Redeploy no longer blocked by missing server credentials** — servers deployed before credential sync had no `/etc/meridian/proxy.yml`, causing redeploy to fail with "stale local cache". Now gracefully proceeds with the local copy and syncs after deploy
+- **Deploy syncs credentials to server** — `proxy.yml` is pushed to `/etc/meridian/` after provisioning so `update-stats.py` cron and client mutation refresh work correctly
+- **E2E acme.sh stub** — stub now returns rc=0 for `--install-cronjob`/`--install-cert`/`--info` to match new return-code checks
+
+### Added
+- **Reproducible redeploy command** — deploy success output shows the exact `meridian deploy` command to redo the same configuration without the wizard
+
 ## [3.16.0] - 2026-04-10
 
 ### Added
