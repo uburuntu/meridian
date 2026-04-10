@@ -124,6 +124,18 @@ def _render_xhttp_location(xhttp_path: str) -> str:
     return textwrap.dedent(f"""\
 
         # --- VLESS+XHTTP (enhanced stealth, nginx-terminated TLS) ---
+        # Xray expects the canonical path without a trailing slash, but some
+        # clients/browsers probe both forms. Route both to the same upstream.
+        location = /{xhttp_path} {{
+            proxy_pass http://meridian_xhttp;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_read_timeout 86400s;
+            proxy_send_timeout 86400s;
+            proxy_buffering off;
+            proxy_request_buffering off;
+        }}
+
         # Long timeouts: XHTTP mode=auto lets clients negotiate streaming
         # modes (stream-one/stream-up) with long-lived connections.
         location /{xhttp_path}/ {{

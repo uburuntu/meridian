@@ -231,6 +231,20 @@ class TestNginxXHTTPBlock:
         assert "proxy_buffering off" in cfg
         assert "xh-def456" in cfg
 
+    def test_xhttp_routes_exact_and_slash_paths(self):
+        cfg = _render_nginx_ip_config(
+            server_ip="198.51.100.1",
+            nginx_internal_port=8443,
+            panel_web_base_path="secretpanel",
+            panel_internal_port=2053,
+            info_page_path="connect",
+            xhttp_path="xh-exact",
+            xhttp_internal_port=29000,
+        )
+        assert "location = /xh-exact {" in cfg
+        assert "location /xh-exact/ {" in cfg
+        assert cfg.count("proxy_pass http://meridian_xhttp;") == 2
+
     def test_xhttp_before_panel(self):
         cfg = _render_nginx_ip_config(
             server_ip="198.51.100.1",
