@@ -4,6 +4,27 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.16.0] - 2026-04-10
+
+### Added
+- **Cloudflare setup guidance** — domain-mode deploy success output now prints DNS, SSL/TLS, and WebSocket configuration steps
+- **Deploy page fanout** — deploy/redeploy regenerates all saved client handoff pages so branding, domain, and SNI changes reach existing clients
+- **SSH hardening via drop-in** — sshd hardening uses an authoritative `/etc/ssh/sshd_config.d/99-meridian.conf` with `sshd -T` validation, overriding cloud-init defaults
+- **Nested credential round-tripping** — unknown fields under panel, server, protocols, clients, relays, and branding sections are preserved across CLI versions via `_extra`
+- **Relay SSH user persistence** — `relay check` and `relay remove` reuse the stored SSH user from the registry instead of defaulting to root
+
+### Fixed
+- **XHTTP nginx path mismatch** — nginx now routes both `/<path>` and `/<path>/` to the XHTTP upstream
+- **Firewall cleanup safety** — `ConfigureFirewall` no longer deletes arbitrary user-managed TCP rules; cleanup is limited to Meridian-owned ports
+- **Handoff page self-containment** — generated HTML/PWA pages no longer depend on `getmeridian.org/ping`; troubleshooting is self-contained
+- **Relay SNI fail-closed** — new relay deploys fail closed when no relay-local SNI is available instead of silently falling back to the default
+- **Client credential mutations fail-closed** — `client add` refreshes from server before mutating and rolls back local state if sync fails
+- **Release workflow pinning** — `release.yml` now checks out `workflow_run.head_sha` so untested commits can't be released
+- **PWA canonical subscription URL** — frontend honors server-provided `subscription_url` instead of reconstructing from `location.pathname`
+
+### Changed
+- **No silent patch auto-upgrade** — patch releases are surfaced as a notification with a link to releases; `meridian update` + `meridian deploy` is now explicit
+
 ## [3.15.2] - 2026-04-10
 
 ### Fixed
