@@ -97,8 +97,9 @@ OUTPUT=$(meridian client list 2>&1 || true)
 check_no_output "bob removed from list" "bob" "$OUTPUT"
 check_output "alice still in list" "alice" "$OUTPUT"
 
-# Verify output files generated
-if ls /root/.meridian/credentials/"$IP"/*-alice-connection-info.html >/dev/null 2>&1; then
+# Verify output files generated (local mode saves to /etc/meridian/)
+if ls /root/.meridian/credentials/"$IP"/*-alice-connection-info.html >/dev/null 2>&1 || \
+   ls /etc/meridian/*-alice-connection-info.html >/dev/null 2>&1; then
     pass "alice HTML connection page exists"
 else
     fail_test "alice HTML connection page missing"
