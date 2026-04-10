@@ -409,22 +409,35 @@ def _generate_vlessenc_keypair(conn: ServerConnection, xray_bin: str) -> tuple[s
     if result.returncode != 0:
         raise PanelError(f"VLESS encryption key generation failed: {result.stderr.strip()}")
 
-    output = result.stdout
-    private_match = re.search(r"(?:PrivateKey|Private key):\s*(.+)", output)
-    public_match = re.search(r"Encryption:\s*(.+)", output)
-
-    if not private_match or not public_match:
-        raise PanelError(
-            f"Failed to parse vlessenc output. Xray version may not support VLESS encryption.\nOutput: {output}"
-        )
-
-    private_key = private_match.group(1).strip()
-    public_key = public_match.group(1).strip()
+    private_key, public_key = _parse_vlessenc_output(result.stdout)
 
     if not private_key or not public_key:
         raise PanelError("vlessenc returned empty keys")
 
     return private_key, public_key
+
+
+def _parse_vlessenc_output(output: str) -> tuple[str, str]:
+    """Parse Xray vlessenc output and return the PQ keypair.
+
+    Newer Xray releases print both X25519 and ML-KEM-768 sections. For
+    Meridian's ``--pq`` mode we must pick the ML-KEM-768 pair.
+    Older builds printed a single ``PrivateKey`` / ``Encryption`` pair.
+    """
+    pq_match = re.search(
+        r'Authentication:\s*ML-KEM-768.*?"decryption":\s*"([^"]+)".*?"encryption":\s*"([^"]+)"',
+        output,
+        re.S,
+    )
+    if pq_match:
+        return pq_match.group(1).strip(), pq_match.group(2).strip()
+
+    private_match = re.search(r"(?:PrivateKey|Private key):\s*(.+)", output)
+    public_match = re.search(r"Encryption:\s*(.+)", output)
+    if private_match and public_match:
+        return private_match.group(1).strip(), public_match.group(1).strip()
+
+    raise PanelError(f"Failed to parse vlessenc output. Xray output format may have changed.\nOutput: {output}")
 
 
 def _apply_panel_settings(
