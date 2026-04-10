@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from meridian.provision.services import (
@@ -756,6 +757,8 @@ class TestInstallNginx:
         conn.when("nginx -V", stdout="--with-stream_ssl_preread_module")
         # acme.sh installed
         conn.when("test -f /root/.acme.sh/acme.sh", stdout="", rc=0)
+        conn.when("crontab -l", stdout="", rc=0)
+        conn.when("acme.sh --install-cronjob", stdout="")
         # All other commands succeed
         conn.when("mkdir", stdout="")
         conn.when("chown", stdout="")
@@ -769,6 +772,46 @@ class TestInstallNginx:
         step = InstallNginx()
         result = step.run(conn, ctx)
         assert result.status == "ok"
+        conn.assert_called_with_pattern("acme.sh --install-cronjob")
+
+    def test_missing_acme_cron_returns_changed(self, tmp_path: Path):
+        conn = MockConnection()
+        conn.when("dpkg -l nginx", stdout="ii  nginx")
+        conn.when("nginx -V", stdout="--with-stream_ssl_preread_module")
+        conn.when("test -f /root/.acme.sh/acme.sh", stdout="", rc=0)
+        conn.when("crontab -l", stdout="", rc=1)
+        conn.when("acme.sh --install-cronjob", stdout="")
+        conn.when("mkdir", stdout="")
+        conn.when("chown", stdout="")
+        conn.when("rm -f", stdout="")
+        conn.when("systemctl stop haproxy", stdout="")
+        conn.when("systemctl stop caddy", stdout="")
+        conn.when("systemctl", stdout="")
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = InstallNginx()
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+
+    def test_acme_cron_install_failure_returns_failed(self, tmp_path: Path):
+        conn = MockConnection()
+        conn.when("dpkg -l nginx", stdout="ii  nginx")
+        conn.when("nginx -V", stdout="--with-stream_ssl_preread_module")
+        conn.when("test -f /root/.acme.sh/acme.sh", stdout="", rc=0)
+        conn.when("crontab -l", stdout="", rc=1)
+        conn.when("acme.sh --install-cronjob", stderr="crontab missing", rc=1)
+        conn.when("mkdir", stdout="")
+        conn.when("chown", stdout="")
+        conn.when("rm -f", stdout="")
+        conn.when("systemctl stop haproxy", stdout="")
+        conn.when("systemctl stop caddy", stdout="")
+        conn.when("systemctl", stdout="")
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = InstallNginx()
+        result = step.run(conn, ctx)
+        assert result.status == "failed"
+        assert "cron job" in result.detail
 
 
 # ---------------------------------------------------------------------------
@@ -805,6 +848,7 @@ class TestIssueTLSCert:
     def test_cert_already_valid(self, tmp_path: Path):
         conn = MockConnection()
         # acme.sh issue (cert already valid)
+        conn.when("acme.sh --info", stdout="", rc=1)
         conn.when("acme.sh --issue", stdout="", rc=2)
         conn.when("acme.sh --install-cert", stdout="")
         conn.when("systemctl", stdout="")
@@ -814,10 +858,17 @@ class TestIssueTLSCert:
         result = step.run(conn, ctx)
         assert result.status == "changed"
         assert "TLS cert issued" in result.detail
+        acme_calls = [c for c in conn.calls if "acme.sh --issue" in c]
+        assert acme_calls
+        assert "shortlived" in acme_calls[0]
+        assert "--days 5" in acme_calls[0]
+        assert "--force" not in acme_calls[0]
+        conn.assert_called_with_pattern("acme.sh --install-cert")
 
     def test_acme_failure_returns_warning(self, tmp_path: Path):
         """ACME failure returns changed with warning, not failed."""
         conn = MockConnection()
+        conn.when("acme.sh --info", stdout="", rc=1)
         conn.when("acme.sh --issue", stdout="", rc=1)
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
@@ -828,6 +879,32 @@ class TestIssueTLSCert:
         assert "self-signed" in result.detail
         # nginx should NOT be reloaded on ACME failure
         conn.assert_not_called_with_pattern("systemctl reload")
+
+    def test_install_cert_failure_returns_failed(self, tmp_path: Path):
+        conn = MockConnection()
+        conn.when("acme.sh --info", stdout="", rc=1)
+        conn.when("acme.sh --issue", stdout="", rc=2)
+        conn.when("acme.sh --install-cert", stderr="copy failed", rc=1)
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = IssueTLSCert(domain="", ip_mode=True, server_ip="198.51.100.1")
+        result = step.run(conn, ctx)
+        assert result.status == "failed"
+        assert "Failed to install TLS cert" in result.detail
+        assert all(c != "systemctl reload nginx" for c in conn.calls)
+
+    def test_reload_failure_returns_failed(self, tmp_path: Path):
+        conn = MockConnection()
+        conn.when("acme.sh --info", stdout="", rc=1)
+        conn.when("acme.sh --issue", stdout="", rc=2)
+        conn.when("acme.sh --install-cert", stdout="")
+        conn.when("systemctl reload nginx", stderr="reload failed", rc=1)
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = IssueTLSCert(domain="", ip_mode=True, server_ip="198.51.100.1")
+        result = step.run(conn, ctx)
+        assert result.status == "failed"
+        assert "Failed to reload nginx" in result.detail
 
     def test_domain_mode_omits_shortlived(self, tmp_path: Path):
         """Domain mode does not use --certificate-profile shortlived."""
@@ -844,6 +921,90 @@ class TestIssueTLSCert:
         acme_calls = [c for c in conn.calls if "acme.sh --issue" in c]
         assert acme_calls
         assert "shortlived" not in acme_calls[0]
+        assert "--days" not in acme_calls[0]
+
+    def test_ip_mode_force_renews_stale_acme_schedule(self, tmp_path: Path):
+        conn = MockConnection()
+        conn.when(
+            "acme.sh --info",
+            stdout="Le_Domain='198.51.100.1'\nLe_RenewalDays='30'\n",
+            rc=0,
+        )
+        conn.when("acme.sh --issue", stdout="", rc=0)
+        conn.when("acme.sh --install-cert", stdout="")
+        conn.when("systemctl", stdout="")
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = IssueTLSCert(domain="", ip_mode=True, server_ip="198.51.100.1")
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+        acme_calls = [c for c in conn.calls if "acme.sh --issue" in c]
+        assert acme_calls
+        assert "shortlived" in acme_calls[0]
+        assert "--days 5" in acme_calls[0]
+        assert "--force" in acme_calls[0]
+
+    def test_ip_mode_force_renews_when_renewal_days_missing(self, tmp_path: Path):
+        stale_next_renew = int(time.time()) + 30 * 24 * 60 * 60
+        conn = MockConnection()
+        conn.when(
+            "acme.sh --info",
+            stdout=f"Le_Domain='198.51.100.1'\nLe_NextRenewTime='{stale_next_renew}'\n",
+            rc=0,
+        )
+        conn.when("acme.sh --issue", stdout="", rc=0)
+        conn.when("acme.sh --install-cert", stdout="")
+        conn.when("systemctl", stdout="")
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = IssueTLSCert(domain="", ip_mode=True, server_ip="198.51.100.1")
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+        acme_calls = [c for c in conn.calls if "acme.sh --issue" in c]
+        assert acme_calls
+        assert "shortlived" in acme_calls[0]
+        assert "--force" in acme_calls[0]
+
+    def test_ip_mode_missing_renewal_days_respects_short_next_renew(self, tmp_path: Path):
+        next_renew = int(time.time()) + 24 * 60 * 60
+        conn = MockConnection()
+        conn.when(
+            "acme.sh --info",
+            stdout=f"Le_Domain='198.51.100.1'\nLe_NextRenewTime='{next_renew}'\n",
+            rc=0,
+        )
+        conn.when("acme.sh --issue", stdout="", rc=2)
+        conn.when("acme.sh --install-cert", stdout="")
+        conn.when("systemctl", stdout="")
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = IssueTLSCert(domain="", ip_mode=True, server_ip="198.51.100.1")
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+        acme_calls = [c for c in conn.calls if "acme.sh --issue" in c]
+        assert acme_calls
+        assert "--force" not in acme_calls[0]
+
+    def test_ip_mode_does_not_force_when_schedule_is_already_correct(self, tmp_path: Path):
+        conn = MockConnection()
+        conn.when(
+            "acme.sh --info",
+            stdout="Le_Domain='198.51.100.1'\nLe_RenewalDays='5'\n",
+            rc=0,
+        )
+        conn.when("acme.sh --issue", stdout="", rc=2)
+        conn.when("acme.sh --install-cert", stdout="")
+        conn.when("systemctl", stdout="")
+
+        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
+        step = IssueTLSCert(domain="", ip_mode=True, server_ip="198.51.100.1")
+        result = step.run(conn, ctx)
+        assert result.status == "changed"
+        acme_calls = [c for c in conn.calls if "acme.sh --issue" in c]
+        assert acme_calls
+        assert "shortlived" in acme_calls[0]
+        assert "--days 5" in acme_calls[0]
+        assert "--force" not in acme_calls[0]
 
 
 # ---------------------------------------------------------------------------

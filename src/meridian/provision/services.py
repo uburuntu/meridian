@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import shlex
 import textwrap
+import time
 from typing import TypeVar
 
 from meridian.config import DEFAULT_FINGERPRINT
@@ -709,6 +710,18 @@ class InstallNginx:
                 )
             changed = True
 
+        cron_check = conn.run("crontab -l 2>/dev/null | grep -q 'acme.sh --cron'", timeout=15)
+        result = conn.run("/root/.acme.sh/acme.sh --install-cronjob", timeout=60)
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
+            return StepResult(
+                name=self.name,
+                status="failed",
+                detail=f"Failed to install acme.sh cron job: {detail[:200]}",
+            )
+        if cron_check.returncode != 0:
+            changed = True
+
         return StepResult(name=self.name, status="changed" if changed else "ok")
 
 
@@ -917,6 +930,41 @@ class ConfigureNginx:
 # ---------------------------------------------------------------------------
 
 
+_SHORTLIVED_IP_CERT_RENEWAL_DAYS = 5
+_SHORTLIVED_IP_CERT_MAX_NEXT_RENEW_SECONDS = 7 * 24 * 60 * 60
+
+
+def _load_acme_domain_info(conn: ServerConnection, cert_host: str) -> str | None:
+    """Return acme.sh domain config output, or None if this host is unknown."""
+    q_cert_host = shlex.quote(cert_host)
+    result = conn.run(
+        f"/root/.acme.sh/acme.sh --info -d {q_cert_host} 2>/dev/null",
+        timeout=30,
+    )
+    if result.returncode != 0 or "Le_Domain=" not in result.stdout:
+        return None
+    return result.stdout
+
+
+def _read_acme_int(domain_info: str, key: str) -> int | None:
+    """Extract an integer value from acme.sh domain config output."""
+    match = re.search(rf"^{re.escape(key)}=['\"]?(\d+)['\"]?$", domain_info, re.MULTILINE)
+    return int(match.group(1)) if match else None
+
+
+def _stale_shortlived_policy(domain_info: str) -> bool:
+    """Return True when stored acme renewal metadata is incompatible with 6-day IP certs."""
+    renewal_days = _read_acme_int(domain_info, "Le_RenewalDays")
+    if renewal_days is not None:
+        return renewal_days != _SHORTLIVED_IP_CERT_RENEWAL_DAYS
+
+    next_renew_time = _read_acme_int(domain_info, "Le_NextRenewTime")
+    if next_renew_time is None:
+        return True
+
+    return next_renew_time > int(time.time()) + _SHORTLIVED_IP_CERT_MAX_NEXT_RENEW_SECONDS
+
+
 class IssueTLSCert:
     """Issue a real TLS certificate via acme.sh and install it.
 
@@ -942,10 +990,26 @@ class IssueTLSCert:
         cert_host = server_ip if self.ip_mode else self.domain
         q_cert_host = shlex.quote(cert_host)
         profile_flag = " --certificate-profile shortlived" if self.ip_mode else ""
+        renew_days_flag = ""
+        force_flag = ""
+
+        if self.ip_mode:
+            renew_days_flag = f" --days {_SHORTLIVED_IP_CERT_RENEWAL_DAYS}"
+            domain_info = _load_acme_domain_info(conn, cert_host)
+            if domain_info:
+                # acme.sh defaults to a 30-day renew window, which is wrong
+                # for LE's 6-day IP certs. Force a one-time migration reissue
+                # when the stored policy is stale. When the policy is already
+                # correct, let acme.sh decide whether to reissue and always
+                # re-run --install-cert so teardown/redeploy can reuse the
+                # existing cached cert without creating a new order.
+                if _stale_shortlived_policy(domain_info):
+                    force_flag = " --force"
 
         result = conn.run(
             f"/root/.acme.sh/acme.sh --issue -d {q_cert_host} "
-            f"--webroot /var/www/acme --server letsencrypt{profile_flag} 2>&1",
+            f"--webroot /var/www/acme --server letsencrypt"
+            f"{profile_flag}{renew_days_flag}{force_flag} 2>&1",
             timeout=180,
         )
         # acme.sh returns 0 on success, 2 if cert already valid (skip renewal)
@@ -953,15 +1017,29 @@ class IssueTLSCert:
 
         if cert_issued:
             # Install cert and set reload command for auto-renewal
-            conn.run(
+            install = conn.run(
                 f"/root/.acme.sh/acme.sh --install-cert -d {q_cert_host} "
                 f"--key-file /etc/ssl/meridian/key.pem "
                 f"--fullchain-file /etc/ssl/meridian/fullchain.pem "
                 f'--reloadcmd "systemctl reload nginx" 2>&1',
                 timeout=60,
             )
+            if install.returncode != 0:
+                detail = install.stderr.strip() or install.stdout.strip() or "unknown error"
+                return StepResult(
+                    name=self.name,
+                    status="failed",
+                    detail=f"Failed to install TLS cert for {cert_host}: {detail[:200]}",
+                )
             # Reload to pick up the real cert
-            conn.run("systemctl reload nginx", timeout=15)
+            reload = conn.run("systemctl reload nginx", timeout=15)
+            if reload.returncode != 0:
+                detail = reload.stderr.strip() or reload.stdout.strip() or "unknown error"
+                return StepResult(
+                    name=self.name,
+                    status="failed",
+                    detail=f"Failed to reload nginx after TLS cert install for {cert_host}: {detail[:200]}",
+                )
 
         if cert_issued:
             return StepResult(
