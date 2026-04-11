@@ -62,14 +62,16 @@ def run_migrate() -> None:
         relays = [(r.ip, r.name) for r in creds.relays if r.ip]
         branding = creds.branding
 
-        server_data.append({
-            "ip": ip,
-            "domain": domain,
-            "sni": sni,
-            "clients": clients,
-            "relays": relays,
-            "branding_name": branding.server_name,
-        })
+        server_data.append(
+            {
+                "ip": ip,
+                "domain": domain,
+                "sni": sni,
+                "clients": clients,
+                "relays": relays,
+                "branding_name": branding.server_name,
+            }
+        )
 
         # Print summary for this server
         err_console.print(f"  [bold cyan]{ip}[/bold cyan]", end="")

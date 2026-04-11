@@ -274,10 +274,7 @@ class DeployRemnawavePanel:
             metrics_password=metrics_password,
         )
         env_path = f"{panel_dir}/.env"
-        write_env = (
-            f"cat > {shlex.quote(env_path)} << 'MERIDIAN_EOF'\n"
-            f"{env_content}MERIDIAN_EOF"
-        )
+        write_env = f"cat > {shlex.quote(env_path)} << 'MERIDIAN_EOF'\n{env_content}MERIDIAN_EOF"
         result = conn.run(write_env, timeout=15)
         if result.returncode != 0:
             return StepResult(
@@ -290,10 +287,7 @@ class DeployRemnawavePanel:
         # -- Write docker-compose.yml --
         compose_content = _render_panel_compose(image=image, panel_port=panel_port)
         compose_path = f"{panel_dir}/docker-compose.yml"
-        write_compose = (
-            f"cat > {shlex.quote(compose_path)} << 'MERIDIAN_EOF'\n"
-            f"{compose_content}MERIDIAN_EOF"
-        )
+        write_compose = f"cat > {shlex.quote(compose_path)} << 'MERIDIAN_EOF'\n{compose_content}MERIDIAN_EOF"
         result = conn.run(write_compose, timeout=15)
         if result.returncode != 0:
             return StepResult(
@@ -311,9 +305,7 @@ class DeployRemnawavePanel:
         pull_ok = False
         pull_result = None
         for attempt in range(3):
-            pull_result = conn.run(
-                f"cd {q_dir} && docker compose pull", timeout=300
-            )
+            pull_result = conn.run(f"cd {q_dir} && docker compose pull", timeout=300)
             if pull_result.returncode == 0:
                 pull_ok = True
                 break
@@ -321,9 +313,7 @@ class DeployRemnawavePanel:
                 time.sleep(10)
 
         if not pull_ok:
-            stderr = (
-                pull_result.stderr.strip()[:200] if pull_result else "unknown"
-            )
+            stderr = pull_result.stderr.strip()[:200] if pull_result else "unknown"
             return StepResult(
                 name=self.name,
                 status="failed",
@@ -333,21 +323,12 @@ class DeployRemnawavePanel:
         # -- Start containers --
         result = conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
         if result.returncode != 0:
-            logs = conn.run(
-                f"cd {q_dir} && docker compose logs --tail 50", timeout=15
-            )
-            log_out = (
-                logs.stdout.strip()[:500]
-                if logs.returncode == 0
-                else "no logs available"
-            )
+            logs = conn.run(f"cd {q_dir} && docker compose logs --tail 50", timeout=15)
+            log_out = logs.stdout.strip()[:500] if logs.returncode == 0 else "no logs available"
             return StepResult(
                 name=self.name,
                 status="failed",
-                detail=(
-                    f"docker compose up failed: {result.stderr.strip()[:200]}\n"
-                    f"Container logs:\n{log_out}"
-                ),
+                detail=(f"docker compose up failed: {result.stderr.strip()[:200]}\nContainer logs:\n{log_out}"),
             )
 
         # -- Wait for panel to become healthy --

@@ -169,7 +169,7 @@ class MeridianPanel:
                 if resp.status_code >= 500:
                     last_error = RemnawaveError(f"Panel server error ({resp.status_code}): {resp.text[:200]}")
                     if attempt < self._max_retries - 1:
-                        time.sleep(2 ** attempt)
+                        time.sleep(2**attempt)
                         continue
                     raise last_error
                 resp.raise_for_status()
@@ -185,7 +185,7 @@ class MeridianPanel:
                     hint_type="system",
                 )
                 if attempt < self._max_retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
                     continue
             except httpx.TimeoutException as e:
                 last_error = RemnawaveError(
@@ -194,7 +194,7 @@ class MeridianPanel:
                     hint_type="system",
                 )
                 if attempt < self._max_retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
                     continue
             except httpx.HTTPStatusError as e:
                 raise RemnawaveError(f"Panel API error: {e.response.status_code} {e.response.text[:200]}") from e

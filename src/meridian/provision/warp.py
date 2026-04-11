@@ -10,8 +10,6 @@ nginx, Xray inbound) are completely unaffected.
 
 from __future__ import annotations
 
-import json
-
 from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
@@ -145,20 +143,3 @@ class ConfigureWarpOutbound:
             status="skipped",
             detail="WARP outbound config via Remnawave API not yet implemented",
         )
-        try:
-            from urllib.parse import quote as urlquote
-
-            form_data = f"xraySetting={urlquote(updated_json, safe='')}"
-            save_data = panel.api_post_form("/panel/xray/update", form_data)
-        except PanelError as e:
-            return StepResult(name=self.name, status="failed", detail=f"Failed to save Xray config: {e}")
-
-        if not save_data.get("success"):
-            return StepResult(name=self.name, status="failed", detail=f"Save failed: {save_data.get('msg', 'unknown')}")
-
-        try:
-            panel.api_post_empty("/panel/api/server/restartXrayService")
-        except PanelError:
-            pass  # Non-fatal — Xray picks up config on next restart
-
-        return StepResult(name=self.name, status="changed", detail="WARP set as default outbound")
