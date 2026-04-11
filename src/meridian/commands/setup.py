@@ -173,6 +173,16 @@ def run(
     else:
         secret_path = cluster.panel.secret_path  # existing cluster
 
+    # Generate or reuse xhttp/ws paths (persist across redeploys)
+    if existing_node and existing_node.xhttp_path:
+        xhttp_path = existing_node.xhttp_path
+    else:
+        xhttp_path = secrets.token_hex(8)
+    if existing_node and existing_node.ws_path:
+        ws_path = existing_node.ws_path
+    else:
+        ws_path = secrets.token_hex(8)
+
     # Build and run provisioner pipeline
     _run_provisioner(
         resolved=resolved,
@@ -188,6 +198,8 @@ def run(
         pq=pq,
         warp=warp,
         geo_block=geo_block,
+        xhttp_path=xhttp_path,
+        ws_path=ws_path,
     )
 
     # Post-provisioner: configure panel via REST API
@@ -205,6 +217,8 @@ def run(
         wss_port=wss_port,
         pq=pq,
         geo_block=geo_block,
+        xhttp_path=xhttp_path,
+        ws_path=ws_path,
     )
 
     # Save branding
@@ -268,6 +282,8 @@ def _run_provisioner(
     pq: bool = False,
     warp: bool = False,
     geo_block: bool = True,
+    xhttp_path: str = "",
+    ws_path: str = "",
 ) -> None:
     """Run the SSH-based provisioner pipeline (OS, Docker, containers)."""
     from meridian.provision import ProvisionContext, Provisioner, build_node_steps, build_setup_steps
@@ -295,11 +311,9 @@ def _run_provisioner(
     # nginx needs these paths for reverse proxy and connection page locations
     ctx["web_base_path"] = secret_path
     ctx["info_page_path"] = cluster.panel.sub_path if cluster.panel.sub_path else secrets.token_hex(8)
-    # Provide xhttp/ws paths (generated fresh for new deploys)
-    if "xhttp_path" not in ctx:
-        ctx["xhttp_path"] = secrets.token_hex(8)
-    if "ws_path" not in ctx:
-        ctx["ws_path"] = secrets.token_hex(8)
+    # Provide xhttp/ws paths — reuse saved paths on redeploy, generate fresh otherwise
+    ctx["xhttp_path"] = xhttp_path or secrets.token_hex(8)
+    ctx["ws_path"] = ws_path or secrets.token_hex(8)
 
     err_console.print()
     info(f"Configuring server at {ctx.ip}...")
@@ -510,6 +524,8 @@ def _configure_panel_and_node(
     *,
     pq: bool = False,
     geo_block: bool = True,
+    xhttp_path: str = "",
+    ws_path: str = "",
 ) -> None:
     """Configure the Remnawave panel via REST API after containers are running.
 
@@ -539,6 +555,8 @@ def _configure_panel_and_node(
             pq=pq,
             geo_block=geo_block,
             version=__version__,
+            xhttp_path=xhttp_path,
+            ws_path=ws_path,
         )
     elif is_redeploy:
         _setup_redeploy(
@@ -558,6 +576,8 @@ def _configure_panel_and_node(
             xhttp_port=xhttp_port,
             wss_port=wss_port,
             version=__version__,
+            xhttp_path=xhttp_path,
+            ws_path=ws_path,
         )
 
 
@@ -575,6 +595,8 @@ def _setup_first_deploy(
     pq: bool,
     geo_block: bool,
     version: str,
+    xhttp_path: str = "",
+    ws_path: str = "",
 ) -> None:
     """First deploy: full panel bootstrap from scratch."""
     base_url = _panel_base_url(resolved.ip, domain, secret_path)
@@ -647,6 +669,8 @@ def _setup_first_deploy(
             domain=domain,
             pq=pq,
             geo_block=geo_block,
+            xhttp_path=xhttp_path,
+            ws_path=ws_path,
         )
 
         try:
@@ -695,6 +719,8 @@ def _setup_first_deploy(
             domain=domain,
             is_panel_host=True,
             deployed_with=version,
+            xhttp_path=xhttp_path,
+            ws_path=ws_path,
         )
         cluster.nodes.append(node_entry)
         cluster.save()
@@ -763,6 +789,9 @@ def _setup_new_node(
     xhttp_port: int,
     wss_port: int,
     version: str,
+    *,
+    xhttp_path: str = "",
+    ws_path: str = "",
 ) -> None:
     """Add a new node to an existing cluster."""
     if not cluster.panel.api_token:
@@ -805,6 +834,8 @@ def _setup_new_node(
                 domain=domain,
                 is_panel_host=False,
                 deployed_with=version,
+                xhttp_path=xhttp_path,
+                ws_path=ws_path,
             )
             cluster.nodes.append(node_entry)
             cluster.save()
@@ -833,6 +864,8 @@ def _build_xray_config(
     *,
     pq: bool,
     geo_block: bool,
+    xhttp_path: str = "",
+    ws_path: str = "",
 ) -> dict:
     """Build the Xray configuration for a Remnawave config profile.
 
@@ -904,6 +937,12 @@ def _build_xray_config(
     config["inbounds"].append(reality_inbound)
 
     # XHTTP inbound (enhanced stealth -- behind nginx reverse proxy)
+    xhttp_stream = {
+        "network": "xhttp",
+        "security": "none",
+    }
+    if xhttp_path:
+        xhttp_stream["xhttpSettings"] = {"path": f"/{xhttp_path}"}
     xhttp_inbound = {
         "tag": "vless-xhttp",
         "protocol": "vless",
@@ -913,15 +952,18 @@ def _build_xray_config(
             "clients": [],
             "decryption": "none",
         },
-        "streamSettings": {
-            "network": "xhttp",
-            "security": "none",
-        },
+        "streamSettings": xhttp_stream,
     }
     config["inbounds"].append(xhttp_inbound)
 
     # WSS inbound (CDN fallback -- domain mode only)
     if domain:
+        ws_stream = {
+            "network": "ws",
+            "security": "none",
+        }
+        if ws_path:
+            ws_stream["wsSettings"] = {"path": f"/{ws_path}"}
         wss_inbound = {
             "tag": "vless-wss",
             "protocol": "vless",
@@ -931,10 +973,7 @@ def _build_xray_config(
                 "clients": [],
                 "decryption": "none",
             },
-            "streamSettings": {
-                "network": "ws",
-                "security": "none",
-            },
+            "streamSettings": ws_stream,
         }
         config["inbounds"].append(wss_inbound)
 
@@ -1557,9 +1596,14 @@ def _print_success(
 
     # Build subscription URL if panel is configured
     sub_url = ""
-    if cluster.panel.url and cluster.panel.sub_path:
-        host = domain or server_ip
-        sub_url = f"https://{host}/{cluster.panel.sub_path}/"
+    if cluster.panel.url and cluster.panel.api_token:
+        try:
+            with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
+                user = panel.get_user(client_label)
+                if user and user.short_uuid:
+                    sub_url = panel.get_subscription_url(user.short_uuid)
+        except RemnawaveError:
+            pass
 
     err_console.print("\n  [ok][bold]Done![/bold][/ok]\n")
     ok("Your proxy server is live and ready to use.")

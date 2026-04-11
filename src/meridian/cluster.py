@@ -8,6 +8,8 @@ deployment topology and panel access.
 from __future__ import annotations
 
 import os
+import shutil
+import sys
 import tempfile
 from dataclasses import asdict, dataclass, field
 from enum import Enum
@@ -68,6 +70,8 @@ class NodeEntry:
     domain: str = ""  # optional domain for WSS/XHTTP
     is_panel_host: bool = False  # panel runs on this node too
     deployed_with: str = ""  # Meridian CLI version
+    xhttp_path: str = ""  # persisted XHTTP path (reused across redeploys)
+    ws_path: str = ""  # persisted WebSocket path (reused across redeploys)
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -137,9 +141,20 @@ class ClusterConfig:
         raw = path.read_text()
         if not raw.strip():
             return cls()
-        data = yaml.safe_load(raw)
+        try:
+            data = yaml.safe_load(raw)
+        except yaml.YAMLError as e:
+            print(f"Warning: cluster.yml is corrupted and could not be parsed: {e}", file=sys.stderr)
+            return cls()
         if not isinstance(data, dict):
             return cls()
+        version = data.get("version", 1)
+        if isinstance(version, int) and version > 1:
+            print(
+                f"Warning: cluster.yml has version {version}, but this CLI only understands version 1. "
+                "Some fields may be ignored. Consider upgrading Meridian.",
+                file=sys.stderr,
+            )
         return _load_cluster(data)
 
     def save(self, path: Path | None = None) -> None:
@@ -174,6 +189,27 @@ class ClusterConfig:
 
     # --- Convenience ---
 
+    def validate(self) -> list[str]:
+        """Validate cluster config consistency. Returns list of error strings (empty = valid)."""
+        errors: list[str] = []
+        if self.is_configured:
+            if not self.panel.url:
+                errors.append("panel.url is empty but cluster is marked as configured")
+            if not self.panel.api_token:
+                errors.append("panel.api_token is empty but cluster is marked as configured")
+        return errors
+
+    def backup(self, path: Path | None = None) -> None:
+        """Copy cluster.yml to cluster.yml.bak before mutations."""
+        if path is None:
+            from meridian.config import CLUSTER_CONFIG
+
+            path = CLUSTER_CONFIG
+        if path.exists():
+            from meridian.config import CLUSTER_BACKUP
+
+            shutil.copy2(str(path), str(CLUSTER_BACKUP))
+
     @property
     def is_configured(self) -> bool:
         """Whether the cluster has a panel configured."""
@@ -193,6 +229,14 @@ class ClusterConfig:
             if node.ip == query or node.name == query:
                 return node
         return None
+
+    def remove_node(self, ip_or_name: str) -> bool:
+        """Remove a node by IP or name. Returns True if found and removed."""
+        for i, node in enumerate(self.nodes):
+            if node.ip == ip_or_name or node.name == ip_or_name:
+                self.nodes.pop(i)
+                return True
+        return False
 
     def find_relay(self, query: str) -> RelayEntry | None:
         """Find a relay by IP or name."""
@@ -221,7 +265,10 @@ _PANEL_FIELDS = {
     "url", "api_token", "admin_user", "admin_pass", "server_ip",
     "ssh_user", "ssh_port", "secret_path", "sub_path", "deployed_with",
 }
-_NODE_FIELDS = {"ip", "uuid", "name", "ssh_user", "ssh_port", "sni", "domain", "is_panel_host", "deployed_with"}
+_NODE_FIELDS = {
+    "ip", "uuid", "name", "ssh_user", "ssh_port", "sni", "domain",
+    "is_panel_host", "deployed_with", "xhttp_path", "ws_path",
+}
 _RELAY_FIELDS = {"ip", "name", "port", "exit_node_ip", "host_uuids", "sni", "ssh_user", "ssh_port"}
 _BRANDING_FIELDS = {"server_name", "icon", "color"}
 _INBOUND_REF_FIELDS = {"uuid", "tag"}
@@ -287,6 +334,10 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
                 d.pop("ssh_port", None)
             if not d.get("is_panel_host"):
                 d.pop("is_panel_host", None)
+            if not d.get("xhttp_path"):
+                d.pop("xhttp_path", None)
+            if not d.get("ws_path"):
+                d.pop("ws_path", None)
             nodes_out.append(d)
         out["nodes"] = nodes_out
 
