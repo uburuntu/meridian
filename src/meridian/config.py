@@ -6,15 +6,27 @@ import os
 from pathlib import Path
 
 MERIDIAN_HOME = Path(os.environ.get("MERIDIAN_HOME", Path.home() / ".meridian"))
-CREDS_BASE = MERIDIAN_HOME / "credentials"
+CLUSTER_CONFIG = MERIDIAN_HOME / "cluster.yml"
+CREDS_BASE = MERIDIAN_HOME / "credentials"  # legacy (3.x migration only)
 CACHE_DIR = MERIDIAN_HOME / "cache"
-SERVERS_FILE = MERIDIAN_HOME / "servers"
+SERVERS_FILE = MERIDIAN_HOME / "servers"  # legacy (3.x migration only)
 SERVER_CREDS_DIR = Path("/etc/meridian")
+SERVER_NODE_CONFIG = SERVER_CREDS_DIR / "node.yml"  # server-side identity
 
 DEFAULT_SNI = "www.microsoft.com"
 DEFAULT_FINGERPRINT = "chrome"
-DEFAULT_PANEL_PORT = 2053
 ACME_SERVER = os.environ.get("MERIDIAN_ACME_SERVER", "letsencrypt").strip() or "letsencrypt"
+
+# Remnawave panel + node
+REMNAWAVE_BACKEND_IMAGE = "remnawave/backend:latest"
+REMNAWAVE_NODE_IMAGE = "remnawave/node:latest"
+REMNAWAVE_PANEL_PORT = 3000  # internal port, nginx reverse-proxied
+REMNAWAVE_NODE_API_PORT = 3001  # node API port (panel→node communication)
+REMNAWAVE_PANEL_DIR = "/opt/remnawave"
+REMNAWAVE_NODE_DIR = "/opt/remnanode"
+
+# Legacy 3x-ui (kept for migration)
+DEFAULT_PANEL_PORT = 2053
 CONNECT_TEST_URL = os.environ.get("MERIDIAN_CONNECT_TEST_URL", "https://ifconfig.me").strip() or "https://ifconfig.me"
 DISABLE_UPDATE_CHECK = os.environ.get("MERIDIAN_DISABLE_UPDATE_CHECK", "").strip().lower() in {
     "1",

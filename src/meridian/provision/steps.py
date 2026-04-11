@@ -10,12 +10,12 @@ from typing import Protocol as TypingProtocol
 from rich.console import Console
 from rich.status import Status
 
-from meridian.config import DEFAULT_PANEL_PORT, DEFAULT_SNI
-from meridian.ssh import ServerConnection
+from meridian.config import DEFAULT_SNI
 
 if TYPE_CHECKING:
-    from meridian.credentials import ServerCredentials
-    from meridian.panel import PanelClient
+    from meridian.cluster import ClusterConfig
+    from meridian.remnawave import MeridianPanel
+    from meridian.ssh import ServerConnection
 
 StepStatus = Literal["ok", "changed", "skipped", "failed"]
 
@@ -34,9 +34,9 @@ class StepResult:
 class ProvisionContext:
     """Carries state through the provisioning pipeline.
 
-    Typed fields for well-known configuration. Dynamic dict-like access
-    for inter-step communication (e.g., ctx["panel"] for a logged-in PanelClient,
-    ctx["credentials"] for ServerCredentials populated by ConfigurePanel).
+    Typed fields for well-known configuration AND typed accessors for
+    inter-step communication. The _state dict is kept for edge cases
+    but typed properties are the preferred interface.
     """
 
     ip: str
@@ -50,19 +50,23 @@ class ProvisionContext:
     hosted_page: bool = False  # serve connection pages via HTTPS on server
     harden: bool = True  # enable SSH hardening + firewall (skip for shared servers)
     creds_dir: str = ""  # local credentials directory path
+    is_panel_host: bool = True  # deploy Remnawave panel on this server
 
     results: list[StepResult] = field(default_factory=list)
 
-    # Mutable state populated by steps:
-    panel_port: int = DEFAULT_PANEL_PORT  # internal panel port
+    # Port layout — Xray ports configured in Remnawave config profile
     xhttp_port: int = 0  # computed from seed
     reality_port: int = 443  # 443 standalone, ~10443 domain mode
     wss_port: int = 0  # computed from seed (domain mode only)
 
-    # 3x-ui image version (pinned to tested release, digest for supply chain integrity)
-    threexui_version: str = "2.8.11@sha256:34c46ea6d838df981c4760bd1fe442413c2b99bbe4bb49dfa3d1bfb8a8a92496"
+    @property
+    def panel_port(self) -> int:
+        """Panel internal port (Remnawave: 3000, legacy 3x-ui: 2053)."""
+        from meridian.config import REMNAWAVE_PANEL_PORT
 
-    # Dynamic inter-step state (PanelClient, credentials, UUIDs, etc.)
+        return REMNAWAVE_PANEL_PORT
+
+    # Dynamic inter-step state
     _state: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
@@ -86,25 +90,43 @@ class ProvisionContext:
     def get(self, key: str, default: Any = None) -> Any:
         return self._state.get(key, default)
 
-    # --- Typed accessors for key inter-step state ---
-    # These document the implicit schema and catch typos at development time.
+    # --- Typed accessors for inter-step state ---
 
     @property
-    def panel(self) -> PanelClient | None:
-        """Logged-in PanelClient, set by LoginToPanel."""
+    def panel_api(self) -> MeridianPanel | None:
+        """Authenticated MeridianPanel client, set after panel setup."""
+        return self._state.get("panel_api")
+
+    @panel_api.setter
+    def panel_api(self, value: MeridianPanel) -> None:
+        self._state["panel_api"] = value
+
+    @property
+    def cluster(self) -> ClusterConfig | None:
+        """ClusterConfig being built during deployment."""
+        return self._state.get("cluster")
+
+    @cluster.setter
+    def cluster(self, value: ClusterConfig) -> None:
+        self._state["cluster"] = value
+
+    # Legacy typed accessors (kept for backward compat during migration)
+    @property
+    def panel(self) -> Any:
+        """Legacy: PanelClient for 3x-ui. Use panel_api for Remnawave."""
         return self._state.get("panel")
 
     @panel.setter
-    def panel(self, value: PanelClient) -> None:
+    def panel(self, value: Any) -> None:
         self._state["panel"] = value
 
     @property
-    def credentials(self) -> ServerCredentials | None:
-        """ServerCredentials, set by ConfigurePanel."""
+    def credentials(self) -> Any:
+        """Legacy: ServerCredentials. Use cluster for 4.0."""
         return self._state.get("credentials")
 
     @credentials.setter
-    def credentials(self, value: ServerCredentials) -> None:
+    def credentials(self, value: Any) -> None:
         self._state["credentials"] = value
 
 
