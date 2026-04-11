@@ -7,6 +7,7 @@ from pathlib import Path
 
 MERIDIAN_HOME = Path(os.environ.get("MERIDIAN_HOME", Path.home() / ".meridian"))
 CLUSTER_CONFIG = MERIDIAN_HOME / "cluster.yml"
+CLUSTER_BACKUP = MERIDIAN_HOME / "cluster.yml.bak"
 CREDS_BASE = MERIDIAN_HOME / "credentials"  # legacy (3.x migration only)
 CACHE_DIR = MERIDIAN_HOME / "cache"
 SERVERS_FILE = MERIDIAN_HOME / "servers"  # legacy (3.x migration only)

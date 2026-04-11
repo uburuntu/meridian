@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shlex
 
+from meridian.cluster import ClusterConfig
 from meridian.commands.resolve import (
     ensure_server_connection,
     fetch_credentials,
@@ -11,7 +12,6 @@ from meridian.commands.resolve import (
 )
 from meridian.config import SERVERS_FILE
 from meridian.console import err_console, info, line, ok, prompt, warn
-from meridian.credentials import ServerCredentials
 from meridian.servers import ServerRegistry
 from meridian.ssh import ServerConnection
 
@@ -189,12 +189,14 @@ def run(
         if 1 <= idx <= len(domains):
             selected = domains[idx - 1]
 
-            # Save to credentials
-            resolved.creds_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-            proxy_file = resolved.creds_dir / "proxy.yml"
-            creds = ServerCredentials.load(proxy_file)
-            creds.server.scanned_sni = selected
-            creds.save(proxy_file)
+            # Save to cluster config
+            cluster = ClusterConfig.load()
+            node = cluster.find_node(resolved.ip)
+            if node:
+                node.sni = selected
+                cluster.save()
+            else:
+                warn(f"Node {resolved.ip} not found in cluster.yml — SNI not saved")
 
             err_console.print()
             ok(f"Saved: {selected}")

@@ -106,6 +106,23 @@ def run(
     if creds_dir.exists():
         shutil.rmtree(creds_dir)
 
+    # Clean up cluster.yml
+    from meridian.cluster import ClusterConfig
+    from meridian.config import CLUSTER_CONFIG
+
+    cluster = ClusterConfig.load()
+    if cluster.is_configured:
+        node = cluster.find_node(resolved.ip)
+        if node and node.is_panel_host:
+            # Panel host torn down — entire cluster config is invalid
+            CLUSTER_CONFIG.unlink(missing_ok=True)
+            info("Removed cluster.yml (panel host was torn down)")
+        elif node:
+            # Non-panel node — remove just that entry
+            cluster.remove_node(resolved.ip)
+            cluster.save()
+            info(f"Removed node {resolved.ip} from cluster.yml")
+
     err_console.print()
     ok("Uninstall complete.")
     err_console.print()
