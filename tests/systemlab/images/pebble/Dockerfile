@@ -1,1 +1,0 @@
-FROM letsencrypt/pebble:latest

@@ -89,6 +89,12 @@ else
   fail_test "nginx config invalid"
 fi
 
+if ssh root@"$EXIT_IP" ss -tlnp sport = :443 2>/dev/null | grep -q nginx; then
+  echo "    nginx listening on :443"; pass
+else
+  fail_test "nginx not listening on port 443"
+fi
+
 # ── Add client ─────────────────────────────────────────────
 echo ""
 echo ">>> Adding client alice..."
