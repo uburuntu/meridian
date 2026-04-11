@@ -9,9 +9,8 @@ from __future__ import annotations
 import re
 
 from meridian.cluster import ClusterConfig
-from meridian.console import confirm, err_console, fail, info, ok, warn
+from meridian.console import confirm, err_console, fail, info, ok
 from meridian.remnawave import MeridianPanel, RemnawaveError, User
-
 
 # -- Helpers --
 
@@ -83,7 +82,7 @@ def _print_subscription(panel: MeridianPanel, user: User) -> None:
     sub_url = panel.get_subscription_url(user.short_uuid)
 
     err_console.print()
-    err_console.print(f"  [bold]Subscription URL[/bold]")
+    err_console.print("  [bold]Subscription URL[/bold]")
     err_console.print(f"  {sub_url}")
 
     qr = generate_qr_terminal(sub_url)
@@ -164,7 +163,8 @@ def run_show(
         # Print traffic stats
         err_console.print()
         err_console.print(f"  [bold]Status[/bold]    {_format_status(client.status)}")
-        err_console.print(f"  [bold]Traffic[/bold]   {_format_traffic(client.used_traffic_bytes, client.traffic_limit_bytes)}")
+        traffic = _format_traffic(client.used_traffic_bytes, client.traffic_limit_bytes)
+        err_console.print(f"  [bold]Traffic[/bold]   {traffic}")
         if client.online_at:
             err_console.print(f"  [bold]Last seen[/bold] {client.online_at}")
 

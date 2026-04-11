@@ -356,6 +356,14 @@ def update_cmd() -> None:
     run_self_update()
 
 
+@app.command("migrate")
+def migrate_cmd() -> None:
+    """Migrate from Meridian 3.x to 4.0 (3x-ui -> Remnawave)."""
+    from meridian.commands.migrate import run_migrate
+
+    run_migrate()
+
+
 # =============================================================================
 # Relay
 # =============================================================================

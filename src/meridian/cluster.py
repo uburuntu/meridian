@@ -220,7 +220,10 @@ _NODE_FIELDS = {"ip", "uuid", "name", "ssh_user", "ssh_port", "sni", "domain", "
 _RELAY_FIELDS = {"ip", "name", "port", "exit_node_ip", "host_uuids", "sni", "ssh_user", "ssh_port"}
 _BRANDING_FIELDS = {"server_name", "icon", "color"}
 _INBOUND_REF_FIELDS = {"uuid", "tag"}
-_KNOWN_TOP = {"version", "panel", "config_profile_uuid", "config_profile_name", "nodes", "relays", "branding", "inbounds"}
+_KNOWN_TOP = {
+    "version", "panel", "config_profile_uuid", "config_profile_name",
+    "nodes", "relays", "branding", "inbounds",
+}
 
 
 def _strip_none(d: dict[str, Any]) -> dict[str, Any]:
