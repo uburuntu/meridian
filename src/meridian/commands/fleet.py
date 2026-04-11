@@ -9,9 +9,8 @@ from __future__ import annotations
 import socket
 
 from meridian.cluster import ClusterConfig
-from meridian.console import err_console, fail, info, ok, warn
+from meridian.console import err_console, fail, warn
 from meridian.remnawave import MeridianPanel, RemnawaveError
-
 
 # -- Helpers --
 

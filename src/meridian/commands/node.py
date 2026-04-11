@@ -7,12 +7,9 @@ reference and SSH access.
 
 from __future__ import annotations
 
-import socket
-
 from meridian.cluster import ClusterConfig, NodeEntry
 from meridian.console import confirm, err_console, fail, info, ok, warn
 from meridian.remnawave import MeridianPanel, RemnawaveError
-
 
 # -- Helpers --
 
@@ -207,7 +204,9 @@ def run_list() -> None:
 
     err_console.print()
     err_console.print(table)
-    err_console.print(f"\n  [dim]Total: {len(cluster.nodes)} node(s) in cluster, {len(api_nodes)} registered in panel[/dim]")
+    n_cluster = len(cluster.nodes)
+    n_panel = len(api_nodes)
+    err_console.print(f"\n  [dim]Total: {n_cluster} node(s) in cluster, {n_panel} registered in panel[/dim]")
     err_console.print()
 
 

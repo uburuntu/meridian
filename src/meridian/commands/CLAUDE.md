@@ -4,36 +4,20 @@
 
 **One file per command** — keeps concerns isolated. Each is a Typer sub-app registered in `cli.py`.
 
-**Server resolution cascade** in `resolve.py` — strict priority order ensures predictable behavior:
+**Cluster-first pattern** — commands load `ClusterConfig` from `cluster.yml`, create `MeridianPanel` client, call REST API. No SSH needed for client/fleet operations.
+
+**Server resolution cascade** in `resolve.py` — strict priority order for server-touching commands (deploy, node add):
 1. Explicit IP → 2. `--server` name → 3. `local` keyword → 4. Single-server auto-select → 5. Multi-server prompt → 6. Fail with hint
 
-**Three-step pattern**: resolve → ensure connection → fetch credentials. Every server-touching command follows this. Deviating causes subtle bugs.
-
-**Version mismatch check** — `fetch_credentials()` compares `deployed_with` against running CLI. Warns once per server per session. Non-blocking.
-
-**CLI UX vision** — every command output is a guided experience, not a status dump:
-- **Educate** — explain *why*, not just what. A user who runs `deploy` should understand Reality camouflage without reading docs. Help text teaches; it doesn't just label flags.
-- **Unbreak paths** — every error and broken state must suggest the recovery protocol. Deployment failed? → `meridian preflight`. Server unreachable? → `meridian test`. Weird state? → `meridian teardown` + `meridian deploy`.
-- **Upsell the next step** — after `deploy`, suggest `test` and `client add`. After `client add`, suggest `client list` and `test`. Every command's output should make the user aware of what's possible next. The CLI is a guided tour, not a dead end.
-- **Cohesive flag language** — same flag means the same thing everywhere. No `--name` meaning three different things on three commands.
-
-**Wizard UX conventions** — the deploy wizard uses `console.py` helpers exclusively:
-- **`choose()`** for any decision with 2+ options. Never raw Y/n prompts. Shows numbered list, user picks a number. Default is always 1.
-- **`prompt()`** for free-text input (IP address, domain, server name). Show defaults in brackets.
-- **`confirm()`** only for the final deploy confirmation. One per command, at the end.
-- **Section pattern**: bold header → dim description → blank line → `choose()`/`prompt()`.
-- **`rich.status.Status`** spinner for any operation >5 seconds (scan, download). Same style as provisioner steps.
-- **Summary Panel** before deploy: show all chosen settings so user can review before confirming.
+**Command groups**: `client` (add/show/list/remove), `node` (add/list/remove), `relay` (deploy/list/remove/check), `fleet` (status/recover). Top-level: `deploy`, `migrate`, `test`, `probe`, `doctor`, `teardown`.
 
 ## What's done well
 
-- **`local` keyword everywhere** — `deploy local`, `check local`, `--server local` all work. Case-insensitive. Same code path.
+- **`client add` is one API call** — `panel.create_user(name)`. No multi-step credential sync.
+- **`fleet recover`** — reconstruct cluster.yml from panel API when local state is lost.
 
 ## Pitfalls
 
-- **Local mode has two entry points** — `local` keyword and root auto-detect. They converge on `local_mode=True` but differ on `creds_dir`.
-- **Registry mixes exits and relays** — relay nodes are stored in `~/.meridian/servers` too. New relay entries carry an explicit role tag; legacy ones still need inference from local relay metadata or cached exit creds. Never let implicit auto-select depend only on whichever exit happens to have a local `proxy.yml`.
-- **Write commands must fail closed on refresh/sync** — if a command mutates credentials, a stale local cache cannot be trusted and a failed post-save sync must abort before success output or handoff artifact generation.
-- **`deploy` refresh is asymmetric** — first deploy may legitimately have nothing to fetch, but redeploy must abort if forced refresh fails and Meridian state already exists either locally or on the server. Never treat “no local cache” as proof of a fresh machine.
-- **`console.fail()` always exits** — raises `typer.Exit(1)`. Only call from command entry points, never library code.
-- **`dev` subcommand is hidden** — not shown in `--help`. Intentional — developer tools only.
+- **`console.fail()` always exits** — raises `typer.Exit(1)`. Only call from command entry points.
+- **`confirm()` raises on rejection** — returns True or raises `typer.Exit(1)`. Never returns False.
+- **Panel node cannot be removed** — `node remove` blocks removal of the panel host server.
