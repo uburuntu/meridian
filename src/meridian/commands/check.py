@@ -114,7 +114,7 @@ def run(
 
         match = re.search(r'users:\(\("([^"]*)"', port_check)
         port_user = match.group(1) if match else "unknown"
-        allowed = {"nginx", "3x-ui", "xray"}
+        allowed = {"nginx", "xray", "remnawave", "remnawave-node", "docker-proxy", "3x-ui"}
         if port_user in allowed:
             ok(f"Port 443 is in use by {port_user} (Meridian -- OK)")
             results["port443"] = f"in use by {port_user} (OK)"
