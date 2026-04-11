@@ -64,11 +64,14 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     # -- Docker --
     steps.append(InstallDocker())
 
-    # -- Remnawave --
+    # -- Remnawave panel (node deployed after API setup, not here) --
     if ctx.is_panel_host:
         steps.append(DeployRemnawavePanel())
 
-    steps.append(DeployRemnawaveNode())
+    # Note: DeployRemnawaveNode is NOT included here because it requires
+    # the node_secret_key from the panel API. The node is deployed in the
+    # post-provisioner phase (setup.py _configure_panel_and_node) after
+    # the panel is up and the node has been registered via REST API.
 
     # -- WARP outbound (optional) --
     if ctx.warp:
@@ -98,11 +101,10 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
             )
             steps.append(IssueTLSCert(domain="", ip_mode=True, server_ip=ctx.ip))
 
-        # PWA assets and connection pages
-        from meridian.provision.services import DeployConnectionPage, DeployPWAAssets
+        # PWA assets (connection pages deployed via post-provisioner API setup)
+        from meridian.provision.services import DeployPWAAssets
 
         steps.append(DeployPWAAssets())
-        steps.append(DeployConnectionPage(server_ip=ctx.ip))
 
     return steps
 
@@ -145,7 +147,7 @@ def build_node_steps(ctx: ProvisionContext) -> list[Step]:
 
     steps.extend([
         InstallDocker(),
-        DeployRemnawaveNode(),
+        # Node deployed after API setup (setup.py), not in pipeline
     ])
 
     if ctx.needs_web_server:

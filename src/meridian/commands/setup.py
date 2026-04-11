@@ -291,6 +291,14 @@ def _run_provisioner(
     # Store cluster and secret path in context for provisioner steps
     ctx.cluster = cluster
     ctx["secret_path"] = secret_path
+    # nginx needs these paths for reverse proxy and connection page locations
+    ctx["web_base_path"] = secret_path
+    ctx["info_page_path"] = cluster.panel.sub_path if cluster.panel.sub_path else secrets.token_hex(8)
+    # Provide xhttp/ws paths (generated fresh for new deploys)
+    if "xhttp_path" not in ctx:
+        ctx["xhttp_path"] = secrets.token_hex(8)
+    if "ws_path" not in ctx:
+        ctx["ws_path"] = secrets.token_hex(8)
 
     err_console.print()
     info(f"Configuring server at {ctx.ip}...")
@@ -349,6 +357,42 @@ def _panel_base_url(ip: str, domain: str, secret_path: str) -> str:
     return f"https://{host}/{secret_path}"
 
 
+def _create_api_token(base_url: str, auth_token: str) -> str:
+    """Create a long-lived API token using the admin auth token.
+
+    Remnawave's auth tokens (from login/register) are short-lived browser
+    session tokens. API endpoints require a separate API token created via
+    POST /api/tokens with the 'remnawave-client-type: browser' header.
+    The API token is effectively permanent (~274 years).
+    """
+    import httpx
+
+    resp = httpx.post(
+        f"{base_url.rstrip('/')}/api/tokens",
+        json={"tokenName": "meridian-provisioner"},
+        headers={
+            "Authorization": f"Bearer {auth_token}",
+            "Content-Type": "application/json",
+            "X-Remnawave-Client-Type": "browser",
+        },
+        timeout=30,
+        verify=False,
+    )
+    if resp.status_code not in (200, 201):
+        fail(
+            f"Could not create API token ({resp.status_code}): {resp.text[:200]}",
+            hint="The panel may need a fresh start",
+            hint_type="system",
+        )
+    data = resp.json()
+    if isinstance(data, dict) and "response" in data:
+        data = data["response"]
+    token = data.get("token", "")
+    if not token:
+        fail("API token creation succeeded but no token returned", hint_type="bug")
+    return token
+
+
 def _wait_for_panel_api(base_url: str, retries: int = 20, delay: float = 3.0) -> bool:
     """Wait for the panel REST API to become reachable from the deployer."""
     import httpx
@@ -356,10 +400,11 @@ def _wait_for_panel_api(base_url: str, retries: int = 20, delay: float = 3.0) ->
     for attempt in range(retries):
         try:
             resp = httpx.get(
-                f"{base_url}/api/health",
+                f"{base_url}/api/auth/login",
                 timeout=10,
                 verify=False,  # Self-signed cert during bootstrap
             )
+            # Any response (even 405 Method Not Allowed) means the API is up
             if resp.status_code < 500:
                 return True
         except (httpx.ConnectError, httpx.TimeoutException):
@@ -467,14 +512,15 @@ def _setup_first_deploy(
 
     # Register admin user
     admin_user = f"meridian-{secrets.token_hex(4)}"
-    admin_pass = secrets.token_hex(16)
+    # Remnawave requires: ≥24 chars, uppercase + lowercase + numbers
+    admin_pass = f"Mx{secrets.token_hex(16)}9A"
 
     try:
-        api_token = MeridianPanel.register_admin(base_url, admin_user, admin_pass)
+        auth_token = MeridianPanel.register_admin(base_url, admin_user, admin_pass)
     except RemnawaveError as e:
         # Admin may already exist on re-run after partial failure
         try:
-            api_token = MeridianPanel.login(base_url, admin_user, admin_pass)
+            auth_token = MeridianPanel.login(base_url, admin_user, admin_pass)
         except RemnawaveError:
             fail(
                 f"Could not register or login to panel: {e}",
@@ -483,11 +529,14 @@ def _setup_first_deploy(
             )
     ok("Panel admin registered")
 
-    # Save panel config to cluster BEFORE further API calls (lockout prevention)
+    # Save admin credentials BEFORE API token step (lockout prevention:
+    # if API token creation fails, we can still login with these creds)
     sub_path = secrets.token_hex(8)
     cluster.panel = PanelConfig(
         url=base_url,
-        api_token=api_token,
+        api_token="",  # filled after API token creation
+        admin_user=admin_user,
+        admin_pass=admin_pass,
         server_ip=resolved.ip,
         ssh_user=resolved.user,
         ssh_port=getattr(resolved.conn, "port", 22),
@@ -495,6 +544,14 @@ def _setup_first_deploy(
         sub_path=sub_path,
         deployed_with=version,
     )
+    cluster.save()
+
+    # Create a long-lived API token (auth token is browser-session only)
+    api_token = _create_api_token(base_url, auth_token)
+    ok("API token created")
+
+    # Update cluster with the API token
+    cluster.panel.api_token = api_token
     cluster.save()
 
     with MeridianPanel(base_url, api_token) as panel:
@@ -539,7 +596,7 @@ def _setup_first_deploy(
         # Store node_secret_key so the DeployRemnawaveNode step can use it
         # (in the current flow, the node container is already started by the
         # provisioner -- this writes the secret to the node's .env and restarts)
-        _update_node_secret_key(resolved.conn, node_creds.secret_key)
+        _deploy_node_container(resolved.conn, node_creds.secret_key)
 
         # Save node entry to cluster
         node_entry = NodeEntry(
@@ -648,8 +705,8 @@ def _setup_new_node(
             )
             ok(f"Node registered: {node_name}")
 
-            # Write secret key to the node container
-            _update_node_secret_key(resolved.conn, node_creds.secret_key)
+            # Deploy the node container with the secret key
+            _deploy_node_container(resolved.conn, node_creds.secret_key)
 
             # Save node entry
             node_entry = NodeEntry(
@@ -868,33 +925,60 @@ def _create_hosts_for_node(
                 warn(f"Could not create WSS host: {e}")
 
 
-def _update_node_secret_key(conn: ServerConnection, secret_key: str) -> None:
-    """Write the node SECRET_KEY to the node's .env and restart the container."""
-    from meridian.config import REMNAWAVE_NODE_DIR
+def _deploy_node_container(conn: ServerConnection, secret_key: str) -> None:
+    """Deploy the Remnawave node container with the given secret key.
+
+    Creates /opt/remnanode, writes docker-compose.yml and .env, pulls the
+    image, and starts the container. Called from the post-provisioner phase
+    after the panel API has registered the node and returned the mTLS secret.
+    """
+    from meridian.config import REMNAWAVE_NODE_API_PORT, REMNAWAVE_NODE_DIR, REMNAWAVE_NODE_IMAGE
+    from meridian.provision.remnawave_node import _render_node_compose, _render_node_env
 
     node_dir = REMNAWAVE_NODE_DIR
-    env_path = f"{node_dir}/.env"
-    q_env = shlex.quote(env_path)
-    q_key = shlex.quote(secret_key)
+    q_dir = shlex.quote(node_dir)
 
-    # Update SECRET_KEY in .env (sed in-place or append)
-    result = conn.run(
-        f"grep -q '^SECRET_KEY=' {q_env} 2>/dev/null && "
-        f"sed -i 's|^SECRET_KEY=.*|SECRET_KEY={q_key}|' {q_env} || "
-        f"echo 'SECRET_KEY={q_key}' >> {q_env}",
-        timeout=15,
-    )
+    # Create directory
+    result = conn.run(f"mkdir -p {node_dir} && chmod 700 {node_dir}", timeout=15)
     if result.returncode != 0:
-        warn(f"Could not update node SECRET_KEY: {result.stderr.strip()[:200]}")
+        warn(f"Could not create {node_dir}: {result.stderr.strip()[:200]}")
         return
 
-    # Restart node container to pick up new secret
-    q_dir = shlex.quote(node_dir)
-    result = conn.run(f"cd {q_dir} && docker compose restart", timeout=60)
+    # Write .env
+    env_content = _render_node_env(REMNAWAVE_NODE_API_PORT, secret_key)
+    env_path = f"{node_dir}/.env"
+    write_env = f"cat > {shlex.quote(env_path)} << 'MERIDIAN_EOF'\n{env_content}MERIDIAN_EOF"
+    conn.run(write_env, timeout=15)
+    conn.run(f"chmod 600 {shlex.quote(env_path)}", timeout=15)
+
+    # Write docker-compose.yml
+    compose_content = _render_node_compose(REMNAWAVE_NODE_IMAGE, REMNAWAVE_NODE_API_PORT)
+    compose_path = f"{node_dir}/docker-compose.yml"
+    write_compose = f"cat > {shlex.quote(compose_path)} << 'MERIDIAN_EOF'\n{compose_content}MERIDIAN_EOF"
+    conn.run(write_compose, timeout=15)
+
+    # Pull image
+    info("Pulling Remnawave node image...")
+    pull_ok = False
+    for attempt in range(3):
+        result = conn.run(f"cd {q_dir} && docker compose pull", timeout=300)
+        if result.returncode == 0:
+            pull_ok = True
+            break
+        if attempt < 2:
+            time.sleep(10)
+
+    if not pull_ok:
+        warn("Could not pull node image — node may not start")
+        return
+
+    # Start container
+    result = conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
     if result.returncode != 0:
-        warn(f"Could not restart node container: {result.stderr.strip()[:200]}")
-    else:
-        ok("Node container restarted with credentials")
+        warn(f"Node container failed to start: {result.stderr.strip()[:200]}")
+        return
+
+    ok("Remnawave node deployed")
 
 
 # ---------------------------------------------------------------------------

@@ -250,23 +250,23 @@ class TestWarpPipelineIntegration:
         assert "Configure WARP outbound" in step_names
 
     def test_warp_steps_before_verify(self):
-        """WARP steps must come after Remnawave node deployment."""
+        """WARP steps must come after Docker."""
         from meridian.provision import build_setup_steps
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp/test", warp=True)
         steps = build_setup_steps(ctx)
         step_names = [s.name for s in steps]
         warp_idx = step_names.index("Install Cloudflare WARP")
-        node_idx = step_names.index("Deploy Remnawave node")
-        assert warp_idx > node_idx
+        docker_idx = step_names.index("Install Docker")
+        assert warp_idx > docker_idx
 
     def test_warp_steps_after_node_deploy(self):
-        """WARP steps must come after node deployment."""
+        """WARP steps must come after Docker install."""
         from meridian.provision import build_setup_steps
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp/test", warp=True)
         steps = build_setup_steps(ctx)
         step_names = [s.name for s in steps]
-        node_idx = step_names.index("Deploy Remnawave node")
+        docker_idx = step_names.index("Install Docker")
         warp_idx = step_names.index("Install Cloudflare WARP")
-        assert warp_idx > node_idx
+        assert warp_idx > docker_idx

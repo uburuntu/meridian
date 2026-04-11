@@ -61,10 +61,10 @@ def domain_ctx(tmp_path: Path) -> ProvisionContext:
 class TestMinimalPipeline:
     def test_minimal_step_count(self, base_ctx: ProvisionContext):
         """Minimal config: disk check, packages, auto-upgrades, timezone, BBR,
-        ensure port 443, docker, remnawave panel, remnawave node = 9 steps."""
+        ensure port 443, docker, remnawave panel = 8 steps (no nginx without hosted_page)."""
         steps = build_setup_steps(base_ctx)
         names = [s.name for s in steps]
-        assert len(steps) == 9, f"Expected 9 minimal steps, got {len(steps)}: {names}"
+        assert len(steps) == 8, f"Expected 8 minimal steps, got {len(steps)}: {names}"
 
     def test_no_services_without_domain_or_hosted_page(self, base_ctx: ProvisionContext):
         names = step_names(base_ctx)
@@ -96,7 +96,6 @@ class TestHostedPage:
         assert "Configure nginx" in names
         assert "Issue TLS certificate" in names
         assert "Deploy PWA assets" in names
-        assert "Deploy connection page" in names
 
 
 class TestDomainMode:
@@ -114,15 +113,13 @@ class TestDomainMode:
         assert "Configure nginx" in names
         assert "Issue TLS certificate" in names
         assert "Deploy PWA assets" in names
-        assert "Deploy connection page" in names
 
 
 class TestFullPipeline:
     def test_full_pipeline_has_remnawave_steps(self, domain_ctx: ProvisionContext):
-        """Verify the full pipeline includes both Remnawave panel and node steps."""
+        """Verify the full pipeline includes Remnawave panel step."""
         names = step_names(domain_ctx)
         assert "Deploy Remnawave panel" in names
-        assert "Deploy Remnawave node" in names
         assert "Install Docker" in names
         assert "Install nginx" in names
         assert "Issue TLS certificate" in names
@@ -141,13 +138,11 @@ class TestStepOrdering:
         assert_before("Install system packages", "Install Docker")
         # Docker before Remnawave
         assert_before("Install Docker", "Deploy Remnawave panel")
-        assert_before("Deploy Remnawave panel", "Deploy Remnawave node")
         # Remnawave before nginx
-        assert_before("Deploy Remnawave node", "Install nginx")
+        assert_before("Deploy Remnawave panel", "Install nginx")
         assert_before("Install nginx", "Configure nginx")
         assert_before("Configure nginx", "Issue TLS certificate")
         assert_before("Issue TLS certificate", "Deploy PWA assets")
-        assert_before("Deploy PWA assets", "Deploy connection page")
 
 
 class TestNodeOnlyPipeline:
@@ -156,4 +151,3 @@ class TestNodeOnlyPipeline:
         base_ctx.is_panel_host = False
         names = step_names(base_ctx)
         assert "Deploy Remnawave panel" not in names
-        assert "Deploy Remnawave node" in names

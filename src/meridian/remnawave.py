@@ -131,7 +131,7 @@ class MeridianPanel:
                 "Content-Type": "application/json",
             },
             timeout=timeout,
-            verify=True,
+            verify=False,  # Panel may use self-signed cert behind nginx
         )
 
     def close(self) -> None:
@@ -289,7 +289,7 @@ class MeridianPanel:
         *,
         config_profile_uuid: str = "",
         inbound_uuids: list[str] | None = None,
-        country_code: str = "",
+        country_code: str = "XX",
     ) -> NodeCredentials:
         """Register a new node with the panel.
 
@@ -299,13 +299,12 @@ class MeridianPanel:
             "name": name,
             "address": address,
             "port": port,
+            "countryCode": country_code,
+            "configProfile": {
+                "activeConfigProfileUuid": config_profile_uuid,
+                "activeInbounds": inbound_uuids or [],
+            },
         }
-        if config_profile_uuid:
-            body["activeConfigProfileUuid"] = config_profile_uuid
-        if inbound_uuids:
-            body["activeInbounds"] = inbound_uuids
-        if country_code:
-            body["countryCode"] = country_code
         data = self._post("/api/nodes", json=body)
         return NodeCredentials(
             uuid=data.get("uuid", ""),
@@ -435,7 +434,9 @@ class MeridianPanel:
 
     def list_inbounds(self) -> list[Inbound]:
         """List all inbounds across config profiles."""
-        data = self._get("/api/inbounds")
+        data = self._get("/api/config-profiles/inbounds")
+        if isinstance(data, dict) and "inbounds" in data:
+            return [_parse_inbound(ib) for ib in data["inbounds"]]
         if isinstance(data, list):
             return [_parse_inbound(ib) for ib in data]
         return []
@@ -473,6 +474,7 @@ class MeridianPanel:
             f"{base_url.rstrip('/')}/api/auth/login",
             json={"username": username, "password": password},
             timeout=timeout,
+            verify=False,
         )
         if resp.status_code != 200:
             raise RemnawaveError(
@@ -500,6 +502,7 @@ class MeridianPanel:
             f"{base_url.rstrip('/')}/api/auth/register",
             json={"username": username, "password": password},
             timeout=timeout,
+            verify=False,
         )
         if resp.status_code not in (200, 201):
             raise RemnawaveError(
