@@ -20,11 +20,15 @@ app = typer.Typer(
 # Subcommand groups
 client_app = typer.Typer(help="Manage proxy clients", no_args_is_help=True)
 server_app = typer.Typer(help="Manage known servers", no_args_is_help=True)
+node_app = typer.Typer(help="Manage proxy nodes in the fleet", no_args_is_help=True)
 relay_app = typer.Typer(help="Manage relay nodes", no_args_is_help=True)
+fleet_app = typer.Typer(help="Fleet health and recovery", no_args_is_help=True)
 dev_app = typer.Typer(help="Developer tools for testing and debugging", no_args_is_help=True)
 app.add_typer(client_app, name="client")
 app.add_typer(server_app, name="server")
+app.add_typer(node_app, name="node")
 app.add_typer(relay_app, name="relay")
+app.add_typer(fleet_app, name="fleet")
 app.add_typer(dev_app, name="dev", hidden=True)
 
 
@@ -414,6 +418,79 @@ def relay_check_cmd(
     from meridian.commands.relay import run_check
 
     run_check(relay_ip, exit, user)
+
+
+# =============================================================================
+# Node (multi-node fleet management)
+# =============================================================================
+
+
+@node_app.command("add")
+def node_add_cmd(
+    ip: str = typer.Argument(..., help="Server IP address"),
+    name: str = typer.Option("", "--name", help="Friendly name for the node"),
+    user: str = typer.Option("root", "--user", "-u", help="SSH user"),
+    sni: str = typer.Option("", "--sni", help="Reality SNI target"),
+    ssh_port: int = typer.Option(22, "--ssh-port", help="SSH port"),
+) -> None:
+    """Add a new proxy node to the fleet.
+
+    [dim]Examples:[/dim]
+      [cyan]meridian node add 1.2.3.4[/cyan]
+      [cyan]meridian node add 1.2.3.4 --name finland --sni www.apple.com[/cyan]
+    """
+    from meridian.commands.node import run_add
+
+    run_add(ip, name=name, user=user, ssh_port=ssh_port, sni=sni)
+
+
+@node_app.command("list")
+def node_list_cmd() -> None:
+    """List all nodes with health status."""
+    from meridian.commands.node import run_list
+
+    run_list()
+
+
+@node_app.command("remove")
+def node_remove_cmd(
+    node: str = typer.Argument(..., help="Node IP or name"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+) -> None:
+    """Remove a node from the fleet."""
+    from meridian.commands.node import run_remove
+
+    run_remove(node, yes=yes)
+
+
+# =============================================================================
+# Fleet (health & recovery)
+# =============================================================================
+
+
+@fleet_app.command("status")
+def fleet_status_cmd() -> None:
+    """Show fleet health overview — nodes, relays, users."""
+    from meridian.commands.fleet import run_status
+
+    run_status()
+
+
+@fleet_app.command("recover")
+def fleet_recover_cmd(
+    panel_url: str = typer.Option(..., "--panel-url", help="Panel HTTPS URL"),
+    api_token: str = typer.Option(..., "--api-token", help="Remnawave API token (JWT)"),
+) -> None:
+    """Reconstruct cluster.yml from the panel API.
+
+    Use when ~/.meridian/ is lost but the panel is still running.
+
+    [dim]Examples:[/dim]
+      [cyan]meridian fleet recover --panel-url https://1.2.3.4/panel --api-token eyJ...[/cyan]
+    """
+    from meridian.commands.recover import run_recover
+
+    run_recover(panel_url, api_token)
 
 
 # =============================================================================
