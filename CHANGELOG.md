@@ -8,12 +8,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - **Multi-node system lab** — Docker Compose-based test harness deploys Meridian across separate exit and relay containers via real SSH, verifying Reality tunnel connectivity (direct + via relay). Catches port mismatches, SNI routing errors, and relay forwarding bugs that mocked tests cannot. Run with `make system-lab`
+- **Custom SSH port** — `--ssh-port` flag for servers with non-standard SSH ports. Port is stored in the server registry and reused for all subsequent commands (#22)
 - **Configurable ACME server** — `MERIDIAN_ACME_SERVER` env var overrides the certificate authority (default: letsencrypt). Enables future local CA testing with Pebble
 - **Configurable connectivity test URL** — `MERIDIAN_CONNECT_TEST_URL` env var overrides the IP check endpoint (default: ifconfig.me)
 - **Disable update check** — `MERIDIAN_DISABLE_UPDATE_CHECK=1` skips PyPI version check for CI/automation
 - **Bootstrap TLS cert includes SAN** — self-signed bootstrap certificates now include `subjectAltName` (IP or DNS), improving client compatibility
 
 ### Fixed
+- **Relay with same SNI as exit no longer crashes nginx** — when relay and exit share the same SNI, Meridian skips creating a duplicate nginx map entry (#17)
+- **Relay credential sync fails loudly** — `relay remove` followed by `relay deploy` no longer gets stuck on "already attached" when SCP sync fails (#19)
+- **Manual 3x-ui inbounds no longer crash client commands** — `list_inbounds()` handles empty or malformed JSON from manually-created panel inbounds (#16)
+- **DebianBanner no longer blocks deploy on some OpenSSH builds** — verification is skipped when `sshd -T` doesn't recognize the directive (#20)
 - **BBR no longer blocks deploy on containers** — `sysctl` failures due to missing kernel tunables (containers, old kernels) return a warning instead of failing the entire deploy. Other sysctl errors still fail
 - **SSH drop-in priority** — `00-meridian.conf` ensures Meridian's sshd hardening takes precedence over cloud-init overrides
 - **SCP directory copy** — fixed `-r` flag compatibility with OpenSSH ≥ 9.0 (SFTP protocol default)
