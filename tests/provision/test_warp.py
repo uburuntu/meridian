@@ -250,23 +250,23 @@ class TestWarpPipelineIntegration:
         assert "Configure WARP outbound" in step_names
 
     def test_warp_steps_before_verify(self):
-        """WARP steps must come before VerifyXray."""
+        """WARP steps must come after Remnawave node deployment."""
         from meridian.provision import build_setup_steps
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp/test", warp=True)
         steps = build_setup_steps(ctx)
         step_names = [s.name for s in steps]
         warp_idx = step_names.index("Install Cloudflare WARP")
-        verify_idx = step_names.index("Verify Xray configuration")
-        assert warp_idx < verify_idx
+        node_idx = step_names.index("Deploy Remnawave node")
+        assert warp_idx > node_idx
 
-    def test_warp_steps_after_geo_blocking(self):
-        """WARP steps must come after ConfigureGeoBlocking."""
+    def test_warp_steps_after_node_deploy(self):
+        """WARP steps must come after node deployment."""
         from meridian.provision import build_setup_steps
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp/test", warp=True)
         steps = build_setup_steps(ctx)
         step_names = [s.name for s in steps]
-        geo_idx = step_names.index("Configure geo-blocking")
+        node_idx = step_names.index("Deploy Remnawave node")
         warp_idx = step_names.index("Install Cloudflare WARP")
-        assert warp_idx > geo_idx
+        assert warp_idx > node_idx

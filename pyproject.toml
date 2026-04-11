@@ -27,6 +27,7 @@ dependencies = [
     "packaging>=23.0",
     "jinja2>=3.0",
     "segno>=1.5",
+    "httpx>=0.27",
 ]
 
 [project.scripts]
