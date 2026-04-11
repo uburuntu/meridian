@@ -94,21 +94,13 @@ def run_status() -> None:
                 if api_node and api_node.is_connected:
                     xray = f"  Xray {api_node.xray_version}" if api_node.xray_version else ""
                     traffic = f"  {_format_traffic(api_node.traffic_used)}" if api_node.traffic_used else ""
-                    err_console.print(
-                        f"    {node.ip}  {label}{role}  [green]connected[/green]{xray}{traffic}"
-                    )
+                    err_console.print(f"    {node.ip}  {label}{role}  [green]connected[/green]{xray}{traffic}")
                 elif api_node and api_node.is_disabled:
-                    err_console.print(
-                        f"    {node.ip}  {label}{role}  [dim]disabled[/dim]"
-                    )
+                    err_console.print(f"    {node.ip}  {label}{role}  [dim]disabled[/dim]")
                 elif api_node:
-                    err_console.print(
-                        f"    {node.ip}  {label}{role}  [red]DISCONNECTED[/red]"
-                    )
+                    err_console.print(f"    {node.ip}  {label}{role}  [red]DISCONNECTED[/red]")
                 else:
-                    err_console.print(
-                        f"    {node.ip}  {label}{role}  [dim]unknown[/dim]"
-                    )
+                    err_console.print(f"    {node.ip}  {label}{role}  [dim]unknown[/dim]")
 
         # -- Relays --
         if cluster.relays:
@@ -126,9 +118,7 @@ def run_status() -> None:
                 else:
                     status = "[red]UNREACHABLE[/red]"
 
-                err_console.print(
-                    f"    {relay.ip}  {label} -> {target_label}  relay: {status}"
-                )
+                err_console.print(f"    {relay.ip}  {label} -> {target_label}  relay: {status}")
 
         # -- Users --
         if panel_ok:

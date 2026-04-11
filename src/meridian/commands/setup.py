@@ -426,18 +426,14 @@ def _generate_reality_keypair(conn: ServerConnection) -> tuple[str, str]:
             continue
         private_key = ""
         public_key = ""
-        for line in result.stdout.strip().splitlines():
-            line = line.strip()
-            # Xray x25519 output varies by version:
-            # "Private key: <key>" / "Public key: <key>"
-            # "PrivateKey: <key>" / "Password: <key>" (newer)
-            low = line.lower()
-            if "private" in low and ":" in line:
-                private_key = line.split(":", 1)[1].strip().strip('"')
-            elif ("public" in low or "password" in low) and ":" in line:
-                # "Password" is the newer Xray's name for the public key
-                if "hash" not in low:  # skip "Hash32:"
-                    public_key = line.split(":", 1)[1].strip().strip('"')
+        for raw_line in result.stdout.strip().splitlines():
+            ln = raw_line.strip()
+            low = ln.lower()
+            if "private" in low and ":" in ln:
+                private_key = ln.split(":", 1)[1].strip().strip('"')
+            elif ("public" in low or "password" in low) and ":" in ln:
+                if "hash" not in low:
+                    public_key = ln.split(":", 1)[1].strip().strip('"')
         if private_key and public_key:
             return private_key, public_key
 
@@ -450,14 +446,14 @@ def _generate_reality_keypair(conn: ServerConnection) -> tuple[str, str]:
         timeout=60,
     )
     if dl_result.returncode == 0:
-        for line in dl_result.stdout.strip().splitlines():
-            line = line.strip()
-            low = line.lower()
-            if "private" in low and ":" in line:
-                private_key = line.split(":", 1)[1].strip().strip('"')
-            elif ("public" in low or "password" in low) and ":" in line:
+        for raw_line in dl_result.stdout.strip().splitlines():
+            ln = raw_line.strip()
+            low = ln.lower()
+            if "private" in low and ":" in ln:
+                private_key = ln.split(":", 1)[1].strip().strip('"')
+            elif ("public" in low or "password" in low) and ":" in ln:
                 if "hash" not in low:
-                    public_key = line.split(":", 1)[1].strip().strip('"')
+                    public_key = ln.split(":", 1)[1].strip().strip('"')
         if private_key and public_key:
             return private_key, public_key
 
@@ -480,8 +476,7 @@ def _get_docker_gateway(conn: ServerConnection) -> str:
     because the panel runs on a custom 'remnawave-net' network.
     """
     result = conn.run(
-        "docker inspect remnawave --format "
-        "'{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}'",
+        "docker inspect remnawave --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}'",
         timeout=15,
     )
     gateway = result.stdout.strip() if result.returncode == 0 else ""

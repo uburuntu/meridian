@@ -36,7 +36,6 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
         SetTimezone,
     )
     from meridian.provision.docker import InstallDocker
-    from meridian.provision.remnawave_node import DeployRemnawaveNode
     from meridian.provision.remnawave_panel import DeployRemnawavePanel
 
     steps: list[Step] = [
@@ -126,7 +125,6 @@ def build_node_steps(ctx: ProvisionContext) -> list[Step]:
         SetTimezone,
     )
     from meridian.provision.docker import InstallDocker
-    from meridian.provision.remnawave_node import DeployRemnawaveNode
 
     steps: list[Step] = [
         CheckDiskSpace(),
@@ -145,10 +143,12 @@ def build_node_steps(ctx: ProvisionContext) -> list[Step]:
     else:
         steps.append(EnsurePort443())
 
-    steps.extend([
-        InstallDocker(),
-        # Node deployed after API setup (setup.py), not in pipeline
-    ])
+    steps.extend(
+        [
+            InstallDocker(),
+            # Node deployed after API setup (setup.py), not in pipeline
+        ]
+    )
 
     if ctx.needs_web_server:
         from meridian.provision.nginx import ConfigureNginx, InstallNginx

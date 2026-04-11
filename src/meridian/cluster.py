@@ -262,19 +262,42 @@ class ClusterConfig:
 # ---------------------------------------------------------------------------
 
 _PANEL_FIELDS = {
-    "url", "api_token", "admin_user", "admin_pass", "server_ip",
-    "ssh_user", "ssh_port", "secret_path", "sub_path", "deployed_with",
+    "url",
+    "api_token",
+    "admin_user",
+    "admin_pass",
+    "server_ip",
+    "ssh_user",
+    "ssh_port",
+    "secret_path",
+    "sub_path",
+    "deployed_with",
 }
 _NODE_FIELDS = {
-    "ip", "uuid", "name", "ssh_user", "ssh_port", "sni", "domain",
-    "is_panel_host", "deployed_with", "xhttp_path", "ws_path",
+    "ip",
+    "uuid",
+    "name",
+    "ssh_user",
+    "ssh_port",
+    "sni",
+    "domain",
+    "is_panel_host",
+    "deployed_with",
+    "xhttp_path",
+    "ws_path",
 }
 _RELAY_FIELDS = {"ip", "name", "port", "exit_node_ip", "host_uuids", "sni", "ssh_user", "ssh_port"}
 _BRANDING_FIELDS = {"server_name", "icon", "color"}
 _INBOUND_REF_FIELDS = {"uuid", "tag"}
 _KNOWN_TOP = {
-    "version", "panel", "config_profile_uuid", "config_profile_name",
-    "nodes", "relays", "branding", "inbounds",
+    "version",
+    "panel",
+    "config_profile_uuid",
+    "config_profile_name",
+    "nodes",
+    "relays",
+    "branding",
+    "inbounds",
 }
 
 

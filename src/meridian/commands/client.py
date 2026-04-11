@@ -46,6 +46,7 @@ def _make_panel(cluster: ClusterConfig) -> MeridianPanel:
 
 def _format_traffic(bytes_used: int, bytes_limit: int = 0) -> str:
     """Format traffic usage as a human-readable string."""
+
     def _human(b: int) -> str:
         if b <= 0:
             return "0 B"
