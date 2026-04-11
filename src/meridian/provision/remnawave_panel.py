@@ -1,8 +1,13 @@
 """Remnawave panel provisioning step.
 
-Deploys the Remnawave backend (panel) and PostgreSQL database as Docker
+Deploys the Remnawave backend, PostgreSQL, and Valkey (Redis) as Docker
 containers on the server. The panel listens on 127.0.0.1:3000 and is
 never exposed directly — nginx reverse-proxies to it.
+
+Three containers:
+  - remnawave (NestJS backend, port 3000 app + 3001 metrics)
+  - remnawave-db (PostgreSQL 17)
+  - remnawave-redis (Valkey 9, Unix socket only)
 """
 
 from __future__ import annotations
@@ -19,20 +24,15 @@ from meridian.config import (
 from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
-# Container name used for the panel backend
+# Container names
 _PANEL_CONTAINER = "remnawave"
 _DB_CONTAINER = "remnawave-db"
+_REDIS_CONTAINER = "remnawave-redis"
+
+_METRICS_PORT = 3001
 
 
-def _render_panel_compose(
-    image: str,
-    panel_port: int,
-    db_password: str,
-    jwt_auth_secret: str,
-    jwt_api_secret: str,
-    front_end_domain: str,
-    sub_public_domain: str,
-) -> str:
+def _render_panel_compose(image: str, panel_port: int) -> str:
     """Render the docker-compose.yml for the Remnawave panel stack."""
     return f"""\
 # Remnawave Panel - VPN Management Interface
@@ -45,12 +45,23 @@ services:
     depends_on:
       remnawave-db:
         condition: service_healthy
+      remnawave-redis:
+        condition: service_healthy
     networks:
       - remnawave-net
+    volumes:
+      - valkey-socket:/var/run/valkey
     ports:
       - "127.0.0.1:{panel_port}:{panel_port}"
+      - "127.0.0.1:{_METRICS_PORT}:{_METRICS_PORT}"
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:{_METRICS_PORT}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     logging:
       driver: json-file
       options:
@@ -58,22 +69,48 @@ services:
         max-file: "3"
 
   remnawave-db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: {_DB_CONTAINER}
     restart: unless-stopped
     networks:
       - remnawave-net
     volumes:
       - ./data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: meridian
-      POSTGRES_PASSWORD: "{db_password}"
-      POSTGRES_DB: remnawave
+    env_file:
+      - .env
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U meridian -d remnawave"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  remnawave-redis:
+    image: valkey/valkey:9-alpine
+    container_name: {_REDIS_CONTAINER}
+    restart: unless-stopped
+    networks:
+      - remnawave-net
+    volumes:
+      - valkey-socket:/var/run/valkey
+    command: >
+      valkey-server
+      --save ""
+      --appendonly no
+      --maxmemory-policy noeviction
+      --loglevel warning
+      --unixsocket /var/run/valkey/valkey.sock
+      --unixsocketperm 777
+      --port 0
+    healthcheck:
+      test: ["CMD", "valkey-cli", "-s", "/var/run/valkey/valkey.sock", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 3
     logging:
       driver: json-file
       options:
@@ -83,6 +120,10 @@ services:
 networks:
   remnawave-net:
     driver: bridge
+
+volumes:
+  valkey-socket:
+    driver: local
 """
 
 
@@ -93,6 +134,7 @@ def _render_panel_env(
     jwt_api_secret: str,
     front_end_domain: str,
     sub_public_domain: str,
+    metrics_password: str,
 ) -> str:
     """Render the .env file for the Remnawave panel."""
     return f"""\
@@ -100,57 +142,70 @@ def _render_panel_env(
 # Managed by Meridian. Manual edits will be overwritten on next run.
 
 APP_PORT={panel_port}
+METRICS_PORT={_METRICS_PORT}
+API_INSTANCES=1
+
 DATABASE_URL=postgresql://meridian:{db_password}@remnawave-db:5432/remnawave
+
+REDIS_SOCKET=/var/run/valkey/valkey.sock
 
 JWT_AUTH_SECRET={jwt_auth_secret}
 JWT_API_TOKENS_SECRET={jwt_api_secret}
 
-FRONT_END_DOMAIN={front_end_domain}
+PANEL_DOMAIN={front_end_domain}
+FRONT_END_DOMAIN=*
 SUB_PUBLIC_DOMAIN={sub_public_domain}
 
+METRICS_USER=meridian
+METRICS_PASS={metrics_password}
+
+IS_TELEGRAM_NOTIFICATIONS_ENABLED=false
+IS_DOCS_ENABLED=false
+SWAGGER_PATH=/docs
+SCALAR_PATH=/scalar
+
 WEBHOOK_ENABLED=false
-NODES_NOTIFY_ENABLED=false
-IS_PANEL_NODE=false
+
+POSTGRES_USER=meridian
+POSTGRES_PASSWORD={db_password}
+POSTGRES_DB=remnawave
 """
 
 
 def _wait_for_remnawave_panel(
     conn: ServerConnection,
-    panel_port: int,
-    retries: int = 30,
+    retries: int = 40,
     delay: float = 3.0,
 ) -> None:
     """Poll the Remnawave health endpoint until responsive or retries exhausted."""
-    url = f"http://127.0.0.1:{panel_port}/api/health"
+    url = f"http://127.0.0.1:{_METRICS_PORT}/health"
     q_url = shlex.quote(url)
 
     for _ in range(retries):
         result = conn.run(
-            f"curl -s -o /dev/null -w '%{{http_code}}' {q_url}",
+            f"curl -sf -o /dev/null -w '%{{http_code}}' {q_url}",
             timeout=15,
         )
         code = result.stdout.strip()
-        if result.returncode == 0 and code and code != "000":
+        if result.returncode == 0 and code in ("200", "204"):
             return
         time.sleep(delay)
 
     raise RuntimeError(
-        f"Remnawave panel did not become responsive at port {panel_port} "
-        f"after {retries * delay:.0f}s. "
+        f"Remnawave panel did not become healthy after {retries * delay:.0f}s. "
         f"Check: docker logs {_PANEL_CONTAINER} --tail 30"
     )
 
 
 class DeployRemnawavePanel:
-    """Deploy Remnawave panel (backend + PostgreSQL) as Docker containers.
+    """Deploy Remnawave panel (backend + PostgreSQL + Valkey) as Docker containers.
 
-    Idempotency: skipped when both containers are already running.
+    Idempotency: skipped when all three containers are already running.
 
     Secrets generated here are stored in the provision context under:
       - ctx["remnawave_db_password"]
       - ctx["remnawave_jwt_auth_secret"]
       - ctx["remnawave_jwt_api_secret"]
-    for use by downstream steps (e.g. panel API bootstrap, node registration).
     """
 
     name = "Deploy Remnawave panel"
@@ -168,28 +223,21 @@ class DeployRemnawavePanel:
         panel_port = REMNAWAVE_PANEL_PORT
         image = REMNAWAVE_BACKEND_IMAGE
 
-        # Resolve domains from context when not provided to constructor
         front_end_domain = self.front_end_domain or ctx.domain or ctx.ip
         sub_public_domain = self.sub_public_domain or ctx.domain or ctx.ip
 
-        # -- Idempotency check: are both containers already running? --
-        panel_check = conn.run(
-            f"docker inspect -f '{{{{.State.Running}}}}' {_PANEL_CONTAINER} 2>/dev/null",
-            timeout=15,
-        )
-        db_check = conn.run(
-            f"docker inspect -f '{{{{.State.Running}}}}' {_DB_CONTAINER} 2>/dev/null",
-            timeout=15,
-        )
-        both_running = (
-            panel_check.returncode == 0
-            and panel_check.stdout.strip() == "true"
-            and db_check.returncode == 0
-            and db_check.stdout.strip() == "true"
-        )
-        if both_running:
-            # Re-read secrets from the existing .env so downstream steps
-            # can still use them even on a skipped run.
+        # -- Idempotency: are all three containers already running? --
+        all_running = True
+        for name in (_PANEL_CONTAINER, _DB_CONTAINER, _REDIS_CONTAINER):
+            check = conn.run(
+                f"docker inspect -f '{{{{.State.Running}}}}' {name} 2>/dev/null",
+                timeout=15,
+            )
+            if check.returncode != 0 or check.stdout.strip() != "true":
+                all_running = False
+                break
+
+        if all_running:
             env_read = conn.run(f"cat {panel_dir}/.env 2>/dev/null", timeout=15)
             if env_read.returncode == 0:
                 _load_env_into_ctx(env_read.stdout, ctx)
@@ -210,9 +258,10 @@ class DeployRemnawavePanel:
                 )
 
         # -- Generate secrets --
-        db_password = secrets.token_hex(16)          # 32-char hex
-        jwt_auth_secret = secrets.token_hex(32)      # 64-char hex
-        jwt_api_secret = secrets.token_hex(32)       # 64-char hex
+        db_password = secrets.token_hex(16)
+        jwt_auth_secret = secrets.token_hex(32)
+        jwt_api_secret = secrets.token_hex(32)
+        metrics_password = secrets.token_hex(8)
 
         # -- Write .env file --
         env_content = _render_panel_env(
@@ -222,9 +271,13 @@ class DeployRemnawavePanel:
             jwt_api_secret=jwt_api_secret,
             front_end_domain=front_end_domain,
             sub_public_domain=sub_public_domain,
+            metrics_password=metrics_password,
         )
         env_path = f"{panel_dir}/.env"
-        write_env = f"cat > {shlex.quote(env_path)} << 'MERIDIAN_EOF'\n{env_content}MERIDIAN_EOF"
+        write_env = (
+            f"cat > {shlex.quote(env_path)} << 'MERIDIAN_EOF'\n"
+            f"{env_content}MERIDIAN_EOF"
+        )
         result = conn.run(write_env, timeout=15)
         if result.returncode != 0:
             return StepResult(
@@ -235,17 +288,12 @@ class DeployRemnawavePanel:
         conn.run(f"chmod 600 {shlex.quote(env_path)}", timeout=15)
 
         # -- Write docker-compose.yml --
-        compose_content = _render_panel_compose(
-            image=image,
-            panel_port=panel_port,
-            db_password=db_password,
-            jwt_auth_secret=jwt_auth_secret,
-            jwt_api_secret=jwt_api_secret,
-            front_end_domain=front_end_domain,
-            sub_public_domain=sub_public_domain,
-        )
+        compose_content = _render_panel_compose(image=image, panel_port=panel_port)
         compose_path = f"{panel_dir}/docker-compose.yml"
-        write_compose = f"cat > {shlex.quote(compose_path)} << 'MERIDIAN_EOF'\n{compose_content}MERIDIAN_EOF"
+        write_compose = (
+            f"cat > {shlex.quote(compose_path)} << 'MERIDIAN_EOF'\n"
+            f"{compose_content}MERIDIAN_EOF"
+        )
         result = conn.run(write_compose, timeout=15)
         if result.returncode != 0:
             return StepResult(
@@ -255,12 +303,17 @@ class DeployRemnawavePanel:
             )
         conn.run(f"chmod 644 {shlex.quote(compose_path)}", timeout=15)
 
-        # -- Pull images (with retries) --
+        # -- Stop old containers if partially deployed --
         q_dir = shlex.quote(panel_dir)
+        conn.run(f"cd {q_dir} && docker compose down 2>/dev/null", timeout=60)
+
+        # -- Pull images (with retries) --
         pull_ok = False
         pull_result = None
         for attempt in range(3):
-            pull_result = conn.run(f"cd {q_dir} && docker compose pull", timeout=300)
+            pull_result = conn.run(
+                f"cd {q_dir} && docker compose pull", timeout=300
+            )
             if pull_result.returncode == 0:
                 pull_ok = True
                 break
@@ -268,7 +321,9 @@ class DeployRemnawavePanel:
                 time.sleep(10)
 
         if not pull_ok:
-            stderr = pull_result.stderr.strip()[:200] if pull_result else "unknown"
+            stderr = (
+                pull_result.stderr.strip()[:200] if pull_result else "unknown"
+            )
             return StepResult(
                 name=self.name,
                 status="failed",
@@ -278,22 +333,26 @@ class DeployRemnawavePanel:
         # -- Start containers --
         result = conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
         if result.returncode != 0:
-            logs = conn.run(f"cd {q_dir} && docker compose logs --tail 50", timeout=15)
-            log_output = logs.stdout.strip()[:500] if logs.returncode == 0 else "no logs available"
+            logs = conn.run(
+                f"cd {q_dir} && docker compose logs --tail 50", timeout=15
+            )
+            log_out = (
+                logs.stdout.strip()[:500]
+                if logs.returncode == 0
+                else "no logs available"
+            )
             return StepResult(
                 name=self.name,
                 status="failed",
                 detail=(
                     f"docker compose up failed: {result.stderr.strip()[:200]}\n"
-                    f"Container logs:\n{log_output}\n"
-                    f"Common fixes: check disk space (df -h), "
-                    f"Docker status (systemctl status docker)"
+                    f"Container logs:\n{log_out}"
                 ),
             )
 
         # -- Wait for panel to become healthy --
         try:
-            _wait_for_remnawave_panel(conn, panel_port)
+            _wait_for_remnawave_panel(conn)
         except RuntimeError as e:
             return StepResult(
                 name=self.name,
@@ -301,7 +360,7 @@ class DeployRemnawavePanel:
                 detail=str(e),
             )
 
-        # -- Store secrets in context for downstream steps --
+        # -- Store secrets in context --
         ctx["remnawave_db_password"] = db_password
         ctx["remnawave_jwt_auth_secret"] = jwt_auth_secret
         ctx["remnawave_jwt_api_secret"] = jwt_api_secret
@@ -315,19 +374,18 @@ class DeployRemnawavePanel:
 
 
 def _load_env_into_ctx(env_text: str, ctx: ProvisionContext) -> None:
-    """Parse key=value lines from .env content and populate known ctx keys."""
+    """Parse key=value lines from .env and populate known ctx keys."""
     key_map = {
-        "REMNAWAVE_DB_PASSWORD": "remnawave_db_password",
+        "POSTGRES_PASSWORD": "remnawave_db_password",
         "JWT_AUTH_SECRET": "remnawave_jwt_auth_secret",
         "JWT_API_TOKENS_SECRET": "remnawave_jwt_api_secret",
     }
-    # Also handle DATABASE_URL to extract password if dedicated key absent
     for line in env_text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         raw_key, _, raw_val = line.partition("=")
         env_key = raw_key.strip()
-        env_val = raw_val.strip()
+        env_val = raw_val.strip().strip('"')
         if env_key in key_map:
             ctx[key_map[env_key]] = env_val

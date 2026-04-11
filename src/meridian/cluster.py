@@ -43,7 +43,9 @@ class PanelConfig:
     """Remnawave panel connection details."""
 
     url: str = ""  # Panel HTTPS endpoint (e.g., https://panel.example.com)
-    api_token: str = ""  # Remnawave JWT API token
+    api_token: str = ""  # Remnawave JWT API token (long-lived)
+    admin_user: str = ""  # Panel admin username (for recovery login)
+    admin_pass: str = ""  # Panel admin password (for recovery login)
     server_ip: str = ""  # IP where panel is deployed
     ssh_user: str = "root"
     ssh_port: int = 22
@@ -215,7 +217,10 @@ class ClusterConfig:
 # Serialization helpers
 # ---------------------------------------------------------------------------
 
-_PANEL_FIELDS = {"url", "api_token", "server_ip", "ssh_user", "ssh_port", "secret_path", "sub_path", "deployed_with"}
+_PANEL_FIELDS = {
+    "url", "api_token", "admin_user", "admin_pass", "server_ip",
+    "ssh_user", "ssh_port", "secret_path", "sub_path", "deployed_with",
+}
 _NODE_FIELDS = {"ip", "uuid", "name", "ssh_user", "ssh_port", "sni", "domain", "is_panel_host", "deployed_with"}
 _RELAY_FIELDS = {"ip", "name", "port", "exit_node_ip", "host_uuids", "sni", "ssh_user", "ssh_port"}
 _BRANDING_FIELDS = {"server_name", "icon", "color"}
