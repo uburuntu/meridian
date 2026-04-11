@@ -20,6 +20,7 @@ from meridian.commands.resolve import (
 )
 from meridian.config import (
     CREDS_BASE,
+    DEFAULT_SNI,
     RELAY_SERVICE_NAME,
     SERVER_CREDS_DIR,
     SERVERS_FILE,
@@ -277,7 +278,14 @@ def _resolve_exit(
         resolved = resolve_server(registry, requested_server=exit_arg, user=user)
 
     resolved = ensure_server_connection(resolved)
-    fetch_credentials(resolved, force=force_refresh)
+    if force_refresh and not fetch_credentials(resolved, force=True):
+        fail(
+            f"Could not refresh credentials from exit server {resolved.ip}",
+            hint="Check SSH/SCP connectivity. Relay commands require fresh exit credentials.",
+            hint_type="system",
+        )
+    elif not force_refresh:
+        fetch_credentials(resolved, force=False)
 
     # Verify exit is deployed
     proxy_file = resolved.creds_dir / "proxy.yml"
@@ -723,8 +731,11 @@ def run_deploy(
     err_console.print()
     ok("Relay deployed successfully")
 
-    # Create relay-specific Xray inbound on exit server (for per-relay SNI)
-    if relay_sni:
+    # Create relay-specific Xray inbound on exit server (for per-relay SNI).
+    # When relay uses the same SNI as exit, no separate inbound or nginx
+    # routing is needed — the existing xray_reality inbound handles it.
+    exit_sni = exit_creds.server.sni or DEFAULT_SNI
+    if relay_sni and relay_sni != exit_sni:
         info("Creating relay-specific Xray inbound on exit server...")
         inbound_ok = _create_relay_inbound(
             resolved_exit.conn,
