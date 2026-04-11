@@ -1,0 +1,152 @@
+"""Fleet status -- overview of all nodes, relays, and users.
+
+Single command that shows the health of the entire Meridian cluster
+at a glance: panel connectivity, node status, relay reachability, user count.
+"""
+
+from __future__ import annotations
+
+import socket
+
+from meridian.cluster import ClusterConfig
+from meridian.console import err_console, fail, info, ok, warn
+from meridian.remnawave import MeridianPanel, RemnawaveError
+
+
+# -- Helpers --
+
+
+def _load_cluster() -> ClusterConfig:
+    """Load and validate cluster configuration."""
+    cluster = ClusterConfig.load()
+    if not cluster.is_configured:
+        fail(
+            "No cluster configured",
+            hint="Deploy first: meridian deploy",
+            hint_type="user",
+        )
+    return cluster
+
+
+def _make_panel(cluster: ClusterConfig) -> MeridianPanel:
+    """Create a MeridianPanel client from cluster config."""
+    return MeridianPanel(cluster.panel.url, cluster.panel.api_token)
+
+
+def _format_traffic(bytes_val: int) -> str:
+    """Format byte count as a human-readable string."""
+    if bytes_val <= 0:
+        return "0 B"
+    b = float(bytes_val)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if abs(b) < 1024:
+            return f"{b:.1f} {unit}" if unit != "B" else f"{int(b)} {unit}"
+        b /= 1024
+    return f"{b:.1f} PB"
+
+
+def _check_relay_health(ip: str, port: int, timeout: float = 3.0) -> bool:
+    """TCP connect check to verify relay is reachable."""
+    try:
+        with socket.create_connection((ip, port), timeout=timeout):
+            return True
+    except (OSError, socket.timeout):
+        return False
+
+
+# -- Fleet Status --
+
+
+def run_status() -> None:
+    """Show fleet health overview: panel, nodes, relays, users."""
+    cluster = _load_cluster()
+    panel = _make_panel(cluster)
+
+    # -- Panel health --
+    err_console.print()
+    panel_url = cluster.panel.url
+    with panel:
+        panel_ok = panel.ping()
+        if panel_ok:
+            err_console.print(f"  [bold]Panel[/bold]   {panel_url} [green]healthy[/green]")
+        else:
+            err_console.print(f"  [bold]Panel[/bold]   {panel_url} [red]UNREACHABLE[/red]")
+            warn("Cannot reach panel API -- node and user data may be stale")
+
+        # -- Nodes --
+        api_nodes = []
+        if panel_ok:
+            try:
+                api_nodes = panel.list_nodes()
+            except RemnawaveError:
+                warn("Could not fetch node status from panel")
+
+        api_by_uuid = {n.uuid: n for n in api_nodes}
+
+        if cluster.nodes:
+            err_console.print()
+            err_console.print("  [bold]Nodes[/bold]")
+
+            for node in cluster.nodes:
+                api_node = api_by_uuid.get(node.uuid)
+                label = node.name or node.ip
+                role = "  [dim](panel)[/dim]" if node.is_panel_host else ""
+
+                if api_node and api_node.is_connected:
+                    xray = f"  Xray {api_node.xray_version}" if api_node.xray_version else ""
+                    traffic = f"  {_format_traffic(api_node.traffic_used)}" if api_node.traffic_used else ""
+                    err_console.print(
+                        f"    {node.ip}  {label}{role}  [green]connected[/green]{xray}{traffic}"
+                    )
+                elif api_node and api_node.is_disabled:
+                    err_console.print(
+                        f"    {node.ip}  {label}{role}  [dim]disabled[/dim]"
+                    )
+                elif api_node:
+                    err_console.print(
+                        f"    {node.ip}  {label}{role}  [red]DISCONNECTED[/red]"
+                    )
+                else:
+                    err_console.print(
+                        f"    {node.ip}  {label}{role}  [dim]unknown[/dim]"
+                    )
+
+        # -- Relays --
+        if cluster.relays:
+            err_console.print()
+            err_console.print("  [bold]Relays[/bold]")
+
+            for relay in cluster.relays:
+                label = relay.name or relay.ip
+                target_node = cluster.find_node(relay.exit_node_ip)
+                target_label = target_node.name if target_node else relay.exit_node_ip
+
+                healthy = _check_relay_health(relay.ip, relay.port)
+                if healthy:
+                    status = "[green]healthy[/green]"
+                else:
+                    status = "[red]UNREACHABLE[/red]"
+
+                err_console.print(
+                    f"    {relay.ip}  {label} -> {target_label}  relay: {status}"
+                )
+
+        # -- Users --
+        if panel_ok:
+            try:
+                users = panel.list_users()
+                active = sum(1 for u in users if u.status.upper() == "ACTIVE")
+                disabled = sum(1 for u in users if u.status.upper() == "DISABLED")
+                other = len(users) - active - disabled
+
+                err_console.print()
+                parts = [f"{active} active"]
+                if disabled:
+                    parts.append(f"{disabled} disabled")
+                if other:
+                    parts.append(f"{other} other")
+                err_console.print(f"  [bold]Users[/bold]   {', '.join(parts)}")
+            except RemnawaveError:
+                pass
+
+    err_console.print()
