@@ -232,8 +232,8 @@ class MeridianPanel:
         body: dict[str, Any] = {"username": username}
         if traffic_limit_bytes > 0:
             body["trafficLimitBytes"] = traffic_limit_bytes
-        if expire_at:
-            body["expireAt"] = expire_at
+        # Remnawave requires expireAt — use far future if not specified
+        body["expireAt"] = expire_at or "2099-12-31T23:59:59.000Z"
         data = self._post("/api/users", json=body)
         return _parse_user(data)
 
@@ -294,6 +294,7 @@ class MeridianPanel:
         """Register a new node with the panel.
 
         Returns credentials including the SECRET_KEY for the node container.
+        The secret key is fetched from the /api/keygen endpoint.
         """
         body: dict[str, Any] = {
             "name": name,
@@ -306,9 +307,17 @@ class MeridianPanel:
             },
         }
         data = self._post("/api/nodes", json=body)
+        node_uuid = data.get("uuid", "")
+
+        # Fetch the connection string (mTLS cert bundle) from keygen
+        keygen = self._get("/api/keygen")
+        secret_key = ""
+        if isinstance(keygen, dict):
+            secret_key = keygen.get("pubKey", "")
+
         return NodeCredentials(
-            uuid=data.get("uuid", ""),
-            secret_key=data.get("secretKey", "") or data.get("connectionString", ""),
+            uuid=node_uuid,
+            secret_key=secret_key,
             _raw=data,
         )
 
@@ -351,13 +360,14 @@ class MeridianPanel:
         remark: str,
         address: str,
         port: int,
+        config_profile_uuid: str,
         inbound_uuid: str,
         sni: str = "",
         host_header: str = "",
         path: str = "",
-        alpn: str = "",
-        fingerprint: str = "",
-        security_layer: str = "",
+        alpn: str | None = None,
+        fingerprint: str | None = None,
+        security_layer: str = "DEFAULT",
         is_disabled: bool = False,
     ) -> Host:
         """Create a host entry (direct address or relay)."""
@@ -365,7 +375,10 @@ class MeridianPanel:
             "remark": remark,
             "address": address,
             "port": port,
-            "inboundUuid": inbound_uuid,
+            "inbound": {
+                "configProfileUuid": config_profile_uuid,
+                "configProfileInboundUuid": inbound_uuid,
+            },
         }
         if sni:
             body["sni"] = sni
@@ -373,11 +386,11 @@ class MeridianPanel:
             body["host"] = host_header
         if path:
             body["path"] = path
-        if alpn:
+        if alpn is not None:
             body["alpn"] = alpn
-        if fingerprint:
+        if fingerprint is not None:
             body["fingerprint"] = fingerprint
-        if security_layer:
+        if security_layer != "DEFAULT":
             body["securityLayer"] = security_layer
         if is_disabled:
             body["isDisabled"] = True

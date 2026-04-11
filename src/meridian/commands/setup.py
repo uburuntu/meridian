@@ -884,10 +884,11 @@ def _create_hosts_for_node(
                 remark=f"reality-{node_ip}",
                 address=node_ip,
                 port=reality_port,
+                config_profile_uuid=cluster.config_profile_uuid,
                 inbound_uuid=reality_ref.uuid,
                 sni=sni,
                 fingerprint="chrome",
-                security_layer="reality",
+                security_layer="DEFAULT",
             )
             ok(f"Host created: Reality via {node_ip}:{reality_port}")
         except RemnawaveError as e:
@@ -901,8 +902,9 @@ def _create_hosts_for_node(
                 remark=f"xhttp-{host_address}",
                 address=host_address,
                 port=443,
+                config_profile_uuid=cluster.config_profile_uuid,
                 inbound_uuid=xhttp_ref.uuid,
-                security_layer="tls",
+                security_layer="TLS",
             )
             ok(f"Host created: XHTTP via {host_address}:443")
         except RemnawaveError as e:
@@ -917,8 +919,9 @@ def _create_hosts_for_node(
                     remark=f"wss-{domain}",
                     address=domain,
                     port=443,
+                    config_profile_uuid=cluster.config_profile_uuid,
                     inbound_uuid=wss_ref.uuid,
-                    security_layer="tls",
+                    security_layer="TLS",
                 )
                 ok(f"Host created: WSS via {domain}:443")
             except RemnawaveError as e:
