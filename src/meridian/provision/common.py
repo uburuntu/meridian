@@ -41,7 +41,8 @@ _BBR_SETTINGS = {
     "net.ipv4.tcp_congestion_control": "bbr",
 }
 
-_SSH_HARDENING_DROPIN_PATH = "/etc/ssh/sshd_config.d/99-meridian.conf"
+_SSH_HARDENING_DROPIN_PATH = "/etc/ssh/sshd_config.d/00-meridian.conf"
+_SSH_HARDENING_DROPIN_OLD_PATH = "/etc/ssh/sshd_config.d/99-meridian.conf"
 _SSH_HARDENING_DROPIN = """\
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -248,6 +249,7 @@ class HardenSSH:
                     detail=f"failed to write sshd hardening drop-in: {result.stderr.strip()[:200]}",
                 )
             conn.run(f"chmod 644 {_SSH_HARDENING_DROPIN_PATH}", timeout=15)
+            conn.run(f"rm -f {_SSH_HARDENING_DROPIN_OLD_PATH}", timeout=15)
             changed = True
 
         # Validate config before restarting
