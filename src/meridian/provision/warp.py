@@ -137,41 +137,14 @@ class ConfigureWarpOutbound:
     name = "Configure WARP outbound"
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
-        from meridian.panel import PanelError
-
-        panel = ctx.panel
-        if panel is None:
-            return StepResult(name=self.name, status="failed", detail="No panel client in context")
-
-        try:
-            data = panel.api_post_empty("/panel/xray/")
-        except PanelError as e:
-            return StepResult(name=self.name, status="failed", detail=f"Failed to fetch Xray config: {e}")
-
-        if not data.get("success"):
-            return StepResult(name=self.name, status="failed", detail="Failed to fetch Xray config template")
-
-        obj = data.get("obj", "")
-        try:
-            wrapper = json.loads(obj) if isinstance(obj, str) else obj
-            template_str = wrapper.get("xraySetting", "")
-            template = json.loads(template_str) if isinstance(template_str, str) else template_str
-        except (json.JSONDecodeError, TypeError, AttributeError) as e:
-            return StepResult(name=self.name, status="failed", detail=f"Failed to parse Xray template: {e}")
-
-        outbounds = template.get("outbounds", [])
-        has_warp = any(o.get("tag") == "warp" for o in outbounds)
-
-        if has_warp:
-            return StepResult(name=self.name, status="ok", detail="WARP outbound already configured")
-
-        # Insert WARP as first outbound (Xray uses first as default).
-        # Geo-blocking rules still route to "blocked"; everything else
-        # goes through WARP instead of "direct".
-        outbounds.insert(0, dict(_WARP_OUTBOUND))
-        template["outbounds"] = outbounds
-
-        updated_json = json.dumps(template)
+        # TODO: Rewrite for Remnawave — use panel.update_xray_config() API
+        # instead of the old 3x-ui PanelClient. For now, WARP outbound
+        # configuration must be done manually via the Remnawave web UI.
+        return StepResult(
+            name=self.name,
+            status="skipped",
+            detail="WARP outbound config via Remnawave API not yet implemented",
+        )
         try:
             from urllib.parse import quote as urlquote
 

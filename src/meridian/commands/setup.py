@@ -393,6 +393,21 @@ def _create_api_token(base_url: str, auth_token: str) -> str:
     return token
 
 
+def _get_docker_gateway(conn: ServerConnection) -> str:
+    """Get the Docker bridge gateway IP for panel-to-node communication.
+
+    When panel (bridge network) and node (host network) are on the same server,
+    the panel cannot reach 127.0.0.1 on the host. It must use the Docker bridge
+    gateway IP (typically 172.17.0.1) to reach services on the host network.
+    """
+    result = conn.run(
+        "docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'",
+        timeout=15,
+    )
+    gateway = result.stdout.strip() if result.returncode == 0 else ""
+    return gateway or "172.17.0.1"  # fallback to common default
+
+
 def _wait_for_panel_api(base_url: str, retries: int = 20, delay: float = 3.0) -> bool:
     """Wait for the panel REST API to become reachable from the deployer."""
     import httpx
@@ -579,12 +594,16 @@ def _setup_first_deploy(
         _cache_inbounds(panel, cluster)
 
         # Register this server as a node
+        # For same-server deployments (panel + node co-located), the panel runs
+        # in a Docker bridge network and cannot reach the node on 127.0.0.1.
+        # Use the Docker bridge gateway IP so the panel can reach the node.
+        node_address = _get_docker_gateway(resolved.conn)
         node_name = domain or resolved.ip
         try:
             inbound_uuids = [ref.uuid for ref in cluster.inbounds.values() if isinstance(ref, InboundRef) and ref.uuid]
             node_creds = panel.create_node(
                 name=node_name,
-                address=resolved.ip,
+                address=node_address,
                 port=REMNAWAVE_NODE_API_PORT,
                 config_profile_uuid=cluster.config_profile_uuid,
                 inbound_uuids=inbound_uuids,

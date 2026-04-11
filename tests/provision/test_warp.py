@@ -143,86 +143,11 @@ class _MockPanel:
 
 
 class TestConfigureWarpOutbound:
-    def test_already_configured_returns_ok(self, tmp_path: Path):
-        panel = _MockPanel(
-            {
-                "outbounds": [
-                    {"protocol": "socks", "tag": "warp", "settings": {}},
-                    {"protocol": "freedom", "tag": "direct"},
-                ],
-            }
-        )
+    def test_skips_pending_remnawave_implementation(self, tmp_path: Path):
+        """WARP outbound config is deferred — skips until Remnawave API integration."""
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path), warp=True)
-        ctx["panel"] = panel
-
         result = ConfigureWarpOutbound().run(MockConnection(), ctx)
-        assert result.status == "ok"
-        assert "already configured" in result.detail
-
-    def test_adds_warp_as_first_outbound(self, tmp_path: Path):
-        panel = _MockPanel(
-            {
-                "outbounds": [{"protocol": "freedom", "tag": "direct"}],
-                "routing": {"rules": []},
-            }
-        )
-        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path), warp=True)
-        ctx["panel"] = panel
-
-        result = ConfigureWarpOutbound().run(MockConnection(), ctx)
-        assert result.status == "changed"
-
-        updated = panel.updated_config
-        assert updated is not None
-        outbounds = updated["outbounds"]
-        # WARP must be FIRST (Xray uses first outbound as default)
-        assert outbounds[0]["tag"] == "warp"
-        assert outbounds[0]["protocol"] == "socks"
-        # Direct still present as fallback
-        assert any(o["tag"] == "direct" for o in outbounds)
-
-    def test_warp_points_to_correct_port(self, tmp_path: Path):
-        panel = _MockPanel()
-        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path), warp=True)
-        ctx["panel"] = panel
-
-        ConfigureWarpOutbound().run(MockConnection(), ctx)
-
-        updated = panel.updated_config
-        assert updated is not None
-        warp_outbound = updated["outbounds"][0]
-        server = warp_outbound["settings"]["servers"][0]
-        assert server["address"] == "127.0.0.1"
-        assert server["port"] == WARP_PROXY_PORT
-
-    def test_preserves_existing_outbounds(self, tmp_path: Path):
-        """WARP should be inserted before existing outbounds, not replace them."""
-        panel = _MockPanel(
-            {
-                "outbounds": [
-                    {"protocol": "freedom", "tag": "direct"},
-                    {"protocol": "blackhole", "tag": "blocked"},
-                ],
-                "routing": {"rules": []},
-            }
-        )
-        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path), warp=True)
-        ctx["panel"] = panel
-
-        ConfigureWarpOutbound().run(MockConnection(), ctx)
-
-        updated = panel.updated_config
-        assert updated is not None
-        tags = [o["tag"] for o in updated["outbounds"]]
-        assert tags == ["warp", "direct", "blocked"]
-
-    def test_restarts_xray(self, tmp_path: Path):
-        panel = _MockPanel()
-        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path), warp=True)
-        ctx["panel"] = panel
-
-        ConfigureWarpOutbound().run(MockConnection(), ctx)
-        assert panel._restarted
+        assert result.status == "skipped"
 
 
 # ---------------------------------------------------------------------------
