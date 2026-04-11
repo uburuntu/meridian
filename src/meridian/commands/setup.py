@@ -160,8 +160,9 @@ def run(
     # Compute port layout
     ip_hash = int(hashlib.sha256(resolved.ip.encode()).hexdigest()[:8], 16)
     xhttp_port = 30000 + (ip_hash % 10000)
-    needs_web_server = bool(domain)  # simplified: domain mode needs nginx
-    reality_port = 443 if not needs_web_server else (10000 + ip_hash % 1000)
+    # nginx always runs in 4.0 (panel reverse proxy + connection pages),
+    # so Reality must use an internal port, never 443 directly
+    reality_port = 10000 + ip_hash % 1000
     wss_port = 20000 + (ip_hash % 10000)
 
     # Generate or reuse secret_path for panel nginx reverse proxy
@@ -393,19 +394,84 @@ def _create_api_token(base_url: str, auth_token: str) -> str:
     return token
 
 
+def _generate_reality_keypair(conn: ServerConnection) -> tuple[str, str]:
+    """Generate x25519 keypair for Reality using tools available on the server.
+
+    Tries multiple sources: Xray in any running container, xray on host.
+    Returns (private_key, public_key) as base64 strings.
+    """
+    # Try various Xray binaries that might be available
+    cmds = [
+        "docker exec remnawave-node rw-core x25519 2>/dev/null",
+        "docker exec 3x-ui /app/bin/xray-linux-amd64 x25519 2>/dev/null",
+        "xray x25519 2>/dev/null",
+    ]
+    for cmd in cmds:
+        result = conn.run(cmd, timeout=15)
+        if result.returncode != 0 or not result.stdout.strip():
+            continue
+        private_key = ""
+        public_key = ""
+        for line in result.stdout.strip().splitlines():
+            line = line.strip()
+            # Xray x25519 output varies by version:
+            # "Private key: <key>" / "Public key: <key>"
+            # "PrivateKey: <key>" / "Password: <key>" (newer)
+            low = line.lower()
+            if "private" in low and ":" in line:
+                private_key = line.split(":", 1)[1].strip().strip('"')
+            elif ("public" in low or "password" in low) and ":" in line:
+                # "Password" is the newer Xray's name for the public key
+                if "hash" not in low:  # skip "Hash32:"
+                    public_key = line.split(":", 1)[1].strip().strip('"')
+        if private_key and public_key:
+            return private_key, public_key
+
+    # Last resort: download a temporary Xray binary
+    info("Downloading Xray binary for key generation...")
+    dl_result = conn.run(
+        "curl -sL https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip"
+        " -o /tmp/xray.zip && cd /tmp && unzip -qo xray.zip xray && chmod +x xray"
+        " && /tmp/xray x25519 && rm -f /tmp/xray /tmp/xray.zip",
+        timeout=60,
+    )
+    if dl_result.returncode == 0:
+        for line in dl_result.stdout.strip().splitlines():
+            line = line.strip()
+            low = line.lower()
+            if "private" in low and ":" in line:
+                private_key = line.split(":", 1)[1].strip().strip('"')
+            elif ("public" in low or "password" in low) and ":" in line:
+                if "hash" not in low:
+                    public_key = line.split(":", 1)[1].strip().strip('"')
+        if private_key and public_key:
+            return private_key, public_key
+
+    fail(
+        "Could not generate Reality x25519 keypair",
+        hint="Install xray on the server or ensure Docker is running",
+        hint_type="system",
+    )
+    return "", ""  # unreachable
+
+
 def _get_docker_gateway(conn: ServerConnection) -> str:
-    """Get the Docker bridge gateway IP for panel-to-node communication.
+    """Get the Docker gateway IP for panel-to-node communication.
 
     When panel (bridge network) and node (host network) are on the same server,
-    the panel cannot reach 127.0.0.1 on the host. It must use the Docker bridge
-    gateway IP (typically 172.17.0.1) to reach services on the host network.
+    the panel cannot reach 127.0.0.1 on the host. It must use the gateway IP
+    of its Docker network to reach services on the host network.
+
+    We inspect the panel container's actual network, not the default bridge,
+    because the panel runs on a custom 'remnawave-net' network.
     """
     result = conn.run(
-        "docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'",
+        "docker inspect remnawave --format "
+        "'{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}'",
         timeout=15,
     )
     gateway = result.stdout.strip() if result.returncode == 0 else ""
-    return gateway or "172.17.0.1"  # fallback to common default
+    return gateway or "172.17.0.1"
 
 
 def _wait_for_panel_api(base_url: str, retries: int = 20, delay: float = 3.0) -> bool:
@@ -573,6 +639,7 @@ def _setup_first_deploy(
         # Create config profile (Xray inbound definitions)
         profile_name = "meridian-default"
         xray_config = _build_xray_config(
+            resolved.conn,
             sni=sni,
             reality_port=reality_port,
             xhttp_port=xhttp_port,
@@ -757,6 +824,7 @@ def _setup_new_node(
 
 
 def _build_xray_config(
+    conn: ServerConnection,
     sni: str,
     reality_port: int,
     xhttp_port: int,
@@ -806,9 +874,14 @@ def _build_xray_config(
     ]
 
     # Reality inbound (primary -- always present)
+    # Generate x25519 keypair and short ID for Reality camouflage
+    private_key, public_key = _generate_reality_keypair(conn)
+    short_id = secrets.token_hex(4)  # 8-char hex
+
     reality_inbound = {
         "tag": "vless-reality",
         "protocol": "vless",
+        "listen": "127.0.0.1",
         "port": reality_port,
         "settings": {
             "clients": [],
@@ -820,6 +893,8 @@ def _build_xray_config(
             "realitySettings": {
                 "dest": f"{sni}:443",
                 "serverNames": [sni],
+                "privateKey": private_key,
+                "shortIds": [short_id],
                 "fingerprint": "chrome",
             },
         },
@@ -1001,6 +1076,16 @@ def _deploy_node_container(conn: ServerConnection, secret_key: str) -> None:
         return
 
     ok("Remnawave node deployed")
+
+    # Allow Docker internal traffic to reach the node API port
+    # (panel in bridge network → node on host via gateway IP)
+    from meridian.config import REMNAWAVE_NODE_API_PORT
+
+    conn.run(
+        f"ufw allow from 172.16.0.0/12 to any port {REMNAWAVE_NODE_API_PORT} proto tcp"
+        f" comment 'Meridian node API (Docker internal)' 2>/dev/null; true",
+        timeout=15,
+    )
 
 
 # ---------------------------------------------------------------------------
