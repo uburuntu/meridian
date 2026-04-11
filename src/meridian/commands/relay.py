@@ -376,22 +376,27 @@ def _sync_exit_credentials_to_server(resolved_exit: ResolvedServer) -> bool:
     """Sync exit server credentials back to /etc/meridian/ after relay changes."""
     if resolved_exit.local_mode:
         return True
+    dest = f"{resolved_exit.user}@{scp_host(resolved_exit.ip)}"
     try:
-        result = subprocess.run(
-            [
-                "scp",
-                *SSH_OPTS,
-                "-r",
-                f"{resolved_exit.creds_dir}/",
-                f"{resolved_exit.user}@{scp_host(resolved_exit.ip)}:/etc/meridian/",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            stdin=subprocess.DEVNULL,
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+        for path in resolved_exit.creds_dir.iterdir():
+            if not path.is_file():
+                continue
+            result = subprocess.run(
+                [
+                    "scp",
+                    *SSH_OPTS,
+                    str(path),
+                    f"{dest}:/etc/meridian/{path.name}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                stdin=subprocess.DEVNULL,
+            )
+            if result.returncode != 0:
+                return False
+        return True
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         return False
 
 
