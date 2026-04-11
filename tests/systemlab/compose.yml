@@ -25,7 +25,6 @@ services:
       - /run
       - /run/lock
     volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:rw
       - exit-docker:/var/lib/docker
     healthcheck:
       test: ["CMD", "bash", "-c", "nc -z 127.0.0.1 22"]
@@ -46,8 +45,6 @@ services:
     tmpfs:
       - /run
       - /run/lock
-    volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:rw
     healthcheck:
       test: ["CMD", "bash", "-c", "nc -z 127.0.0.1 22"]
       interval: 5s
