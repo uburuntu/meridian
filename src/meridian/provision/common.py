@@ -335,10 +335,18 @@ class ConfigureBBR:
         for key, value in _BBR_SETTINGS.items():
             result = conn.run(f"sysctl -w {key}={value}", timeout=15)
             if result.returncode != 0:
+                stderr = result.stderr.strip()
+                # Containers and old kernels lack these tunables — warn, don't block deploy
+                if "No such file" in stderr or "does not exist" in stderr:
+                    return StepResult(
+                        name=self.name,
+                        status="changed",
+                        detail=f"WARNING: {key} unavailable (kernel may not support BBR)",
+                    )
                 return StepResult(
                     name=self.name,
-                    status="changed",
-                    detail=f"WARNING: {key} unavailable (kernel may not support BBR)",
+                    status="failed",
+                    detail=f"sysctl {key} failed: {stderr[:200]}",
                 )
 
         # Persist to sysctl.conf
