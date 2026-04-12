@@ -182,6 +182,14 @@ class ClusterConfig:
             fd = -1
             os.chmod(tmp, 0o600)
             os.rename(tmp, str(path))
+        except OSError as e:
+            if fd >= 0:
+                os.close(fd)
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise OSError(
+                f"Failed to save cluster.yml: {e}. Check disk space (df -h) and directory permissions ({path.parent})"
+            ) from e
         except BaseException:
             if fd >= 0:
                 os.close(fd)
