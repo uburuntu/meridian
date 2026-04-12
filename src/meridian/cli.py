@@ -226,11 +226,12 @@ def client_remove(
     name: str = typer.Argument(..., help="Client name"),
     server: str = typer.Option("", "--server", help="Target server (name or IP)"),
     user: str = typer.Option("", "--user", "-u", help="SSH user"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
     """Remove a client."""
     from meridian.commands.client import run_remove
 
-    run_remove(name, user, server)
+    run_remove(name, user, server, yes=yes)
 
 
 # =============================================================================

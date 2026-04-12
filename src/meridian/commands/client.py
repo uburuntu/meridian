@@ -240,6 +240,7 @@ def run_remove(
     name: str,
     user: str = "",
     requested_server: str = "",
+    yes: bool = False,
 ) -> None:
     """Remove a client from the proxy cluster."""
     _validate_client_name(name)
@@ -255,7 +256,7 @@ def run_remove(
                 hint_type="user",
             )
 
-        if not confirm(f"Remove client '{name}'?"):
+        if not yes and not confirm(f"Remove client '{name}'?"):
             raise typer.Exit(1)
 
         success = panel.delete_user(client.uuid)
