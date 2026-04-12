@@ -560,7 +560,14 @@ def _configure_panel_and_node(
             cluster=cluster,
             domain=domain,
             sni=sni,
+            reality_port=reality_port,
+            xhttp_port=xhttp_port,
+            wss_port=wss_port,
             version=__version__,
+            pq=pq,
+            geo_block=geo_block,
+            xhttp_path=xhttp_path,
+            ws_path=ws_path,
         )
     else:
         _setup_new_node(
@@ -674,6 +681,7 @@ def _setup_first_deploy(
         xray_config = xray_result["config"]
         reality_public_key = xray_result["reality_public_key"]
         reality_short_id = xray_result["reality_short_id"]
+        reality_private_key = xray_result["reality_private_key"]
 
         try:
             existing_profile = panel.find_config_profile_by_name(profile_name)
@@ -738,6 +746,7 @@ def _setup_first_deploy(
             ws_path=ws_path,
             reality_public_key=reality_public_key,
             reality_short_id=reality_short_id,
+            reality_private_key=reality_private_key,
         )
         # Deduplicate: update existing entry or append new
         cluster.remove_node(resolved.ip)
@@ -767,15 +776,32 @@ def _setup_redeploy(
     cluster: ClusterConfig,
     domain: str,
     sni: str,
+    reality_port: int,
+    xhttp_port: int,
+    wss_port: int,
     version: str,
+    *,
+    pq: bool = False,
+    geo_block: bool = True,
+    xhttp_path: str = "",
+    ws_path: str = "",
 ) -> None:
-    """Redeploy: verify panel access, update node metadata."""
+    """Redeploy: update node config, rebuild Xray profile, redeploy container.
+
+    Preserves Reality keys from cluster.yml so existing client configs
+    continue to work. Re-runs panel API configuration to pick up
+    changes to SNI, domain, protocol options, etc.
+    """
     if not cluster.panel.api_token:
         fail(
             "Cluster config exists but has no API token",
             hint="Run: meridian teardown, then redeploy from scratch",
             hint_type="system",
         )
+
+    node = cluster.find_node(resolved.ip)
+    if not node:
+        fail(f"Node {resolved.ip} not found in cluster config", hint_type="system")
 
     try:
         with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
@@ -787,14 +813,110 @@ def _setup_redeploy(
                 )
             ok("Panel API accessible")
 
-            # Update node entry metadata
-            node = cluster.find_node(resolved.ip)
-            if node:
-                node.sni = sni or node.sni
-                node.domain = domain or node.domain
-                node.deployed_with = version
-                cluster.save()
-                ok("Node metadata updated")
+            # Build Xray config reusing existing Reality keys
+            # If we have saved keys, skip keygen (preserves client configs)
+            if node.reality_private_key and node.reality_public_key and node.reality_short_id:
+                info("Reusing existing Reality keys (client configs preserved)")
+                xray_result = _build_xray_config(
+                    None,  # no SSH needed when reusing keys
+                    sni=sni or node.sni,
+                    reality_port=reality_port,
+                    xhttp_port=xhttp_port,
+                    wss_port=wss_port,
+                    domain=domain or node.domain,
+                    pq=pq,
+                    geo_block=geo_block,
+                    xhttp_path=xhttp_path or node.xhttp_path,
+                    ws_path=ws_path or node.ws_path,
+                    existing_private_key=node.reality_private_key,
+                    existing_public_key=node.reality_public_key,
+                    existing_short_id=node.reality_short_id,
+                )
+            else:
+                # No saved keys — must regenerate (breaks existing client configs)
+                warn("No saved Reality keys — regenerating (clients will need new configs)")
+                xray_result = _build_xray_config(
+                    resolved.conn,
+                    sni=sni or node.sni,
+                    reality_port=reality_port,
+                    xhttp_port=xhttp_port,
+                    wss_port=wss_port,
+                    domain=domain or node.domain,
+                    pq=pq,
+                    geo_block=geo_block,
+                    xhttp_path=xhttp_path or node.xhttp_path,
+                    ws_path=ws_path or node.ws_path,
+                )
+
+            xray_config = xray_result["config"]
+            reality_public_key = xray_result["reality_public_key"]
+            reality_short_id = xray_result["reality_short_id"]
+            reality_private_key = xray_result["reality_private_key"]
+
+            # Update or create config profile
+            profile_name = cluster.config_profile_name or "meridian-default"
+            try:
+                existing_profile = panel.find_config_profile_by_name(profile_name)
+                if existing_profile:
+                    # Update existing profile with new Xray config
+                    profile = panel.create_config_profile(f"{profile_name}-{version}", xray_config)
+                    ok(f"Config profile updated: {profile.name}")
+                else:
+                    profile = panel.create_config_profile(profile_name, xray_config)
+                    ok("Config profile created")
+                cluster.config_profile_uuid = profile.uuid
+                cluster.config_profile_name = profile.name
+            except RemnawaveError as e:
+                warn(f"Could not update config profile: {e}")
+
+            # Re-cache inbounds
+            _cache_inbounds(panel, cluster)
+
+            # Verify node registration
+            if node.uuid:
+                api_node = panel.get_node(node.uuid)
+                if api_node:
+                    ok(f"Node {resolved.ip} still registered")
+                else:
+                    warn(f"Node {resolved.ip} not found in panel — re-registering")
+                    inbound_uuids = [
+                        ref.uuid for ref in cluster.inbounds.values()
+                        if isinstance(ref, InboundRef) and ref.uuid
+                    ]
+                    node_creds = panel.create_node(
+                        name=domain or resolved.ip,
+                        address=resolved.ip,
+                        port=REMNAWAVE_NODE_API_PORT,
+                        config_profile_uuid=cluster.config_profile_uuid,
+                        inbound_uuids=inbound_uuids,
+                    )
+                    node.uuid = node_creds.uuid
+                    _deploy_node_container(resolved.conn, node_creds.secret_key)
+            else:
+                warn("Node has no UUID — skipping panel verification")
+
+            # Redeploy node container (refresh secret key + image)
+            if node.uuid:
+                keygen = panel._get("/api/keygen")
+                secret_key = keygen.get("pubKey", "") if isinstance(keygen, dict) else ""
+                if secret_key:
+                    _deploy_node_container(resolved.conn, secret_key)
+
+            # Recreate hosts (idempotent)
+            _create_hosts_for_node(panel, cluster, resolved.ip, domain or node.domain, sni or node.sni, reality_port)
+
+            # Update node metadata
+            node.sni = sni or node.sni
+            node.domain = domain or node.domain
+            node.deployed_with = version
+            node.reality_public_key = reality_public_key
+            node.reality_short_id = reality_short_id
+            node.reality_private_key = reality_private_key
+            node.xhttp_path = xhttp_path or node.xhttp_path
+            node.ws_path = ws_path or node.ws_path
+            cluster.backup()
+            cluster.save()
+            ok("Node configuration updated")
 
     except RemnawaveError as e:
         fail(f"Panel API error: {e}", hint_type="system")
@@ -888,7 +1010,7 @@ def _setup_new_node(
 
 
 def _build_xray_config(
-    conn: ServerConnection,
+    conn: ServerConnection | None,
     sni: str,
     reality_port: int,
     xhttp_port: int,
@@ -899,11 +1021,18 @@ def _build_xray_config(
     geo_block: bool,
     xhttp_path: str = "",
     ws_path: str = "",
+    existing_private_key: str = "",
+    existing_public_key: str = "",
+    existing_short_id: str = "",
 ) -> dict:
     """Build the Xray configuration for a Remnawave config profile.
 
     This defines the inbounds that the node will run. The actual Xray
     config is managed by Remnawave, but we provide the template.
+
+    If existing_private_key/public_key/short_id are provided, reuses
+    them instead of generating new Reality keys (preserves client configs
+    on redeploy). When provided, conn may be None.
 
     Returns a dict with keys:
       - "config": the Xray config dict
@@ -945,9 +1074,16 @@ def _build_xray_config(
     ]
 
     # Reality inbound (primary -- always present)
-    # Generate x25519 keypair and short ID for Reality camouflage
-    private_key, public_key = _generate_reality_keypair(conn)
-    short_id = secrets.token_hex(4)  # 8-char hex
+    # Reuse existing keys on redeploy, generate fresh on first deploy
+    if existing_private_key and existing_public_key and existing_short_id:
+        private_key = existing_private_key
+        public_key = existing_public_key
+        short_id = existing_short_id
+    else:
+        if conn is None:
+            fail("Cannot generate Reality keys without SSH connection", hint_type="bug")
+        private_key, public_key = _generate_reality_keypair(conn)
+        short_id = secrets.token_hex(4)  # 8-char hex
 
     reality_inbound = {
         "tag": "vless-reality",
@@ -1023,6 +1159,7 @@ def _build_xray_config(
         "config": config,
         "reality_public_key": public_key,
         "reality_short_id": short_id,
+        "reality_private_key": private_key,
     }
 
 

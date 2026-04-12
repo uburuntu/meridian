@@ -7,6 +7,7 @@ deployment topology and panel access.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import sys
@@ -17,6 +18,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger("meridian.cluster")
 
 
 # StrEnum backport for Python 3.10 (stdlib StrEnum is 3.11+)
@@ -74,6 +77,7 @@ class NodeEntry:
     ws_path: str = ""  # persisted WebSocket path (reused across redeploys)
     reality_public_key: str = ""  # Reality public key (for test command)
     reality_short_id: str = ""  # Reality short ID
+    reality_private_key: str = ""  # Reality private key (for redeploy config rebuild)
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -138,6 +142,7 @@ class ClusterConfig:
             from meridian.config import CLUSTER_CONFIG
 
             path = CLUSTER_CONFIG
+        logger.debug("Loading cluster config from %s", path)
         if not path.exists():
             return cls()
         raw = path.read_text()
@@ -165,6 +170,7 @@ class ClusterConfig:
             from meridian.config import CLUSTER_CONFIG
 
             path = CLUSTER_CONFIG
+        logger.debug("Saving cluster config to %s", path)
 
         errors = self.validate()
         if errors:
@@ -381,6 +387,7 @@ _NODE_FIELDS = {
     "ws_path",
     "reality_public_key",
     "reality_short_id",
+    "reality_private_key",
 }
 _RELAY_FIELDS = {"ip", "name", "port", "exit_node_ip", "host_uuids", "sni", "ssh_user", "ssh_port"}
 _BRANDING_FIELDS = {"server_name", "icon", "color"}
@@ -461,6 +468,8 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
                 d.pop("reality_public_key", None)
             if not d.get("reality_short_id"):
                 d.pop("reality_short_id", None)
+            if not d.get("reality_private_key"):
+                d.pop("reality_private_key", None)
             nodes_out.append(d)
         out["nodes"] = nodes_out
 
