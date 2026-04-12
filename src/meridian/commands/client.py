@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import re
 
+import typer
+
 from meridian.commands._helpers import format_traffic, load_cluster, make_panel
-from meridian.console import confirm, err_console, fail, info, ok
+from meridian.console import confirm, err_console, fail, info, is_json_mode, ok
 from meridian.remnawave import MeridianPanel, RemnawaveError, User
 
 # -- Helpers --
@@ -123,6 +125,25 @@ def run_show(
                 hint_type="user",
             )
 
+        if is_json_mode():
+            from meridian.console import json_output
+
+            json_output(
+                {
+                    "client": {
+                        "username": client.username,
+                        "uuid": client.uuid,
+                        "status": client.status,
+                        "traffic_used": client.used_traffic_bytes,
+                        "traffic_limit": client.traffic_limit_bytes,
+                        "created_at": client.created_at,
+                        "last_seen": client.online_at,
+                        "subscription_url": panel.get_subscription_url(client.short_uuid),
+                    }
+                }
+            )
+            return
+
         # Print subscription URL + QR
         _print_subscription(panel, client)
 
@@ -234,7 +255,8 @@ def run_remove(
                 hint_type="user",
             )
 
-        confirm(f"Remove client '{name}'?")
+        if not confirm(f"Remove client '{name}'?"):
+            raise typer.Exit(1)
 
         success = panel.delete_user(client.uuid)
         if not success:
