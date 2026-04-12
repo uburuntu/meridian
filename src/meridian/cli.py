@@ -439,17 +439,24 @@ def node_add_cmd(
     name: str = typer.Option("", "--name", help="Friendly name for the node"),
     user: str = typer.Option("root", "--user", "-u", help="SSH user"),
     sni: str = typer.Option("", "--sni", help="Reality SNI target"),
+    domain: str = typer.Option("", "--domain", help="Domain for WSS/XHTTP (Cloudflare CDN)"),
     ssh_port: int = typer.Option(22, "--ssh-port", help="SSH port"),
+    harden: bool = typer.Option(True, help="Apply OS hardening (firewall, SSH, etc.)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts"),
 ) -> None:
-    """Add a new proxy node to the fleet.
+    """Provision and add a new proxy node to the fleet.
+
+    Connects via SSH, hardens the server, installs Docker and Xray,
+    registers with the panel, and creates host entries.
 
     [dim]Examples:[/dim]
       [cyan]meridian node add 1.2.3.4[/cyan]
-      [cyan]meridian node add 1.2.3.4 --name finland --sni www.apple.com[/cyan]
+      [cyan]meridian node add 1.2.3.4 --name finland --sni www.google.com[/cyan]
+      [cyan]meridian node add 1.2.3.4 --domain proxy.example.com --yes[/cyan]
     """
     from meridian.commands.node import run_add
 
-    run_add(ip, name=name, user=user, ssh_port=ssh_port, sni=sni)
+    run_add(ip, name=name, user=user, ssh_port=ssh_port, sni=sni, domain=domain, harden=harden, yes=yes)
 
 
 @node_app.command("list")
@@ -464,11 +471,12 @@ def node_list_cmd() -> None:
 def node_remove_cmd(
     node: str = typer.Argument(..., help="Node IP or name"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+    force: bool = typer.Option(False, "--force", help="Remove even if relays depend on this node"),
 ) -> None:
     """Remove a node from the fleet."""
     from meridian.commands.node import run_remove
 
-    run_remove(node, yes=yes)
+    run_remove(node, yes=yes, force=force)
 
 
 # =============================================================================

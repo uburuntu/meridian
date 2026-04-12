@@ -1,4 +1,4 @@
-"""Node management -- add, list, remove proxy nodes in the fleet.
+"""Node management -- add, list, check, remove proxy nodes in the fleet.
 
 Nodes are servers running Remnawave node + Xray. All node state is
 tracked in the panel database; cluster.yml stores topology for local
@@ -7,11 +7,12 @@ reference and SSH access.
 
 from __future__ import annotations
 
-from meridian.commands._helpers import format_traffic, load_cluster, make_panel
-from meridian.cluster import ClusterConfig, NodeEntry
-from meridian.console import confirm, err_console, fail, info, ok, warn
-from meridian.remnawave import MeridianPanel, RemnawaveError
+import hashlib
+import secrets
 
+from meridian.commands._helpers import format_traffic, load_cluster, make_panel
+from meridian.console import confirm, err_console, fail, info, ok, warn
+from meridian.remnawave import RemnawaveError
 
 # -- Node Add --
 
@@ -22,9 +23,18 @@ def run_add(
     user: str = "root",
     ssh_port: int = 22,
     sni: str = "",
-    port: int = 2087,
+    domain: str = "",
+    harden: bool = True,
+    yes: bool = False,
 ) -> None:
-    """Add a new node to the fleet."""
+    """Provision and add a new node to the fleet."""
+    from meridian.commands.resolve import ensure_server_connection, resolve_server
+    from meridian.commands.setup import (
+        DEFAULT_SNI,
+        _run_provisioner,
+        _setup_new_node,
+    )
+
     if not ip:
         fail("Node IP address is required", hint="Usage: meridian node add IP", hint_type="user")
 
@@ -33,66 +43,67 @@ def run_add(
     # Check for duplicate
     existing = cluster.find_node(ip)
     if existing is not None:
-        fail(f"Node {ip} already exists in cluster", hint="Use: meridian node list", hint_type="user")
+        fail(
+            f"Node {ip} already exists in cluster",
+            hint=f"Use: meridian deploy {ip} to redeploy",
+            hint_type="user",
+        )
+
+    # Resolve and connect
+    resolved = resolve_server(ip, user=user, port=ssh_port)
+    ensure_server_connection(resolved)
 
     node_name = name or ip
+    effective_sni = sni or DEFAULT_SNI
 
-    info(f"Adding node {ip} ({node_name})...")
+    info(f"Adding node {resolved.ip} ({node_name})...")
 
-    # TODO: SSH into the new server and run provisioner pipeline:
-    #   conn = ServerConnection(ip, user=user, port=ssh_port)
-    #   steps = build_node_steps(conn, ...)
-    #   run_steps(steps)
-    # This provisions OS hardening, Docker, and Remnawave node container.
-    # For now, we assume the node is already provisioned and register it
-    # with the panel API only.
+    if not yes:
+        confirm(f"Provision and add node at {resolved.ip}?")
 
-    panel = make_panel(cluster)
-    with panel:
-        # Collect inbound UUIDs from cluster config
-        inbound_uuids = [ref.uuid for ref in cluster.inbounds.values() if ref.uuid]
+    # Compute port layout (same scheme as deploy)
+    ip_hash = int(hashlib.sha256(resolved.ip.encode()).hexdigest()[:8], 16)
+    xhttp_port = 30000 + (ip_hash % 10000)
+    reality_port = 10000 + ip_hash % 1000
+    wss_port = 20000 + (ip_hash % 10000)
 
-        # Register node with the panel
-        try:
-            creds = panel.create_node(
-                name=node_name,
-                address=ip,
-                port=port,
-                config_profile_uuid=cluster.config_profile_uuid,
-                inbound_uuids=inbound_uuids or None,
-            )
-        except RemnawaveError as e:
-            fail(
-                f"Could not register node: {e}",
-                hint=e.hint or "Check panel connectivity",
-                hint_type=e.hint_type,
-            )
+    # Generate paths
+    xhttp_path = secrets.token_hex(8)
+    ws_path = secrets.token_hex(8)
 
-        ok(f"Node registered with panel (uuid: {creds.uuid[:8]}...)")
-
-        # TODO: Write SECRET_KEY to node's .env and restart container:
-        #   conn.run(f"echo 'SECRET_KEY={shlex.quote(creds.secret_key)}' > ...")
-        #   conn.run("docker compose restart remnawave-node")
-
-        if creds.secret_key:
-            info("Secret key obtained -- provision the node container to complete setup")
-
-        # TODO: Create hosts for this node's IP
-        #   panel.create_host(remark=..., address=ip, port=443, inbound_uuid=...)
-
-    # Save to cluster config
-    node_entry = NodeEntry(
-        ip=ip,
-        uuid=creds.uuid,
-        name=node_name,
-        ssh_user=user,
-        ssh_port=ssh_port,
-        sni=sni,
+    # Run SSH provisioner pipeline (OS hardening, Docker, nginx, TLS)
+    _run_provisioner(
+        resolved=resolved,
+        cluster=cluster,
+        domain=domain,
+        sni=effective_sni,
+        harden=harden,
+        is_panel_host=False,
+        secret_path=cluster.panel.secret_path,
+        xhttp_port=xhttp_port,
+        reality_port=reality_port,
+        wss_port=wss_port,
+        xhttp_path=xhttp_path,
+        ws_path=ws_path,
     )
-    cluster.nodes.append(node_entry)
-    cluster.save()
 
-    ok(f"Node {ip} added to cluster")
+    # Configure via panel API (register node, deploy container, create hosts)
+    from meridian import __version__
+
+    _setup_new_node(
+        resolved=resolved,
+        cluster=cluster,
+        domain=domain,
+        sni=effective_sni,
+        reality_port=reality_port,
+        xhttp_port=xhttp_port,
+        wss_port=wss_port,
+        version=__version__,
+        xhttp_path=xhttp_path,
+        ws_path=ws_path,
+    )
+
+    ok(f"Node {resolved.ip} provisioned and added to cluster")
 
     err_console.print()
     err_console.print("  [dim]List nodes:     meridian node list[/dim]")
@@ -183,7 +194,7 @@ def run_list() -> None:
 # -- Node Remove --
 
 
-def run_remove(ip_or_name: str, yes: bool = False) -> None:
+def run_remove(ip_or_name: str, yes: bool = False, force: bool = False) -> None:
     """Remove a node from the fleet."""
     if not ip_or_name:
         fail("Node IP or name is required", hint="Usage: meridian node remove IP_OR_NAME", hint_type="user")
@@ -204,6 +215,19 @@ def run_remove(ip_or_name: str, yes: bool = False) -> None:
             hint="The panel runs on this node. Use 'meridian teardown' instead.",
             hint_type="user",
         )
+
+    # Guard: check for relays that depend on this node as their exit
+    dependent_relays = [r for r in cluster.relays if r.exit_node_ip == node.ip]
+    if dependent_relays:
+        relay_names = ", ".join(r.name or r.ip for r in dependent_relays)
+        if not force:
+            fail(
+                f"Cannot remove node {node.ip} — {len(dependent_relays)} relay(s) depend on it: {relay_names}",
+                hint="Remove relays first, or use --force to remove anyway",
+                hint_type="user",
+            )
+        else:
+            warn(f"Force-removing node with {len(dependent_relays)} dependent relay(s): {relay_names}")
 
     if not yes:
         confirm(f"Remove node {node.ip} ({node.name or 'unnamed'})?")
