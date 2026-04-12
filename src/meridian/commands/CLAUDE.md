@@ -18,6 +18,6 @@
 
 ## Pitfalls
 
-- **`console.fail()` always exits** — raises `typer.Exit(1)`. Only call from command entry points.
-- **`confirm()` raises on rejection** — returns True or raises `typer.Exit(1)`. Never returns False.
+- **`console.fail()` always exits** — raises `typer.Exit` with semantic codes (user=2, system=3, bug=1). Only call from command entry points.
+- **`confirm()` returns bool** — returns True on accept, False on reject. Callers must check `if not confirm(...): raise typer.Exit(1)`.
 - **Panel node cannot be removed** — `node remove` blocks removal of the panel host server.

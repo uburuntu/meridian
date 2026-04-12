@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import typer
+
 from meridian.cluster import ClusterConfig
 from meridian.config import CLUSTER_CONFIG, CREDS_BASE
 from meridian.console import confirm, err_console, fail, info, ok, warn
@@ -103,7 +105,8 @@ def run_migrate() -> None:
     err_console.print()
 
     # 4. Confirm
-    confirm("Ready to see migration instructions?")
+    if not confirm("Ready to see migration instructions?"):
+        raise typer.Exit(1)
 
     # 5. Print migration guide
     err_console.print()

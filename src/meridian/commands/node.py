@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import secrets
 
+import typer
+
 from meridian.commands._helpers import format_traffic, load_cluster, make_panel
 from meridian.console import confirm, err_console, fail, info, ok, warn
 from meridian.remnawave import RemnawaveError
@@ -59,7 +61,8 @@ def run_add(
     info(f"Adding node {resolved.ip} ({node_name})...")
 
     if not yes:
-        confirm(f"Provision and add node at {resolved.ip}?")
+        if not confirm(f"Provision and add node at {resolved.ip}?"):
+            raise typer.Exit(1)
 
     # Compute port layout (same scheme as deploy)
     ip_hash = int(hashlib.sha256(resolved.ip.encode()).hexdigest()[:8], 16)
@@ -363,7 +366,8 @@ def run_remove(ip_or_name: str, yes: bool = False, force: bool = False) -> None:
             warn(f"Force-removing node with {len(dependent_relays)} dependent relay(s): {relay_names}")
 
     if not yes:
-        confirm(f"Remove node {node.ip} ({node.name or 'unnamed'})?")
+        if not confirm(f"Remove node {node.ip} ({node.name or 'unnamed'})?"):
+            raise typer.Exit(1)
 
     panel = make_panel(cluster)
     with panel:

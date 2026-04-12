@@ -10,6 +10,7 @@ path, accessible directly from the deployer's machine (no SSH tunneling).
 from __future__ import annotations
 
 import logging
+import random
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -132,7 +133,7 @@ class MeridianPanel:
         nodes = panel.list_nodes()
     """
 
-    def __init__(self, base_url: str, api_token: str, *, timeout: int = 30, max_retries: int = 3):
+    def __init__(self, base_url: str, api_token: str, *, timeout: int = 30, max_retries: int = 5):
         import httpx
 
         self._base = base_url.rstrip("/")
@@ -191,7 +192,7 @@ class MeridianPanel:
                     last_error = RemnawaveError(f"Panel server error ({resp.status_code}): {resp.text[:200]}")
                     if attempt < self._max_retries - 1:
                         logger.debug("Retry %d/%d after %s", attempt + 1, self._max_retries, "ServerError")
-                        time.sleep(2**attempt)
+                        time.sleep(min(2**attempt, 16) + random.uniform(0, 1))
                         continue
                     raise last_error
                 resp.raise_for_status()

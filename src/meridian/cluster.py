@@ -177,12 +177,9 @@ class ClusterConfig:
 
         errors = self.validate()
         if errors:
-            print(
-                f"Warning: cluster config has {len(errors)} validation issue(s):",
-                file=sys.stderr,
+            raise ValueError(
+                f"Cluster config has {len(errors)} validation error(s):\n" + "\n".join(f"  - {e}" for e in errors[:5])
             )
-            for e in errors[:5]:
-                print(f"  - {e}", file=sys.stderr)
 
         out = _serialize_cluster(self)
 
