@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import typer
 
 from meridian.credentials import RelayEntry, ServerCredentials
 from meridian.models import ProtocolURL, RelayURLSet
@@ -517,179 +516,6 @@ class TestRelayCLI:
         assert "Exit server" in result.output
 
 
-class TestRelayRemoveSync:
-    def test_remove_sync_failure_restores_local_state_and_fails(self, sample_proxy_with_relays: Path) -> None:
-        from meridian.commands.relay import run_remove
-
-        creds_dir = sample_proxy_with_relays.parent
-        original = sample_proxy_with_relays.read_text()
-        resolved_exit = MagicMock()
-        resolved_exit.ip = "5.6.7.8"
-        resolved_exit.user = "root"
-        resolved_exit.local_mode = False
-        resolved_exit.creds_dir = creds_dir
-        resolved_exit.conn = MagicMock()
-
-        registry = MagicMock()
-        relay_conn = MagicMock()
-        panel = MagicMock()
-        panel.login.return_value = None
-        panel.find_inbound.return_value = MagicMock(id=42)
-        panel.api_post_empty.return_value = None
-
-        with (
-            patch("meridian.commands.relay._resolve_exit", return_value=resolved_exit),
-            patch("meridian.commands.relay.fetch_credentials", return_value=True),
-            patch("meridian.commands.relay.ServerRegistry", return_value=registry),
-            patch("meridian.commands.relay.ServerConnection", return_value=relay_conn),
-            patch("meridian.commands.relay._sync_exit_credentials_to_server", return_value=False),
-            patch("meridian.panel.PanelClient", return_value=panel),
-        ):
-            with pytest.raises(typer.Exit) as exc:
-                run_remove("1.2.3.4", exit_arg="5.6.7.8", yes=True)
-
-        assert exc.value.exit_code == 1
-        # Relay should remain in local creds if sync fails
-        creds = ServerCredentials.load(sample_proxy_with_relays)
-        assert any(r.ip == "1.2.3.4" for r in creds.relays)
-        assert sample_proxy_with_relays.read_text() == original
-        registry.remove.assert_not_called()
-
-    def test_remove_warns_on_panel_failure_but_completes(self, sample_proxy_with_relays: Path) -> None:
-        from meridian.commands.relay import run_remove
-        from meridian.panel import PanelError
-
-        creds_dir = sample_proxy_with_relays.parent
-        resolved_exit = MagicMock()
-        resolved_exit.ip = "5.6.7.8"
-        resolved_exit.user = "root"
-        resolved_exit.local_mode = False
-        resolved_exit.creds_dir = creds_dir
-        resolved_exit.conn = MagicMock()
-
-        registry = MagicMock()
-        relay_conn = MagicMock()
-        panel = MagicMock()
-        panel.login.return_value = None
-        panel.find_inbound.return_value = MagicMock(id=42)
-        panel.api_post_empty.side_effect = PanelError("backend failed")
-
-        with (
-            patch("meridian.commands.relay._resolve_exit", return_value=resolved_exit),
-            patch("meridian.commands.relay.fetch_credentials", return_value=True),
-            patch("meridian.commands.relay.ServerRegistry", return_value=registry),
-            patch("meridian.commands.relay.ServerConnection", return_value=relay_conn),
-            patch("meridian.commands.relay._remove_relay_nginx", return_value=True),
-            patch("meridian.commands.relay._sync_exit_credentials_to_server", return_value=True),
-            patch("meridian.panel.PanelClient", return_value=panel),
-        ):
-            run_remove("1.2.3.4", exit_arg="5.6.7.8", yes=True)
-
-        # Relay should still be removed locally despite panel failure
-        creds = ServerCredentials.load(sample_proxy_with_relays)
-        assert all(r.ip != "1.2.3.4" for r in creds.relays)
-        registry.remove.assert_called_once_with("1.2.3.4")
-
-    def test_remove_nginx_cleanup_failure_keeps_local_state(self, sample_proxy_with_relays: Path) -> None:
-        from meridian.commands.relay import run_remove
-
-        creds_dir = sample_proxy_with_relays.parent
-        original = sample_proxy_with_relays.read_text()
-        resolved_exit = MagicMock()
-        resolved_exit.ip = "5.6.7.8"
-        resolved_exit.user = "root"
-        resolved_exit.local_mode = False
-        resolved_exit.creds_dir = creds_dir
-        resolved_exit.conn = MagicMock()
-
-        registry = MagicMock()
-        relay_conn = MagicMock()
-        panel = MagicMock()
-        panel.login.return_value = None
-        panel.find_inbound.return_value = MagicMock(id=42)
-        panel.api_post_empty.return_value = None
-
-        with (
-            patch("meridian.commands.relay._resolve_exit", return_value=resolved_exit),
-            patch("meridian.commands.relay.fetch_credentials", return_value=True),
-            patch("meridian.commands.relay.ServerRegistry", return_value=registry),
-            patch("meridian.commands.relay.ServerConnection", return_value=relay_conn),
-            patch("meridian.commands.relay._remove_relay_nginx", return_value=False),
-            patch("meridian.panel.PanelClient", return_value=panel),
-        ):
-            with pytest.raises(typer.Exit) as exc:
-                run_remove("1.2.3.4", exit_arg="5.6.7.8", yes=True)
-
-        assert exc.value.exit_code == 1
-        assert sample_proxy_with_relays.read_text() == original
-        creds = ServerCredentials.load(sample_proxy_with_relays)
-        assert any(r.ip == "1.2.3.4" for r in creds.relays)
-        registry.remove.assert_not_called()
-
-
-class TestRelayStoredUser:
-    def test_remove_uses_registry_user_by_default(self, sample_proxy_with_relays: Path) -> None:
-        from meridian.commands.relay import run_remove
-
-        creds_dir = sample_proxy_with_relays.parent
-        resolved_exit = MagicMock()
-        resolved_exit.ip = "5.6.7.8"
-        resolved_exit.user = "root"
-        resolved_exit.local_mode = False
-        resolved_exit.creds_dir = creds_dir
-        resolved_exit.conn = MagicMock()
-
-        registry = MagicMock()
-        registry.find.return_value = MagicMock(user="ubuntu")
-        relay_conn = MagicMock()
-        panel = MagicMock()
-        panel.login.return_value = None
-        panel.find_inbound.return_value = None
-
-        with (
-            patch("meridian.commands.relay._resolve_exit", return_value=resolved_exit),
-            patch("meridian.commands.relay.fetch_credentials", return_value=True),
-            patch("meridian.commands.relay.ServerRegistry", return_value=registry),
-            patch("meridian.commands.relay.ServerConnection", return_value=relay_conn) as mock_conn_cls,
-            patch("meridian.commands.relay._sync_exit_credentials_to_server", return_value=True),
-            patch("meridian.commands.relay._remove_relay_nginx", return_value=True),
-            patch("meridian.panel.PanelClient", return_value=panel),
-        ):
-            run_remove("1.2.3.4", exit_arg="5.6.7.8", yes=True)
-
-        relay_conn.check_ssh.assert_called_once()
-        mock_conn_cls.assert_called_once_with(ip="1.2.3.4", user="ubuntu")
-
-    def test_check_uses_registry_user_by_default(self, sample_proxy_with_relays: Path) -> None:
-        from meridian.commands.relay import run_check
-
-        creds_dir = sample_proxy_with_relays.parent
-        resolved_exit = MagicMock()
-        resolved_exit.ip = "5.6.7.8"
-        resolved_exit.user = "root"
-        resolved_exit.local_mode = False
-        resolved_exit.creds_dir = creds_dir
-        resolved_exit.conn = MagicMock()
-
-        registry = MagicMock()
-        registry.find.return_value = MagicMock(user="ubuntu")
-        relay_conn = MagicMock()
-        relay_conn.run.side_effect = [
-            MagicMock(returncode=0, stdout="active\n", stderr=""),
-            MagicMock(returncode=0, stdout="", stderr=""),
-        ]
-
-        with (
-            patch("meridian.commands.relay._find_exit_for_relay", return_value=(registry, resolved_exit)),
-            patch("meridian.commands.relay.ServerRegistry", return_value=registry),
-            patch("meridian.commands.relay.ServerConnection", return_value=relay_conn) as mock_conn_cls,
-            patch("meridian.ssh.tcp_connect", return_value=True),
-        ):
-            run_check("1.2.3.4")
-
-        mock_conn_cls.assert_called_once_with(ip="1.2.3.4", user="ubuntu")
-
-
 # ---------------------------------------------------------------------------
 # Rendering tests
 # ---------------------------------------------------------------------------
@@ -781,12 +607,6 @@ class TestRelayHelpers:
         entry = RelayEntry(ip="1.2.3.4")
         assert _relay_label(entry) == "1-2-3-4"
 
-    def test_relay_inbound_remark(self) -> None:
-        from meridian.commands.relay import _relay_inbound_remark
-
-        entry = RelayEntry(ip="1.2.3.4", name="ru-moscow")
-        assert _relay_inbound_remark(entry) == "VLESS-Reality-Relay-ru-moscow"
-
     def test_relay_xray_port_deterministic(self) -> None:
         from meridian.commands.relay import _relay_xray_port
 
@@ -830,30 +650,3 @@ relays:
 """)
         creds = ServerCredentials.load(path)
         assert creds.relays[0].sni == ""
-
-
-class TestRelayDeploySNISelection:
-    def test_deploy_fails_when_scan_finds_no_local_sni(self, sample_proxy_yml: Path) -> None:
-        from meridian.commands.relay import run_deploy
-
-        resolved_exit = MagicMock()
-        resolved_exit.ip = "1.2.3.4"
-        resolved_exit.user = "root"
-        resolved_exit.local_mode = False
-        resolved_exit.creds_dir = sample_proxy_yml.parent
-        resolved_exit.conn = MagicMock()
-
-        relay_conn = MagicMock()
-        relay_conn.run.side_effect = [
-            MagicMock(returncode=1, stdout="", stderr=""),
-            MagicMock(returncode=0, stdout="", stderr=""),
-        ]
-
-        with (
-            patch("meridian.commands.relay._resolve_exit", return_value=resolved_exit),
-            patch("meridian.commands.relay.ServerRegistry"),
-            patch("meridian.commands.relay.ServerConnection", return_value=relay_conn),
-            patch("meridian.commands.scan.scan_for_sni", return_value=[]),
-            pytest.raises(typer.Exit),
-        ):
-            run_deploy("2.3.4.5", "1.2.3.4", yes=True)

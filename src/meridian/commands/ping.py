@@ -6,10 +6,10 @@ import shlex
 import subprocess
 import time
 
+from meridian.cluster import ClusterConfig
 from meridian.commands.resolve import resolve_server
 from meridian.config import DEFAULT_SNI, SERVERS_FILE
 from meridian.console import err_console, info, ok, warn
-from meridian.credentials import ServerCredentials
 from meridian.servers import ServerRegistry
 from meridian.ssh import tcp_connect
 
@@ -24,14 +24,14 @@ def run(
     registry = ServerRegistry(SERVERS_FILE)
     resolved = resolve_server(registry, requested_server=requested_server, explicit_ip=ip)
 
-    # Load saved credentials for domain/SNI if not provided
-    proxy_file = resolved.creds_dir / "proxy.yml"
-    if proxy_file.exists():
-        creds = ServerCredentials.load(proxy_file)
+    # Load cluster config for node metadata
+    cluster = ClusterConfig.load()
+    node = cluster.find_node(resolved.ip)
+    if node:
         if not domain:
-            domain = creds.server.domain or ""
+            domain = node.domain or ""
         if not sni:
-            sni = creds.server.sni or ""
+            sni = node.sni or ""
 
     sni_host = sni or DEFAULT_SNI
     issues = 0
@@ -165,16 +165,18 @@ def run(
             issues += 1
 
     # 4. Relay reachability checks
-    if proxy_file.exists():
-        for relay in creds.relays:
-            relay_label = relay.name or relay.ip
-            info(f"Connecting to relay {relay_label} ({relay.ip}:{relay.port})...")
-            checks += 1
-            if tcp_connect(relay.ip, relay.port, timeout=5):
-                ok(f"Relay {relay_label} is reachable")
-            else:
-                warn(f"Relay {relay_label} ({relay.ip}:{relay.port}) is not reachable")
-                issues += 1
+    for relay in cluster.relays:
+        # Only test relays that forward to this node
+        if relay.exit_node_ip and relay.exit_node_ip != resolved.ip:
+            continue
+        relay_label = relay.name or relay.ip
+        info(f"Connecting to relay {relay_label} ({relay.ip}:{relay.port})...")
+        checks += 1
+        if tcp_connect(relay.ip, relay.port, timeout=5):
+            ok(f"Relay {relay_label} is reachable")
+        else:
+            warn(f"Relay {relay_label} ({relay.ip}:{relay.port}) is not reachable")
+            issues += 1
 
     # Summary
     err_console.print()
@@ -193,21 +195,19 @@ def run(
         err_console.print("  [dim]  - Your ISP may be blocking this server's IP -- try a different server[/dim]")
 
     # --- Connection tests (actual traffic through proxy) ---
-    if issues == 0 and proxy_file.exists():
-        _run_connection_tests(creds, resolved.ip)
+    if issues == 0 and node and node.reality_public_key:
+        _run_connection_tests(cluster, resolved.ip)
 
     err_console.print()
 
 
-def _run_connection_tests(creds: ServerCredentials, server_ip: str) -> None:
+def _run_connection_tests(cluster: ClusterConfig, server_ip: str) -> None:
     """Test actual proxy connections using a local xray client."""
-    from meridian.xray_client import build_test_configs, ensure_xray_binary, test_connection
+    from meridian.xray_client import build_test_configs_from_cluster, ensure_xray_binary, test_connection
 
     err_console.print()
     err_console.print("  [bold]Connection[/bold]")
     err_console.print("  [dim]Testing actual proxy traffic through this device[/dim]")
-    if creds.server.warp:
-        err_console.print("  [dim]WARP enabled — exit IP will be Cloudflare, not server IP[/dim]")
     err_console.print()
 
     info("Checking xray client binary...")
@@ -218,9 +218,9 @@ def _run_connection_tests(creds: ServerCredentials, server_ip: str) -> None:
         return
     ok(f"xray ready ({xray_bin.name})")
 
-    configs = build_test_configs(creds)
+    configs = build_test_configs_from_cluster(cluster, server_ip)
     if not configs:
-        warn("No active protocols found in credentials")
+        warn("No active protocols found in cluster config")
         return
 
     passed = 0

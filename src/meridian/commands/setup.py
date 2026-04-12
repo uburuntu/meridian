@@ -655,7 +655,7 @@ def _setup_first_deploy(
     with MeridianPanel(base_url, api_token) as panel:
         # Create config profile (Xray inbound definitions)
         profile_name = "meridian-default"
-        xray_config = _build_xray_config(
+        xray_result = _build_xray_config(
             resolved.conn,
             sni=sni,
             reality_port=reality_port,
@@ -667,6 +667,9 @@ def _setup_first_deploy(
             xhttp_path=xhttp_path,
             ws_path=ws_path,
         )
+        xray_config = xray_result["config"]
+        reality_public_key = xray_result["reality_public_key"]
+        reality_short_id = xray_result["reality_short_id"]
 
         try:
             profile = panel.create_config_profile(profile_name, xray_config)
@@ -716,6 +719,8 @@ def _setup_first_deploy(
             deployed_with=version,
             xhttp_path=xhttp_path,
             ws_path=ws_path,
+            reality_public_key=reality_public_key,
+            reality_short_id=reality_short_id,
         )
         cluster.nodes.append(node_entry)
         cluster.save()
@@ -819,6 +824,8 @@ def _setup_new_node(
             _deploy_node_container(resolved.conn, node_creds.secret_key)
 
             # Save node entry
+            # Reuse Reality keys from existing node (shared config profile)
+            existing_node = cluster.panel_node
             node_entry = NodeEntry(
                 ip=resolved.ip,
                 uuid=node_creds.uuid,
@@ -831,6 +838,8 @@ def _setup_new_node(
                 deployed_with=version,
                 xhttp_path=xhttp_path,
                 ws_path=ws_path,
+                reality_public_key=existing_node.reality_public_key if existing_node else "",
+                reality_short_id=existing_node.reality_short_id if existing_node else "",
             )
             cluster.nodes.append(node_entry)
             cluster.save()
@@ -866,6 +875,11 @@ def _build_xray_config(
 
     This defines the inbounds that the node will run. The actual Xray
     config is managed by Remnawave, but we provide the template.
+
+    Returns a dict with keys:
+      - "config": the Xray config dict
+      - "reality_public_key": the Reality public key
+      - "reality_short_id": the Reality short ID
     """
     # Base config with DNS and routing
     config: dict = {
@@ -972,7 +986,11 @@ def _build_xray_config(
         }
         config["inbounds"].append(wss_inbound)
 
-    return config
+    return {
+        "config": config,
+        "reality_public_key": public_key,
+        "reality_short_id": short_id,
+    }
 
 
 def _cache_inbounds(panel: MeridianPanel, cluster: ClusterConfig) -> None:

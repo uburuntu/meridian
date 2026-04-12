@@ -15,6 +15,7 @@ import tempfile
 import time
 import zipfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from meridian.config import (
     CONNECT_TEST_URL,
@@ -25,7 +26,10 @@ from meridian.config import (
     XRAY_GITHUB_URL,
     XRAY_VERSION,
 )
-from meridian.credentials import ServerCredentials
+
+if TYPE_CHECKING:
+    from meridian.cluster import ClusterConfig
+    from meridian.credentials import ServerCredentials
 
 
 def _xray_bin_path() -> Path:
@@ -454,6 +458,115 @@ def build_test_configs(creds: ServerCredentials) -> list[tuple[str, dict, bool]]
                     f"XHTTP via {relay_label}",
                     cfg,
                     not domain and not warp,
+                )
+            )
+
+    return configs
+
+
+def build_test_configs_from_cluster(
+    cluster: ClusterConfig,
+    node_ip: str,
+    *,
+    uuid: str = "",
+) -> list[tuple[str, dict, bool]]:
+    """Build test configs from ClusterConfig data (v4).
+
+    Uses node metadata (Reality keys, paths) from cluster.yml instead of
+    the legacy ServerCredentials/proxy.yml format.
+
+    Args:
+        cluster: Loaded ClusterConfig.
+        node_ip: IP of the node to test.
+        uuid: Client UUID for building test connections. If empty, a dummy
+              UUID is used (connection will fail auth but tests reachability).
+
+    Returns list of (label, config_dict, expect_ip_match) tuples.
+    """
+    node = cluster.find_node(node_ip)
+    if node is None:
+        return []
+
+    ip = node.ip
+    sni = node.sni or DEFAULT_SNI
+    domain = node.domain or ""
+    public_key = node.reality_public_key or ""
+    short_id = node.reality_short_id or ""
+    xhttp_path = node.xhttp_path or ""
+    ws_path = node.ws_path or ""
+    test_uuid = uuid or "00000000-0000-0000-0000-000000000000"
+
+    configs: list[tuple[str, dict, bool]] = []
+
+    # Reality (always present)
+    if public_key:
+        port = _find_free_port()
+        configs.append(
+            (
+                "Reality (TCP)",
+                build_reality_config(port, ip, test_uuid, sni, public_key, short_id),
+                True,
+            )
+        )
+
+    # XHTTP
+    if xhttp_path:
+        host = domain or ip
+        port = _find_free_port()
+        configs.append(
+            (
+                "XHTTP",
+                build_xhttp_config(port, host, test_uuid, xhttp_path),
+                not domain,
+            )
+        )
+
+    # WSS (domain mode only)
+    if domain and ws_path:
+        port = _find_free_port()
+        configs.append(
+            (
+                "WSS (CDN)",
+                build_wss_config(port, domain, test_uuid, ws_path),
+                False,
+            )
+        )
+
+    # Relay configs
+    for relay in cluster.relays:
+        if relay.exit_node_ip and relay.exit_node_ip != ip:
+            continue  # This relay forwards to a different node
+        relay_label = relay.name or relay.ip
+        relay_sni = relay.sni or sni
+
+        if public_key:
+            port = _find_free_port()
+            configs.append(
+                (
+                    f"Reality via {relay_label}",
+                    build_reality_config(
+                        port,
+                        relay.ip,
+                        test_uuid,
+                        relay_sni,
+                        public_key,
+                        short_id,
+                        server_port=relay.port,
+                    ),
+                    True,
+                )
+            )
+
+        if xhttp_path:
+            xhttp_host = domain or ip
+            port = _find_free_port()
+            cfg = build_xhttp_config(port, xhttp_host, test_uuid, xhttp_path, server_port=relay.port)
+            cfg["outbounds"][0]["settings"]["vnext"][0]["address"] = relay.ip
+            configs.append(
+                (
+                    f"XHTTP via {relay_label}",
+                    cfg,
+                    not domain,
                 )
             )
 

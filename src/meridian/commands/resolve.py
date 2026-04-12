@@ -6,12 +6,15 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from meridian.config import SERVER_CREDS_DIR, creds_dir_for, is_ip
 from meridian.console import err_console, fail, info, warn
-from meridian.credentials import ServerCredentials
 from meridian.servers import SERVER_ROLE_RELAY, ServerEntry, ServerRegistry
 from meridian.ssh import ServerConnection, SSHError
+
+if TYPE_CHECKING:
+    from meridian.credentials import ServerCredentials
 
 LOCAL_KEYWORDS = ("local", "locally")
 
@@ -74,19 +77,37 @@ class ResolvedServer:
     @property
     def creds(self) -> ServerCredentials:
         """Load credentials from the resolved creds_dir."""
+        from meridian.credentials import ServerCredentials
+
         return ServerCredentials.load(self.creds_dir / "proxy.yml")
 
 
 def _detect_local_mode_from_creds() -> str | None:
-    """Check if /etc/meridian/proxy.yml is readable and extract server IP.
+    """Check if we're running on a deployed server and extract its IP.
 
-    Only succeeds for root. Non-root users can't read /etc/meridian/
-    and will use the remote SSH path instead.
+    Tries v4 cluster.yml first (node with is_panel_host), then falls back
+    to v3 /etc/meridian/proxy.yml. Only succeeds for root.
     """
+    # v4: check cluster.yml for a panel node matching this server
+    try:
+        from meridian.cluster import ClusterConfig
+        from meridian.config import SERVER_NODE_CONFIG
+
+        if SERVER_NODE_CONFIG.is_file():
+            cluster = ClusterConfig.load()
+            panel_node = cluster.panel_node
+            if panel_node and panel_node.ip:
+                return panel_node.ip
+    except (PermissionError, OSError):
+        pass
+
+    # v3 compat: /etc/meridian/proxy.yml
     proxy = SERVER_CREDS_DIR / "proxy.yml"
     try:
         if not proxy.is_file():
             return None
+        from meridian.credentials import ServerCredentials
+
         creds = ServerCredentials.load(proxy)
         return creds.server.ip or None
     except (PermissionError, OSError):
@@ -104,6 +125,8 @@ def _find_proxy_file(host: str) -> Path | None:
     local = cfg.SERVER_CREDS_DIR / "proxy.yml"
     try:
         if local.is_file():
+            from meridian.credentials import ServerCredentials
+
             creds = ServerCredentials.load(local)
             if creds.server.ip == host:
                 return local
@@ -125,6 +148,8 @@ def _find_relay_file(host: str) -> Path | None:
 
 def _cached_relay_hosts(entries: list[ServerEntry]) -> set[str]:
     """Infer legacy relay entries from locally cached exit credentials."""
+    from meridian.credentials import ServerCredentials
+
     relay_hosts: set[str] = set()
     for entry in entries:
         proxy_file = _find_proxy_file(entry.host)
@@ -363,6 +388,8 @@ def _check_version_mismatch(server_ip: str, proxy_file: Path) -> None:
     """Warn once per session if the server was deployed with a different CLI version."""
     if server_ip in _warned_servers:
         return
+
+    from meridian.credentials import ServerCredentials
 
     creds = ServerCredentials.load(proxy_file)
     deployed_with = creds.server.deployed_with

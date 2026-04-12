@@ -1,9 +1,8 @@
 """Protocol/inbound type definitions — single source of truth.
 
-Adding a new protocol (e.g., Hysteria2, TUIC) requires:
-1. Add an InboundType entry to INBOUND_TYPES
-2. Create a Protocol subclass below
-3. Add an entry to the PROTOCOLS dict (and PROTOCOL_ORDER list)
+Adding a new protocol requires:
+1. Create a Protocol subclass below
+2. Add an entry to the PROTOCOLS dict (and PROTOCOL_ORDER list)
 
 The rest of the system (client add/remove, output generation) will
 pick up the new protocol automatically via the registry.
@@ -12,12 +11,12 @@ pick up the new protocol automatically via the registry.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from meridian.config import DEFAULT_FINGERPRINT, DEFAULT_SNI
-from meridian.credentials import ServerCredentials
-from meridian.models import Inbound
+
+if TYPE_CHECKING:
+    from meridian.credentials import ServerCredentials
 
 
 def _bracket_ipv6(ip: str) -> str:
@@ -25,35 +24,6 @@ def _bracket_ipv6(ip: str) -> str:
     if ":" in ip and not ip.startswith("["):
         return f"[{ip}]"
     return ip
-
-
-@dataclass(frozen=True)
-class InboundType:
-    """Defines an inbound protocol type in 3x-ui."""
-
-    remark: str  # 3x-ui inbound remark (e.g., "VLESS-Reality")
-    email_prefix: str  # Client email prefix (e.g., "reality-")
-    flow: str  # Xray flow value (e.g., "xtls-rprx-vision")
-
-
-# Single source of truth for all inbound types.
-INBOUND_TYPES: dict[str, InboundType] = {
-    "reality": InboundType(
-        remark="VLESS-Reality",
-        email_prefix="reality-",
-        flow="xtls-rprx-vision",
-    ),
-    "wss": InboundType(
-        remark="VLESS-WSS",
-        email_prefix="wss-",
-        flow="",
-    ),
-    "xhttp": InboundType(
-        remark="VLESS-Reality-XHTTP",
-        email_prefix="xhttp-",
-        flow="",
-    ),
-}
 
 
 # ---------------------------------------------------------------------------
@@ -66,8 +36,6 @@ class Protocol(ABC):
 
     Each Protocol knows how to:
     - Build a connection URL for a given client UUID
-    - Build the 3x-ui addClient API body
-    - Determine if it's available on a server (by inspecting inbounds)
     """
 
     @property
@@ -75,22 +43,6 @@ class Protocol(ABC):
     def key(self) -> str:
         """Protocol key (e.g., 'reality', 'wss', 'xhttp')."""
         ...
-
-    @property
-    @abstractmethod
-    def inbound_type(self) -> InboundType:
-        """The inbound type definition."""
-        ...
-
-    @property
-    def remark(self) -> str:
-        """Convenience: the 3x-ui inbound remark for this protocol."""
-        return self.inbound_type.remark
-
-    @property
-    def email_prefix(self) -> str:
-        """Convenience: email prefix for client emails."""
-        return self.inbound_type.email_prefix
 
     @property
     def display_label(self) -> str:
@@ -110,38 +62,6 @@ class Protocol(ABC):
             A complete VLESS/etc URL string.
         """
         ...
-
-    def client_settings(self, uuid: str, email: str) -> dict[str, Any]:
-        """Build the client settings dict for the 3x-ui addClient API.
-
-        Returns a dict with 'clients' key containing a single-element list:
-            {"clients": [{"id": uuid, "flow": ..., "email": ..., ...}]}
-
-        Subclasses can override for protocol-specific fields.
-        """
-        return {
-            "clients": [
-                {
-                    "id": uuid,
-                    "flow": self.inbound_type.flow,
-                    "email": email,
-                    "limitIp": 2,
-                    "totalGB": 0,
-                    "expiryTime": 0,
-                    "enable": True,
-                    "tgId": "",
-                    "subId": "",
-                    "reset": 0,
-                }
-            ]
-        }
-
-    def find_inbound(self, inbounds: list[Inbound]) -> Inbound | None:
-        """Find this protocol's inbound in a list of panel inbounds."""
-        for ib in inbounds:
-            if ib.remark == self.remark:
-                return ib
-        return None
 
     @property
     def requires_domain(self) -> bool:
@@ -223,10 +143,6 @@ class RealityProtocol(Protocol):
         return "reality"
 
     @property
-    def inbound_type(self) -> InboundType:
-        return INBOUND_TYPES["reality"]
-
-    @property
     def display_label(self) -> str:
         return "Primary"
 
@@ -299,10 +215,6 @@ class XHTTPProtocol(Protocol):
     @property
     def key(self) -> str:
         return "xhttp"
-
-    @property
-    def inbound_type(self) -> InboundType:
-        return INBOUND_TYPES["xhttp"]
 
     @property
     def display_label(self) -> str:
@@ -386,10 +298,6 @@ class WSSProtocol(Protocol):
     @property
     def key(self) -> str:
         return "wss"
-
-    @property
-    def inbound_type(self) -> InboundType:
-        return INBOUND_TYPES["wss"]
 
     @property
     def display_label(self) -> str:
@@ -483,24 +391,3 @@ PROTOCOL_ORDER: list[str] = ["reality", "xhttp", "wss"]
 def get_protocol(key: str) -> Protocol | None:
     """Find a protocol by key (e.g., 'reality', 'wss', 'xhttp')."""
     return PROTOCOLS.get(key)
-
-
-def available_protocols(
-    inbounds: list[Inbound],
-    domain: str = "",
-) -> list[Protocol]:
-    """Return protocols that are available on this server.
-
-    A protocol is available when:
-    1. Its inbound exists in the panel (matched by remark)
-    2. If it requires a domain, a domain is configured
-    """
-    result: list[Protocol] = []
-    for key in PROTOCOL_ORDER:
-        proto = PROTOCOLS[key]
-        if proto.find_inbound(inbounds) is None:
-            continue
-        if proto.requires_domain and not domain:
-            continue
-        result.append(proto)
-    return result

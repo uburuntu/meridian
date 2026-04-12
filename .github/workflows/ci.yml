@@ -24,7 +24,7 @@ jobs:
         run: pip install ".[dev]"
 
       - name: Run tests (skip integration — no Docker)
-        run: pytest tests/ -v --tb=short --ignore=tests/test_integration_3xui.py
+        run: pytest tests/ -v --tb=short --ignore=tests/test_integration_3xui.py --ignore=tests/e2e
 
   python-lint:
     name: Python Lint
@@ -145,6 +145,7 @@ jobs:
   integration:
     name: Integration
     runs-on: ubuntu-latest
+    if: false  # TODO: Rewrite for Remnawave (3x-ui integration tests removed in v4)
     steps:
       - uses: actions/checkout@v5
 
@@ -185,6 +186,7 @@ jobs:
     name: E2E Provisioner
     runs-on: ubuntu-latest
     needs: [python-test, python-lint]
+    if: false  # TODO: Rewrite for Remnawave (E2E shell scripts reference 3x-ui)
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
