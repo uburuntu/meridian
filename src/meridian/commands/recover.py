@@ -7,6 +7,8 @@ database is the source of truth for nodes, inbounds, and config profiles.
 
 from __future__ import annotations
 
+from typing import Any
+
 from meridian.cluster import (
     ClusterConfig,
     InboundRef,
@@ -15,6 +17,82 @@ from meridian.cluster import (
 )
 from meridian.console import err_console, fail, info, ok, warn
 from meridian.remnawave import MeridianPanel, RemnawaveError
+
+# -- Config metadata extraction --
+
+
+def _extract_config_metadata(profile_raw: dict[str, Any]) -> dict[str, str]:
+    """Extract Reality/XHTTP/WSS keys from a config profile's raw API data.
+
+    Parses the Xray config embedded in the profile to recover private keys,
+    short IDs, SNI targets, and protocol paths. These are essential for
+    preserving existing client configs across recovery + redeploy.
+
+    Returns a dict with keys: private_key, short_id, sni, xhttp_path, ws_path.
+    Missing values default to empty string.
+    """
+    result: dict[str, str] = {
+        "private_key": "",
+        "short_id": "",
+        "sni": "",
+        "xhttp_path": "",
+        "ws_path": "",
+    }
+
+    if not isinstance(profile_raw, dict):
+        return result
+
+    config = profile_raw.get("config")
+    if not isinstance(config, dict):
+        return result
+
+    inbounds = config.get("inbounds")
+    if not isinstance(inbounds, list):
+        return result
+
+    # Index inbounds by tag for direct lookup
+    by_tag: dict[str, dict[str, Any]] = {}
+    for ib in inbounds:
+        if isinstance(ib, dict) and ib.get("tag"):
+            by_tag[ib["tag"]] = ib
+
+    # Reality inbound → private_key, short_id, sni
+    reality = by_tag.get("vless-reality")
+    if reality:
+        stream = reality.get("streamSettings")
+        if isinstance(stream, dict):
+            rs = stream.get("realitySettings")
+            if isinstance(rs, dict):
+                result["private_key"] = rs.get("privateKey", "") or ""
+                short_ids = rs.get("shortIds")
+                if isinstance(short_ids, list) and short_ids:
+                    result["short_id"] = str(short_ids[0])
+                server_names = rs.get("serverNames")
+                if isinstance(server_names, list) and server_names:
+                    result["sni"] = str(server_names[0])
+
+    # XHTTP inbound → xhttp_path
+    xhttp = by_tag.get("vless-xhttp")
+    if xhttp:
+        stream = xhttp.get("streamSettings")
+        if isinstance(stream, dict):
+            xs = stream.get("xhttpSettings")
+            if isinstance(xs, dict):
+                path = xs.get("path", "") or ""
+                result["xhttp_path"] = path.lstrip("/")
+
+    # WSS inbound → ws_path
+    wss = by_tag.get("vless-wss")
+    if wss:
+        stream = wss.get("streamSettings")
+        if isinstance(stream, dict):
+            ws = stream.get("wsSettings")
+            if isinstance(ws, dict):
+                path = ws.get("path", "") or ""
+                result["ws_path"] = path.lstrip("/")
+
+    return result
+
 
 # -- Recovery --
 
@@ -61,6 +139,7 @@ def run_recover(panel_url: str, api_token: str) -> None:
         # Fetch config profiles
         config_profile_uuid = ""
         config_profile_name = ""
+        metadata: dict[str, str] = {}
         try:
             profiles = panel.list_config_profiles()
             if profiles:
@@ -68,6 +147,14 @@ def run_recover(panel_url: str, api_token: str) -> None:
                 config_profile_uuid = profiles[0].uuid
                 config_profile_name = profiles[0].name
                 info(f"Config profile: {config_profile_name}")
+                # Extract Reality keys and protocol paths from the config
+                metadata = _extract_config_metadata(profiles[0]._raw)
+                if metadata.get("private_key"):
+                    ok("Reality private key recovered from config profile")
+                if metadata.get("xhttp_path"):
+                    info(f"XHTTP path recovered: {metadata['xhttp_path']}")
+                if metadata.get("ws_path"):
+                    info(f"WS path recovered: {metadata['ws_path']}")
         except RemnawaveError:
             warn("Could not fetch config profiles")
 
@@ -90,16 +177,29 @@ def run_recover(panel_url: str, api_token: str) -> None:
             uuid=api_node.uuid,
             name=api_node.name,
             is_panel_host=(i == 0),  # assume first node is panel host
+            sni=metadata.get("sni", ""),
+            reality_private_key=metadata.get("private_key", ""),
+            reality_short_id=metadata.get("short_id", ""),
+            xhttp_path=metadata.get("xhttp_path", ""),
+            ws_path=metadata.get("ws_path", ""),
         )
         nodes.append(node)
 
+    if metadata.get("private_key") and not metadata.get("public_key"):
+        warn("Reality public key not available from panel — will be derived on next redeploy")
+
     # Build cluster config
+    panel_config = PanelConfig(
+        url=panel_url,
+        api_token=api_token,
+    )
+    # Set panel server_ip from first node (panel host)
+    if nodes and nodes[0].is_panel_host:
+        panel_config.server_ip = nodes[0].ip
+
     cluster = ClusterConfig(
         version=1,
-        panel=PanelConfig(
-            url=panel_url,
-            api_token=api_token,
-        ),
+        panel=panel_config,
         config_profile_uuid=config_profile_uuid,
         config_profile_name=config_profile_name,
         nodes=nodes,
@@ -120,9 +220,11 @@ def run_recover(panel_url: str, api_token: str) -> None:
     err_console.print(f"    Inbounds:  {len(inbounds)}")
     if config_profile_name:
         err_console.print(f"    Profile:   {config_profile_name}")
+    if metadata.get("sni"):
+        err_console.print(f"    SNI:       {metadata['sni']}")
 
     err_console.print()
-    warn("Review ~/.meridian/cluster.yml -- some fields (SSH user, SNI, relays) need manual setup")
+    warn("Review ~/.meridian/cluster.yml -- some fields (SSH user, relays) need manual setup")
     err_console.print()
     err_console.print("  [dim]Fleet status:   meridian fleet status[/dim]")
     err_console.print("  [dim]List nodes:     meridian node list[/dim]")
