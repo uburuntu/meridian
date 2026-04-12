@@ -166,6 +166,15 @@ class ClusterConfig:
 
             path = CLUSTER_CONFIG
 
+        errors = self.validate()
+        if errors:
+            print(
+                f"Warning: cluster config has {len(errors)} validation issue(s):",
+                file=sys.stderr,
+            )
+            for e in errors[:5]:
+                print(f"  - {e}", file=sys.stderr)
+
         out = _serialize_cluster(self)
 
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -207,6 +216,47 @@ class ClusterConfig:
                 errors.append("panel.url is empty but cluster is marked as configured")
             if not self.panel.api_token:
                 errors.append("panel.api_token is empty but cluster is marked as configured")
+
+        # Panel server_ip
+        if self.panel.server_ip and not _is_valid_ip(self.panel.server_ip):
+            errors.append(f"panel.server_ip is not a valid IP: {self.panel.server_ip}")
+
+        # Panel ssh_port
+        if not _is_valid_port(self.panel.ssh_port):
+            errors.append(f"panel.ssh_port is out of range: {self.panel.ssh_port}")
+
+        # Node validations
+        node_ips: list[str] = []
+        for i, node in enumerate(self.nodes):
+            label = f"nodes[{i}]"
+            if node.ip:
+                if not _is_valid_ip(node.ip):
+                    errors.append(f"{label}.ip is not a valid IP: {node.ip}")
+                if node.ip in node_ips:
+                    errors.append(f"{label}.ip is a duplicate: {node.ip}")
+                node_ips.append(node.ip)
+            if node.uuid and not _is_valid_uuid(node.uuid):
+                errors.append(f"{label}.uuid is not a valid UUID: {node.uuid}")
+            if not _is_valid_port(node.ssh_port):
+                errors.append(f"{label}.ssh_port is out of range: {node.ssh_port}")
+
+        # Relay validations
+        for i, relay in enumerate(self.relays):
+            label = f"relays[{i}]"
+            if relay.ip and not _is_valid_ip(relay.ip):
+                errors.append(f"{label}.ip is not a valid IP: {relay.ip}")
+            if not _is_valid_port(relay.port):
+                errors.append(f"{label}.port is out of range: {relay.port}")
+            if not _is_valid_port(relay.ssh_port):
+                errors.append(f"{label}.ssh_port is out of range: {relay.ssh_port}")
+            if relay.exit_node_ip and node_ips and relay.exit_node_ip not in node_ips:
+                errors.append(f"{label}.exit_node_ip references unknown node: {relay.exit_node_ip}")
+
+        # Inbound ref UUIDs
+        for key, ref in self.inbounds.items():
+            if hasattr(ref, "uuid") and ref.uuid and not _is_valid_uuid(ref.uuid):
+                errors.append(f"inbounds[{key}].uuid is not a valid UUID: {ref.uuid}")
+
         return errors
 
     def backup(self, path: Path | None = None) -> None:
@@ -265,6 +315,40 @@ class ClusterConfig:
             self.inbounds[k] = _load_dataclass(ref, InboundRef, _INBOUND_REF_FIELDS)
             return self.inbounds[k]
         return ref
+
+
+# ---------------------------------------------------------------------------
+# Validation helpers
+# ---------------------------------------------------------------------------
+
+
+def _is_valid_ip(s: str) -> bool:
+    """Check if a string is a valid IPv4 or IPv6 address."""
+    import ipaddress
+
+    try:
+        ipaddress.ip_address(s)
+        return True
+    except ValueError:
+        return False
+
+
+def _is_valid_uuid(s: str) -> bool:
+    """Check if a string matches UUID format (lowercase or uppercase hex)."""
+    import re
+
+    return bool(
+        re.match(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            s,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _is_valid_port(port: int) -> bool:
+    """Check if a port number is in the valid range."""
+    return isinstance(port, int) and 1 <= port <= 65535
 
 
 # ---------------------------------------------------------------------------
