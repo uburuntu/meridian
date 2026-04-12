@@ -1,4 +1,4 @@
-.PHONY: help install sync test lint format check typecheck ci e2e system-lab \
+.PHONY: help install sync test lint format check typecheck ci system-lab \
        templates ai-docs build publish clean hooks
 
 ## —— Setup ——————————————————————————————————————————————
@@ -40,10 +40,6 @@ templates: ## Validate Jinja2 template rendering
 ## —— CI (runs everything) ———————————————————————————————
 
 ci: check templates ## Run full CI locally
-
-e2e: ## Run E2E provisioner tests in Docker (Linux only, needs docker socket)
-	docker compose -f tests/e2e/docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e
-	docker compose -f tests/e2e/docker-compose.e2e.yml down -v
 
 system-lab: ## Run multi-node system lab (Linux, privileged containers, ~20min)
 	bash tests/systemlab/scripts/setup-fixtures.sh
