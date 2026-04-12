@@ -9,7 +9,7 @@ from __future__ import annotations
 import socket
 
 from meridian.commands._helpers import format_traffic, load_cluster, make_panel
-from meridian.console import err_console, warn
+from meridian.console import err_console, is_json_mode, json_output, warn
 from meridian.remnawave import RemnawaveError
 
 
@@ -90,21 +90,69 @@ def run_status() -> None:
                 err_console.print(f"    {relay.ip}  {label} -> {target_label}  relay: {status}")
 
         # -- Users --
+        users_data: list[dict] = []
         if panel_ok:
             try:
                 users = panel.list_users()
                 active = sum(1 for u in users if u.status.upper() == "ACTIVE")
                 disabled = sum(1 for u in users if u.status.upper() == "DISABLED")
                 other = len(users) - active - disabled
+                users_data = [{"username": u.username, "status": u.status} for u in users]
 
-                err_console.print()
-                parts = [f"{active} active"]
-                if disabled:
-                    parts.append(f"{disabled} disabled")
-                if other:
-                    parts.append(f"{other} other")
-                err_console.print(f"  [bold]Users[/bold]   {', '.join(parts)}")
+                if not is_json_mode():
+                    err_console.print()
+                    parts = [f"{active} active"]
+                    if disabled:
+                        parts.append(f"{disabled} disabled")
+                    if other:
+                        parts.append(f"{other} other")
+                    err_console.print(f"  [bold]Users[/bold]   {', '.join(parts)}")
             except RemnawaveError:
                 pass
+
+        # -- JSON output --
+        if is_json_mode():
+            nodes_json = []
+            for node in cluster.nodes:
+                api_node = api_by_uuid.get(node.uuid)
+                nodes_json.append(
+                    {
+                        "ip": node.ip,
+                        "name": node.name,
+                        "uuid": node.uuid,
+                        "is_panel_host": node.is_panel_host,
+                        "status": (
+                            "connected"
+                            if api_node and api_node.is_connected
+                            else "disabled"
+                            if api_node and api_node.is_disabled
+                            else "disconnected"
+                            if api_node
+                            else "unknown"
+                        ),
+                        "xray_version": api_node.xray_version if api_node else "",
+                        "traffic_bytes": api_node.traffic_used if api_node else 0,
+                    }
+                )
+            relays_json = []
+            for relay in cluster.relays:
+                relays_json.append(
+                    {
+                        "ip": relay.ip,
+                        "name": relay.name,
+                        "port": relay.port,
+                        "exit_node_ip": relay.exit_node_ip,
+                        "healthy": _check_relay_health(relay.ip, relay.port),
+                    }
+                )
+            json_output(
+                {
+                    "panel": {"url": panel_url, "healthy": panel_ok},
+                    "nodes": nodes_json,
+                    "relays": relays_json,
+                    "users": users_data,
+                }
+            )
+            return
 
     err_console.print()

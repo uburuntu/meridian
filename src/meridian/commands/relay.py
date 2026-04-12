@@ -11,6 +11,7 @@ import hashlib
 import re
 import shlex
 
+import typer
 import yaml
 
 from meridian.cluster import ClusterConfig, ProtocolKey, RelayEntry
@@ -342,7 +343,8 @@ def run_deploy(
     err_console.print()
 
     if not yes:
-        confirm(f"Deploy relay to {user}@{relay_ip}?")
+        if not confirm(f"Deploy relay to {user}@{relay_ip}?"):
+            raise typer.Exit(1)
 
     # Run relay provisioner (Realm install -- panel-agnostic)
     from meridian.provision.relay import RelayContext, build_relay_steps
@@ -455,6 +457,28 @@ def run_list(
     except RemnawaveError:
         pass
 
+    # JSON output
+    from meridian.console import is_json_mode
+
+    if is_json_mode():
+        from meridian.console import json_output
+
+        relays_data = []
+        for relay in relays:
+            enabled = host_status.get(relay.ip)
+            relays_data.append(
+                {
+                    "ip": relay.ip,
+                    "name": relay.name,
+                    "exit_node_ip": relay.exit_node_ip,
+                    "port": relay.port,
+                    "sni": relay.sni,
+                    "enabled": enabled,
+                }
+            )
+        json_output({"relays": relays_data})
+        return
+
     title = f"Relays for {exit_arg}" if exit_arg else "All Relay Nodes"
     table = Table(title=title, show_lines=False, pad_edge=False, box=ROUNDED, padding=(0, 2))
     for col, kw in [
@@ -515,7 +539,8 @@ def run_remove(
 
     if not yes:
         relay_label = relay_entry.name or relay_ip
-        confirm(f"Remove relay {relay_label} from exit {relay_entry.exit_node_ip}?")
+        if not confirm(f"Remove relay {relay_label} from exit {relay_entry.exit_node_ip}?"):
+            raise typer.Exit(1)
 
     relay_user = _relay_registry_user(registry, relay_ip, user)
 
