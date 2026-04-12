@@ -124,9 +124,15 @@ class TestSetupFirstDeployHappyPath:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "PUB", "reality_short_id": "ab", "reality_private_key": "PRIV",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "PUB",
+                    "reality_short_id": "ab",
+                    "reality_private_key": "PRIV",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -140,10 +146,16 @@ class TestSetupFirstDeployHappyPath:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
         # First save happens BEFORE _create_api_token
@@ -160,10 +172,15 @@ class TestSetupFirstDeployHappyPath:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "MY_PUB", "reality_short_id": "abcd1234",
-                "reality_private_key": "MY_PRIV",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "MY_PUB",
+                    "reality_short_id": "abcd1234",
+                    "reality_private_key": "MY_PRIV",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -177,10 +194,16 @@ class TestSetupFirstDeployHappyPath:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
         assert len(cluster.nodes) == 1
@@ -197,10 +220,15 @@ class TestSetupFirstDeployHappyPath:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -214,10 +242,16 @@ class TestSetupFirstDeployHappyPath:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
         assert cluster.nodes[0].is_panel_host is True
@@ -230,10 +264,15 @@ class TestSetupFirstDeployHappyPath:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -247,10 +286,16 @@ class TestSetupFirstDeployHappyPath:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
         panel.create_user.assert_called_once_with(_CLIENT)
@@ -263,10 +308,15 @@ class TestSetupFirstDeployHappyPath:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -280,10 +330,16 @@ class TestSetupFirstDeployHappyPath:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
         assert cluster.config_profile_uuid == _PROFILE_UUID
@@ -305,10 +361,15 @@ class TestSetupFirstDeployAdminRegistration:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", side_effect=register_effect),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -321,16 +382,23 @@ class TestSetupFirstDeployAdminRegistration:
             patches.append(patch("meridian.commands.setup.MeridianPanel.login", side_effect=login_effect))
 
         import contextlib
+
         with contextlib.ExitStack() as stack:
             for p in patches:
                 stack.enter_context(p)
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
         return cluster
 
@@ -362,10 +430,16 @@ class TestSetupFirstDeployAdminRegistration:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
     def test_reuses_existing_admin_creds_on_rerun(self) -> None:
@@ -388,10 +462,15 @@ class TestSetupFirstDeployAdminRegistration:
         with (
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -403,10 +482,16 @@ class TestSetupFirstDeployAdminRegistration:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
         # Verify register was called with existing admin creds
@@ -434,10 +519,16 @@ class TestSetupFirstDeployPanelWait:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
 
@@ -461,10 +552,15 @@ class TestSetupFirstDeployConfigProfile:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -476,10 +572,16 @@ class TestSetupFirstDeployConfigProfile:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
         # Should NOT call create_config_profile
@@ -497,10 +599,15 @@ class TestSetupFirstDeployConfigProfile:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup.MeridianPanel", return_value=panel),
             patch("meridian.commands.setup.secrets.token_hex", side_effect=lambda n: "a" * (n * 2)),
@@ -511,10 +618,16 @@ class TestSetupFirstDeployConfigProfile:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
 
@@ -538,10 +651,15 @@ class TestSetupFirstDeployNodeRegistration:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -553,10 +671,16 @@ class TestSetupFirstDeployNodeRegistration:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
         panel.create_node.assert_not_called()
@@ -574,10 +698,15 @@ class TestSetupFirstDeployNodeRegistration:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup.MeridianPanel", return_value=panel),
             patch("meridian.commands.setup.secrets.token_hex", side_effect=lambda n: "a" * (n * 2)),
@@ -588,10 +717,16 @@ class TestSetupFirstDeployNodeRegistration:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
 
@@ -612,10 +747,15 @@ class TestSetupFirstDeployClientCreation:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -627,10 +767,16 @@ class TestSetupFirstDeployClientCreation:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
         panel.create_user.assert_not_called()
@@ -647,10 +793,15 @@ class TestSetupFirstDeployClientCreation:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -663,10 +814,16 @@ class TestSetupFirstDeployClientCreation:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
         # Verify it completed successfully (nodes saved)
@@ -689,10 +846,15 @@ class TestSetupFirstDeployApiToken:
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
             patch("meridian.commands.setup._create_api_token", return_value="my-api-token-123"),
-            patch("meridian.commands.setup._build_xray_config", return_value={
-                "config": {}, "reality_public_key": "P", "reality_short_id": "a",
-                "reality_private_key": "K",
-            }),
+            patch(
+                "meridian.commands.setup._build_xray_config",
+                return_value={
+                    "config": {},
+                    "reality_public_key": "P",
+                    "reality_short_id": "a",
+                    "reality_private_key": "K",
+                },
+            ),
             patch("meridian.commands.setup._get_docker_gateway", return_value=_GATEWAY),
             patch("meridian.commands.setup._deploy_node_container"),
             patch("meridian.commands.setup._create_hosts_for_node"),
@@ -704,10 +866,16 @@ class TestSetupFirstDeployApiToken:
             _setup_first_deploy(
                 resolved=_make_resolved(),
                 cluster=cluster,
-                domain="", sni=_SNI, client_name=_CLIENT,
+                domain="",
+                sni=_SNI,
+                client_name=_CLIENT,
                 secret_path=_SECRET_PATH,
-                reality_port=_REALITY_PORT, xhttp_port=_XHTTP_PORT, wss_port=_WSS_PORT,
-                pq=False, geo_block=True, version=_VERSION,
+                reality_port=_REALITY_PORT,
+                xhttp_port=_XHTTP_PORT,
+                wss_port=_WSS_PORT,
+                pq=False,
+                geo_block=True,
+                version=_VERSION,
             )
 
         assert cluster.panel.api_token == "my-api-token-123"

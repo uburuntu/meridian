@@ -334,9 +334,7 @@ class TestNodeRemove:
             mock_load.return_value = cluster
             run_remove(ip_or_name="198.51.100.2")
 
-    def test_remove_with_dependent_relays_force_warns(
-        self, tmp_home: Path, _patch_cluster_config: Path
-    ) -> None:
+    def test_remove_with_dependent_relays_force_warns(self, tmp_home: Path, _patch_cluster_config: Path) -> None:
         """Node with dependent relays can be removed with --force (warns)."""
         cluster = _cluster_with_relay()
         panel = _make_panel_mock()
@@ -356,9 +354,7 @@ class TestNodeRemove:
         # Should still proceed with panel deletion
         panel.delete_node.assert_called_once()
 
-    def test_remove_saves_cluster_without_node(
-        self, tmp_home: Path, _patch_cluster_config: Path
-    ) -> None:
+    def test_remove_saves_cluster_without_node(self, tmp_home: Path, _patch_cluster_config: Path) -> None:
         """After removal, the cluster should be saved without the removed node."""
         cluster = _configured_cluster()
         panel = _make_panel_mock()
@@ -375,9 +371,7 @@ class TestNodeRemove:
         assert len(cluster.nodes) == 1
         assert cluster.nodes[0].ip == "198.51.100.1"
 
-    def test_remove_panel_api_error_warns(
-        self, tmp_home: Path, _patch_cluster_config: Path
-    ) -> None:
+    def test_remove_panel_api_error_warns(self, tmp_home: Path, _patch_cluster_config: Path) -> None:
         """Panel API errors during disable/delete should warn but still remove from cluster."""
         cluster = _configured_cluster()
         panel = _make_panel_mock()
