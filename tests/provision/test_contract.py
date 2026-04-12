@@ -65,7 +65,10 @@ def _make_pipeline_conn() -> MockConnection:
     # Remnawave panel: already running
     conn.when("docker inspect", stdout='[{"State":{"Status":"running"}}]')
     conn.when("docker compose", rc=0)
-    conn.when("cat /opt/remnawave/.env", stdout="REMNAWAVE_JWT_AUTH_SECRET=test\nREMNAWAVE_JWT_API_SECRET=test\nREMNAWAVE_DB_PASSWORD=test\n")
+    conn.when(
+        "cat /opt/remnawave/.env",
+        stdout="REMNAWAVE_JWT_AUTH_SECRET=test\nREMNAWAVE_JWT_API_SECRET=test\nREMNAWAVE_DB_PASSWORD=test\n",
+    )
 
     # Remnawave node: already running
     conn.when("ss -tlnp", stdout="")
@@ -108,11 +111,10 @@ class TestFullPipelineContract:
 
         for step in steps:
             try:
-                result = step.run(conn, ctx)
+                step.run(conn, ctx)
             except KeyError as e:
                 raise AssertionError(
-                    f"Step '{step.name}' crashed with KeyError: {e}. "
-                    f"Context keys available: {list(ctx._state.keys())}"
+                    f"Step '{step.name}' crashed with KeyError: {e}. Context keys available: {list(ctx._state.keys())}"
                 ) from e
             except AttributeError as e:
                 raise AssertionError(
@@ -138,7 +140,7 @@ class TestFullPipelineContract:
 
         for step in steps:
             try:
-                result = step.run(conn, ctx)
+                step.run(conn, ctx)
             except KeyError as e:
                 raise AssertionError(
                     f"Step '{step.name}' crashed with KeyError: {e}. Context keys: {list(ctx._state.keys())}"
@@ -162,7 +164,7 @@ class TestFullPipelineContract:
 
         for step in steps:
             try:
-                result = step.run(conn, ctx)
+                step.run(conn, ctx)
             except (KeyError, AttributeError) as e:
                 raise AssertionError(f"Step '{step.name}' crashed: {e}. Context keys: {list(ctx._state.keys())}") from e
 

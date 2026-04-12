@@ -303,23 +303,37 @@ class ServerConnection:
     def detect_local_mode(self) -> bool:
         """Check if we're running on the target server itself.
 
-        Detection is file-based only: /etc/meridian/proxy.yml readable (root)
-        or /etc/meridian/ directory exists (non-root on deployed server).
+        Detection is file-based only: /etc/meridian/node.yml (v4) or
+        /etc/meridian/proxy.yml (v3 compat) readable (root), or
+        /etc/meridian/ directory exists but files not readable (non-root).
 
         Does NOT use public IP matching — that produces false positives when
         the user is connected to the server via TUN mode (VPN), since their
         outbound IP matches the server IP.
         """
-        from meridian.config import SERVER_CREDS_DIR
+        from meridian.config import SERVER_CREDS_DIR, SERVER_NODE_CONFIG
 
+        file_check_failed = False
+
+        # v4: node.yml
+        try:
+            if SERVER_NODE_CONFIG.is_file() and SERVER_NODE_CONFIG.stat().st_size > 0:
+                self.local_mode = True
+                return True
+        except (PermissionError, OSError):
+            file_check_failed = True
+
+        # v3 compat: proxy.yml
         proxy = SERVER_CREDS_DIR / "proxy.yml"
         try:
             if proxy.is_file() and proxy.stat().st_size > 0:
                 self.local_mode = True
                 return True
         except (PermissionError, OSError):
-            # Can't stat the file — check if /etc/meridian/ dir exists
-            # (non-root on a deployed server)
+            file_check_failed = True
+
+        # Dir exists but files not readable → non-root on deployed server
+        if file_check_failed:
             try:
                 if SERVER_CREDS_DIR.is_dir():
                     warn("Running as non-root on the server. Using sudo for commands.")
@@ -328,7 +342,6 @@ class ServerConnection:
                     return True
             except (PermissionError, OSError):
                 pass
-            return False
 
         return False
 

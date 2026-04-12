@@ -1,4 +1,4 @@
-"""Tests for protocol/inbound type registry and Protocol abstraction."""
+"""Tests for protocol registry and Protocol abstraction."""
 
 from __future__ import annotations
 
@@ -9,55 +9,15 @@ from meridian.credentials import (
     WSSConfig,
     XHTTPConfig,
 )
-from meridian.models import Inbound
 from meridian.protocols import (
-    INBOUND_TYPES,
     PROTOCOL_ORDER,
     PROTOCOLS,
-    InboundType,
     Protocol,
     RealityProtocol,
     WSSProtocol,
     XHTTPProtocol,
-    available_protocols,
     get_protocol,
 )
-
-
-class TestInboundTypes:
-    def test_all_types_present(self) -> None:
-        assert set(INBOUND_TYPES.keys()) == {"reality", "wss", "xhttp"}
-
-    def test_type_is_frozen_dataclass(self) -> None:
-        for t in INBOUND_TYPES.values():
-            assert isinstance(t, InboundType)
-
-    def test_reality_values(self) -> None:
-        r = INBOUND_TYPES["reality"]
-        assert r.remark == "VLESS-Reality"
-        assert r.email_prefix == "reality-"
-        assert r.flow == "xtls-rprx-vision"
-
-    def test_wss_values(self) -> None:
-        w = INBOUND_TYPES["wss"]
-        assert w.remark == "VLESS-WSS"
-        assert w.email_prefix == "wss-"
-        assert w.flow == ""
-
-    def test_xhttp_values(self) -> None:
-        x = INBOUND_TYPES["xhttp"]
-        assert x.remark == "VLESS-Reality-XHTTP"
-        assert x.email_prefix == "xhttp-"
-        assert x.flow == ""
-
-    def test_email_prefixes_unique(self) -> None:
-        prefixes = [t.email_prefix for t in INBOUND_TYPES.values()]
-        assert len(prefixes) == len(set(prefixes))
-
-    def test_remarks_unique(self) -> None:
-        remarks = [t.remark for t in INBOUND_TYPES.values()]
-        assert len(remarks) == len(set(remarks))
-
 
 # ---------------------------------------------------------------------------
 # Protocol ABC and registry
@@ -96,17 +56,6 @@ class TestProtocolRegistry:
     def test_protocol_keys_unique(self) -> None:
         keys = list(PROTOCOLS.keys())
         assert len(keys) == len(set(keys))
-
-    def test_protocol_references_inbound_types(self) -> None:
-        """Each protocol's inbound_type must be the same object from INBOUND_TYPES."""
-        for p in PROTOCOLS.values():
-            assert p.inbound_type is INBOUND_TYPES[p.key]
-
-    def test_remark_and_email_prefix_convenience(self) -> None:
-        """Convenience properties must match the inbound_type."""
-        for p in PROTOCOLS.values():
-            assert p.remark == p.inbound_type.remark
-            assert p.email_prefix == p.inbound_type.email_prefix
 
     def test_display_labels(self) -> None:
         """Each protocol should have a human-readable display label."""
@@ -258,151 +207,6 @@ class TestWSSBuildURL:
     def test_wss_own_uuid(self) -> None:
         """WSS uses its own UUID (no shares_uuid_with)."""
         assert WSSProtocol().shares_uuid_with is None
-
-
-# ---------------------------------------------------------------------------
-# Protocol.client_settings()
-# ---------------------------------------------------------------------------
-
-
-class TestClientSettings:
-    def test_reality_client_settings(self) -> None:
-        proto = RealityProtocol()
-        settings = proto.client_settings("my-uuid", "reality-alice")
-        clients = settings["clients"]
-        assert len(clients) == 1
-        c = clients[0]
-        assert c["id"] == "my-uuid"
-        assert c["flow"] == "xtls-rprx-vision"
-        assert c["email"] == "reality-alice"
-        assert c["enable"] is True
-        assert c["limitIp"] == 2
-
-    def test_xhttp_client_settings(self) -> None:
-        proto = XHTTPProtocol()
-        settings = proto.client_settings("my-uuid", "xhttp-alice")
-        c = settings["clients"][0]
-        assert c["id"] == "my-uuid"
-        assert c["flow"] == ""  # XHTTP has no flow
-        assert c["email"] == "xhttp-alice"
-
-    def test_wss_client_settings(self) -> None:
-        proto = WSSProtocol()
-        settings = proto.client_settings("wss-uuid", "wss-alice")
-        c = settings["clients"][0]
-        assert c["id"] == "wss-uuid"
-        assert c["flow"] == ""  # WSS has no flow
-        assert c["email"] == "wss-alice"
-
-    def test_all_settings_have_required_fields(self) -> None:
-        """All protocols must produce settings with the required 3x-ui fields."""
-        required_keys = {"id", "flow", "email", "limitIp", "totalGB", "expiryTime", "enable"}
-        for proto in PROTOCOLS.values():
-            settings = proto.client_settings("uuid", "email")
-            c = settings["clients"][0]
-            assert required_keys.issubset(c.keys()), f"{proto.key} missing fields"
-
-    def test_base_class_method_used(self) -> None:
-        """client_settings() is defined on the base Protocol class, not duplicated."""
-        # All three should use the same method object from Protocol
-        for proto in PROTOCOLS.values():
-            assert proto.client_settings.__func__ is Protocol.client_settings  # type: ignore[attr-defined]
-
-
-# ---------------------------------------------------------------------------
-# Protocol.find_inbound()
-# ---------------------------------------------------------------------------
-
-
-def _make_inbound(remark: str, port: int = 443) -> Inbound:
-    return Inbound(id=1, remark=remark, protocol="vless", port=port)
-
-
-class TestFindInbound:
-    def test_finds_matching_inbound(self) -> None:
-        inbounds = [
-            _make_inbound("VLESS-Reality"),
-            _make_inbound("VLESS-WSS"),
-        ]
-        proto = RealityProtocol()
-        ib = proto.find_inbound(inbounds)
-        assert ib is not None
-        assert ib.remark == "VLESS-Reality"
-
-    def test_returns_none_when_missing(self) -> None:
-        inbounds = [_make_inbound("VLESS-WSS")]
-        proto = RealityProtocol()
-        assert proto.find_inbound(inbounds) is None
-
-    def test_returns_none_for_empty_list(self) -> None:
-        for proto in PROTOCOLS.values():
-            assert proto.find_inbound([]) is None
-
-
-# ---------------------------------------------------------------------------
-# available_protocols()
-# ---------------------------------------------------------------------------
-
-
-class TestAvailableProtocols:
-    def test_all_available(self) -> None:
-        inbounds = [
-            _make_inbound("VLESS-Reality"),
-            _make_inbound("VLESS-Reality-XHTTP", port=12345),
-            _make_inbound("VLESS-WSS"),
-        ]
-        result = available_protocols(inbounds, domain="example.com")
-        keys = [p.key for p in result]
-        assert keys == ["reality", "xhttp", "wss"]
-
-    def test_reality_only(self) -> None:
-        inbounds = [_make_inbound("VLESS-Reality")]
-        result = available_protocols(inbounds)
-        assert len(result) == 1
-        assert result[0].key == "reality"
-
-    def test_wss_excluded_without_domain(self) -> None:
-        inbounds = [
-            _make_inbound("VLESS-Reality"),
-            _make_inbound("VLESS-WSS"),
-        ]
-        result = available_protocols(inbounds, domain="")
-        keys = [p.key for p in result]
-        assert "wss" not in keys
-        assert "reality" in keys
-
-    def test_wss_included_with_domain(self) -> None:
-        inbounds = [
-            _make_inbound("VLESS-Reality"),
-            _make_inbound("VLESS-WSS"),
-        ]
-        result = available_protocols(inbounds, domain="example.com")
-        keys = [p.key for p in result]
-        assert "wss" in keys
-
-    def test_empty_inbounds(self) -> None:
-        result = available_protocols([])
-        assert result == []
-
-    def test_unknown_inbound_ignored(self) -> None:
-        inbounds = [
-            _make_inbound("VLESS-Reality"),
-            _make_inbound("Something-Else"),
-        ]
-        result = available_protocols(inbounds)
-        assert len(result) == 1
-        assert result[0].key == "reality"
-
-    def test_preserves_protocol_order(self) -> None:
-        """Even if inbounds are in different order, result follows PROTOCOLS order."""
-        inbounds = [
-            _make_inbound("VLESS-WSS"),
-            _make_inbound("VLESS-Reality-XHTTP", port=9999),
-            _make_inbound("VLESS-Reality"),
-        ]
-        result = available_protocols(inbounds, domain="example.com")
-        keys = [p.key for p in result]
-        assert keys == ["reality", "xhttp", "wss"]
 
 
 # ---------------------------------------------------------------------------

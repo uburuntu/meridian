@@ -14,7 +14,6 @@ from meridian.commands.resolve import (
 )
 from meridian.config import CREDS_BASE, RELAY_SERVICE_NAME, SERVERS_FILE, sanitize_ip_for_path
 from meridian.console import err_console, fail, info, ok, prompt, warn
-from meridian.credentials import ServerCredentials
 from meridian.servers import ServerRegistry
 from meridian.ssh import ServerConnection
 
@@ -59,27 +58,28 @@ def run(
     err_console.print()
 
     # Stop relay nodes that forward to this exit
-    proxy_file = resolved.creds_dir / "proxy.yml"
-    if proxy_file.exists():
-        creds = ServerCredentials.load(proxy_file)
-        if creds.relays:
-            info(f"Stopping {len(creds.relays)} relay node(s)...")
-            for relay in creds.relays:
-                try:
-                    relay_conn = ServerConnection(ip=relay.ip, user=user)
-                    relay_conn.check_ssh()
-                    relay_conn.run(f"systemctl stop {RELAY_SERVICE_NAME} 2>/dev/null", timeout=15)
-                    relay_conn.run(f"systemctl disable {RELAY_SERVICE_NAME} 2>/dev/null", timeout=10)
-                    ok(f"Relay {relay.ip} stopped")
-                except Exception:
-                    warn(f"Could not reach relay {relay.ip} — service may still be running")
-                # Clean up local relay metadata
-                relay_creds_dir = CREDS_BASE / sanitize_ip_for_path(relay.ip)
-                relay_file = relay_creds_dir / "relay.yml"
-                if relay_file.exists():
-                    relay_file.unlink()
-                registry.remove(relay.ip)
-            err_console.print()
+    from meridian.cluster import ClusterConfig
+
+    cluster = ClusterConfig.load()
+    relays_for_node = [r for r in cluster.relays if r.exit_node_ip == resolved.ip]
+    if relays_for_node:
+        info(f"Stopping {len(relays_for_node)} relay node(s)...")
+        for relay in relays_for_node:
+            try:
+                relay_conn = ServerConnection(ip=relay.ip, user=user)
+                relay_conn.check_ssh()
+                relay_conn.run(f"systemctl stop {RELAY_SERVICE_NAME} 2>/dev/null", timeout=15)
+                relay_conn.run(f"systemctl disable {RELAY_SERVICE_NAME} 2>/dev/null", timeout=10)
+                ok(f"Relay {relay.ip} stopped")
+            except Exception:
+                warn(f"Could not reach relay {relay.ip} — service may still be running")
+            # Clean up local relay metadata
+            relay_creds_dir = CREDS_BASE / sanitize_ip_for_path(relay.ip)
+            relay_file = relay_creds_dir / "relay.yml"
+            if relay_file.exists():
+                relay_file.unlink()
+            registry.remove(relay.ip)
+        err_console.print()
 
     # Run uninstall via provisioner
     from meridian.provision.steps import ProvisionContext, Provisioner
@@ -107,10 +107,8 @@ def run(
         shutil.rmtree(creds_dir)
 
     # Clean up cluster.yml
-    from meridian.cluster import ClusterConfig
     from meridian.config import CLUSTER_CONFIG
 
-    cluster = ClusterConfig.load()
     if cluster.is_configured:
         node = cluster.find_node(resolved.ip)
         if node and node.is_panel_host:

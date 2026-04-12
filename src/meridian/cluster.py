@@ -72,6 +72,8 @@ class NodeEntry:
     deployed_with: str = ""  # Meridian CLI version
     xhttp_path: str = ""  # persisted XHTTP path (reused across redeploys)
     ws_path: str = ""  # persisted WebSocket path (reused across redeploys)
+    reality_public_key: str = ""  # Reality public key (for test command)
+    reality_short_id: str = ""  # Reality short ID
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -285,6 +287,8 @@ _NODE_FIELDS = {
     "deployed_with",
     "xhttp_path",
     "ws_path",
+    "reality_public_key",
+    "reality_short_id",
 }
 _RELAY_FIELDS = {"ip", "name", "port", "exit_node_ip", "host_uuids", "sni", "ssh_user", "ssh_port"}
 _BRANDING_FIELDS = {"server_name", "icon", "color"}
@@ -361,6 +365,10 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
                 d.pop("xhttp_path", None)
             if not d.get("ws_path"):
                 d.pop("ws_path", None)
+            if not d.get("reality_public_key"):
+                d.pop("reality_public_key", None)
+            if not d.get("reality_short_id"):
+                d.pop("reality_short_id", None)
             nodes_out.append(d)
         out["nodes"] = nodes_out
 

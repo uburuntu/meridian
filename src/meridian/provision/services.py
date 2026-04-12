@@ -389,9 +389,13 @@ def _render_nginx_server_block(
 
 def _render_stats_script(panel_internal_port: int) -> str:
     """Render the stats update Python script."""
-    from meridian.protocols import INBOUND_TYPES
-
-    prefixes_repr = repr({it.email_prefix: key for key, it in INBOUND_TYPES.items()})
+    # Legacy 3x-ui email prefix mapping (hardcoded since INBOUND_TYPES removed in v4)
+    _LEGACY_PREFIXES = {
+        "reality-": "reality",
+        "wss-": "wss",
+        "xhttp-": "xhttp",
+    }
+    prefixes_repr = repr(_LEGACY_PREFIXES)
     return textwrap.dedent(f"""\
         #!/usr/bin/env python3
         \"\"\"Fetch per-client traffic stats from 3x-ui and write per-client JSON files.
