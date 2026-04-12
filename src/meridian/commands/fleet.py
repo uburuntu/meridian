@@ -9,9 +9,8 @@ from __future__ import annotations
 import socket
 
 from meridian.commands._helpers import format_traffic, load_cluster, make_panel
-from meridian.cluster import ClusterConfig
-from meridian.console import err_console, fail, warn
-from meridian.remnawave import MeridianPanel, RemnawaveError
+from meridian.console import err_console, warn
+from meridian.remnawave import RemnawaveError
 
 
 def _check_relay_health(ip: str, port: int, timeout: float = 3.0) -> bool:

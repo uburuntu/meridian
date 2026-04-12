@@ -880,8 +880,7 @@ def _setup_redeploy(
                 else:
                     warn(f"Node {resolved.ip} not found in panel — re-registering")
                     inbound_uuids = [
-                        ref.uuid for ref in cluster.inbounds.values()
-                        if isinstance(ref, InboundRef) and ref.uuid
+                        ref.uuid for ref in cluster.inbounds.values() if isinstance(ref, InboundRef) and ref.uuid
                     ]
                     node_creds = panel.create_node(
                         name=domain or resolved.ip,

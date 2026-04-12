@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import NoReturn
+import json as _json
+from typing import Any, NoReturn
 
 import typer
 from rich.console import Console
@@ -21,6 +22,24 @@ _theme = Theme(
 
 console = Console(theme=_theme, highlight=False)
 err_console = Console(theme=_theme, stderr=True, highlight=False)
+
+_output_json = False
+
+
+def set_json_mode(enabled: bool) -> None:
+    """Set JSON output mode."""
+    global _output_json
+    _output_json = enabled
+
+
+def is_json_mode() -> bool:
+    """Check if JSON output mode is active."""
+    return _output_json
+
+
+def json_output(data: Any) -> None:
+    """Write JSON to stdout (for --json mode). Separate from Rich stderr output."""
+    print(_json.dumps(data, indent=2, default=str))
 
 
 def info(msg: str) -> None:
