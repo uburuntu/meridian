@@ -36,7 +36,7 @@ from meridian.config import (
     is_ip,
 )
 from meridian.console import choose, confirm, err_console, fail, info, line, ok, prompt, warn
-from meridian.remnawave import MeridianPanel, RemnawaveError
+from meridian.remnawave import MeridianPanel, NodeCredentials, RemnawaveError
 from meridian.servers import ServerEntry, ServerRegistry
 from meridian.ssh import ServerConnection
 
@@ -676,10 +676,15 @@ def _setup_first_deploy(
         reality_short_id = xray_result["reality_short_id"]
 
         try:
-            profile = panel.create_config_profile(profile_name, xray_config)
+            existing_profile = panel.find_config_profile_by_name(profile_name)
+            if existing_profile:
+                profile = existing_profile
+                info(f"Config profile '{profile_name}' already exists, reusing")
+            else:
+                profile = panel.create_config_profile(profile_name, xray_config)
+                ok("Config profile created")
             cluster.config_profile_uuid = profile.uuid
             cluster.config_profile_name = profile.name
-            ok("Config profile created")
         except RemnawaveError as e:
             fail(f"Failed to create config profile: {e}", hint_type="system")
 
@@ -694,14 +699,22 @@ def _setup_first_deploy(
         node_name = domain or resolved.ip
         try:
             inbound_uuids = [ref.uuid for ref in cluster.inbounds.values() if isinstance(ref, InboundRef) and ref.uuid]
-            node_creds = panel.create_node(
-                name=node_name,
-                address=node_address,
-                port=REMNAWAVE_NODE_API_PORT,
-                config_profile_uuid=cluster.config_profile_uuid,
-                inbound_uuids=inbound_uuids,
-            )
-            ok(f"Node registered: {node_name}")
+            existing_api_node = panel.find_node_by_address(node_address)
+            if existing_api_node:
+                info(f"Node at {node_address} already registered, reusing")
+                # Re-fetch keygen for secret key (needed for container .env)
+                keygen = panel._get("/api/keygen")
+                secret_key = keygen.get("pubKey", "") if isinstance(keygen, dict) else ""
+                node_creds = NodeCredentials(uuid=existing_api_node.uuid, secret_key=secret_key)
+            else:
+                node_creds = panel.create_node(
+                    name=node_name,
+                    address=node_address,
+                    port=REMNAWAVE_NODE_API_PORT,
+                    config_profile_uuid=cluster.config_profile_uuid,
+                    inbound_uuids=inbound_uuids,
+                )
+                ok(f"Node registered: {node_name}")
         except RemnawaveError as e:
             fail(f"Failed to register node: {e}", hint_type="system")
 
@@ -818,14 +831,21 @@ def _setup_new_node(
 
             node_name = domain or resolved.ip
             inbound_uuids = [ref.uuid for ref in cluster.inbounds.values() if isinstance(ref, InboundRef) and ref.uuid]
-            node_creds = panel.create_node(
-                name=node_name,
-                address=resolved.ip,
-                port=REMNAWAVE_NODE_API_PORT,
-                config_profile_uuid=cluster.config_profile_uuid,
-                inbound_uuids=inbound_uuids,
-            )
-            ok(f"Node registered: {node_name}")
+            existing_api_node = panel.find_node_by_address(resolved.ip)
+            if existing_api_node:
+                info(f"Node at {resolved.ip} already registered, reusing")
+                keygen = panel._get("/api/keygen")
+                secret_key = keygen.get("pubKey", "") if isinstance(keygen, dict) else ""
+                node_creds = NodeCredentials(uuid=existing_api_node.uuid, secret_key=secret_key)
+            else:
+                node_creds = panel.create_node(
+                    name=node_name,
+                    address=resolved.ip,
+                    port=REMNAWAVE_NODE_API_PORT,
+                    config_profile_uuid=cluster.config_profile_uuid,
+                    inbound_uuids=inbound_uuids,
+                )
+                ok(f"Node registered: {node_name}")
 
             # Deploy the node container with the secret key
             _deploy_node_container(resolved.conn, node_creds.secret_key)
@@ -1038,53 +1058,65 @@ def _create_hosts_for_node(
     # Reality host (direct IP, port 443 or computed)
     reality_ref = cluster.get_inbound(ProtocolKey.REALITY)
     if reality_ref and reality_ref.uuid:
-        try:
-            panel.create_host(
-                remark=f"reality-{node_ip}",
-                address=node_ip,
-                port=reality_port,
-                config_profile_uuid=cluster.config_profile_uuid,
-                inbound_uuid=reality_ref.uuid,
-                sni=sni,
-                fingerprint="chrome",
-                security_layer="DEFAULT",
-            )
-            ok(f"Host created: Reality via {node_ip}:{reality_port}")
-        except RemnawaveError as e:
-            warn(f"Could not create Reality host: {e}")
+        remark = f"reality-{node_ip}"
+        if panel.find_host_by_remark(remark):
+            info(f"Host '{remark}' already exists, skipping")
+        else:
+            try:
+                panel.create_host(
+                    remark=remark,
+                    address=node_ip,
+                    port=reality_port,
+                    config_profile_uuid=cluster.config_profile_uuid,
+                    inbound_uuid=reality_ref.uuid,
+                    sni=sni,
+                    fingerprint="chrome",
+                    security_layer="DEFAULT",
+                )
+                ok(f"Host created: Reality via {node_ip}:{reality_port}")
+            except RemnawaveError as e:
+                warn(f"Could not create Reality host: {e}")
 
     # XHTTP host (via domain or IP, port 443 through nginx)
     xhttp_ref = cluster.get_inbound(ProtocolKey.XHTTP)
     if xhttp_ref and xhttp_ref.uuid:
-        try:
-            panel.create_host(
-                remark=f"xhttp-{host_address}",
-                address=host_address,
-                port=443,
-                config_profile_uuid=cluster.config_profile_uuid,
-                inbound_uuid=xhttp_ref.uuid,
-                security_layer="TLS",
-            )
-            ok(f"Host created: XHTTP via {host_address}:443")
-        except RemnawaveError as e:
-            warn(f"Could not create XHTTP host: {e}")
+        remark = f"xhttp-{host_address}"
+        if panel.find_host_by_remark(remark):
+            info(f"Host '{remark}' already exists, skipping")
+        else:
+            try:
+                panel.create_host(
+                    remark=remark,
+                    address=host_address,
+                    port=443,
+                    config_profile_uuid=cluster.config_profile_uuid,
+                    inbound_uuid=xhttp_ref.uuid,
+                    security_layer="TLS",
+                )
+                ok(f"Host created: XHTTP via {host_address}:443")
+            except RemnawaveError as e:
+                warn(f"Could not create XHTTP host: {e}")
 
     # WSS host (domain mode only, port 443 through CDN)
     if domain:
         wss_ref = cluster.get_inbound(ProtocolKey.WSS)
         if wss_ref and wss_ref.uuid:
-            try:
-                panel.create_host(
-                    remark=f"wss-{domain}",
-                    address=domain,
-                    port=443,
-                    config_profile_uuid=cluster.config_profile_uuid,
-                    inbound_uuid=wss_ref.uuid,
-                    security_layer="TLS",
-                )
-                ok(f"Host created: WSS via {domain}:443")
-            except RemnawaveError as e:
-                warn(f"Could not create WSS host: {e}")
+            remark = f"wss-{domain}"
+            if panel.find_host_by_remark(remark):
+                info(f"Host '{remark}' already exists, skipping")
+            else:
+                try:
+                    panel.create_host(
+                        remark=remark,
+                        address=domain,
+                        port=443,
+                        config_profile_uuid=cluster.config_profile_uuid,
+                        inbound_uuid=wss_ref.uuid,
+                        security_layer="TLS",
+                    )
+                    ok(f"Host created: WSS via {domain}:443")
+                except RemnawaveError as e:
+                    warn(f"Could not create WSS host: {e}")
 
 
 def _deploy_node_container(conn: ServerConnection, secret_key: str) -> None:

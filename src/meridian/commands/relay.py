@@ -13,8 +13,8 @@ import shlex
 
 import yaml
 
-from meridian.commands._helpers import load_cluster, make_panel
 from meridian.cluster import ClusterConfig, ProtocolKey, RelayEntry
+from meridian.commands._helpers import load_cluster, make_panel
 from meridian.config import (
     CREDS_BASE,
     RELAY_SERVICE_NAME,
@@ -175,6 +175,11 @@ def _create_relay_hosts(
         if not ref or not ref.uuid:
             continue
         remark = f"Relay-{label}-{proto_key}"
+        existing = panel.find_host_by_remark(remark)
+        if existing:
+            host_uuids[str(proto_key)] = existing.uuid
+            info(f"Host '{remark}' already exists, reusing")
+            continue
         try:
             host = panel.create_host(
                 remark=remark,
