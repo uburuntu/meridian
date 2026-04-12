@@ -77,9 +77,7 @@ def _patch_all(**overrides: object):  # noqa: ANN202
     """
     defaults = {
         "meridian.commands.setup.resolve_server": MagicMock(return_value=_make_resolved()),
-        "meridian.commands.setup.ensure_server_connection": MagicMock(
-            side_effect=lambda r: r
-        ),
+        "meridian.commands.setup.ensure_server_connection": MagicMock(side_effect=lambda r: r),
         "meridian.commands.setup._check_ports": MagicMock(),
         "meridian.commands.setup._run_provisioner": MagicMock(),
         "meridian.commands.setup._configure_panel_and_node": MagicMock(),

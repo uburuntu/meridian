@@ -467,36 +467,28 @@ class TestCheckPortsHappyPath:
     @patch("meridian.commands.setup.warn")
     def test_port_held_by_nginx_is_allowed(self, mock_warn: MagicMock) -> None:
         conn = MagicMock()
-        conn.run.return_value = _ok_result(
-            stdout='LISTEN 0 128 *:443 *:* users:(("nginx",pid=1234,fd=6))\n'
-        )
+        conn.run.return_value = _ok_result(stdout='LISTEN 0 128 *:443 *:* users:(("nginx",pid=1234,fd=6))\n')
         _check_ports(conn, _IP, yes=True)
         mock_warn.assert_not_called()
 
     @patch("meridian.commands.setup.warn")
     def test_port_held_by_xray_is_allowed(self, mock_warn: MagicMock) -> None:
         conn = MagicMock()
-        conn.run.return_value = _ok_result(
-            stdout='LISTEN 0 128 *:443 *:* users:(("xray",pid=5678,fd=7))\n'
-        )
+        conn.run.return_value = _ok_result(stdout='LISTEN 0 128 *:443 *:* users:(("xray",pid=5678,fd=7))\n')
         _check_ports(conn, _IP, yes=True)
         mock_warn.assert_not_called()
 
     @patch("meridian.commands.setup.warn")
     def test_port_held_by_docker_proxy_is_allowed(self, mock_warn: MagicMock) -> None:
         conn = MagicMock()
-        conn.run.return_value = _ok_result(
-            stdout='LISTEN 0 128 *:443 *:* users:(("docker-proxy",pid=999,fd=4))\n'
-        )
+        conn.run.return_value = _ok_result(stdout='LISTEN 0 128 *:443 *:* users:(("docker-proxy",pid=999,fd=4))\n')
         _check_ports(conn, _IP, yes=True)
         mock_warn.assert_not_called()
 
     @patch("meridian.commands.setup.warn")
     def test_port_held_by_remnawave_node_is_allowed(self, mock_warn: MagicMock) -> None:
         conn = MagicMock()
-        conn.run.return_value = _ok_result(
-            stdout='LISTEN 0 128 *:80 *:* users:(("remnawave-node",pid=444,fd=3))\n'
-        )
+        conn.run.return_value = _ok_result(stdout='LISTEN 0 128 *:80 *:* users:(("remnawave-node",pid=444,fd=3))\n')
         _check_ports(conn, _IP, yes=True)
         mock_warn.assert_not_called()
 
@@ -518,9 +510,7 @@ class TestCheckPortsConflict:
         """With --yes, a conflicting process triggers fail() which raises Exit."""
         mock_fail.side_effect = typer.Exit(2)
         conn = MagicMock()
-        conn.run.return_value = _ok_result(
-            stdout='LISTEN 0 128 *:443 *:* users:(("apache2",pid=111,fd=5))\n'
-        )
+        conn.run.return_value = _ok_result(stdout='LISTEN 0 128 *:443 *:* users:(("apache2",pid=111,fd=5))\n')
         with pytest.raises(typer.Exit):
             _check_ports(conn, _IP, yes=True)
         mock_fail.assert_called_once()
@@ -540,9 +530,7 @@ class TestCheckPortsConflict:
         """Interactive mode: user chooses 'No' (index 2) -> fail()."""
         mock_fail.side_effect = typer.Exit(2)
         conn = MagicMock()
-        conn.run.return_value = _ok_result(
-            stdout='LISTEN 0 128 *:80 *:* users:(("apache2",pid=222,fd=3))\n'
-        )
+        conn.run.return_value = _ok_result(stdout='LISTEN 0 128 *:80 *:* users:(("apache2",pid=222,fd=3))\n')
         with pytest.raises(typer.Exit):
             _check_ports(conn, _IP, yes=False)
         mock_fail.assert_called_once()
@@ -577,9 +565,7 @@ class TestCheckPortsConflict:
         mock_fail.side_effect = typer.Exit(2)
         conn = MagicMock()
         # Malformed users field — regex won't match
-        conn.run.return_value = _ok_result(
-            stdout="LISTEN 0 128 *:443 *:* users:((broken-format))\n"
-        )
+        conn.run.return_value = _ok_result(stdout="LISTEN 0 128 *:443 *:* users:((broken-format))\n")
         with pytest.raises(typer.Exit):
             _check_ports(conn, _IP, yes=True)
         mock_fail.assert_called_once()
@@ -627,9 +613,7 @@ class TestWaitForPanelApi:
 
     @patch("meridian.commands.setup.time")
     @patch("httpx.get")
-    def test_all_retries_exhausted_returns_false(
-        self, mock_get: MagicMock, mock_time: MagicMock
-    ) -> None:
+    def test_all_retries_exhausted_returns_false(self, mock_get: MagicMock, mock_time: MagicMock) -> None:
         """After all retries with 500s, returns False."""
         resp = MagicMock()
         resp.status_code = 500
@@ -663,9 +647,7 @@ class TestWaitForPanelApi:
 
     @patch("meridian.commands.setup.time")
     @patch("httpx.get")
-    def test_sleeps_between_retries_with_correct_delay(
-        self, mock_get: MagicMock, mock_time: MagicMock
-    ) -> None:
+    def test_sleeps_between_retries_with_correct_delay(self, mock_get: MagicMock, mock_time: MagicMock) -> None:
         """Verify sleep(delay) is called between retries, not after last."""
         import httpx
 
@@ -682,9 +664,7 @@ class TestWaitForPanelApi:
 
     @patch("meridian.commands.setup.time")
     @patch("httpx.get")
-    def test_passes_verify_false_and_timeout(
-        self, mock_get: MagicMock, mock_time: MagicMock
-    ) -> None:
+    def test_passes_verify_false_and_timeout(self, mock_get: MagicMock, mock_time: MagicMock) -> None:
         """Ensure httpx.get is called with verify=False and timeout=10."""
         resp = MagicMock()
         resp.status_code = 200

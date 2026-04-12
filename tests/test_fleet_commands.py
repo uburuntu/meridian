@@ -430,9 +430,7 @@ class TestFleetRecover:
         assert node.reality_short_id == _SAMPLE_SHORT_ID
         assert node.sni == _SAMPLE_SNI
 
-    def test_recover_multiple_nodes_first_is_panel_host(
-        self, tmp_home: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_recover_multiple_nodes_first_is_panel_host(self, tmp_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """First node from API is marked as panel host; others are not."""
         import meridian.config as cfg
 
