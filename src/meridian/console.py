@@ -24,6 +24,7 @@ console = Console(theme=_theme, highlight=False)
 err_console = Console(theme=_theme, stderr=True, highlight=False)
 
 _output_json = False
+_quiet_mode = False
 
 
 def set_json_mode(enabled: bool) -> None:
@@ -37,21 +38,35 @@ def is_json_mode() -> bool:
     return _output_json
 
 
+def set_quiet_mode(enabled: bool) -> None:
+    """Set quiet mode — suppresses info/ok/warn/banner output."""
+    global _quiet_mode
+    _quiet_mode = enabled
+
+
+def is_quiet_mode() -> bool:
+    """Check if quiet mode is active."""
+    return _quiet_mode
+
+
 def json_output(data: Any) -> None:
     """Write JSON to stdout (for --json mode). Separate from Rich stderr output."""
     print(_json.dumps(data, indent=2, default=str))
 
 
 def info(msg: str) -> None:
-    err_console.print(f"  [info]\u2192[/info] {msg}")
+    if not _quiet_mode:
+        err_console.print(f"  [info]\u2192[/info] {msg}")
 
 
 def ok(msg: str) -> None:
-    err_console.print(f"  [ok]\u2713[/ok] {msg}")
+    if not _quiet_mode:
+        err_console.print(f"  [ok]\u2713[/ok] {msg}")
 
 
 def warn(msg: str) -> None:
-    err_console.print(f"  [warn]![/warn] {msg}")
+    if not _quiet_mode:
+        err_console.print(f"  [warn]![/warn] {msg}")
 
 
 _EXIT_CODES = {"user": 2, "system": 3, "bug": 1}
@@ -89,7 +104,8 @@ def line() -> None:
 
 
 def banner(version: str) -> None:
-    err_console.print(f"\n  [bold]Meridian[/bold] [dim]v{version}[/dim]\n")
+    if not _quiet_mode:
+        err_console.print(f"\n  [bold]Meridian[/bold] [dim]v{version}[/dim]\n")
 
 
 def prompt(message: str, default: str = "") -> str:
