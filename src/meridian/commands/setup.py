@@ -608,15 +608,19 @@ def _setup_first_deploy(
             hint_type="system",
         )
 
-    # Register admin user
-    admin_user = f"meridian-{secrets.token_hex(4)}"
-    # Remnawave requires: ≥24 chars, uppercase + lowercase + numbers
-    admin_pass = f"Mx{secrets.token_hex(16)}9A"
+    # Register admin user (reuse saved credentials on re-run after partial failure)
+    if cluster.panel.admin_user and cluster.panel.admin_pass:
+        admin_user = cluster.panel.admin_user
+        admin_pass = cluster.panel.admin_pass
+    else:
+        admin_user = f"meridian-{secrets.token_hex(4)}"
+        # Remnawave requires: ≥24 chars, uppercase + lowercase + numbers
+        admin_pass = f"Mx{secrets.token_hex(16)}9A"
 
     try:
         auth_token = MeridianPanel.register_admin(base_url, admin_user, admin_pass)
     except RemnawaveError as e:
-        # Admin may already exist on re-run after partial failure
+        # Admin may already exist on re-run after partial failure — try login
         try:
             auth_token = MeridianPanel.login(base_url, admin_user, admin_pass)
         except RemnawaveError:
@@ -642,9 +646,8 @@ def _setup_first_deploy(
         sub_path=sub_path,
         deployed_with=version,
     )
-    cluster.save()
-
-    # Create a long-lived API token (auth token is browser-session only)
+    cluster.backup()
+    cluster.save()  # Create a long-lived API token (auth token is browser-session only)
     api_token = _create_api_token(base_url, auth_token)
     ok("API token created")
 
@@ -722,7 +725,10 @@ def _setup_first_deploy(
             reality_public_key=reality_public_key,
             reality_short_id=reality_short_id,
         )
+        # Deduplicate: update existing entry or append new
+        cluster.remove_node(resolved.ip)
         cluster.nodes.append(node_entry)
+        cluster.backup()
         cluster.save()
 
         # Create direct hosts for this node's protocols
@@ -841,7 +847,9 @@ def _setup_new_node(
                 reality_public_key=existing_node.reality_public_key if existing_node else "",
                 reality_short_id=existing_node.reality_short_id if existing_node else "",
             )
+            cluster.remove_node(resolved.ip)
             cluster.nodes.append(node_entry)
+            cluster.backup()
             cluster.save()
 
             # Create hosts for the new node
