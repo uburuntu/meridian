@@ -631,9 +631,9 @@ def _setup_first_deploy(
         # Admin may already exist on re-run after partial failure — try login
         try:
             auth_token = MeridianPanel.login(base_url, admin_user, admin_pass)
-        except RemnawaveError:
+        except RemnawaveError as login_err:
             fail(
-                f"Could not register or login to panel: {e}",
+                f"Panel admin registration failed ({e}), login also failed ({login_err})",
                 hint="Panel may need a fresh start: meridian teardown, then redeploy",
                 hint_type="system",
             )

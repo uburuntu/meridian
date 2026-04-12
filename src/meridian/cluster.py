@@ -132,6 +132,7 @@ class ClusterConfig:
     branding: BrandingConfig = field(default_factory=BrandingConfig)
     inbounds: dict[str, InboundRef] = field(default_factory=dict)
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
+    _readonly: bool = field(default=False, repr=False)
 
     # --- Persistence ---
 
@@ -159,13 +160,17 @@ class ClusterConfig:
         if isinstance(version, int) and version > 1:
             print(
                 f"Warning: cluster.yml has version {version}, but this CLI only understands version 1. "
-                "Some fields may be ignored. Consider upgrading Meridian.",
+                "Some fields may be ignored. Upgrade Meridian: pip install --upgrade meridian-vpn",
                 file=sys.stderr,
             )
         from meridian.migrations import migrate
 
         data = migrate(data)
         cfg = _load_cluster(data)
+
+        # Mark future-version configs as read-only to prevent data loss
+        if isinstance(version, int) and version > 1:
+            cfg._readonly = True
 
         # Warn about validation errors on load (don't hard-fail — recover/doctor need corrupt configs)
         errors = cfg.validate()
@@ -180,6 +185,11 @@ class ClusterConfig:
 
     def save(self, path: Path | None = None) -> None:
         """Write to cluster.yml (atomic via tempfile+rename)."""
+        if self._readonly:
+            raise ValueError(
+                "Cannot save: cluster.yml has a newer version than this CLI supports. "
+                "Upgrade Meridian to avoid data loss: pip install --upgrade meridian-vpn"
+            )
         if path is None:
             from meridian.config import CLUSTER_CONFIG
 
@@ -258,6 +268,7 @@ class ClusterConfig:
                 errors.append(f"{label}.ssh_port is out of range: {node.ssh_port}")
 
         # Relay validations
+        relay_endpoints: set[tuple[str, int]] = set()
         for i, relay in enumerate(self.relays):
             label = f"relays[{i}]"
             if relay.ip and not _is_valid_ip(relay.ip):
@@ -268,6 +279,25 @@ class ClusterConfig:
                 errors.append(f"{label}.ssh_port is out of range: {relay.ssh_port}")
             if relay.exit_node_ip and node_ips and relay.exit_node_ip not in node_ips:
                 errors.append(f"{label}.exit_node_ip references unknown node: {relay.exit_node_ip}")
+            # Relay endpoint uniqueness
+            if relay.ip:
+                endpoint = (relay.ip, relay.port)
+                if endpoint in relay_endpoints:
+                    errors.append(f"{label}: duplicate relay endpoint {relay.ip}:{relay.port}")
+                relay_endpoints.add(endpoint)
+
+        # Panel host uniqueness — at most one node can be panel host
+        panel_hosts = [i for i, n in enumerate(self.nodes) if n.is_panel_host]
+        if len(panel_hosts) > 1:
+            errors.append(f"Multiple panel hosts detected: nodes[{panel_hosts[0]}] and nodes[{panel_hosts[1]}]")
+
+        # Panel URL format
+        if self.panel.url:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(self.panel.url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                errors.append(f"panel.url is not a valid HTTP(S) URL: {self.panel.url}")
 
         # Inbound ref UUIDs
         for key, ref in self.inbounds.items():
