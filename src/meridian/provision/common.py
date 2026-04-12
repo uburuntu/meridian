@@ -373,7 +373,7 @@ class ConfigureBBR:
             # Remove existing entries and append new ones
             q_key = shlex.quote(key)
             q_value = shlex.quote(value)
-            conn.run(f"sed -i '/^{key}/d' /etc/sysctl.conf", timeout=15)
+            conn.run(f"sed -i '/^{q_key}/d' /etc/sysctl.conf", timeout=15)
             conn.run(f"printf '%s = %s\\n' {q_key} {q_value} >> /etc/sysctl.conf", timeout=15)
 
         return StepResult(name=self.name, status="changed")

@@ -400,8 +400,8 @@ def run_deploy(
         ssh_user=user,
         ssh_port=ssh_port,
     )
-    cluster.relays.append(relay_entry)
     cluster.backup()
+    cluster.relays.append(relay_entry)
     cluster.save()
     _save_relay_local(relay_ip, exit_ip, 443, listen_port)
     if relay_ip != exit_ip:
@@ -569,7 +569,7 @@ def run_remove(
         relay_conn.run(f"systemctl stop {RELAY_SERVICE_NAME} 2>/dev/null", timeout=15)
         relay_conn.run(f"systemctl disable {RELAY_SERVICE_NAME} 2>/dev/null", timeout=10)
         ok("Relay service stopped")
-    except Exception:
+    except (SSHError, OSError):
         warn(f"Could not connect to relay {relay_ip} -- service may still be running")
 
     # Remove from cluster.yml and local state
@@ -611,7 +611,7 @@ def run_check(
         relay_conn = ServerConnection(ip=relay_ip, user=relay_user, port=relay_entry.ssh_port)
         relay_conn.check_ssh()
         ok("SSH to relay: connected")
-    except Exception:
+    except (SSHError, OSError):
         err_console.print(f"  [red bold]x[/red bold] SSH to relay: failed ({relay_ip})")
         warn("Cannot proceed without SSH -- check SSH key and user")
         return
