@@ -328,6 +328,13 @@ class MeridianPanel:
             return [_parse_node(n) for n in data]
         return []
 
+    def find_node_by_address(self, address: str) -> Node | None:
+        """Find a node by its address. Returns None if not found."""
+        for node in self.list_nodes():
+            if node.address == address:
+                return node
+        return None
+
     def get_node(self, uuid: str) -> Node | None:
         """Get a node by UUID."""
         try:
@@ -404,6 +411,13 @@ class MeridianPanel:
             return [_parse_host(h) for h in data]
         return []
 
+    def find_host_by_remark(self, remark: str) -> Host | None:
+        """Find a host by its remark string. Returns None if not found."""
+        for host in self.list_hosts():
+            if host.remark == remark:
+                return host
+        return None
+
     def enable_host(self, uuid: str) -> None:
         """Enable a disabled host."""
         self._post(f"/api/hosts/enable/{uuid}")
@@ -442,6 +456,13 @@ class MeridianPanel:
         if isinstance(data, list):
             return [ConfigProfile(uuid=p.get("uuid", ""), name=p.get("name", ""), _raw=p) for p in data]
         return []
+
+    def find_config_profile_by_name(self, name: str) -> ConfigProfile | None:
+        """Find a config profile by name. Returns None if not found."""
+        for profile in self.list_config_profiles():
+            if profile.name == name:
+                return profile
+        return None
 
     # --- Inbounds ---
 
