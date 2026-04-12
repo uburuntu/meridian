@@ -144,6 +144,53 @@ class TestClusterValidation:
         errors = cfg.validate()
         assert any("panel.ssh_port" in e for e in errors)
 
+    def test_duplicate_relay_endpoint_detected(self) -> None:
+        cfg = ClusterConfig(
+            nodes=[NodeEntry(ip=_IP_A)],
+            relays=[
+                RelayEntry(ip=_IP_B, port=443, exit_node_ip=_IP_A),
+                RelayEntry(ip=_IP_B, port=443, exit_node_ip=_IP_A),
+            ],
+        )
+        errors = cfg.validate()
+        assert any("duplicate relay endpoint" in e for e in errors)
+
+    def test_multiple_panel_hosts_detected(self) -> None:
+        cfg = ClusterConfig(
+            nodes=[
+                NodeEntry(ip=_IP_A, is_panel_host=True),
+                NodeEntry(ip=_IP_B, is_panel_host=True),
+            ],
+        )
+        errors = cfg.validate()
+        assert any("Multiple panel hosts" in e for e in errors)
+
+    def test_invalid_panel_url_detected(self) -> None:
+        cfg = ClusterConfig(
+            panel=PanelConfig(url="not-a-url"),
+        )
+        errors = cfg.validate()
+        assert any("panel.url" in e for e in errors)
+
+    def test_valid_panel_url_accepted(self) -> None:
+        cfg = ClusterConfig(
+            panel=PanelConfig(url="https://panel.example.com/secret"),
+        )
+        errors = cfg.validate()
+        assert not any("panel.url" in e for e in errors)
+
+    def test_future_version_sets_readonly(self, tmp_path: Path) -> None:
+        p = tmp_path / "cluster.yml"
+        p.write_text("version: 99\n")
+        cfg = ClusterConfig.load(p)
+        assert cfg._readonly is True
+
+    def test_readonly_config_cannot_be_saved(self, tmp_path: Path) -> None:
+        cfg = ClusterConfig()
+        cfg._readonly = True
+        with pytest.raises(ValueError, match="newer version"):
+            cfg.save(tmp_path / "cluster.yml")
+
 
 # ---------------------------------------------------------------------------
 # YAML round-trip
