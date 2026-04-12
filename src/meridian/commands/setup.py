@@ -449,7 +449,7 @@ def _generate_reality_keypair(conn: ServerConnection) -> tuple[str, str]:
     # Last resort: download a temporary Xray binary
     info("Downloading Xray binary for key generation...")
     dl_result = conn.run(
-        'ARCH=$(uname -m); '
+        "ARCH=$(uname -m); "
         'case "$ARCH" in '
         "aarch64|arm64) XRAY_ARCH=arm64-v8a ;; "
         "*) XRAY_ARCH=64 ;; "
