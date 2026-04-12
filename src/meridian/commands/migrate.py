@@ -7,6 +7,7 @@ Does NOT auto-deploy -- the deployer runs `meridian deploy` manually.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from meridian.cluster import ClusterConfig
 from meridian.config import CLUSTER_CONFIG, CREDS_BASE
@@ -52,7 +53,7 @@ def run_migrate() -> None:
     info("Scanning 3.x credentials...")
     err_console.print()
 
-    server_data: list[dict[str, object]] = []
+    server_data: list[dict[str, Any]] = []
     for dir_name, proxy_path in old_servers:
         creds = ServerCredentials.load(proxy_path)
         ip = creds.server.ip or dir_name

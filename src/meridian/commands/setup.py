@@ -12,6 +12,7 @@ import re
 import secrets
 import shlex
 import time
+from typing import Any
 
 from meridian.cluster import (
     BrandingConfig,
@@ -950,11 +951,15 @@ def _build_xray_config(
         },
     }
     if pq:
-        reality_inbound["streamSettings"]["realitySettings"]["fingerprint"] = "chrome"
+        rs = reality_inbound["streamSettings"]
+        if isinstance(rs, dict):
+            rs_inner = rs.get("realitySettings")
+            if isinstance(rs_inner, dict):
+                rs_inner["fingerprint"] = "chrome"
     config["inbounds"].append(reality_inbound)
 
     # XHTTP inbound (enhanced stealth -- behind nginx reverse proxy)
-    xhttp_stream = {
+    xhttp_stream: dict[str, Any] = {
         "network": "xhttp",
         "security": "none",
     }
@@ -975,7 +980,7 @@ def _build_xray_config(
 
     # WSS inbound (CDN fallback -- domain mode only)
     if domain:
-        ws_stream = {
+        ws_stream: dict[str, Any] = {
             "network": "ws",
             "security": "none",
         }
