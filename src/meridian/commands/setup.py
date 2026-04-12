@@ -1186,11 +1186,17 @@ def _create_hosts_for_node(
     """Create direct host entries for a node's protocols."""
     host_address = domain or node_ip
 
+    # Batch-fetch all hosts once instead of per-protocol find_host_by_remark
+    try:
+        existing_remarks = {h.remark for h in panel.list_hosts()}
+    except RemnawaveError:
+        existing_remarks = set()
+
     # Reality host (direct IP, port 443 or computed)
     reality_ref = cluster.get_inbound(ProtocolKey.REALITY)
     if reality_ref and reality_ref.uuid:
         remark = f"reality-{node_ip}"
-        if panel.find_host_by_remark(remark):
+        if remark in existing_remarks:
             info(f"Host '{remark}' already exists, skipping")
         else:
             try:
@@ -1212,7 +1218,7 @@ def _create_hosts_for_node(
     xhttp_ref = cluster.get_inbound(ProtocolKey.XHTTP)
     if xhttp_ref and xhttp_ref.uuid:
         remark = f"xhttp-{host_address}"
-        if panel.find_host_by_remark(remark):
+        if remark in existing_remarks:
             info(f"Host '{remark}' already exists, skipping")
         else:
             try:
@@ -1233,7 +1239,7 @@ def _create_hosts_for_node(
         wss_ref = cluster.get_inbound(ProtocolKey.WSS)
         if wss_ref and wss_ref.uuid:
             remark = f"wss-{domain}"
-            if panel.find_host_by_remark(remark):
+            if remark in existing_remarks:
                 info(f"Host '{remark}' already exists, skipping")
             else:
                 try:

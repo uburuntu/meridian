@@ -40,6 +40,7 @@ def main_callback(
     version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
     verbose: bool = typer.Option(False, "--verbose", help="Enable debug logging"),
     json_mode: bool = typer.Option(False, "--json", help="Output JSON to stdout (for scripting)"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress progress output"),
 ) -> None:
     """Meridian — Censorship-resistant proxy server management."""
     if ctx.resilient_parsing:
@@ -55,9 +56,15 @@ def main_callback(
         )
 
     if json_mode:
-        from meridian.console import set_json_mode
+        from meridian.console import set_json_mode, set_quiet_mode
 
         set_json_mode(True)
+        set_quiet_mode(True)  # JSON implies quiet
+
+    if quiet:
+        from meridian.console import set_quiet_mode
+
+        set_quiet_mode(True)
 
     if version:
         print(f"meridian {__version__}")
