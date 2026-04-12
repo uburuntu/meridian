@@ -7,9 +7,7 @@ missing inbounds, and the tag → ProtocolKey mapping.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from meridian.cluster import ClusterConfig, InboundRef, NodeEntry, PanelConfig, ProtocolKey
 from meridian.commands.setup import _cache_inbounds, _create_hosts_for_node
