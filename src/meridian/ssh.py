@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import shlex
 import shutil
 import subprocess
 from pathlib import Path
 
 from meridian.console import err_console, info, ok, warn
+
+logger = logging.getLogger("meridian.ssh")
 
 
 class SSHError(Exception):
@@ -208,6 +211,7 @@ class ServerConnection:
         of letting ``subprocess.TimeoutExpired`` crash the caller.
         """
         use_sudo = sudo if sudo is not None else (self.user != "root")
+        logger.debug("SSH %s@%s: %s", self.user, self.ip, command[:200])
 
         if self.local_mode:
             if self.needs_sudo or use_sudo:
@@ -215,13 +219,15 @@ class ServerConnection:
             else:
                 cmd = ["bash", "-c", command]
             try:
-                return subprocess.run(
+                result = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
                     timeout=timeout,
                     stdin=subprocess.DEVNULL,
                 )
+                logger.debug("SSH rc=%d", result.returncode)
+                return result
             except subprocess.TimeoutExpired:
                 return subprocess.CompletedProcess(
                     args=cmd,
@@ -237,13 +243,15 @@ class ServerConnection:
             command = f"sudo -n sh -c {shlex.quote(command)}"
         cmd = ["ssh", *self._ssh_opts, f"{self.user}@{self.ip}", command]
         try:
-            return subprocess.run(
+            result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
                 stdin=subprocess.DEVNULL,
             )
+            logger.debug("SSH rc=%d", result.returncode)
+            return result
         except subprocess.TimeoutExpired:
             return subprocess.CompletedProcess(
                 args=cmd,
