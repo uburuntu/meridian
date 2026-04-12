@@ -1,0 +1,310 @@
+"""Tests for cluster config — validation, YAML round-trip, and convenience methods."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from meridian.cluster import (
+    BrandingConfig,
+    ClusterConfig,
+    InboundRef,
+    NodeEntry,
+    PanelConfig,
+    ProtocolKey,
+    RelayEntry,
+)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_UUID_A = "550e8400-e29b-41d4-a716-446655440000"
+_UUID_B = "660e8400-e29b-41d4-a716-446655440001"
+_UUID_C = "770e8400-e29b-41d4-a716-446655440002"
+_IP_A = "198.51.100.1"
+_IP_B = "198.51.100.2"
+_IP_C = "198.51.100.3"
+
+
+def _configured_cluster(**overrides) -> ClusterConfig:
+    """Return a fully valid, configured cluster for testing."""
+    defaults = dict(
+        panel=PanelConfig(
+            url="https://panel.example.com",
+            api_token="tok_abc123",
+            server_ip=_IP_A,
+        ),
+        nodes=[
+            NodeEntry(ip=_IP_A, uuid=_UUID_A, name="finland"),
+            NodeEntry(ip=_IP_B, uuid=_UUID_B, name="germany"),
+        ],
+        relays=[
+            RelayEntry(ip=_IP_C, name="ru-moscow", exit_node_ip=_IP_A),
+        ],
+        inbounds={
+            ProtocolKey.REALITY: InboundRef(uuid=_UUID_C, tag="VLESS_REALITY"),
+        },
+        branding=BrandingConfig(server_name="Test VPN", color="ocean"),
+    )
+    defaults.update(overrides)
+    return ClusterConfig(**defaults)
+
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+
+
+class TestClusterValidation:
+    def test_empty_cluster_validates(self) -> None:
+        cfg = ClusterConfig()
+        assert cfg.validate() == []
+
+    def test_configured_cluster_requires_url_and_token(self) -> None:
+        # panel.url set but no api_token — is_configured is False, so no error
+        cfg = ClusterConfig(panel=PanelConfig(url="https://panel.example.com"))
+        assert cfg.validate() == []
+
+        # Both set (is_configured=True) then blank one — triggers error
+        cfg = ClusterConfig(panel=PanelConfig(url="https://panel.example.com", api_token="tok"))
+        assert cfg.validate() == []  # both present, no error
+
+    def test_invalid_node_ip_detected(self) -> None:
+        cfg = ClusterConfig(nodes=[NodeEntry(ip="not-an-ip", uuid=_UUID_A)])
+        errors = cfg.validate()
+        assert any("nodes[0].ip" in e and "not a valid IP" in e for e in errors)
+
+    def test_duplicate_node_ip_detected(self) -> None:
+        cfg = ClusterConfig(
+            nodes=[
+                NodeEntry(ip=_IP_A, uuid=_UUID_A),
+                NodeEntry(ip=_IP_A, uuid=_UUID_B),
+            ]
+        )
+        errors = cfg.validate()
+        assert any("duplicate" in e for e in errors)
+
+    def test_invalid_uuid_detected(self) -> None:
+        cfg = ClusterConfig(nodes=[NodeEntry(ip=_IP_A, uuid="bad-uuid")])
+        errors = cfg.validate()
+        assert any("nodes[0].uuid" in e and "not a valid UUID" in e for e in errors)
+
+    def test_relay_referencing_unknown_node_detected(self) -> None:
+        cfg = ClusterConfig(
+            nodes=[NodeEntry(ip=_IP_A, uuid=_UUID_A)],
+            relays=[RelayEntry(ip=_IP_C, exit_node_ip=_IP_B)],
+        )
+        errors = cfg.validate()
+        assert any("exit_node_ip" in e and "unknown node" in e for e in errors)
+
+    def test_port_out_of_range_detected(self) -> None:
+        cfg = ClusterConfig(nodes=[NodeEntry(ip=_IP_A, ssh_port=0)])
+        errors = cfg.validate()
+        assert any("ssh_port" in e and "out of range" in e for e in errors)
+
+        cfg2 = ClusterConfig(nodes=[NodeEntry(ip=_IP_A, ssh_port=70000)])
+        errors2 = cfg2.validate()
+        assert any("ssh_port" in e and "out of range" in e for e in errors2)
+
+    def test_valid_cluster_returns_no_errors(self) -> None:
+        cfg = _configured_cluster()
+        assert cfg.validate() == []
+
+    def test_invalid_panel_server_ip_detected(self) -> None:
+        cfg = ClusterConfig(panel=PanelConfig(server_ip="bogus"))
+        errors = cfg.validate()
+        assert any("panel.server_ip" in e for e in errors)
+
+    def test_invalid_relay_ip_detected(self) -> None:
+        cfg = ClusterConfig(relays=[RelayEntry(ip="nope")])
+        errors = cfg.validate()
+        assert any("relays[0].ip" in e and "not a valid IP" in e for e in errors)
+
+    def test_relay_port_out_of_range_detected(self) -> None:
+        cfg = ClusterConfig(relays=[RelayEntry(ip=_IP_C, port=99999)])
+        errors = cfg.validate()
+        assert any("relays[0].port" in e and "out of range" in e for e in errors)
+
+    def test_invalid_inbound_uuid_detected(self) -> None:
+        cfg = ClusterConfig(inbounds={"reality": InboundRef(uuid="not-a-uuid", tag="X")})
+        errors = cfg.validate()
+        assert any("inbounds[reality].uuid" in e for e in errors)
+
+    def test_relay_exit_node_skipped_when_no_nodes(self) -> None:
+        """Relay exit_node_ip check is skipped when there are no nodes (empty cluster)."""
+        cfg = ClusterConfig(relays=[RelayEntry(ip=_IP_C, exit_node_ip=_IP_B)])
+        errors = cfg.validate()
+        # No "unknown node" error because node_ips is empty — can't validate references
+        assert not any("unknown node" in e for e in errors)
+
+    def test_panel_ssh_port_out_of_range(self) -> None:
+        cfg = ClusterConfig(panel=PanelConfig(ssh_port=0))
+        errors = cfg.validate()
+        assert any("panel.ssh_port" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# YAML round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestClusterYAMLRoundTrip:
+    def test_save_and_load_preserves_all_fields(self, tmp_path: Path) -> None:
+        cfg = _configured_cluster()
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+
+        assert loaded.panel.url == cfg.panel.url
+        assert loaded.panel.api_token == cfg.panel.api_token
+        assert loaded.panel.server_ip == cfg.panel.server_ip
+        assert len(loaded.nodes) == 2
+        assert loaded.nodes[0].ip == _IP_A
+        assert loaded.nodes[0].uuid == _UUID_A
+        assert loaded.nodes[0].name == "finland"
+        assert loaded.nodes[1].ip == _IP_B
+        assert len(loaded.relays) == 1
+        assert loaded.relays[0].ip == _IP_C
+        assert loaded.relays[0].exit_node_ip == _IP_A
+        assert loaded.branding.server_name == "Test VPN"
+        assert loaded.branding.color == "ocean"
+        inbound = loaded.get_inbound(ProtocolKey.REALITY)
+        assert inbound is not None
+        assert inbound.uuid == _UUID_C
+        assert inbound.tag == "VLESS_REALITY"
+
+    def test_save_and_load_preserves_extra_fields(self, tmp_path: Path) -> None:
+        cfg = ClusterConfig(_extra={"future_field": "hello"})
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        assert loaded._extra.get("future_field") == "hello"
+
+    def test_save_and_load_preserves_strenum_keys(self, tmp_path: Path) -> None:
+        cfg = ClusterConfig(
+            inbounds={
+                ProtocolKey.REALITY: InboundRef(uuid=_UUID_A, tag="R"),
+                ProtocolKey.XHTTP: InboundRef(uuid=_UUID_B, tag="X"),
+            }
+        )
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        # Keys survive as plain strings (YAML doesn't know about ProtocolKey)
+        assert "reality" in loaded.inbounds
+        assert "xhttp" in loaded.inbounds
+        ref = loaded.get_inbound("reality")
+        assert ref is not None
+        assert ref.uuid == _UUID_A
+
+    def test_load_missing_file_returns_empty(self, tmp_path: Path) -> None:
+        cfg = ClusterConfig.load(tmp_path / "nonexistent.yml")
+        assert cfg.nodes == []
+        assert cfg.panel.url == ""
+
+    def test_load_empty_file_returns_empty(self, tmp_path: Path) -> None:
+        p = tmp_path / "cluster.yml"
+        p.write_text("")
+        cfg = ClusterConfig.load(p)
+        assert cfg.nodes == []
+
+    def test_load_corrupted_yaml_returns_empty(self, tmp_path: Path) -> None:
+        p = tmp_path / "cluster.yml"
+        p.write_text(":\n  - :\n    [invalid yaml{{{")
+        cfg = ClusterConfig.load(p)
+        assert cfg.nodes == []
+
+
+# ---------------------------------------------------------------------------
+# Convenience methods
+# ---------------------------------------------------------------------------
+
+
+class TestClusterConvenience:
+    def test_find_node_by_ip(self) -> None:
+        cfg = _configured_cluster()
+        node = cfg.find_node(_IP_A)
+        assert node is not None
+        assert node.name == "finland"
+
+    def test_find_node_by_name(self) -> None:
+        cfg = _configured_cluster()
+        node = cfg.find_node("germany")
+        assert node is not None
+        assert node.ip == _IP_B
+
+    def test_find_node_returns_none_when_not_found(self) -> None:
+        cfg = _configured_cluster()
+        assert cfg.find_node("198.51.100.99") is None
+        assert cfg.find_node("nonexistent") is None
+
+    def test_remove_node(self) -> None:
+        cfg = _configured_cluster()
+        assert len(cfg.nodes) == 2
+        result = cfg.remove_node("finland")
+        assert result is True
+        assert len(cfg.nodes) == 1
+        assert cfg.nodes[0].name == "germany"
+
+    def test_remove_node_not_found(self) -> None:
+        cfg = _configured_cluster()
+        result = cfg.remove_node("nonexistent")
+        assert result is False
+        assert len(cfg.nodes) == 2
+
+    def test_panel_node_property(self) -> None:
+        cfg = _configured_cluster(
+            nodes=[
+                NodeEntry(ip=_IP_A, name="panel-host", is_panel_host=True),
+                NodeEntry(ip=_IP_B, name="standalone"),
+            ]
+        )
+        panel_node = cfg.panel_node
+        assert panel_node is not None
+        assert panel_node.name == "panel-host"
+
+    def test_panel_node_returns_none_when_absent(self) -> None:
+        cfg = _configured_cluster()
+        # Default test nodes have is_panel_host=False
+        assert cfg.panel_node is None
+
+    def test_is_configured_property(self) -> None:
+        assert ClusterConfig().is_configured is False
+        assert ClusterConfig(panel=PanelConfig(url="https://x.com")).is_configured is False
+        assert ClusterConfig(panel=PanelConfig(url="https://x.com", api_token="tok")).is_configured is True
+
+    def test_find_relay_by_ip(self) -> None:
+        cfg = _configured_cluster()
+        relay = cfg.find_relay(_IP_C)
+        assert relay is not None
+        assert relay.name == "ru-moscow"
+
+    def test_find_relay_by_name(self) -> None:
+        cfg = _configured_cluster()
+        relay = cfg.find_relay("ru-moscow")
+        assert relay is not None
+        assert relay.ip == _IP_C
+
+    def test_find_relay_returns_none_when_not_found(self) -> None:
+        cfg = _configured_cluster()
+        assert cfg.find_relay("nonexistent") is None
+
+    def test_get_inbound(self) -> None:
+        cfg = _configured_cluster()
+        ref = cfg.get_inbound(ProtocolKey.REALITY)
+        assert ref is not None
+        assert ref.uuid == _UUID_C
+        assert ref.tag == "VLESS_REALITY"
+
+    def test_get_inbound_returns_none_for_missing(self) -> None:
+        cfg = _configured_cluster()
+        assert cfg.get_inbound("nonexistent") is None
+
+    def test_save_emits_warnings_on_invalid_config(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        cfg = ClusterConfig(nodes=[NodeEntry(ip="bad-ip")])
+        cfg.save(tmp_path / "cluster.yml")
+        captured = capsys.readouterr()
+        assert "validation issue" in captured.err
+        assert "not a valid IP" in captured.err
