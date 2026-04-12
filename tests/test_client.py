@@ -70,8 +70,8 @@ class TestRunAdd:
         panel.get_user.return_value = None  # no existing user with this name
 
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
-            patch("meridian.commands.client.MeridianPanel", return_value=panel),
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
         ):
             mock_load.return_value = _make_cluster(tmp_home)
             run_add(name="alice")
@@ -85,8 +85,8 @@ class TestRunAdd:
         panel.get_user.return_value = _make_user("alice")
 
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
-            patch("meridian.commands.client.MeridianPanel", return_value=panel),
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
             pytest.raises(typer.Exit),
         ):
             mock_load.return_value = _make_cluster(tmp_home)
@@ -97,7 +97,7 @@ class TestRunAdd:
     def test_add_client_empty_name_fails(self, tmp_home: Path) -> None:
         """Empty client name should fail."""
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
             pytest.raises(typer.Exit),
         ):
             mock_load.return_value = _make_cluster(tmp_home)
@@ -106,7 +106,7 @@ class TestRunAdd:
     def test_add_client_no_cluster_fails(self, tmp_home: Path) -> None:
         """Adding a client without a configured cluster should fail."""
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
             pytest.raises(typer.Exit),
         ):
             mock_load.return_value = ClusterConfig()  # unconfigured
@@ -119,8 +119,8 @@ class TestRunShow:
         panel = _make_panel_mock()
 
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
-            patch("meridian.commands.client.MeridianPanel", return_value=panel),
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
         ):
             mock_load.return_value = _make_cluster(tmp_home)
             run_show(name="alice")
@@ -133,8 +133,8 @@ class TestRunShow:
         panel.get_user.return_value = None
 
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
-            patch("meridian.commands.client.MeridianPanel", return_value=panel),
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
             pytest.raises(typer.Exit),
         ):
             mock_load.return_value = _make_cluster(tmp_home)
@@ -147,8 +147,8 @@ class TestRunList:
         panel = _make_panel_mock()
 
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
-            patch("meridian.commands.client.MeridianPanel", return_value=panel),
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
         ):
             mock_load.return_value = _make_cluster(tmp_home)
             run_list()
@@ -161,8 +161,8 @@ class TestRunList:
         panel.list_users.return_value = []
 
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
-            patch("meridian.commands.client.MeridianPanel", return_value=panel),
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
         ):
             mock_load.return_value = _make_cluster(tmp_home)
             run_list()
@@ -174,8 +174,8 @@ class TestRunRemove:
         panel = _make_panel_mock()
 
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
-            patch("meridian.commands.client.MeridianPanel", return_value=panel),
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
             patch("meridian.commands.client.confirm", return_value=True),
         ):
             mock_load.return_value = _make_cluster(tmp_home)
@@ -189,8 +189,8 @@ class TestRunRemove:
         panel.get_user.return_value = None
 
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
-            patch("meridian.commands.client.MeridianPanel", return_value=panel),
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
             pytest.raises(typer.Exit),
         ):
             mock_load.return_value = _make_cluster(tmp_home)
@@ -201,8 +201,8 @@ class TestRunRemove:
         panel = _make_panel_mock()
 
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
-            patch("meridian.commands.client.MeridianPanel", return_value=panel),
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
             patch("meridian.commands.client.confirm", side_effect=typer.Exit(1)),
             pytest.raises(typer.Exit),
         ):
@@ -220,8 +220,8 @@ class TestPanelAPIErrors:
         panel.create_user.side_effect = RemnawaveError("Panel unreachable")
 
         with (
-            patch("meridian.commands.client.ClusterConfig.load") as mock_load,
-            patch("meridian.commands.client.MeridianPanel", return_value=panel),
+            patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+            patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
             pytest.raises(typer.Exit),
         ):
             mock_load.return_value = _make_cluster(tmp_home)

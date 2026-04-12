@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from meridian.cluster import ClusterConfig
+from meridian.commands._helpers import format_traffic, load_cluster, make_panel
 from meridian.console import confirm, err_console, fail, info, ok
 from meridian.remnawave import MeridianPanel, RemnawaveError, User
 
@@ -25,41 +25,6 @@ def _validate_client_name(name: str) -> None:
             hint="Use letters, numbers, hyphens, and underscores.",
             hint_type="user",
         )
-
-
-def _load_cluster() -> ClusterConfig:
-    """Load and validate cluster configuration."""
-    cluster = ClusterConfig.load()
-    if not cluster.is_configured:
-        fail(
-            "No cluster configured",
-            hint="Deploy first: meridian deploy",
-            hint_type="user",
-        )
-    return cluster
-
-
-def _make_panel(cluster: ClusterConfig) -> MeridianPanel:
-    """Create a MeridianPanel client from cluster config."""
-    return MeridianPanel(cluster.panel.url, cluster.panel.api_token)
-
-
-def _format_traffic(bytes_used: int, bytes_limit: int = 0) -> str:
-    """Format traffic usage as a human-readable string."""
-
-    def _human(b: int) -> str:
-        if b <= 0:
-            return "0 B"
-        for unit in ("B", "KB", "MB", "GB", "TB"):
-            if abs(b) < 1024:
-                return f"{b:.1f} {unit}" if unit != "B" else f"{b} {unit}"
-            b /= 1024  # type: ignore[assignment]
-        return f"{b:.1f} PB"
-
-    used = _human(bytes_used)
-    if bytes_limit > 0:
-        return f"{used} / {_human(bytes_limit)}"
-    return used
 
 
 def _format_status(status: str) -> str:
@@ -102,8 +67,8 @@ def run_add(
 ) -> None:
     """Add a new client to the proxy cluster."""
     _validate_client_name(name)
-    cluster = _load_cluster()
-    panel = _make_panel(cluster)
+    cluster = load_cluster()
+    panel = make_panel(cluster)
 
     info(f"Adding client '{name}'...")
 
@@ -146,8 +111,8 @@ def run_show(
 ) -> None:
     """Display connection info for an existing client."""
     _validate_client_name(name)
-    cluster = _load_cluster()
-    panel = _make_panel(cluster)
+    cluster = load_cluster()
+    panel = make_panel(cluster)
 
     with panel:
         client = panel.get_user(name)
@@ -164,7 +129,7 @@ def run_show(
         # Print traffic stats
         err_console.print()
         err_console.print(f"  [bold]Status[/bold]    {_format_status(client.status)}")
-        traffic = _format_traffic(client.used_traffic_bytes, client.traffic_limit_bytes)
+        traffic = format_traffic(client.used_traffic_bytes, client.traffic_limit_bytes)
         err_console.print(f"  [bold]Traffic[/bold]   {traffic}")
         if client.online_at:
             err_console.print(f"  [bold]Last seen[/bold] {client.online_at}")
@@ -185,8 +150,8 @@ def run_list(
     from rich.box import ROUNDED
     from rich.table import Table
 
-    cluster = _load_cluster()
-    panel = _make_panel(cluster)
+    cluster = load_cluster()
+    panel = make_panel(cluster)
 
     with panel:
         try:
@@ -214,7 +179,7 @@ def run_list(
         table.add_row(
             u.username,
             _format_status(u.status),
-            _format_traffic(u.used_traffic_bytes, u.traffic_limit_bytes),
+            format_traffic(u.used_traffic_bytes, u.traffic_limit_bytes),
             u.online_at or "-",
         )
 
@@ -240,8 +205,8 @@ def run_remove(
 ) -> None:
     """Remove a client from the proxy cluster."""
     _validate_client_name(name)
-    cluster = _load_cluster()
-    panel = _make_panel(cluster)
+    cluster = load_cluster()
+    panel = make_panel(cluster)
 
     with panel:
         client = panel.get_user(name)
