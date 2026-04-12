@@ -165,7 +165,18 @@ class ClusterConfig:
         from meridian.migrations import migrate
 
         data = migrate(data)
-        return _load_cluster(data)
+        cfg = _load_cluster(data)
+
+        # Warn about validation errors on load (don't hard-fail — recover/doctor need corrupt configs)
+        errors = cfg.validate()
+        if errors:
+            print(f"Warning: cluster.yml has {len(errors)} validation issue(s):", file=sys.stderr)
+            for e in errors[:3]:
+                print(f"  - {e}", file=sys.stderr)
+            if len(errors) > 3:
+                print(f"  ... and {len(errors) - 3} more", file=sys.stderr)
+
+        return cfg
 
     def save(self, path: Path | None = None) -> None:
         """Write to cluster.yml (atomic via tempfile+rename)."""
