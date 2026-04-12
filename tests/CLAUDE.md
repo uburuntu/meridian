@@ -1,8 +1,8 @@
 # tests
 
 ```bash
-make test                              # pytest only (~700 tests, ~17s)
-make system-lab                        # multi-node Docker lab (TODO: rewrite for Remnawave)
+make test                              # pytest only (~1000 tests, ~22s)
+make system-lab                        # multi-node Docker lab (~15 min)
 uv run pytest tests/ -v --tb=short     # verbose
 uv run pytest tests/ -k "test_name"    # by pattern
 ```
@@ -11,10 +11,10 @@ uv run pytest tests/ -k "test_name"    # by pattern
 
 | Layer | What | Where | Speed |
 |-------|------|-------|-------|
-| **Unit** | MockConnection-based provisioner steps, config parsing, cluster/credential handling | `tests/` (pytest) | ~17s |
-| **Integration** | TODO: Remnawave Docker container, panel API (3x-ui integration removed in v4) | — | — |
-| **E2E** | TODO: Rewrite for Remnawave (currently references 3x-ui containers) | `tests/e2e/` | — |
-| **System lab** | TODO: Rewrite for Remnawave (currently references 3x-ui containers) | `tests/systemlab/` | — |
+| **Unit** | MockConnection-based provisioner steps, config parsing, cluster/credential handling | `tests/` (pytest) | ~22s |
+| **Deploy** | Mock-based deploy pipeline tests (setup.py orchestration, hosts, container, redeploy) | `tests/test_setup_*.py` (pytest) | <1s |
+| **Command** | Mock-based command tests (node, fleet, client, recover) | `tests/test_*_commands.py` (pytest) | <1s |
+| **System lab** | Real multi-node deploy via Docker: Remnawave panel+node, relay, connection tests | `tests/systemlab/` | ~15 min |
 
 ## Testing philosophy
 
