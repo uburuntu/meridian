@@ -162,6 +162,9 @@ class ClusterConfig:
                 "Some fields may be ignored. Consider upgrading Meridian.",
                 file=sys.stderr,
             )
+        from meridian.migrations import migrate
+
+        data = migrate(data)
         return _load_cluster(data)
 
     def save(self, path: Path | None = None) -> None:
