@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import shlex
 import shutil
 import subprocess
@@ -11,6 +12,18 @@ from pathlib import Path
 from meridian.console import err_console, info, ok, warn
 
 logger = logging.getLogger("meridian.ssh")
+
+# Patterns to redact from debug log output (env var assignments with secrets)
+_SECRET_PATTERNS = re.compile(
+    r"((?:SECRET_KEY|PASSWORD|JWT_AUTH_SECRET|JWT_API_TOKENS_SECRET|POSTGRES_PASSWORD|METRICS_PASS)"
+    r"\s*=\s*)\S+",
+    re.IGNORECASE,
+)
+
+
+def _redact_command(cmd: str) -> str:
+    """Mask secret values in SSH commands for safe debug logging."""
+    return _SECRET_PATTERNS.sub(r"\1***", cmd[:200])
 
 
 class SSHError(Exception):
@@ -211,7 +224,7 @@ class ServerConnection:
         of letting ``subprocess.TimeoutExpired`` crash the caller.
         """
         use_sudo = sudo if sudo is not None else (self.user != "root")
-        logger.debug("SSH %s@%s: %s", self.user, self.ip, command[:200])
+        logger.debug("SSH %s@%s: %s", self.user, self.ip, _redact_command(command))
 
         if self.local_mode:
             if self.needs_sudo or use_sudo:
