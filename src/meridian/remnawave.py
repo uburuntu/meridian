@@ -9,9 +9,12 @@ path, accessible directly from the deployer's machine (no SSH tunneling).
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
+
+logger = logging.getLogger("meridian.api")
 
 
 class RemnawaveError(Exception):
@@ -150,6 +153,7 @@ class MeridianPanel:
         """Make an API request with retry logic."""
         import httpx
 
+        logger.debug("%s %s", method, path)
         last_error: Exception | None = None
         for attempt in range(self._max_retries):
             try:
@@ -169,11 +173,13 @@ class MeridianPanel:
                 if resp.status_code >= 500:
                     last_error = RemnawaveError(f"Panel server error ({resp.status_code}): {resp.text[:200]}")
                     if attempt < self._max_retries - 1:
+                        logger.debug("Retry %d/%d after %s", attempt + 1, self._max_retries, "ServerError")
                         time.sleep(2**attempt)
                         continue
                     raise last_error
                 resp.raise_for_status()
                 data = resp.json()
+                logger.debug("← %s (%d bytes)", resp.status_code, len(resp.content))
                 # Remnawave wraps responses in {"response": ...}
                 if isinstance(data, dict) and "response" in data:
                     return data["response"]
@@ -185,6 +191,7 @@ class MeridianPanel:
                     hint_type="system",
                 )
                 if attempt < self._max_retries - 1:
+                    logger.debug("Retry %d/%d after %s", attempt + 1, self._max_retries, type(e).__name__)
                     time.sleep(2**attempt)
                     continue
             except httpx.TimeoutException as e:
@@ -194,6 +201,7 @@ class MeridianPanel:
                     hint_type="system",
                 )
                 if attempt < self._max_retries - 1:
+                    logger.debug("Retry %d/%d after %s", attempt + 1, self._max_retries, type(e).__name__)
                     time.sleep(2**attempt)
                     continue
             except httpx.HTTPStatusError as e:
