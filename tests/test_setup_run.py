@@ -7,7 +7,6 @@ IP/flag validation, deterministic port computation, and path reuse.
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -15,7 +14,6 @@ import pytest
 import typer
 
 from meridian.cluster import (
-    BrandingConfig,
     ClusterConfig,
     InboundRef,
     NodeEntry,

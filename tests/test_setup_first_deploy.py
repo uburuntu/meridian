@@ -8,12 +8,12 @@ deploy → cluster save → host creation → client creation.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
 
-from meridian.cluster import ClusterConfig, InboundRef, NodeEntry, PanelConfig, ProtocolKey
+from meridian.cluster import ClusterConfig, PanelConfig
 from meridian.remnawave import RemnawaveError
 
 # ---------------------------------------------------------------------------
@@ -108,62 +108,6 @@ def _base_patches():  # noqa: ANN202
     }
 
 
-def _run_first_deploy(cluster: ClusterConfig | None = None, panel_mock: MagicMock | None = None, **patch_overrides: object) -> dict:
-    """Run _setup_first_deploy with standard mocks. Returns dict of mocks."""
-    from meridian.commands.setup import _setup_first_deploy
-
-    if cluster is None:
-        cluster = ClusterConfig()
-    if panel_mock is None:
-        panel_mock = _make_panel_mock()
-
-    resolved = _make_resolved()
-    patches = _base_patches()
-    patches.update(patch_overrides)
-
-    mocks: dict[str, MagicMock] = {}
-    with (
-        patch(patches.pop("meridian.commands.setup._wait_for_panel_api").return_value and "meridian.commands.setup._wait_for_panel_api", patches.get("meridian.commands.setup._wait_for_panel_api", MagicMock(return_value=True))),
-    ):
-        pass
-
-    # Simpler approach: patch everything and run
-    import contextlib
-
-    with contextlib.ExitStack() as stack:
-        for key, val in patches.items():
-            m = stack.enter_context(patch(key, val))
-            mocks[key.split(".")[-1]] = m
-
-        # Patch MeridianPanel constructor to return our mock
-        stack.enter_context(patch("meridian.commands.setup.MeridianPanel", return_value=panel_mock))
-        # Patch ClusterConfig.save and backup
-        mock_save = stack.enter_context(patch.object(cluster, "save"))
-        mock_backup = stack.enter_context(patch.object(cluster, "backup"))
-        mocks["save"] = mock_save
-        mocks["backup"] = mock_backup
-
-        _setup_first_deploy(
-            resolved=resolved,
-            cluster=cluster,
-            domain="",
-            sni=_SNI,
-            client_name=_CLIENT,
-            secret_path=_SECRET_PATH,
-            reality_port=_REALITY_PORT,
-            xhttp_port=_XHTTP_PORT,
-            wss_port=_WSS_PORT,
-            pq=False,
-            geo_block=True,
-            version=_VERSION,
-        )
-
-    mocks["cluster"] = cluster
-    mocks["panel"] = panel_mock
-    mocks["resolved"] = resolved
-    return mocks
-
-
 # ---------------------------------------------------------------------------
 # Happy path
 # ---------------------------------------------------------------------------
@@ -176,12 +120,10 @@ class TestSetupFirstDeployHappyPath:
         panel = _make_panel_mock()
         save_calls: list[str] = []
 
-        original_patches = _base_patches()
-
         with (
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
             patch("meridian.commands.setup.MeridianPanel.register_admin", return_value=_AUTH_TOKEN),
-            patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN) as mock_token,
+            patch("meridian.commands.setup._create_api_token", return_value=_API_TOKEN),
             patch("meridian.commands.setup._build_xray_config", return_value={
                 "config": {}, "reality_public_key": "PUB", "reality_short_id": "ab", "reality_private_key": "PRIV",
             }),
@@ -407,7 +349,6 @@ class TestSetupFirstDeployAdminRegistration:
         from meridian.commands.setup import _setup_first_deploy
 
         cluster = ClusterConfig()
-        panel = _make_panel_mock()
 
         with (
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
