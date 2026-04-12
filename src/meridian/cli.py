@@ -39,6 +39,7 @@ def main_callback(
     ctx: typer.Context,
     version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
     verbose: bool = typer.Option(False, "--verbose", help="Enable debug logging"),
+    json_mode: bool = typer.Option(False, "--json", help="Output JSON to stdout (for scripting)"),
 ) -> None:
     """Meridian — Censorship-resistant proxy server management."""
     if ctx.resilient_parsing:
@@ -52,6 +53,11 @@ def main_callback(
             format="  %(name)s: %(message)s",
             handlers=[logging.StreamHandler(sys.stderr)],
         )
+
+    if json_mode:
+        from meridian.console import set_json_mode
+
+        set_json_mode(True)
 
     if version:
         print(f"meridian {__version__}")

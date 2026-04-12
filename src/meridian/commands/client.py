@@ -163,6 +163,23 @@ def run_list(
                 hint_type=e.hint_type,
             )
 
+    from meridian.console import is_json_mode, json_output
+
+    if is_json_mode():
+        clients_data = [
+            {
+                "username": u.username,
+                "uuid": u.uuid,
+                "status": u.status,
+                "traffic_used": u.used_traffic_bytes,
+                "traffic_limit": u.traffic_limit_bytes,
+                "created_at": u.created_at,
+            }
+            for u in users
+        ]
+        json_output({"clients": clients_data})
+        return
+
     table = Table(
         title="Proxy Clients",
         show_lines=False,

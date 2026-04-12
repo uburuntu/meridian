@@ -242,6 +242,32 @@ def run_list() -> None:
     # Index API nodes by UUID for quick lookup
     api_by_uuid = {n.uuid: n for n in api_nodes}
 
+    from meridian.console import is_json_mode, json_output
+
+    if is_json_mode():
+        nodes_data = []
+        for node in cluster.nodes:
+            api_node = api_by_uuid.get(node.uuid)
+            if api_node and api_node.is_connected:
+                status = "connected"
+            elif api_node and api_node.is_disabled:
+                status = "disabled"
+            else:
+                status = "disconnected"
+            nodes_data.append(
+                {
+                    "ip": node.ip,
+                    "name": node.name,
+                    "uuid": node.uuid,
+                    "is_panel_host": node.is_panel_host,
+                    "status": status,
+                    "xray_version": api_node.xray_version if api_node else "",
+                    "traffic_bytes": api_node.traffic_used if api_node else 0,
+                }
+            )
+        json_output({"nodes": nodes_data})
+        return
+
     table = Table(
         title="Proxy Nodes",
         show_lines=False,

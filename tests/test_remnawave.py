@@ -14,15 +14,12 @@ from meridian.remnawave import (
     Host,
     MeridianPanel,
     Node,
-    NodeCredentials,
     RemnawaveError,
-    User,
     _parse_host,
     _parse_inbound,
     _parse_node,
     _parse_user,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -77,9 +74,7 @@ class TestFindNodeByAddress:
 
     def test_returns_none_when_not_found(self) -> None:
         panel = _make_panel()
-        panel.list_nodes = MagicMock(
-            return_value=[Node(uuid="uuid-1", address="198.51.100.1")]
-        )
+        panel.list_nodes = MagicMock(return_value=[Node(uuid="uuid-1", address="198.51.100.1")])
         assert panel.find_node_by_address("198.51.100.99") is None
 
     def test_returns_none_on_empty_list(self) -> None:
@@ -103,9 +98,7 @@ class TestFindHostByRemark:
 
     def test_returns_none_when_not_found(self) -> None:
         panel = _make_panel()
-        panel.list_hosts = MagicMock(
-            return_value=[Host(uuid="h1", remark="reality-198.51.100.1")]
-        )
+        panel.list_hosts = MagicMock(return_value=[Host(uuid="h1", remark="reality-198.51.100.1")])
         assert panel.find_host_by_remark("wss-example.com") is None
 
     def test_returns_none_on_empty_list(self) -> None:
@@ -129,9 +122,7 @@ class TestFindConfigProfileByName:
 
     def test_returns_none_when_not_found(self) -> None:
         panel = _make_panel()
-        panel.list_config_profiles = MagicMock(
-            return_value=[ConfigProfile(uuid="cp-1", name="meridian-default")]
-        )
+        panel.list_config_profiles = MagicMock(return_value=[ConfigProfile(uuid="cp-1", name="meridian-default")])
         assert panel.find_config_profile_by_name("nonexistent") is None
 
     def test_returns_none_on_empty_list(self) -> None:
@@ -352,9 +343,7 @@ class TestRetryLogic:
     def test_unwraps_response_wrapper(self) -> None:
         """Remnawave wraps responses in {"response": ...}."""
         mock_client = MagicMock()
-        mock_client.request.return_value = _mock_response(
-            200, {"response": {"users": [{"uuid": "u-1"}]}}
-        )
+        mock_client.request.return_value = _mock_response(200, {"response": {"users": [{"uuid": "u-1"}]}})
         panel = _make_panel(mock_client)
         result = panel._request("GET", "/api/users")
         assert result == {"users": [{"uuid": "u-1"}]}
@@ -560,9 +549,7 @@ class TestCreateNode:
 class TestCreateHost:
     def test_create_host_minimal(self) -> None:
         panel = _make_panel()
-        panel._post = MagicMock(
-            return_value={"uuid": "h-1", "remark": "reality-198.51.100.1", "port": 443}
-        )
+        panel._post = MagicMock(return_value={"uuid": "h-1", "remark": "reality-198.51.100.1", "port": 443})
         host = panel.create_host(
             remark="reality-198.51.100.1",
             address="198.51.100.1",
@@ -599,9 +586,7 @@ class TestCreateHost:
 class TestConfigProfiles:
     def test_create_config_profile(self) -> None:
         panel = _make_panel()
-        panel._post = MagicMock(
-            return_value={"uuid": "cp-1", "name": "meridian-default"}
-        )
+        panel._post = MagicMock(return_value={"uuid": "cp-1", "name": "meridian-default"})
         profile = panel.create_config_profile("meridian-default", {"inbounds": []})
         assert profile.uuid == "cp-1"
         assert profile.name == "meridian-default"
@@ -633,9 +618,7 @@ class TestConfigProfiles:
 class TestListInbounds:
     def test_list_inbounds_wrapped(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(
-            return_value={"inbounds": [{"uuid": "ib-1", "tag": "vless-reality"}]}
-        )
+        panel._get = MagicMock(return_value={"inbounds": [{"uuid": "ib-1", "tag": "vless-reality"}]})
         inbounds = panel.list_inbounds()
         assert len(inbounds) == 1
         assert inbounds[0].tag == "vless-reality"
