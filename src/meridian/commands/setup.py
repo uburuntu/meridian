@@ -155,8 +155,14 @@ def run(
         info("First deployment -- will set up panel + proxy node")
     elif is_redeploy:
         info(f"Redeploying existing node at {resolved.ip}")
-    else:
-        info(f"Adding new node at {resolved.ip} to existing cluster")
+    elif cluster.is_configured:
+        # Cluster exists but this IP is new — user should use `node add`
+        fail(
+            f"Cluster already configured — use 'meridian node add {resolved.ip}' to add a new node",
+            hint="'meridian deploy' is for initial deployment or redeploying existing nodes.\n"
+            "To add new nodes to an existing cluster: meridian node add IP",
+            hint_type="user",
+        )
 
     # Compute port layout
     ip_hash = int(hashlib.sha256(resolved.ip.encode()).hexdigest()[:8], 16)
@@ -528,9 +534,7 @@ def _configure_panel_and_node(
     For first deploy: register admin, create config profile, register node,
     create hosts, create first client.
 
-    For redeploy: verify panel access, update node if needed.
-
-    For new node: register node with existing panel, create hosts.
+    For redeploy: update Xray config, re-register if needed, redeploy container.
     """
     from meridian import __version__
 
@@ -569,19 +573,8 @@ def _configure_panel_and_node(
             xhttp_path=xhttp_path,
             ws_path=ws_path,
         )
-    else:
-        _setup_new_node(
-            resolved=resolved,
-            cluster=cluster,
-            domain=domain,
-            sni=sni,
-            reality_port=reality_port,
-            xhttp_port=xhttp_port,
-            wss_port=wss_port,
-            version=__version__,
-            xhttp_path=xhttp_path,
-            ws_path=ws_path,
-        )
+    # Note: new-node path removed — deploy refuses new IPs when cluster
+    # is configured. Use `meridian node add` instead.
 
 
 def _setup_first_deploy(
@@ -1309,6 +1302,30 @@ def _deploy_node_container(conn: ServerConnection, secret_key: str) -> None:
         return
 
     ok("Remnawave node deployed")
+
+    # Health gate: verify the node container started
+    info("Verifying node container health...")
+    node_healthy = False
+    for _attempt in range(10):
+        check = conn.run(
+            "docker inspect remnawave-node --format '{{.State.Running}}' 2>/dev/null",
+            timeout=10,
+        )
+        if check.returncode == 0 and "true" in check.stdout.strip().lower():
+            node_healthy = True
+            break
+        time.sleep(3)
+
+    if node_healthy:
+        ok("Node container verified healthy")
+    else:
+        logs = conn.run("docker logs remnawave-node --tail 20 2>&1", timeout=15)
+        log_tail = logs.stdout.strip()[:500] if logs.returncode == 0 else "(no logs available)"
+        warn(
+            f"Node container may not be healthy after 30s\n"
+            f"  Recent logs:\n{log_tail}\n"
+            f"  Check: ssh {shlex.quote(conn.user)}@{conn.ip} docker logs remnawave-node"
+        )
 
     # Allow Docker internal traffic to reach the node API port
     # (panel in bridge network → node on host via gateway IP)
