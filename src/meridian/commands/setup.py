@@ -14,6 +14,8 @@ import shlex
 import time
 from typing import Any
 
+import typer
+
 from meridian.cluster import (
     BrandingConfig,
     ClusterConfig,
@@ -1736,9 +1738,11 @@ def _interactive_wizard(
     # --- Confirm ---
     if not yes:
         if is_local:
-            confirm(f"Deploy locally on this server ({detected_ip})?")
+            if not confirm(f"Deploy locally on this server ({detected_ip})?"):
+                raise typer.Exit(1)
         else:
-            confirm(f"Deploy to {ssh_user}@{server_ip}?")
+            if not confirm(f"Deploy to {ssh_user}@{server_ip}?"):
+                raise typer.Exit(1)
     err_console.print()
 
     return server_ip, ssh_user, sni, domain, harden, client_name, server_name, icon, color, pq, warp, geo_block

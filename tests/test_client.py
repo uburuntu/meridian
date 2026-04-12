@@ -203,7 +203,7 @@ class TestRunRemove:
         with (
             patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
             patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
-            patch("meridian.commands.client.confirm", side_effect=typer.Exit(1)),
+            patch("meridian.commands.client.confirm", return_value=False),
             pytest.raises(typer.Exit),
         ):
             mock_load.return_value = _make_cluster(tmp_home)

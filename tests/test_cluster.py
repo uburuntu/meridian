@@ -302,9 +302,7 @@ class TestClusterConvenience:
         cfg = _configured_cluster()
         assert cfg.get_inbound("nonexistent") is None
 
-    def test_save_emits_warnings_on_invalid_config(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_save_raises_on_invalid_config(self, tmp_path: Path) -> None:
         cfg = ClusterConfig(nodes=[NodeEntry(ip="bad-ip")])
-        cfg.save(tmp_path / "cluster.yml")
-        captured = capsys.readouterr()
-        assert "validation issue" in captured.err
-        assert "not a valid IP" in captured.err
+        with pytest.raises(ValueError, match="validation error"):
+            cfg.save(tmp_path / "cluster.yml")

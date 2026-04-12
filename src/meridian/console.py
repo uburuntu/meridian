@@ -54,8 +54,11 @@ def warn(msg: str) -> None:
     err_console.print(f"  [warn]![/warn] {msg}")
 
 
-def fail(msg: str, *, hint: str = "", hint_type: str = "bug") -> NoReturn:
-    """Print an error message and exit with code 1.
+_EXIT_CODES = {"user": 2, "system": 3, "bug": 1}
+
+
+def fail(msg: str, *, hint: str = "", hint_type: str = "bug", exit_code: int | None = None) -> NoReturn:
+    """Print an error message and exit.
 
     Args:
         msg: The error message to display.
@@ -64,6 +67,8 @@ def fail(msg: str, *, hint: str = "", hint_type: str = "bug") -> NoReturn:
             "user"   -- input validation errors; no GitHub link shown.
             "system" -- infrastructure errors; suggests 'meridian doctor'.
             "bug"    -- unexpected errors (default); shows GitHub issues link.
+        exit_code: Explicit exit code. If None, derived from hint_type
+            (user=2, system=3, bug=1).
     """
     err_console.print(f"\n  [error]\u2717 {msg}[/error]")
     if hint:
@@ -74,7 +79,8 @@ def fail(msg: str, *, hint: str = "", hint_type: str = "bug") -> NoReturn:
         err_console.print("  [dim]Run: meridian doctor  (to collect server info)[/dim]\n")
     else:  # "bug"
         err_console.print("  [dim]Report: https://github.com/uburuntu/meridian/issues[/dim]\n")
-    raise typer.Exit(code=1)
+    code = exit_code if exit_code is not None else _EXIT_CODES.get(hint_type, 1)
+    raise typer.Exit(code=code)
 
 
 def line() -> None:
@@ -102,21 +108,14 @@ def prompt(message: str, default: str = "") -> str:
 
 
 def confirm(message: str = "Continue?") -> bool:
-    """Y/n confirmation prompt. Returns True on accept, raises typer.Exit(1) on reject.
-
-    Accepts: y, Y, Enter (default yes).
-    Rejects: n, N (raises typer.Exit(1)).
-    """
+    """Y/n confirmation prompt. Returns True on accept, False on reject."""
     try:
         with open("/dev/tty") as tty:
             err_console.print(f"\n  [info]\u2192[/info] {message} [dim][Y/n][/dim] ", end="")
             answer = tty.readline().strip().lower()
     except OSError:
-        # No TTY available — default to reject (don't auto-confirm destructive ops)
-        raise typer.Exit(code=1)
-    if answer in ("", "y", "yes"):
-        return True
-    raise typer.Exit(code=1)
+        return False
+    return answer in ("", "y", "yes")
 
 
 def choose(message: str, options: list[str], *, default: int = 1) -> int:
