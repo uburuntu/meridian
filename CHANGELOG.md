@@ -4,6 +4,28 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [4.0.0] - 2026-04-12
+
+### Changed
+- **Remnawave replaces 3x-ui** — modern panel with panel/node separation (NestJS + PostgreSQL + Valkey), proper REST API, built-in subscriptions, native multi-node support
+- **Single `cluster.yml` replaces per-server `proxy.yml`** — fleet-wide manifest with panel URL, API token, nodes, relays. Client state lives in Remnawave's database, not locally
+- **`client add` is one API call** — was ~400 LOC of SSH-tunneled curl, credential sync, and per-inbound client insertion
+- **Relay = Remnawave Host entry** — enable/disable host toggles subscription inclusion automatically
+
+### Added
+- **`meridian node add/list/remove`** — multi-node fleet management
+- **`meridian fleet status`** — panel health, node connectivity, relay status, user count
+- **`meridian fleet recover`** — reconstruct cluster.yml from panel API when local state is lost
+- **`meridian migrate`** — guided migration from 3.x (reads old proxy.yml, prints step-by-step plan)
+- **`MeridianPanel` REST client** — direct httpx calls to Remnawave API (JWT auth, retries)
+- **Config reliability** — corrupt YAML handling, version check, backup before mutations, disk-full error messages
+- **Reality keys persisted** — public_key and short_id saved in cluster.yml for connection testing
+
+### Removed
+- **3x-ui panel** — PanelClient, ConfigurePanel, CreateInbound, all SSH-tunneled curl API calls
+- **Per-server proxy.yml** — replaced by cluster.yml (kept only for `meridian migrate` compatibility)
+- **Local client state** — no more UUID storage, credential sync, SCP rollback
+
 ## [3.17.0] - 2026-04-11
 
 ### Added

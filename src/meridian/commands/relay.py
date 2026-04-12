@@ -476,7 +476,7 @@ def run_list(
         ("SNI", {"style": "dim"}),
         ("Status", {"justify": "center"}),
     ]:
-        table.add_column(col, **kw)
+        table.add_column(col, **kw)  # type: ignore[arg-type]
 
     for relay in relays:
         enabled = host_status.get(relay.ip)
