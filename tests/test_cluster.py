@@ -216,6 +216,24 @@ class TestClusterYAMLRoundTrip:
         cfg = ClusterConfig.load(p)
         assert cfg.nodes == []
 
+    def test_load_with_invalid_node_ip_warns(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """Loading cluster.yml with invalid node IP should warn but not crash."""
+        p = tmp_path / "cluster.yml"
+        p.write_text("version: 1\nnodes:\n  - ip: not-an-ip\n    uuid: 550e8400-e29b-41d4-a716-446655440000\n")
+        cfg = ClusterConfig.load(p)
+        assert len(cfg.nodes) == 1
+        captured = capsys.readouterr()
+        assert "validation issue" in captured.err
+
+    def test_load_valid_config_no_warning(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """Loading a valid cluster.yml should produce no warnings."""
+        cfg = _configured_cluster()
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        ClusterConfig.load(p)
+        captured = capsys.readouterr()
+        assert "validation issue" not in captured.err
+
 
 # ---------------------------------------------------------------------------
 # Convenience methods
