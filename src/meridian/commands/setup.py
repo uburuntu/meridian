@@ -449,7 +449,12 @@ def _generate_reality_keypair(conn: ServerConnection) -> tuple[str, str]:
     # Last resort: download a temporary Xray binary
     info("Downloading Xray binary for key generation...")
     dl_result = conn.run(
-        "curl -sL https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip"
+        'ARCH=$(uname -m); '
+        'case "$ARCH" in '
+        "aarch64|arm64) XRAY_ARCH=arm64-v8a ;; "
+        "*) XRAY_ARCH=64 ;; "
+        "esac; "
+        'curl -sL "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${XRAY_ARCH}.zip"'
         " -o /tmp/xray.zip && cd /tmp && unzip -qo xray.zip xray && chmod +x xray"
         " && /tmp/xray x25519 && rm -f /tmp/xray /tmp/xray.zip",
         timeout=60,
