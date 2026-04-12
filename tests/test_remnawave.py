@@ -14,7 +14,10 @@ from meridian.remnawave import (
     Host,
     MeridianPanel,
     Node,
+    RemnawaveAuthError,
     RemnawaveError,
+    RemnawaveNetworkError,
+    RemnawaveNotFoundError,
     _parse_host,
     _parse_inbound,
     _parse_node,
@@ -505,7 +508,7 @@ class TestGetUser:
 
     def test_get_user_not_found(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveError("404"))
+        panel._get = MagicMock(side_effect=RemnawaveNotFoundError("404"))
         assert panel.get_user("nobody") is None
 
 
@@ -517,7 +520,7 @@ class TestDeleteUser:
 
     def test_delete_failure(self) -> None:
         panel = _make_panel()
-        panel._delete = MagicMock(side_effect=RemnawaveError("failed"))
+        panel._delete = MagicMock(side_effect=RemnawaveNotFoundError("not found"))
         assert panel.delete_user("u-1") is False
 
 
@@ -600,7 +603,7 @@ class TestConfigProfiles:
 
     def test_get_config_profile_not_found(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveError("404"))
+        panel._get = MagicMock(side_effect=RemnawaveNotFoundError("404"))
         assert panel.get_config_profile("nonexistent") is None
 
     def test_list_config_profiles(self) -> None:
@@ -632,3 +635,122 @@ class TestListInbounds:
         panel = _make_panel()
         panel._get = MagicMock(return_value={})
         assert panel.list_inbounds() == []
+
+
+# ---------------------------------------------------------------------------
+# Error Subclasses & Safety
+# ---------------------------------------------------------------------------
+
+
+class TestErrorSubclasses:
+    def test_not_found_is_remnawave_error(self) -> None:
+        assert issubclass(RemnawaveNotFoundError, RemnawaveError)
+
+    def test_auth_is_remnawave_error(self) -> None:
+        assert issubclass(RemnawaveAuthError, RemnawaveError)
+
+    def test_network_is_remnawave_error(self) -> None:
+        assert issubclass(RemnawaveNetworkError, RemnawaveError)
+
+    def test_404_raises_not_found(self) -> None:
+        mock_client = MagicMock()
+        mock_client.request.return_value = _mock_response(404)
+        panel = _make_panel(mock_client)
+        with pytest.raises(RemnawaveNotFoundError):
+            panel._request("GET", "/api/test")
+
+    def test_401_raises_auth_error(self) -> None:
+        mock_client = MagicMock()
+        mock_client.request.return_value = _mock_response(401)
+        panel = _make_panel(mock_client)
+        with pytest.raises(RemnawaveAuthError):
+            panel._request("GET", "/api/test")
+
+    def test_403_raises_auth_error(self) -> None:
+        mock_client = MagicMock()
+        mock_client.request.return_value = _mock_response(403)
+        panel = _make_panel(mock_client)
+        with pytest.raises(RemnawaveAuthError):
+            panel._request("GET", "/api/test")
+
+    def test_connect_error_raises_network_error(self) -> None:
+        import httpx
+
+        mock_client = MagicMock()
+        mock_client.request.side_effect = httpx.ConnectError("refused")
+        panel = _make_panel(mock_client)
+        panel._max_retries = 1
+        with pytest.raises(RemnawaveNetworkError):
+            panel._request("GET", "/api/test")
+
+    def test_timeout_raises_network_error(self) -> None:
+        import httpx
+
+        mock_client = MagicMock()
+        mock_client.request.side_effect = httpx.ReadTimeout("slow")
+        panel = _make_panel(mock_client)
+        panel._max_retries = 1
+        with pytest.raises(RemnawaveNetworkError):
+            panel._request("GET", "/api/test")
+
+    def test_json_decode_error_raises_remnawave_error(self) -> None:
+        mock_client = MagicMock()
+        resp = _mock_response(200)
+        resp.json.side_effect = ValueError("Expecting value")
+        resp.content = b"<html>truncated"
+        mock_client.request.return_value = resp
+        panel = _make_panel(mock_client)
+        with pytest.raises(RemnawaveError, match="invalid JSON"):
+            panel._request("GET", "/api/test")
+
+
+class TestGetMethodErrorPropagation:
+    def test_get_user_not_found_returns_none(self) -> None:
+        panel = _make_panel()
+        panel._get = MagicMock(side_effect=RemnawaveNotFoundError("404"))
+        assert panel.get_user("nobody") is None
+
+    def test_get_user_network_error_propagates(self) -> None:
+        panel = _make_panel()
+        panel._get = MagicMock(side_effect=RemnawaveNetworkError("timeout"))
+        with pytest.raises(RemnawaveNetworkError):
+            panel.get_user("alice")
+
+    def test_get_user_auth_error_propagates(self) -> None:
+        panel = _make_panel()
+        panel._get = MagicMock(side_effect=RemnawaveAuthError("expired"))
+        with pytest.raises(RemnawaveAuthError):
+            panel.get_user("alice")
+
+    def test_get_node_not_found_returns_none(self) -> None:
+        panel = _make_panel()
+        panel._get = MagicMock(side_effect=RemnawaveNotFoundError("404"))
+        assert panel.get_node("uuid-1") is None
+
+    def test_get_node_network_error_propagates(self) -> None:
+        panel = _make_panel()
+        panel._get = MagicMock(side_effect=RemnawaveNetworkError("down"))
+        with pytest.raises(RemnawaveNetworkError):
+            panel.get_node("uuid-1")
+
+    def test_get_config_profile_not_found_returns_none(self) -> None:
+        panel = _make_panel()
+        panel._get = MagicMock(side_effect=RemnawaveNotFoundError("404"))
+        assert panel.get_config_profile("cp-1") is None
+
+    def test_get_config_profile_auth_error_propagates(self) -> None:
+        panel = _make_panel()
+        panel._get = MagicMock(side_effect=RemnawaveAuthError("expired"))
+        with pytest.raises(RemnawaveAuthError):
+            panel.get_config_profile("cp-1")
+
+    def test_delete_user_not_found_returns_false(self) -> None:
+        panel = _make_panel()
+        panel._delete = MagicMock(side_effect=RemnawaveNotFoundError("gone"))
+        assert panel.delete_user("uuid-1") is False
+
+    def test_delete_user_network_error_propagates(self) -> None:
+        panel = _make_panel()
+        panel._delete = MagicMock(side_effect=RemnawaveNetworkError("timeout"))
+        with pytest.raises(RemnawaveNetworkError):
+            panel.delete_user("uuid-1")

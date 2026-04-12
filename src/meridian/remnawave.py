@@ -26,6 +26,18 @@ class RemnawaveError(Exception):
         self.hint_type = hint_type
 
 
+class RemnawaveNotFoundError(RemnawaveError):
+    """Resource not found (404)."""
+
+
+class RemnawaveAuthError(RemnawaveError):
+    """Authentication or authorization failure (401/403)."""
+
+
+class RemnawaveNetworkError(RemnawaveError):
+    """Transport-level failure (connection refused, timeout)."""
+
+
 # ---------------------------------------------------------------------------
 # Response models — lightweight dataclasses, not Pydantic
 # ---------------------------------------------------------------------------
@@ -159,16 +171,21 @@ class MeridianPanel:
             try:
                 resp = self._client.request(method, path, json=json, params=params)
                 if resp.status_code == 401:
-                    raise RemnawaveError(
+                    raise RemnawaveAuthError(
                         "Panel authentication failed (401)",
                         hint="Check your API token — it may have expired",
                         hint_type="user",
                     )
                 if resp.status_code == 403:
-                    raise RemnawaveError(
+                    raise RemnawaveAuthError(
                         "Panel access forbidden (403)",
                         hint="API token lacks required permissions",
                         hint_type="user",
+                    )
+                if resp.status_code == 404:
+                    raise RemnawaveNotFoundError(
+                        f"Resource not found: {path}",
+                        hint_type="system",
                     )
                 if resp.status_code >= 500:
                     last_error = RemnawaveError(f"Panel server error ({resp.status_code}): {resp.text[:200]}")
@@ -178,14 +195,21 @@ class MeridianPanel:
                         continue
                     raise last_error
                 resp.raise_for_status()
-                data = resp.json()
+                try:
+                    data = resp.json()
+                except (ValueError, Exception) as e:
+                    raise RemnawaveError(
+                        f"Panel returned invalid JSON ({len(resp.content)} bytes)",
+                        hint=f"Response may be truncated by firewall or DPI: {e}",
+                        hint_type="system",
+                    ) from e
                 logger.debug("← %s (%d bytes)", resp.status_code, len(resp.content))
                 # Remnawave wraps responses in {"response": ...}
                 if isinstance(data, dict) and "response" in data:
                     return data["response"]
                 return data
             except httpx.ConnectError as e:
-                last_error = RemnawaveError(
+                last_error = RemnawaveNetworkError(
                     f"Cannot connect to panel at {self._base}",
                     hint=f"Is the panel running? Check: curl {self._base}/api/health\n{e}",
                     hint_type="system",
@@ -195,7 +219,7 @@ class MeridianPanel:
                     time.sleep(2**attempt)
                     continue
             except httpx.TimeoutException as e:
-                last_error = RemnawaveError(
+                last_error = RemnawaveNetworkError(
                     f"Panel request timed out after {self._timeout}s",
                     hint=f"Panel may be overloaded or unreachable: {e}",
                     hint_type="system",
@@ -246,19 +270,19 @@ class MeridianPanel:
         return _parse_user(data)
 
     def get_user(self, username: str) -> User | None:
-        """Find a user by username. Returns None if not found."""
+        """Find a user by username. Returns None only if not found (404)."""
         try:
             data = self._get(f"/api/users/by-username/{username}")
             return _parse_user(data)
-        except RemnawaveError:
+        except RemnawaveNotFoundError:
             return None
 
     def get_user_by_uuid(self, uuid: str) -> User | None:
-        """Find a user by UUID."""
+        """Find a user by UUID. Returns None only if not found (404)."""
         try:
             data = self._get(f"/api/users/{uuid}")
             return _parse_user(data)
-        except RemnawaveError:
+        except RemnawaveNotFoundError:
             return None
 
     def list_users(self) -> list[User]:
@@ -272,11 +296,11 @@ class MeridianPanel:
         return []
 
     def delete_user(self, uuid: str) -> bool:
-        """Delete a user by UUID."""
+        """Delete a user by UUID. Returns False only if not found."""
         try:
             self._delete(f"/api/users/{uuid}")
             return True
-        except RemnawaveError:
+        except RemnawaveNotFoundError:
             return False
 
     def enable_user(self, uuid: str) -> None:
@@ -344,11 +368,11 @@ class MeridianPanel:
         return None
 
     def get_node(self, uuid: str) -> Node | None:
-        """Get a node by UUID."""
+        """Get a node by UUID. Returns None only if not found (404)."""
         try:
             data = self._get(f"/api/nodes/{uuid}")
             return _parse_node(data)
-        except RemnawaveError:
+        except RemnawaveNotFoundError:
             return None
 
     def enable_node(self, uuid: str) -> None:
@@ -451,11 +475,11 @@ class MeridianPanel:
         )
 
     def get_config_profile(self, uuid: str) -> ConfigProfile | None:
-        """Get a config profile by UUID."""
+        """Get a config profile by UUID. Returns None only if not found (404)."""
         try:
             data = self._get(f"/api/config-profiles/{uuid}")
             return ConfigProfile(uuid=data.get("uuid", ""), name=data.get("name", ""), _raw=data)
-        except RemnawaveError:
+        except RemnawaveNotFoundError:
             return None
 
     def list_config_profiles(self) -> list[ConfigProfile]:
