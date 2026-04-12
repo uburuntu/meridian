@@ -13,6 +13,7 @@ import shlex
 
 import yaml
 
+from meridian.commands._helpers import load_cluster, make_panel
 from meridian.cluster import ClusterConfig, ProtocolKey, RelayEntry
 from meridian.config import (
     CREDS_BASE,
@@ -25,23 +26,6 @@ from meridian.console import confirm, err_console, fail, info, line, ok, warn
 from meridian.remnawave import MeridianPanel, RemnawaveError
 from meridian.servers import SERVER_ROLE_RELAY, ServerEntry, ServerRegistry
 from meridian.ssh import ServerConnection, SSHError
-
-
-def _load_cluster() -> ClusterConfig:
-    """Load and validate cluster configuration."""
-    cluster = ClusterConfig.load()
-    if not cluster.is_configured:
-        fail(
-            "No cluster configured",
-            hint="Deploy first: meridian deploy",
-            hint_type="user",
-        )
-    return cluster
-
-
-def _make_panel(cluster: ClusterConfig) -> MeridianPanel:
-    """Create a MeridianPanel client from cluster config."""
-    return MeridianPanel(cluster.panel.url, cluster.panel.api_token)
 
 
 def _relay_label(relay: RelayEntry) -> str:
@@ -237,7 +221,7 @@ def run_deploy(
     if relay_name and not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", relay_name):
         fail(f"Invalid relay name: {relay_name}", hint="Use letters, numbers, hyphens, underscores", hint_type="user")
 
-    cluster = _load_cluster()
+    cluster = load_cluster()
     registry = ServerRegistry(SERVERS_FILE)
     exit_ip = _find_exit_node(cluster, exit_arg)
     exit_node = cluster.find_node(exit_ip)
@@ -372,7 +356,7 @@ def run_deploy(
     ok("Realm relay deployed successfully")
 
     # Create Remnawave Host entries for this relay
-    panel = _make_panel(cluster)
+    panel = make_panel(cluster)
     with panel:
         info("Creating relay host entries in panel...")
         host_uuids = _create_relay_hosts(panel, cluster, relay_ip, listen_port, relay_sni, relay_name)
@@ -441,7 +425,7 @@ def run_list(
     from rich.box import ROUNDED
     from rich.table import Table
 
-    cluster = _load_cluster()
+    cluster = load_cluster()
 
     relays = cluster.relays
     if exit_arg:
@@ -456,7 +440,7 @@ def run_list(
     # Optionally check host status from panel
     host_status: dict[str, bool | None] = {}
     try:
-        with _make_panel(cluster) as panel:
+        with make_panel(cluster) as panel:
             host_map = {h.uuid: h for h in panel.list_hosts()}
             for relay in relays:
                 for _, host_uuid in relay.host_uuids.items():
@@ -511,7 +495,7 @@ def run_remove(
     if not is_ip(relay_ip):
         fail(f"Invalid relay IP: {relay_ip}", hint="Enter a valid IP address", hint_type="user")
 
-    cluster = _load_cluster()
+    cluster = load_cluster()
     registry = ServerRegistry(SERVERS_FILE)
 
     # Find relay entry
@@ -531,7 +515,7 @@ def run_remove(
     relay_user = _relay_registry_user(registry, relay_ip, user)
 
     # Delete Remnawave hosts
-    with _make_panel(cluster) as panel:
+    with make_panel(cluster) as panel:
         info("Removing relay host entries from panel...")
         _delete_relay_hosts(panel, relay_entry)
 
@@ -580,7 +564,7 @@ def run_check(
     if not is_ip(relay_ip):
         fail(f"Invalid relay IP: {relay_ip}", hint="Enter a valid IP address", hint_type="user")
 
-    cluster = _load_cluster()
+    cluster = load_cluster()
     registry = ServerRegistry(SERVERS_FILE)
 
     relay_entry = cluster.find_relay(relay_ip)
@@ -630,7 +614,7 @@ def run_check(
 
     # 5. Panel host status
     try:
-        with _make_panel(cluster) as panel:
+        with make_panel(cluster) as panel:
             host_map = {h.uuid: h for h in panel.list_hosts()}
             for proto_key, host_uuid in relay_entry.host_uuids.items():
                 host = host_map.get(host_uuid)

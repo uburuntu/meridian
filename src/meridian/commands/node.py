@@ -7,40 +7,10 @@ reference and SSH access.
 
 from __future__ import annotations
 
+from meridian.commands._helpers import format_traffic, load_cluster, make_panel
 from meridian.cluster import ClusterConfig, NodeEntry
 from meridian.console import confirm, err_console, fail, info, ok, warn
 from meridian.remnawave import MeridianPanel, RemnawaveError
-
-# -- Helpers --
-
-
-def _load_cluster() -> ClusterConfig:
-    """Load and validate cluster configuration."""
-    cluster = ClusterConfig.load()
-    if not cluster.is_configured:
-        fail(
-            "No cluster configured",
-            hint="Deploy first: meridian deploy",
-            hint_type="user",
-        )
-    return cluster
-
-
-def _make_panel(cluster: ClusterConfig) -> MeridianPanel:
-    """Create a MeridianPanel client from cluster config."""
-    return MeridianPanel(cluster.panel.url, cluster.panel.api_token)
-
-
-def _format_traffic(bytes_val: int) -> str:
-    """Format byte count as a human-readable string."""
-    if bytes_val <= 0:
-        return "0 B"
-    b = float(bytes_val)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(b) < 1024:
-            return f"{b:.1f} {unit}" if unit != "B" else f"{int(b)} {unit}"
-        b /= 1024
-    return f"{b:.1f} PB"
 
 
 # -- Node Add --
@@ -58,7 +28,7 @@ def run_add(
     if not ip:
         fail("Node IP address is required", hint="Usage: meridian node add IP", hint_type="user")
 
-    cluster = _load_cluster()
+    cluster = load_cluster()
 
     # Check for duplicate
     existing = cluster.find_node(ip)
@@ -77,7 +47,7 @@ def run_add(
     # For now, we assume the node is already provisioned and register it
     # with the panel API only.
 
-    panel = _make_panel(cluster)
+    panel = make_panel(cluster)
     with panel:
         # Collect inbound UUIDs from cluster config
         inbound_uuids = [ref.uuid for ref in cluster.inbounds.values() if ref.uuid]
@@ -138,8 +108,8 @@ def run_list() -> None:
     from rich.box import ROUNDED
     from rich.table import Table
 
-    cluster = _load_cluster()
-    panel = _make_panel(cluster)
+    cluster = load_cluster()
+    panel = make_panel(cluster)
 
     with panel:
         try:
@@ -177,7 +147,7 @@ def run_list() -> None:
             else:
                 status = "[red]disconnected[/red]"
             xray = api_node.xray_version or "-"
-            traffic = _format_traffic(api_node.traffic_used)
+            traffic = format_traffic(api_node.traffic_used)
         else:
             status = "[dim]unknown[/dim]"
             xray = "-"
@@ -199,7 +169,7 @@ def run_list() -> None:
                 f"{api_node.name} [yellow](untracked)[/yellow]",
                 status,
                 api_node.xray_version or "-",
-                _format_traffic(api_node.traffic_used),
+                format_traffic(api_node.traffic_used),
             )
 
     err_console.print()
@@ -218,7 +188,7 @@ def run_remove(ip_or_name: str, yes: bool = False) -> None:
     if not ip_or_name:
         fail("Node IP or name is required", hint="Usage: meridian node remove IP_OR_NAME", hint_type="user")
 
-    cluster = _load_cluster()
+    cluster = load_cluster()
 
     node = cluster.find_node(ip_or_name)
     if node is None:
@@ -238,7 +208,7 @@ def run_remove(ip_or_name: str, yes: bool = False) -> None:
     if not yes:
         confirm(f"Remove node {node.ip} ({node.name or 'unnamed'})?")
 
-    panel = _make_panel(cluster)
+    panel = make_panel(cluster)
     with panel:
         if node.uuid:
             try:

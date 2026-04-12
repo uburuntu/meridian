@@ -8,40 +8,10 @@ from __future__ import annotations
 
 import socket
 
+from meridian.commands._helpers import format_traffic, load_cluster, make_panel
 from meridian.cluster import ClusterConfig
 from meridian.console import err_console, fail, warn
 from meridian.remnawave import MeridianPanel, RemnawaveError
-
-# -- Helpers --
-
-
-def _load_cluster() -> ClusterConfig:
-    """Load and validate cluster configuration."""
-    cluster = ClusterConfig.load()
-    if not cluster.is_configured:
-        fail(
-            "No cluster configured",
-            hint="Deploy first: meridian deploy",
-            hint_type="user",
-        )
-    return cluster
-
-
-def _make_panel(cluster: ClusterConfig) -> MeridianPanel:
-    """Create a MeridianPanel client from cluster config."""
-    return MeridianPanel(cluster.panel.url, cluster.panel.api_token)
-
-
-def _format_traffic(bytes_val: int) -> str:
-    """Format byte count as a human-readable string."""
-    if bytes_val <= 0:
-        return "0 B"
-    b = float(bytes_val)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(b) < 1024:
-            return f"{b:.1f} {unit}" if unit != "B" else f"{int(b)} {unit}"
-        b /= 1024
-    return f"{b:.1f} PB"
 
 
 def _check_relay_health(ip: str, port: int, timeout: float = 3.0) -> bool:
@@ -58,8 +28,8 @@ def _check_relay_health(ip: str, port: int, timeout: float = 3.0) -> bool:
 
 def run_status() -> None:
     """Show fleet health overview: panel, nodes, relays, users."""
-    cluster = _load_cluster()
-    panel = _make_panel(cluster)
+    cluster = load_cluster()
+    panel = make_panel(cluster)
 
     # -- Panel health --
     err_console.print()
@@ -93,7 +63,7 @@ def run_status() -> None:
 
                 if api_node and api_node.is_connected:
                     xray = f"  Xray {api_node.xray_version}" if api_node.xray_version else ""
-                    traffic = f"  {_format_traffic(api_node.traffic_used)}" if api_node.traffic_used else ""
+                    traffic = f"  {format_traffic(api_node.traffic_used)}" if api_node.traffic_used else ""
                     err_console.print(f"    {node.ip}  {label}{role}  [green]connected[/green]{xray}{traffic}")
                 elif api_node and api_node.is_disabled:
                     err_console.print(f"    {node.ip}  {label}{role}  [dim]disabled[/dim]")
