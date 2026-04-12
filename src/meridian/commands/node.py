@@ -111,6 +111,113 @@ def run_add(
     err_console.print()
 
 
+# -- Node Check --
+
+
+def run_check(ip_or_name: str, user: str = "") -> None:
+    """Check health of a node: panel status, SSH, containers, ports, TLS."""
+    import shlex
+
+    from meridian.ssh import ServerConnection, SSHError
+
+    cluster = load_cluster()
+    node = cluster.find_node(ip_or_name)
+    if node is None:
+        fail(f"Node '{ip_or_name}' not found", hint="Check: meridian node list", hint_type="user")
+
+    err_console.print()
+    info(f"Checking node {node.ip} ({node.name or 'unnamed'})...")
+    err_console.print()
+
+    all_ok = True
+
+    # 1. Panel heartbeat
+    try:
+        panel = make_panel(cluster)
+        with panel:
+            api_node = panel.get_node(node.uuid) if node.uuid else None
+            if api_node and api_node.is_connected:
+                ok("Panel: node connected")
+            elif api_node:
+                err_console.print("  [red]✗[/red] Panel: node disconnected")
+                all_ok = False
+            else:
+                err_console.print("  [red]✗[/red] Panel: node not registered")
+                all_ok = False
+    except RemnawaveError:
+        err_console.print("  [red]✗[/red] Panel: unreachable")
+        all_ok = False
+
+    # 2. SSH connectivity
+    ssh_user = user or node.ssh_user or "root"
+    try:
+        conn = ServerConnection(ip=node.ip, user=ssh_user, port=node.ssh_port)
+        conn.check_ssh()
+        ok("SSH: connected")
+    except SSHError:
+        err_console.print("  [red]✗[/red] SSH: cannot connect")
+        warn("Cannot proceed with server-side checks")
+        err_console.print()
+        return
+
+    # 3. Docker containers
+    result = conn.run("docker ps --format '{{.Names}}' 2>/dev/null", timeout=15)
+    containers = result.stdout.strip().splitlines() if result.returncode == 0 else []
+    if "remnawave-node" in containers:
+        ok("Container: remnawave-node running")
+    else:
+        err_console.print("  [red]✗[/red] Container: remnawave-node not found")
+        all_ok = False
+
+    if node.is_panel_host:
+        for name in ("remnawave", "remnawave-db", "remnawave-redis"):
+            if name in containers:
+                ok(f"Container: {name} running")
+            else:
+                err_console.print(f"  [red]✗[/red] Container: {name} not found")
+                all_ok = False
+
+    # 4. Port 443
+    result = conn.run("ss -tlnp sport = :443 2>/dev/null | grep -c LISTEN", timeout=10)
+    if result.returncode == 0 and result.stdout.strip() != "0":
+        ok("Port 443: listening")
+    else:
+        err_console.print("  [red]✗[/red] Port 443: not listening")
+        all_ok = False
+
+    # 5. TLS cert validity
+    host = node.domain or node.sni or node.ip
+    result = conn.run(
+        f"echo | openssl s_client -connect 127.0.0.1:443 -servername {shlex.quote(host)} 2>/dev/null"
+        " | openssl x509 -noout -enddate 2>/dev/null",
+        timeout=15,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        ok(f"TLS cert: {result.stdout.strip()}")
+    else:
+        warn("TLS cert: could not verify")
+
+    # 6. Disk space
+    result = conn.run("df / --output=pcent 2>/dev/null | tail -1 | tr -d ' %'", timeout=10)
+    if result.returncode == 0 and result.stdout.strip():
+        try:
+            pct = int(result.stdout.strip())
+            if pct > 90:
+                warn(f"Disk: {pct}% used (low space)")
+                all_ok = False
+            else:
+                ok(f"Disk: {pct}% used")
+        except ValueError:
+            pass
+
+    err_console.print()
+    if all_ok:
+        ok("All checks passed")
+    else:
+        warn("Some checks failed — review above")
+    err_console.print()
+
+
 # -- Node List --
 
 

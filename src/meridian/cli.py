@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import typer
 
 from meridian import __version__
@@ -36,10 +38,20 @@ app.add_typer(dev_app, name="dev", hidden=True)
 def main_callback(
     ctx: typer.Context,
     version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
+    verbose: bool = typer.Option(False, "--verbose", help="Enable debug logging"),
 ) -> None:
     """Meridian — Censorship-resistant proxy server management."""
     if ctx.resilient_parsing:
         return
+
+    if verbose:
+        import logging
+
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="  %(name)s: %(message)s",
+            handlers=[logging.StreamHandler(sys.stderr)],
+        )
 
     if version:
         print(f"meridian {__version__}")
@@ -49,8 +61,6 @@ def main_callback(
         raise typer.Exit()
 
     # Show banner before subcommands (but not for --help)
-    import sys
-
     if "--help" not in sys.argv and "-h" not in sys.argv:
         banner(__version__)
 
@@ -465,6 +475,17 @@ def node_list_cmd() -> None:
     from meridian.commands.node import run_list
 
     run_list()
+
+
+@node_app.command("check")
+def node_check_cmd(
+    node: str = typer.Argument(..., help="Node IP or name"),
+    user: str = typer.Option("", "--user", "-u", help="SSH user override"),
+) -> None:
+    """Check health of a proxy node."""
+    from meridian.commands.node import run_check
+
+    run_check(node, user=user)
 
 
 @node_app.command("remove")
