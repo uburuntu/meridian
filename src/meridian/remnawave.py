@@ -142,7 +142,7 @@ class MeridianPanel:
         self._timeout = timeout
         self._max_retries = max_retries
         self._client = httpx.Client(
-            base_url=self._base,
+            base_url=self._base + "/",
             headers={
                 "Authorization": f"Bearer {api_token}",
                 "Content-Type": "application/json",
@@ -167,6 +167,10 @@ class MeridianPanel:
         """Make an API request with retry logic."""
         import httpx
 
+        # Strip leading / so httpx joins relative to base_url path
+        # (absolute paths like "/api/users" would replace the base path,
+        # bypassing the secret path prefix that nginx requires).
+        path = path.lstrip("/")
         logger.debug("%s %s", method, path)
         last_error: Exception | None = None
         for attempt in range(self._max_retries):

@@ -339,18 +339,28 @@ def _render_nginx_server_block(
                 proxy_set_header Upgrade $http_upgrade;
                 proxy_set_header Connection $connection_upgrade;
 
-                # Rewrite absolute asset paths for subpath deployment.
-                # The Remnawave SPA references /assets/, /favicons/ etc.
-                # without the secret path prefix.  sub_filter patches the
-                # HTML so the browser loads them through this location.
-                # Excludes protocol-relative URLs (//example.com).
+                # Rewrite paths for subpath deployment.  Remnawave is not
+                # designed for sub-paths (docs: "must be hosted on root path"),
+                # so we patch responses with sub_filter.
+                #
+                # HTML: asset hrefs/srcs (/assets/, /favicons/, /splash_screens/)
+                #       and CSS url() for fonts (url(/assets/...woff2))
+                # JS:   axios baseURL (window.location.origin → +secret path),
+                #       i18next loadPath (/locales/), queue viewer link (/api/queues)
+                #
+                # This eliminates root-level /api/ and /locales/ proxies that
+                # would fingerprint the server (NestJS errors, i18n JSON).
                 proxy_set_header Accept-Encoding "";
                 sub_filter_once off;
-                sub_filter_types text/html;
+                sub_filter_types application/javascript text/javascript;
                 sub_filter 'href="/a' 'href="/{panel_web_base_path}/a';
                 sub_filter 'href="/f' 'href="/{panel_web_base_path}/f';
                 sub_filter 'href="/s' 'href="/{panel_web_base_path}/s';
                 sub_filter 'src="/a' 'src="/{panel_web_base_path}/a';
+                sub_filter 'url(/a' 'url(/{panel_web_base_path}/a';
+                sub_filter '=window.location.origin;' '=window.location.origin+"/{panel_web_base_path}";';
+                sub_filter '"/locales/' '"/{panel_web_base_path}/locales/';
+                sub_filter '"/api/queues' '"/{panel_web_base_path}/api/queues';
             }}
 
             # --- Connection Info Pages (PWA with per-client config) ---
@@ -371,24 +381,9 @@ def _render_nginx_server_block(
                 {root_action}
             }}
 
-            # Panel SPA runtime dependencies: the JS uses window.location.origin
-            # as its base URL, so API calls and i18n fetches miss the secret path.
-            # Only these two paths are needed — assets are handled by sub_filter
-            # in the /{panel_web_base_path}/ location above.
-            location /api/ {{
-                proxy_pass http://127.0.0.1:{panel_internal_port}/api/;
-                proxy_http_version 1.1;
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
-            }}
-            location /locales/ {{
-                proxy_pass http://127.0.0.1:{panel_internal_port}/locales/;
-            }}
-
             # Default: stock nginx 404 — indistinguishable from any nginx server.
-            # MUST NOT serve custom pages or proxy to panel here (fingerprinting).
+            # No root-level proxies — all panel traffic goes through the secret
+            # path location above (sub_filter rewrites JS to use it).
             location / {{
                 {default_action}
             }}

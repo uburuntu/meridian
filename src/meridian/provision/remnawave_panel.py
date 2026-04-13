@@ -224,7 +224,14 @@ class DeployRemnawavePanel:
         image = REMNAWAVE_BACKEND_IMAGE
 
         front_end_domain = self.front_end_domain or ctx.domain or ctx.ip
-        sub_public_domain = self.sub_public_domain or ctx.domain or ctx.ip
+        host = ctx.domain or ctx.ip
+        # Include the secret path so Remnawave's UI subscription URLs
+        # route through the nginx panel location (not exposed at root).
+        web_base_path = ctx.get("web_base_path", "")
+        if web_base_path:
+            sub_public_domain = self.sub_public_domain or f"{host}/{web_base_path}/api/sub"
+        else:
+            sub_public_domain = self.sub_public_domain or host
 
         # -- Idempotency: are all three containers already running? --
         all_running = True
