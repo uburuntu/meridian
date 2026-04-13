@@ -135,7 +135,7 @@ def run(
     )
     resolved = ensure_server_connection(resolved)
     _check_ports(resolved.conn, resolved.ip, yes)
-    _check_legacy_panel(resolved.conn, yes)
+    _check_legacy_panel(resolved.conn, resolved.ip, yes)
 
     # Validate client name
     if client_name and not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", client_name):
@@ -1445,11 +1445,12 @@ def _check_ports(conn: ServerConnection, ip: str, yes: bool) -> None:
                 fail("Aborted -- port conflict", hint_type="user")
 
 
-def _check_legacy_panel(conn: ServerConnection, yes: bool) -> None:
+def _check_legacy_panel(conn: ServerConnection, server_ip: str, yes: bool) -> None:
     """Detect a running 3x-ui panel from Meridian 3.x and warn the user.
 
-    Called before provisioning so the user can abort or run ``meridian migrate``
-    first.  The actual cleanup happens in the provisioner pipeline
+    Shows migration context inline (client names, what will break) so the
+    user can make an informed decision without leaving the deploy flow.
+    The actual cleanup happens in the provisioner pipeline
     (CleanupLegacyPanel step).
     """
     result = conn.run("docker inspect -f '{{.State.Status}}' 3x-ui 2>/dev/null", timeout=15)
@@ -1458,21 +1459,37 @@ def _check_legacy_panel(conn: ServerConnection, yes: bool) -> None:
 
     from rich.panel import Panel
 
-    warning = (
-        "This server has a Meridian 3.x deployment (3x-ui).\n"
-        "Meridian 4.0 replaces 3x-ui with [bold]Remnawave[/bold] -- a new panel.\n"
-        "\n"
-        "  [yellow]\u2022[/yellow] 3x-ui will be stopped and removed (panel data is not transferred)\n"
-        "  [yellow]\u2022[/yellow] Existing client connection configs will stop working\n"
-        "  [yellow]\u2022[/yellow] Clients will need new QR codes / subscription links\n"
-        "\n"
-        "Tip: run [cyan]meridian migrate[/cyan] first to see a migration checklist."
-    )
+    from meridian.config import CREDS_BASE
+    from meridian.credentials import ServerCredentials
+
+    # Try to read old v3 credentials for this server
+    client_names: list[str] = []
+    proxy_path = CREDS_BASE / server_ip / "proxy.yml"
+    if proxy_path.exists():
+        try:
+            creds = ServerCredentials.load(proxy_path)
+            client_names = [c.name for c in creds.clients if c.name]
+        except Exception:
+            pass
+
+    lines = [
+        "This server has a Meridian 3.x deployment (3x-ui).",
+        "Meridian 4.0 replaces 3x-ui with [bold]Remnawave[/bold] -- a new panel.",
+        "",
+        "  [yellow]\u2022[/yellow] 3x-ui will be stopped and removed",
+        "  [yellow]\u2022[/yellow] Existing client connection configs will stop working",
+    ]
+    if client_names:
+        names = ", ".join(f"[bold]{n}[/bold]" for n in client_names)
+        lines.append(f"  [yellow]\u2022[/yellow] Re-create clients after deploy: {names}")
+    lines.append("  [yellow]\u2022[/yellow] Clients will need new QR codes / subscription links")
+
+    warning = "\n".join(lines)
     err_console.print()
     err_console.print(
         Panel(
             warning,
-            title="[bold yellow]Legacy panel detected[/bold yellow]",
+            title="[bold yellow]Upgrading from 3.x[/bold yellow]",
             border_style="yellow",
             padding=(0, 2),
         )
