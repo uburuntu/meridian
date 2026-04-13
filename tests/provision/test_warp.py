@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 
 from meridian.provision.steps import ProvisionContext
-from meridian.provision.warp import WARP_PROXY_PORT, ConfigureWarpOutbound, InstallWarp
+from meridian.provision.warp import WARP_PROXY_PORT, InstallWarp
 from tests.provision.conftest import MockConnection
 
 
@@ -104,53 +103,6 @@ class TestInstallWarp:
 
 
 # ---------------------------------------------------------------------------
-# ConfigureWarpOutbound
-# ---------------------------------------------------------------------------
-
-
-class _MockPanel:
-    """Minimal panel mock for Xray config fetch/update."""
-
-    def __init__(self, xray_config: dict | None = None):
-        self._config = xray_config or {
-            "outbounds": [{"protocol": "freedom", "tag": "direct"}],
-            "routing": {"rules": []},
-        }
-        self._updated: str | None = None
-        self._restarted = False
-
-    def api_post_empty(self, path: str) -> dict:
-        if path == "/panel/xray/":
-            wrapper = {"xraySetting": json.dumps(self._config)}
-            return {"success": True, "obj": json.dumps(wrapper)}
-        if path == "/panel/api/server/restartXrayService":
-            self._restarted = True
-            return {"success": True}
-        return {"success": True}
-
-    def api_post_form(self, path: str, form_data: str) -> dict:
-        self._updated = form_data
-        return {"success": True}
-
-    @property
-    def updated_config(self) -> dict | None:
-        if self._updated is None:
-            return None
-        from urllib.parse import unquote
-
-        raw = self._updated.replace("xraySetting=", "")
-        return json.loads(unquote(raw))
-
-
-class TestConfigureWarpOutbound:
-    def test_skips_pending_remnawave_implementation(self, tmp_path: Path):
-        """WARP outbound config is deferred — skips until Remnawave API integration."""
-        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path), warp=True)
-        result = ConfigureWarpOutbound().run(MockConnection(), ctx)
-        assert result.status == "skipped"
-
-
-# ---------------------------------------------------------------------------
 # Pipeline integration
 # ---------------------------------------------------------------------------
 
@@ -163,16 +115,14 @@ class TestWarpPipelineIntegration:
         steps = build_setup_steps(ctx)
         step_names = [s.name for s in steps]
         assert "Install Cloudflare WARP" not in step_names
-        assert "Configure WARP outbound" not in step_names
 
-    def test_warp_enabled_adds_steps(self):
+    def test_warp_enabled_adds_install_step(self):
         from meridian.provision import build_setup_steps
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp/test", warp=True)
         steps = build_setup_steps(ctx)
         step_names = [s.name for s in steps]
         assert "Install Cloudflare WARP" in step_names
-        assert "Configure WARP outbound" in step_names
 
     def test_warp_steps_before_verify(self):
         """WARP steps must come after Docker."""

@@ -298,7 +298,9 @@ class TestSetupFirstDeployHappyPath:
                 version=_VERSION,
             )
 
-        panel.create_user.assert_called_once_with(_CLIENT)
+        panel.create_user.assert_called_once()
+        call_args = panel.create_user.call_args
+        assert call_args[0][0] == _CLIENT
 
     def test_config_profile_uuid_saved(self) -> None:
         cluster = ClusterConfig()

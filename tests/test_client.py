@@ -76,7 +76,7 @@ class TestRunAdd:
             mock_load.return_value = _make_cluster(tmp_home)
             run_add(name="alice")
 
-        panel.create_user.assert_called_once_with("alice")
+        panel.create_user.assert_called_once_with("alice", squad_uuids=None)
 
     def test_add_duplicate_client_fails(self, tmp_home: Path) -> None:
         """Adding a client that already exists should fail."""
