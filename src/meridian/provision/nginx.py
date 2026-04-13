@@ -343,13 +343,13 @@ def _render_nginx_server_block(
                 # designed for sub-paths (docs: "must be hosted on root path"),
                 # so we patch responses with sub_filter.
                 #
-                # HTML: asset hrefs/srcs (/assets/, /favicons/, /splash_screens/)
-                #       and CSS url() for fonts (url(/assets/...woff2))
-                # JS:   axios baseURL (window.location.origin → +secret path),
-                #       i18next loadPath (/locales/), queue viewer link (/api/queues)
+                # HTML: href/src for assets, favicons, splash_screens
+                #       CSS url() for fonts
+                # JS:   axios baseURL, i18next loadPath, React Router
+                #       routes (/dashboard, /auth, /oauth2), Lottie srcs
                 #
-                # This eliminates root-level /api/ and /locales/ proxies that
-                # would fingerprint the server (NestJS errors, i18n JSON).
+                # This eliminates all root-level paths — every probe
+                # returns stock nginx 403/404.
                 proxy_set_header Accept-Encoding "";
                 sub_filter_once off;
                 sub_filter_types application/javascript text/javascript;
@@ -361,6 +361,10 @@ def _render_nginx_server_block(
                 sub_filter '=window.location.origin;' '=window.location.origin+"/{panel_web_base_path}";';
                 sub_filter '"/locales/' '"/{panel_web_base_path}/locales/';
                 sub_filter '"/api/queues' '"/{panel_web_base_path}/api/queues';
+                sub_filter '"/dashboard' '"/{panel_web_base_path}/dashboard';
+                sub_filter '"/auth' '"/{panel_web_base_path}/auth';
+                sub_filter '"/oauth2/' '"/{panel_web_base_path}/oauth2/';
+                sub_filter '"/lotties/' '"/{panel_web_base_path}/lotties/';
             }}
 
             # --- Connection Info Pages (PWA with per-client config) ---
