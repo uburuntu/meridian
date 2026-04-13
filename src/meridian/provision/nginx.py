@@ -545,6 +545,7 @@ class InstallNginx:
         conn.run(
             "mkdir -p /var/www/private /var/www/acme/.well-known/acme-challenge "
             "/etc/ssl/meridian /etc/nginx/stream.d /etc/nginx/stream.d/relay-maps && "
+            "chmod 700 /etc/ssl/meridian && "
             "chown -R www-data:www-data /var/www/private /var/www/acme",
             timeout=15,
         )
@@ -678,7 +679,8 @@ class ConfigureNginx:
             result = conn.run(
                 f"openssl req -x509 -newkey rsa:2048 -keyout /etc/ssl/meridian/key.pem "
                 f"-out /etc/ssl/meridian/fullchain.pem -days 1 -nodes "
-                f"-subj {q_subj} -addext {san_ext}",
+                f"-subj {q_subj} -addext {san_ext} && "
+                f"chmod 600 /etc/ssl/meridian/key.pem",
                 timeout=15,
             )
             if result.returncode != 0:
