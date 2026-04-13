@@ -2060,12 +2060,20 @@ def _print_success(
 
     # Build subscription URL if panel is configured
     sub_url = ""
+    page_url = ""
     if cluster.panel.url and cluster.panel.api_token:
         try:
             with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
                 user = panel.get_user(client_label)
                 if user and user.short_uuid:
                     sub_url = panel.get_subscription_url(user.short_uuid)
+                # Build connection page URL from cluster data
+                if user and user.vless_uuid:
+                    node = cluster.panel_node
+                    info_path = cluster.panel.sub_path or ""
+                    if node and info_path:
+                        host = node.domain or node.ip
+                        page_url = f"https://{host}/{info_path}/{user.vless_uuid}/"
         except RemnawaveError:
             pass
 
@@ -2074,8 +2082,6 @@ def _print_success(
     err_console.print()
     err_console.print("  [bold]Next steps:[/bold]\n")
 
-    # Connection page URL (from _deploy_client_page, stashed in _extra)
-    page_url = cluster._extra.get("_page_url", "")
     step = 1
 
     if page_url:
