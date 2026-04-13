@@ -338,6 +338,19 @@ def _render_nginx_server_block(
                 proxy_set_header X-Forwarded-Proto $scheme;
                 proxy_set_header Upgrade $http_upgrade;
                 proxy_set_header Connection $connection_upgrade;
+
+                # Rewrite absolute asset paths for subpath deployment.
+                # The Remnawave SPA references /assets/, /favicons/ etc.
+                # without the secret path prefix.  sub_filter patches the
+                # HTML so the browser loads them through this location.
+                # Excludes protocol-relative URLs (//example.com).
+                proxy_set_header Accept-Encoding "";
+                sub_filter_once off;
+                sub_filter_types text/html;
+                sub_filter 'href="/a' 'href="/{panel_web_base_path}/a';
+                sub_filter 'href="/f' 'href="/{panel_web_base_path}/f';
+                sub_filter 'href="/s' 'href="/{panel_web_base_path}/s';
+                sub_filter 'src="/a' 'src="/{panel_web_base_path}/a';
             }}
 
             # --- Connection Info Pages (PWA with per-client config) ---
