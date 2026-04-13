@@ -51,6 +51,7 @@ class User:
     uuid: str = ""
     short_uuid: str = ""
     username: str = ""
+    vless_uuid: str = ""  # VLESS protocol UUID (used by Xray, differs from account UUID)
     status: str = ""  # "ACTIVE", "DISABLED", "LIMITED", "EXPIRED"
     used_traffic_bytes: int = 0
     traffic_limit_bytes: int = 0
@@ -198,7 +199,7 @@ class MeridianPanel:
                 resp.raise_for_status()
                 try:
                     data = resp.json()
-                except (ValueError, Exception) as e:
+                except Exception as e:
                     raise RemnawaveError(
                         f"Panel returned invalid JSON ({len(resp.content)} bytes)",
                         hint=f"Response may be truncated by firewall or DPI: {e}",
@@ -260,13 +261,28 @@ class MeridianPanel:
 
     # --- Users (= Meridian clients) ---
 
-    def create_user(self, username: str, *, traffic_limit_bytes: int = 0, expire_at: str = "") -> User:
-        """Create a new user in Remnawave."""
+    def create_user(
+        self,
+        username: str,
+        *,
+        traffic_limit_bytes: int = 0,
+        expire_at: str = "",
+        squad_uuids: list[str] | None = None,
+    ) -> User:
+        """Create a new user in Remnawave.
+
+        Args:
+            squad_uuids: Internal squad UUIDs to assign the user to.
+                Users must be in a squad that's linked to inbounds for
+                Xray to include them in the config.
+        """
         body: dict[str, Any] = {"username": username}
         if traffic_limit_bytes > 0:
             body["trafficLimitBytes"] = traffic_limit_bytes
         # Remnawave requires expireAt — use far future if not specified
         body["expireAt"] = expire_at or "2099-12-31T23:59:59.000Z"
+        if squad_uuids:
+            body["activeInternalSquads"] = squad_uuids
         data = self._post("/api/users", json=body)
         return _parse_user(data)
 
@@ -508,6 +524,34 @@ class MeridianPanel:
             return [_parse_inbound(ib) for ib in data]
         return []
 
+    # --- Internal Squads (access control groups) ---
+
+    def list_internal_squads(self) -> list[dict[str, Any]]:
+        """List internal squads. Returns raw dicts with uuid, name, info."""
+        data = self._get("/api/internal-squads")
+        if isinstance(data, dict) and "internalSquads" in data:
+            return data["internalSquads"]
+        if isinstance(data, list):
+            return data
+        return []
+
+    def get_default_squad_uuid(self) -> str:
+        """Get the UUID of the Default-Squad. Returns empty string if not found."""
+        squads = self.list_internal_squads()
+        for s in squads:
+            if isinstance(s, dict) and s.get("name") == "Default-Squad":
+                return s.get("uuid", "")
+        return ""
+
+    def assign_inbounds_to_squad(self, squad_uuid: str, inbound_uuids: list[str]) -> None:
+        """Assign inbounds to an internal squad (PATCH).
+
+        Remnawave requires users and inbounds to share a squad for the
+        user to appear in the node's Xray config. Without this, the
+        node gets an empty client list and connections fail auth.
+        """
+        self._patch("/api/internal-squads", json={"uuid": squad_uuid, "inbounds": inbound_uuids})
+
     # --- Subscriptions ---
 
     def get_subscription_url(self, short_uuid: str) -> str:
@@ -537,19 +581,34 @@ class MeridianPanel:
         """
         import httpx
 
-        resp = httpx.post(
-            f"{base_url.rstrip('/')}/api/auth/login",
-            json={"username": username, "password": password},
-            timeout=timeout,
-            verify=False,
-        )
+        try:
+            resp = httpx.post(
+                f"{base_url.rstrip('/')}/api/auth/login",
+                json={"username": username, "password": password},
+                timeout=timeout,
+                verify=False,
+            )
+        except httpx.ConnectError as e:
+            raise RemnawaveNetworkError(
+                f"Cannot connect to panel at {base_url}",
+                hint=f"Is the panel running? {e}",
+                hint_type="system",
+            ) from e
+        except httpx.TimeoutException as e:
+            raise RemnawaveNetworkError(
+                f"Panel login timed out after {timeout}s",
+                hint_type="system",
+            ) from e
         if resp.status_code != 200:
             raise RemnawaveError(
                 f"Panel login failed ({resp.status_code})",
                 hint="Check panel credentials",
                 hint_type="user",
             )
-        data = resp.json()
+        try:
+            data = resp.json()
+        except (ValueError, TypeError) as e:
+            raise RemnawaveError("Panel returned invalid JSON during login", hint_type="system") from e
         if isinstance(data, dict) and "response" in data:
             data = data["response"]
         token = data.get("accessToken", "") or data.get("token", "")
@@ -565,18 +624,33 @@ class MeridianPanel:
         """
         import httpx
 
-        resp = httpx.post(
-            f"{base_url.rstrip('/')}/api/auth/register",
-            json={"username": username, "password": password},
-            timeout=timeout,
-            verify=False,
-        )
+        try:
+            resp = httpx.post(
+                f"{base_url.rstrip('/')}/api/auth/register",
+                json={"username": username, "password": password},
+                timeout=timeout,
+                verify=False,
+            )
+        except httpx.ConnectError as e:
+            raise RemnawaveNetworkError(
+                f"Cannot connect to panel at {base_url}",
+                hint=f"Is the panel running? {e}",
+                hint_type="system",
+            ) from e
+        except httpx.TimeoutException as e:
+            raise RemnawaveNetworkError(
+                f"Panel registration timed out after {timeout}s",
+                hint_type="system",
+            ) from e
         if resp.status_code not in (200, 201):
             raise RemnawaveError(
                 f"Admin registration failed ({resp.status_code}): {resp.text[:200]}",
                 hint_type="system",
             )
-        data = resp.json()
+        try:
+            data = resp.json()
+        except (ValueError, TypeError) as e:
+            raise RemnawaveError("Panel returned invalid JSON during registration", hint_type="system") from e
         if isinstance(data, dict) and "response" in data:
             data = data["response"]
         token = data.get("accessToken", "") or data.get("token", "")
@@ -597,6 +671,7 @@ def _parse_user(data: Any) -> User:
         uuid=data.get("uuid", ""),
         short_uuid=data.get("shortUuid", "") or data.get("short_uuid", ""),
         username=data.get("username", ""),
+        vless_uuid=data.get("vlessUuid", "") or data.get("vless_uuid", ""),
         status=data.get("status", ""),
         used_traffic_bytes=data.get("usedTrafficBytes", 0) or 0,
         traffic_limit_bytes=data.get("trafficLimitBytes", 0) or 0,

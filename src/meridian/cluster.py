@@ -48,9 +48,9 @@ class PanelConfig:
     """Remnawave panel connection details."""
 
     url: str = ""  # Panel HTTPS endpoint (e.g., https://panel.example.com)
-    api_token: str = ""  # Remnawave JWT API token (long-lived)
+    api_token: str = field(default="", repr=False)  # Remnawave JWT API token (long-lived)
     admin_user: str = ""  # Panel admin username (for recovery login)
-    admin_pass: str = ""  # Panel admin password (for recovery login)
+    admin_pass: str = field(default="", repr=False)  # Panel admin password (for recovery login)
     server_ip: str = ""  # IP where panel is deployed
     ssh_user: str = "root"
     ssh_port: int = 22
@@ -77,7 +77,8 @@ class NodeEntry:
     ws_path: str = ""  # persisted WebSocket path (reused across redeploys)
     reality_public_key: str = ""  # Reality public key (for test command)
     reality_short_id: str = ""  # Reality short ID
-    reality_private_key: str = ""  # Reality private key (for redeploy config rebuild)
+    reality_private_key: str = field(default="", repr=False)  # Reality private key (for redeploy config rebuild)
+    warp: bool = False  # Cloudflare WARP outbound enabled
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -127,6 +128,7 @@ class ClusterConfig:
     panel: PanelConfig = field(default_factory=PanelConfig)
     config_profile_uuid: str = ""
     config_profile_name: str = ""
+    squad_uuid: str = ""  # Remnawave internal squad for user-inbound access control
     nodes: list[NodeEntry] = field(default_factory=list)
     relays: list[RelayEntry] = field(default_factory=list)
     branding: BrandingConfig = field(default_factory=BrandingConfig)
@@ -214,6 +216,7 @@ class ClusterConfig:
         fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
         try:
             os.write(fd, yaml.dump(out, default_flow_style=False, sort_keys=False).encode())
+            os.fsync(fd)
             os.close(fd)
             fd = -1
             os.chmod(tmp, 0o600)
@@ -429,6 +432,7 @@ _NODE_FIELDS = {
     "reality_public_key",
     "reality_short_id",
     "reality_private_key",
+    "warp",
 }
 _RELAY_FIELDS = {"ip", "name", "port", "exit_node_ip", "host_uuids", "sni", "ssh_user", "ssh_port"}
 _BRANDING_FIELDS = {"server_name", "icon", "color"}
@@ -438,6 +442,7 @@ _KNOWN_TOP = {
     "panel",
     "config_profile_uuid",
     "config_profile_name",
+    "squad_uuid",
     "nodes",
     "relays",
     "branding",
@@ -489,6 +494,8 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
         out["config_profile_uuid"] = cfg.config_profile_uuid
     if cfg.config_profile_name:
         out["config_profile_name"] = cfg.config_profile_name
+    if cfg.squad_uuid:
+        out["squad_uuid"] = cfg.squad_uuid
 
     # Nodes
     if cfg.nodes:
@@ -511,6 +518,8 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
                 d.pop("reality_short_id", None)
             if not d.get("reality_private_key"):
                 d.pop("reality_private_key", None)
+            if not d.get("warp"):
+                d.pop("warp", None)
             nodes_out.append(d)
         out["nodes"] = nodes_out
 
@@ -569,11 +578,27 @@ def _load_dataclass(
     defaults: dict[str, Any] | None = None,
     transforms: dict[str, Any] | None = None,
 ) -> Any:
-    """Load known fields into a dataclass, preserving unknown ones in _extra."""
+    """Load known fields into a dataclass, preserving unknown ones in _extra.
+
+    YAML ``null`` values are coerced to the field's dataclass default so that
+    downstream code never sees ``None`` on a ``str``/``int``/``bool`` field.
+    """
+    from dataclasses import MISSING
+    from dataclasses import fields as dataclass_fields
+
     if not isinstance(raw, dict):
         raw = {}
     defaults = defaults or {}
     transforms = transforms or {}
+
+    # Build a map of field name → default value for None coercion
+    field_defaults: dict[str, Any] = {}
+    for f in dataclass_fields(cls):
+        if f.name.startswith("_"):
+            continue
+        if f.default is not MISSING:
+            field_defaults[f.name] = f.default
+
     values: dict[str, Any] = {}
     for field_name in known_fields:
         if field_name in raw:
@@ -582,6 +607,9 @@ def _load_dataclass(
             value = defaults[field_name]
         else:
             continue
+        # Coerce YAML null → dataclass default (e.g., None → "" for str fields)
+        if value is None and field_name in field_defaults:
+            value = field_defaults[field_name]
         if field_name in transforms:
             value = transforms[field_name](value)
         values[field_name] = value
@@ -607,8 +635,8 @@ def _load_cluster(data: dict[str, Any]) -> ClusterConfig:
                 n,
                 NodeEntry,
                 _NODE_FIELDS,
-                defaults={"ssh_user": "root", "ssh_port": 22, "is_panel_host": False},
-                transforms={"is_panel_host": bool},
+                defaults={"ssh_user": "root", "ssh_port": 22, "is_panel_host": False, "warp": False},
+                transforms={"is_panel_host": bool, "warp": bool},
             )
         )
 
@@ -645,6 +673,7 @@ def _load_cluster(data: dict[str, Any]) -> ClusterConfig:
         panel=panel,
         config_profile_uuid=data.get("config_profile_uuid", ""),
         config_profile_name=data.get("config_profile_name", ""),
+        squad_uuid=data.get("squad_uuid", ""),
         nodes=nodes,
         relays=relays,
         branding=branding,
