@@ -13,18 +13,20 @@ docker compose -f tests/systemlab/compose.yml down -v
 
 The system lab deploys Meridian across two containers via SSH — exactly like a real VPS — and verifies the full lifecycle with real Remnawave containers.
 
-### 8 test stages
+### 10 test stages
 
 | # | Stage | What it validates |
 |---|-------|-------------------|
 | 1 | SSH/systemd setup | Host key scanning, systemd boot, Pebble CA install |
 | 2 | Fresh deploy | Full provisioner pipeline: Docker, Remnawave panel+DB+Valkey+node, nginx, TLS |
 | 3 | Verify deployment | 4 containers running, nginx valid, port 443, cluster.yml, fleet status connected |
-| 4 | Client lifecycle | add/list/show/remove via panel API |
-| 5 | Relay deploy | Realm install, systemd service, relay host entries in panel |
-| 6 | Connection test | Reality tunnel through xray client (direct + via relay) |
-| 7 | Redeploy | Key preservation — Reality keys unchanged, existing clients still work |
-| 8 | Teardown | Container removal, port freed, nginx cleaned |
+| 4 | Client lifecycle | Multi-client isolation: add alice+bob, remove alice, verify bob survives |
+| 5 | PWA page serving | curl connection page, config.json, security headers, shared assets |
+| 6 | Relay deploy | Realm install, systemd service, relay host entries in panel |
+| 7 | Connection test | Reality tunnel (fatal), negative test with bogus UUID |
+| 8 | Redeploy | Key preservation — Reality keys unchanged, connections still work (fatal) |
+| 9 | Hardening verification | UFW rules, SSH password auth disabled, fail2ban active, port 80 blocked |
+| 10 | Teardown | Container removal, port freed, nginx cleaned |
 
 ## Design decisions
 
@@ -43,3 +45,4 @@ The system lab deploys Meridian across two containers via SSH — exactly like a
 - **Image pull time** — 4 Remnawave images (~500MB) pulled inside nested Docker on first run. Expect 3-5 min in CI.
 - **systemd reports `degraded`** — some kernel features missing in containers. Accepted.
 - **Base image build is slow** — docker-ce from official repo. Uses BuildKit apt cache mounts.
+- **UFW filtering untestable on Docker bridge** — all container ports reachable regardless of iptables. Stage 9 verifies UFW *configuration* (rules, status), not actual packet filtering.
