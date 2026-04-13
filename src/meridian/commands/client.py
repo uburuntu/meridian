@@ -205,7 +205,8 @@ def run_show(
 
     err_console.print()
     if cluster.panel.url:
-        err_console.print(f"  [dim]Remnawave panel:   {cluster.panel.url}[/dim]")
+        panel_display = cluster.panel.url.rstrip("/") + "/"
+        err_console.print(f"  [dim]Remnawave panel:   {panel_display}[/dim]")
         if cluster.panel.admin_user:
             creds = f"{cluster.panel.admin_user} / {cluster.panel.admin_pass}"
             err_console.print(f"  [dim]                   {creds}[/dim]")
