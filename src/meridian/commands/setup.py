@@ -2139,8 +2139,9 @@ def _print_success(
 
     # Panel access for advanced users
     if cluster.panel.url:
+        panel_display = cluster.panel.url.rstrip("/") + "/"
         err_console.print("\n  [dim]Remnawave panel (advanced -- manage nodes, monitor traffic):[/dim]")
-        err_console.print(f"  [dim]  {cluster.panel.url}[/dim]")
+        err_console.print(f"  [dim]  {panel_display}[/dim]")
 
     err_console.print("\n  [dim]Feedback & issues: https://github.com/uburuntu/meridian/issues[/dim]\n")
 
