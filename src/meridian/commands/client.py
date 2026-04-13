@@ -10,6 +10,7 @@ import re
 
 import typer
 
+from meridian.cluster import ClusterConfig
 from meridian.commands._helpers import format_traffic, load_cluster, make_panel
 from meridian.console import confirm, err_console, fail, info, is_json_mode, ok
 from meridian.remnawave import MeridianPanel, RemnawaveError, User
@@ -43,20 +44,44 @@ def _format_status(status: str) -> str:
     return f"[dim]● {status.lower()}[/dim]"
 
 
-def _print_subscription(panel: MeridianPanel, user: User) -> None:
-    """Print subscription URL and QR code for a user."""
+def _build_page_url(cluster: ClusterConfig, vless_uuid: str) -> str:
+    """Build the connection page URL for a client, or empty string if unavailable."""
+    info_page_path = cluster.panel.sub_path or ""
+    if not info_page_path or not vless_uuid:
+        return ""
+    node = cluster.panel_node
+    if not node:
+        return ""
+    host = node.domain or node.ip
+    return f"https://{host}/{info_page_path}/{vless_uuid}/"
+
+
+def _print_subscription(panel: MeridianPanel, user: User, *, page_url: str = "") -> None:
+    """Print connection page URL and/or subscription URL with QR code."""
     from meridian.urls import generate_qr_terminal
 
     sub_url = panel.get_subscription_url(user.short_uuid)
 
-    err_console.print()
-    err_console.print("  [bold]Subscription URL[/bold]")
-    err_console.print(f"  {sub_url}")
-
-    qr = generate_qr_terminal(sub_url)
-    if qr:
+    if page_url:
         err_console.print()
-        err_console.print(qr)
+        err_console.print("  [bold]Share this link[/bold]")
+        err_console.print(f"  {page_url}")
+        err_console.print("  [dim](They open it, scan the QR code, and connect)[/dim]")
+        qr = generate_qr_terminal(page_url)
+        if qr:
+            err_console.print()
+            err_console.print(qr)
+        err_console.print()
+        err_console.print("  [bold]Subscription URL[/bold] [dim](for Xray/V2Ray apps)[/dim]")
+        err_console.print(f"  {sub_url}")
+    else:
+        err_console.print()
+        err_console.print("  [bold]Subscription URL[/bold]")
+        err_console.print(f"  {sub_url}")
+        qr = generate_qr_terminal(sub_url)
+        if qr:
+            err_console.print()
+            err_console.print(qr)
 
 
 # -- Client Add --
@@ -96,33 +121,29 @@ def run_add(
             )
 
         ok(f"Client '{name}' added")
-        _print_subscription(panel, new_user)
 
-        # Deploy connection page on the panel host
-        page_url = ""
-        panel_node = cluster.panel_node
-        if new_user.vless_uuid and panel_node and cluster.panel.server_ip:
-            try:
-                from meridian.commands.setup import _deploy_client_page
-                from meridian.ssh import ServerConnection
+        # Build page URL (deterministic from cluster data)
+        page_url = _build_page_url(cluster, new_user.vless_uuid)
+        _print_subscription(panel, new_user, page_url=page_url)
 
-                sub_url = panel.get_subscription_url(new_user.short_uuid) if new_user.short_uuid else ""
-                with ServerConnection(
-                    cluster.panel.server_ip,
-                    user=cluster.panel.ssh_user or "root",
-                    port=getattr(cluster.panel, "ssh_port", 22) or 22,
-                ) as conn:
-                    page_url = _deploy_client_page(conn, cluster, panel_node, new_user.vless_uuid, name, sub_url)
-            except Exception:
-                pass  # Non-fatal — subscription URL still works
+        # Deploy connection page files on the panel host
+        if page_url and cluster.panel.server_ip:
+            panel_node = cluster.panel_node
+            if panel_node:
+                try:
+                    from meridian.commands.setup import _deploy_client_page
+                    from meridian.ssh import ServerConnection
 
-    err_console.print()
-    if page_url:
-        err_console.print("  Share this link:")
-        err_console.print(f"  [bold]{page_url}[/bold]")
-        err_console.print()
-        err_console.print(f"  [dim]Send this URL to {name} --[/dim]")
-        err_console.print("  [dim]they open it, scan the QR code, and connect.[/dim]")
+                    sub_url = panel.get_subscription_url(new_user.short_uuid) if new_user.short_uuid else ""
+                    with ServerConnection(
+                        cluster.panel.server_ip,
+                        user=cluster.panel.ssh_user or "root",
+                        port=getattr(cluster.panel, "ssh_port", 22) or 22,
+                    ) as conn:
+                        _deploy_client_page(conn, cluster, panel_node, new_user.vless_uuid, name, sub_url)
+                except Exception:
+                    pass  # Non-fatal — subscription URL still works
+
     err_console.print()
     err_console.print("  [dim]Show client:       meridian client show " + name + "[/dim]")
     err_console.print("  [dim]View all clients:  meridian client list[/dim]")
@@ -170,8 +191,9 @@ def run_show(
             )
             return
 
-        # Print subscription URL + QR
-        _print_subscription(panel, client)
+        # Print connection page URL + subscription
+        page_url = _build_page_url(cluster, client.vless_uuid)
+        _print_subscription(panel, client, page_url=page_url)
 
         # Print traffic stats
         err_console.print()
