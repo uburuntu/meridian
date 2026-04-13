@@ -111,35 +111,6 @@ class InstallWarp:
         )
 
 
-# ---------------------------------------------------------------------------
-# ConfigureWarpOutbound
-# ---------------------------------------------------------------------------
-
-_WARP_OUTBOUND = {
-    "protocol": "socks",
-    "tag": "warp",
-    "settings": {
-        "servers": [
-            {
-                "address": "127.0.0.1",
-                "port": WARP_PROXY_PORT,
-            }
-        ]
-    },
-}
-
-
-class ConfigureWarpOutbound:
-    """Add WARP SOCKS5 as default Xray outbound so all egress goes through Cloudflare."""
-
-    name = "Configure WARP outbound"
-
-    def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
-        # TODO: Rewrite for Remnawave — use panel.update_xray_config() API
-        # instead of the old 3x-ui PanelClient. For now, WARP outbound
-        # configuration must be done manually via the Remnawave web UI.
-        return StepResult(
-            name=self.name,
-            status="skipped",
-            detail="WARP outbound config via Remnawave API not yet implemented",
-        )
+# Note: WARP outbound configuration is handled in _build_xray_config (setup.py)
+# which adds the WARP SOCKS5 outbound to the Xray config profile at deploy time.
+# The old ConfigureWarpOutbound provisioner step is no longer needed.

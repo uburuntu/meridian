@@ -494,6 +494,7 @@ def build_test_configs_from_cluster(
     short_id = node.reality_short_id or ""
     xhttp_path = node.xhttp_path or ""
     ws_path = node.ws_path or ""
+    warp = getattr(node, "warp", False)
     test_uuid = uuid or "00000000-0000-0000-0000-000000000000"
 
     configs: list[tuple[str, dict, bool]] = []
@@ -505,7 +506,7 @@ def build_test_configs_from_cluster(
             (
                 "Reality (TCP)",
                 build_reality_config(port, ip, test_uuid, sni, public_key, short_id),
-                True,
+                not warp,
             )
         )
 
@@ -517,7 +518,7 @@ def build_test_configs_from_cluster(
             (
                 "XHTTP",
                 build_xhttp_config(port, host, test_uuid, xhttp_path),
-                not domain,
+                not domain and not warp,
             )
         )
 
@@ -553,7 +554,7 @@ def build_test_configs_from_cluster(
                         short_id,
                         server_port=relay.port,
                     ),
-                    True,
+                    not warp,
                 )
             )
 
@@ -566,7 +567,7 @@ def build_test_configs_from_cluster(
                 (
                     f"XHTTP via {relay_label}",
                     cfg,
-                    not domain,
+                    not domain and not warp,
                 )
             )
 
