@@ -531,7 +531,7 @@ def _wait_for_panel_api(base_url: str, retries: int = 20, delay: float = 3.0) ->
     for attempt in range(retries):
         try:
             resp = httpx.get(
-                f"{base_url}/api/auth/login",
+                f"{base_url.rstrip('/')}/api/auth/login",
                 timeout=10,
                 verify=False,  # Self-signed cert during bootstrap
             )
