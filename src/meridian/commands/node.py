@@ -36,6 +36,8 @@ def run_add(
         _run_provisioner,
         _setup_new_node,
     )
+    from meridian.config import SERVERS_FILE
+    from meridian.servers import ServerRegistry
 
     if not ip:
         fail("Node IP address is required", hint="Usage: meridian node add IP", hint_type="user")
@@ -52,7 +54,8 @@ def run_add(
         )
 
     # Resolve and connect
-    resolved = resolve_server(ip, user=user, port=ssh_port)
+    registry = ServerRegistry(SERVERS_FILE)
+    resolved = resolve_server(registry, explicit_ip=ip, user=user, port=ssh_port)
     ensure_server_connection(resolved)
 
     node_name = name or ip
