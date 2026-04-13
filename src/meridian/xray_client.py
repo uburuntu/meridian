@@ -319,7 +319,7 @@ def test_connection(
             [
                 "curl",
                 "-sS",
-                "--socks5",
+                "--socks5-hostname",
                 f"127.0.0.1:{socks_port}",
                 "--connect-timeout",
                 "10",

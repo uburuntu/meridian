@@ -502,9 +502,12 @@ class MeridianPanel:
     def list_config_profiles(self) -> list[ConfigProfile]:
         """List all config profiles."""
         data = self._get("/api/config-profiles")
+        items: list[dict[str, Any]] = []
         if isinstance(data, list):
-            return [ConfigProfile(uuid=p.get("uuid", ""), name=p.get("name", ""), _raw=p) for p in data]
-        return []
+            items = data
+        elif isinstance(data, dict) and "configProfiles" in data:
+            items = data["configProfiles"]
+        return [ConfigProfile(uuid=p.get("uuid", ""), name=p.get("name", ""), _raw=p) for p in items]
 
     def find_config_profile_by_name(self, name: str) -> ConfigProfile | None:
         """Find a config profile by name. Returns None if not found."""
