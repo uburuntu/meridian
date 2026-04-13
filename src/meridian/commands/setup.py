@@ -225,6 +225,7 @@ def run(
         xhttp_port=xhttp_port,
         wss_port=wss_port,
         pq=pq,
+        warp=warp,
         geo_block=geo_block,
         xhttp_path=xhttp_path,
         ws_path=ws_path,
@@ -532,6 +533,7 @@ def _configure_panel_and_node(
     wss_port: int,
     *,
     pq: bool = False,
+    warp: bool = False,
     geo_block: bool = True,
     xhttp_path: str = "",
     ws_path: str = "",
@@ -560,6 +562,7 @@ def _configure_panel_and_node(
             xhttp_port=xhttp_port,
             wss_port=wss_port,
             pq=pq,
+            warp=warp,
             geo_block=geo_block,
             version=__version__,
             xhttp_path=xhttp_path,
@@ -576,6 +579,7 @@ def _configure_panel_and_node(
             wss_port=wss_port,
             version=__version__,
             pq=pq,
+            warp=warp,
             geo_block=geo_block,
             xhttp_path=xhttp_path,
             ws_path=ws_path,
@@ -596,6 +600,7 @@ def _setup_first_deploy(
     wss_port: int,
     *,
     pq: bool,
+    warp: bool = False,
     geo_block: bool,
     version: str,
     xhttp_path: str = "",
@@ -675,6 +680,7 @@ def _setup_first_deploy(
             domain=domain,
             pq=pq,
             geo_block=geo_block,
+            warp=warp,
             xhttp_path=xhttp_path,
             ws_path=ws_path,
         )
@@ -698,6 +704,24 @@ def _setup_first_deploy(
 
         # Cache inbound references from the profile
         _cache_inbounds(panel, cluster)
+
+        # Assign inbounds to Default-Squad so users can access them.
+        # Remnawave requires users and inbounds to share an "internal squad"
+        # for the user to appear in the node's Xray config.
+        try:
+            squad_uuid = panel.get_default_squad_uuid()
+            if squad_uuid:
+                inbound_uuids_all = [
+                    ref.uuid for ref in cluster.inbounds.values() if isinstance(ref, InboundRef) and ref.uuid
+                ]
+                if inbound_uuids_all:
+                    panel.assign_inbounds_to_squad(squad_uuid, inbound_uuids_all)
+                    ok("Inbounds linked to Default-Squad")
+                cluster.squad_uuid = squad_uuid
+            else:
+                warn("Default-Squad not found — users may not get access to inbounds")
+        except RemnawaveError as e:
+            warn(f"Could not configure squad: {e}")
 
         # Register this server as a node
         # For same-server deployments (panel + node co-located), the panel runs
@@ -726,9 +750,6 @@ def _setup_first_deploy(
         except RemnawaveError as e:
             fail(f"Failed to register node: {e}", hint_type="system")
 
-        # Store node_secret_key so the DeployRemnawaveNode step can use it
-        # (in the current flow, the node container is already started by the
-        # provisioner -- this writes the secret to the node's .env and restarts)
         _deploy_node_container(resolved.conn, node_creds.secret_key)
 
         # Save node entry to cluster
@@ -742,6 +763,7 @@ def _setup_first_deploy(
             domain=domain,
             is_panel_host=True,
             deployed_with=version,
+            warp=warp,
             xhttp_path=xhttp_path,
             ws_path=ws_path,
             reality_public_key=reality_public_key,
@@ -763,7 +785,8 @@ def _setup_first_deploy(
             if existing_user:
                 info(f"Client '{client_name}' already exists")
             else:
-                panel.create_user(client_name)
+                squad_uuids = [cluster.squad_uuid] if cluster.squad_uuid else None
+                panel.create_user(client_name, squad_uuids=squad_uuids)
                 ok(f"Client '{client_name}' created")
         except RemnawaveError as e:
             warn(f"Could not create client '{client_name}': {e}")
@@ -782,6 +805,7 @@ def _setup_redeploy(
     version: str,
     *,
     pq: bool = False,
+    warp: bool = False,
     geo_block: bool = True,
     xhttp_path: str = "",
     ws_path: str = "",
@@ -826,6 +850,7 @@ def _setup_redeploy(
                     domain=domain or node.domain,
                     pq=pq,
                     geo_block=geo_block,
+                    warp=warp,
                     xhttp_path=xhttp_path or node.xhttp_path,
                     ws_path=ws_path or node.ws_path,
                     existing_private_key=node.reality_private_key,
@@ -844,6 +869,7 @@ def _setup_redeploy(
                     domain=domain or node.domain,
                     pq=pq,
                     geo_block=geo_block,
+                    warp=warp,
                     xhttp_path=xhttp_path or node.xhttp_path,
                     ws_path=ws_path or node.ws_path,
                 )
@@ -871,6 +897,19 @@ def _setup_redeploy(
 
             # Re-cache inbounds
             _cache_inbounds(panel, cluster)
+
+            # Refresh squad-inbound linkage
+            try:
+                squad_uuid = cluster.squad_uuid or panel.get_default_squad_uuid()
+                if squad_uuid:
+                    inbound_uuids_all = [
+                        ref.uuid for ref in cluster.inbounds.values() if isinstance(ref, InboundRef) and ref.uuid
+                    ]
+                    if inbound_uuids_all:
+                        panel.assign_inbounds_to_squad(squad_uuid, inbound_uuids_all)
+                    cluster.squad_uuid = squad_uuid
+            except RemnawaveError:
+                pass  # Non-fatal on redeploy
 
             # Verify node registration
             if node.uuid:
@@ -908,6 +947,7 @@ def _setup_redeploy(
             node.sni = sni or node.sni
             node.domain = domain or node.domain
             node.deployed_with = version
+            node.warp = warp
             node.reality_public_key = reality_public_key
             node.reality_short_id = reality_short_id
             node.reality_private_key = reality_private_key
@@ -1018,6 +1058,7 @@ def _build_xray_config(
     *,
     pq: bool,
     geo_block: bool,
+    warp: bool = False,
     xhttp_path: str = "",
     ws_path: str = "",
     existing_private_key: str = "",
@@ -1067,10 +1108,20 @@ def _build_xray_config(
     config["routing"]["rules"].append({"type": "field", "ip": ["geoip:private"], "outboundTag": "block"})
 
     # Outbounds
-    config["outbounds"] = [
-        {"tag": "direct", "protocol": "freedom"},
-        {"tag": "block", "protocol": "blackhole"},
-    ]
+    outbounds: list[dict] = []
+    if warp:
+        from meridian.provision.warp import WARP_PROXY_PORT
+
+        outbounds.append(
+            {
+                "tag": "warp",
+                "protocol": "socks",
+                "settings": {"servers": [{"address": "127.0.0.1", "port": WARP_PROXY_PORT}]},
+            }
+        )
+    outbounds.append({"tag": "direct", "protocol": "freedom"})
+    outbounds.append({"tag": "block", "protocol": "blackhole"})
+    config["outbounds"] = outbounds
 
     # Reality inbound (primary -- always present)
     # Reuse existing keys on redeploy, generate fresh on first deploy
@@ -1261,7 +1312,7 @@ def _create_hosts_for_node(
                     warn(f"Could not create WSS host: {e}")
 
 
-def _deploy_node_container(conn: ServerConnection, secret_key: str) -> None:
+def _deploy_node_container(conn: ServerConnection, secret_key: str) -> bool:
     """Deploy the Remnawave node container with the given secret key.
 
     Creates /opt/remnanode, writes docker-compose.yml and .env, pulls the
@@ -1275,10 +1326,10 @@ def _deploy_node_container(conn: ServerConnection, secret_key: str) -> None:
     q_dir = shlex.quote(node_dir)
 
     # Create directory
-    result = conn.run(f"mkdir -p {node_dir} && chmod 700 {node_dir}", timeout=15)
+    result = conn.run(f"mkdir -p {q_dir} && chmod 700 {q_dir}", timeout=15)
     if result.returncode != 0:
         warn(f"Could not create {node_dir}: {result.stderr.strip()[:200]}")
-        return
+        return False
 
     # Write .env
     env_content = _render_node_env(REMNAWAVE_NODE_API_PORT, secret_key)
@@ -1306,13 +1357,13 @@ def _deploy_node_container(conn: ServerConnection, secret_key: str) -> None:
 
     if not pull_ok:
         warn("Could not pull node image — node may not start")
-        return
+        return False
 
     # Start container
     result = conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
     if result.returncode != 0:
         warn(f"Node container failed to start: {result.stderr.strip()[:200]}")
-        return
+        return False
 
     ok("Remnawave node deployed")
 
@@ -1349,6 +1400,8 @@ def _deploy_node_container(conn: ServerConnection, secret_key: str) -> None:
         f" comment 'Meridian node API (Docker internal)' 2>/dev/null; true",
         timeout=15,
     )
+
+    return node_healthy
 
 
 # ---------------------------------------------------------------------------

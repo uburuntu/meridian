@@ -86,7 +86,8 @@ def run_add(
 
         # Create the user -- one API call
         try:
-            new_user = panel.create_user(name)
+            squad_uuids = [cluster.squad_uuid] if cluster.squad_uuid else None
+            new_user = panel.create_user(name, squad_uuids=squad_uuids)
         except RemnawaveError as e:
             fail(
                 f"Could not create client: {e}",

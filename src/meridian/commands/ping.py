@@ -218,7 +218,22 @@ def _run_connection_tests(cluster: ClusterConfig, server_ip: str) -> None:
         return
     ok(f"xray ready ({xray_bin.name})")
 
-    configs = build_test_configs_from_cluster(cluster, server_ip)
+    # Fetch a real client UUID from the panel (dummy UUID won't pass Remnawave auth)
+    test_uuid = ""
+    if cluster.panel.url and cluster.panel.api_token:
+        try:
+            from meridian.remnawave import MeridianPanel
+
+            with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
+                users = panel.list_users()
+                if users:
+                    test_uuid = users[0].vless_uuid or users[0].uuid
+        except Exception:
+            pass  # Fall back to dummy UUID (will test reachability only)
+    if not test_uuid:
+        warn("No client UUID available — connection tests may fail auth")
+
+    configs = build_test_configs_from_cluster(cluster, server_ip, uuid=test_uuid)
     if not configs:
         warn("No active protocols found in cluster config")
         return

@@ -72,12 +72,11 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     # post-provisioner phase (setup.py _configure_panel_and_node) after
     # the panel is up and the node has been registered via REST API.
 
-    # -- WARP outbound (optional) --
+    # -- WARP client (optional) --
     if ctx.warp:
-        from meridian.provision.warp import ConfigureWarpOutbound, InstallWarp
+        from meridian.provision.warp import InstallWarp
 
         steps.append(InstallWarp())
-        steps.append(ConfigureWarpOutbound())
 
     # -- nginx + TLS + connection page --
     if ctx.needs_web_server:
