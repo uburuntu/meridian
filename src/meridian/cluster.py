@@ -178,8 +178,8 @@ class ClusterConfig:
         errors = cfg.validate()
         if errors:
             print(f"Warning: cluster.yml has {len(errors)} validation issue(s):", file=sys.stderr)
-            for e in errors[:3]:
-                print(f"  - {e}", file=sys.stderr)
+            for err in errors[:3]:
+                print(f"  - {err}", file=sys.stderr)
             if len(errors) > 3:
                 print(f"  ... and {len(errors) - 3} more", file=sys.stderr)
 
