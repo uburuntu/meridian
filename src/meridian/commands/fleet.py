@@ -32,7 +32,7 @@ def run_status() -> None:
 
     # -- Panel health --
     err_console.print()
-    panel_url = cluster.panel.url
+    panel_url = cluster.panel.display_url or cluster.panel.url
     with panel:
         panel_ok = panel.ping()
         if panel_ok:

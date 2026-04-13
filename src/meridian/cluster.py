@@ -59,6 +59,13 @@ class PanelConfig:
     deployed_with: str = ""  # Meridian CLI version
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
+    @property
+    def display_url(self) -> str:
+        """Panel URL with trailing slash for browser compatibility."""
+        if not self.url:
+            return ""
+        return self.url.rstrip("/") + "/"
+
 
 @dataclass
 class NodeEntry:
