@@ -258,6 +258,16 @@ def run(
     cluster.save()
     ok("Cluster configuration saved")
 
+    # Persist sub_path on server for fleet recovery (not stored in panel API)
+    if cluster.panel.sub_path:
+        try:
+            resolved.conn.run(
+                f"printf '%s' {shlex.quote(cluster.panel.sub_path)} > /etc/meridian/sub_path 2>/dev/null",
+                timeout=10,
+            )
+        except Exception:
+            pass  # Non-fatal
+
     # Register server in legacy registry (for --server flag resolution)
     registry.add(ServerEntry(host=resolved.ip, user=resolved.user, port=getattr(resolved.conn, "port", 22)))
 
@@ -2139,9 +2149,8 @@ def _print_success(
 
     # Panel access for advanced users
     if cluster.panel.url:
-        panel_display = cluster.panel.url.rstrip("/") + "/"
         err_console.print("\n  [dim]Remnawave panel (advanced -- manage nodes, monitor traffic):[/dim]")
-        err_console.print(f"  [dim]  {panel_display}[/dim]")
+        err_console.print(f"  [dim]  {cluster.panel.display_url}[/dim]")
 
     err_console.print("\n  [dim]Feedback & issues: https://github.com/uburuntu/meridian/issues[/dim]\n")
 

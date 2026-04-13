@@ -211,7 +211,7 @@ class TestFleetStatus:
         assert "relays" in data
         assert "users" in data
         assert data["panel"]["healthy"] is True
-        assert data["panel"]["url"] == "https://198.51.100.1/panel"
+        assert data["panel"]["url"] == "https://198.51.100.1/panel/"
         assert len(data["nodes"]) == 2
         assert len(data["relays"]) == 1
         assert len(data["users"]) == 2

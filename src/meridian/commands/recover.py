@@ -196,6 +196,16 @@ def run_recover(panel_url: str, api_token: str) -> None:
     # Set panel server_ip from first node (panel host)
     if nodes and nodes[0].is_panel_host:
         panel_config.server_ip = nodes[0].ip
+        # Try to recover sub_path from server (not stored in panel API)
+        try:
+            from meridian.ssh import ServerConnection
+
+            with ServerConnection(nodes[0].ip, user=nodes[0].ssh_user, port=nodes[0].ssh_port) as conn:
+                result = conn.run("cat /etc/meridian/sub_path 2>/dev/null", timeout=10)
+                if result.returncode == 0 and result.stdout.strip():
+                    panel_config.sub_path = result.stdout.strip()
+        except Exception:
+            pass  # Non-fatal — sub_path can be re-generated on next deploy
 
     cluster = ClusterConfig(
         version=1,

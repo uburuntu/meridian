@@ -371,19 +371,26 @@ def _render_nginx_server_block(
                 {root_action}
             }}
 
-            # Default: proxy to panel backend.
-            # The Remnawave SPA uses window.location.origin as its base URL,
-            # so JS requests for /api/, /locales/, etc. miss the secret path.
-            # Rather than listing each path, proxy everything unmatched to
-            # the panel.  Specific locations above (XHTTP, connection pages)
-            # take priority.  JWT auth protects API endpoints.
-            location / {{
-                proxy_pass http://127.0.0.1:{panel_internal_port};
+            # Panel SPA runtime dependencies: the JS uses window.location.origin
+            # as its base URL, so API calls and i18n fetches miss the secret path.
+            # Only these two paths are needed — assets are handled by sub_filter
+            # in the /{panel_web_base_path}/ location above.
+            location /api/ {{
+                proxy_pass http://127.0.0.1:{panel_internal_port}/api/;
                 proxy_http_version 1.1;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                 proxy_set_header X-Forwarded-Proto $scheme;
+            }}
+            location /locales/ {{
+                proxy_pass http://127.0.0.1:{panel_internal_port}/locales/;
+            }}
+
+            # Default: stock nginx 404 — indistinguishable from any nginx server.
+            # MUST NOT serve custom pages or proxy to panel here (fingerprinting).
+            location / {{
+                {default_action}
             }}
 
             access_log /var/log/nginx/meridian.log;

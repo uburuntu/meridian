@@ -205,8 +205,7 @@ def run_show(
 
     err_console.print()
     if cluster.panel.url:
-        panel_display = cluster.panel.url.rstrip("/") + "/"
-        err_console.print(f"  [dim]Remnawave panel:   {panel_display}[/dim]")
+        err_console.print(f"  [dim]Remnawave panel:   {cluster.panel.display_url}[/dim]")
         if cluster.panel.admin_user:
             creds = f"{cluster.panel.admin_user} / {cluster.panel.admin_pass}"
             err_console.print(f"  [dim]                   {creds}[/dim]")
@@ -319,6 +318,25 @@ def run_remove(
             )
 
         ok(f"Client '{name}' removed")
+
+        # Clean up connection page files on server
+        if client.vless_uuid and cluster.panel.server_ip:
+            try:
+                import shlex
+
+                from meridian.ssh import ServerConnection
+
+                with ServerConnection(
+                    cluster.panel.server_ip,
+                    user=cluster.panel.ssh_user or "root",
+                    port=getattr(cluster.panel, "ssh_port", 22) or 22,
+                ) as conn:
+                    conn.run(
+                        f"rm -rf /var/www/private/{shlex.quote(client.vless_uuid)}",
+                        timeout=15,
+                    )
+            except Exception:
+                pass  # Non-fatal
 
     err_console.print()
     err_console.print("  [dim]View all clients:  meridian client list[/dim]")
