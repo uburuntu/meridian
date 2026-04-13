@@ -193,6 +193,12 @@ def run(
     else:
         ws_path = secrets.token_hex(8)
 
+    # Generate or reuse info_page_path for connection pages
+    if cluster.panel.sub_path:
+        info_page_path = cluster.panel.sub_path
+    else:
+        info_page_path = secrets.token_hex(8)
+
     # Build and run provisioner pipeline
     _run_provisioner(
         resolved=resolved,
@@ -210,6 +216,7 @@ def run(
         geo_block=geo_block,
         xhttp_path=xhttp_path,
         ws_path=ws_path,
+        info_page_path=info_page_path,
     )
 
     # Post-provisioner: configure panel via REST API
@@ -230,6 +237,7 @@ def run(
         geo_block=geo_block,
         xhttp_path=xhttp_path,
         ws_path=ws_path,
+        info_page_path=info_page_path,
     )
 
     # Save branding
@@ -295,6 +303,7 @@ def _run_provisioner(
     geo_block: bool = True,
     xhttp_path: str = "",
     ws_path: str = "",
+    info_page_path: str = "",
 ) -> None:
     """Run the SSH-based provisioner pipeline (OS, Docker, containers)."""
     from meridian.provision import ProvisionContext, Provisioner, build_node_steps, build_setup_steps
@@ -321,7 +330,7 @@ def _run_provisioner(
     ctx["secret_path"] = secret_path
     # nginx needs these paths for reverse proxy and connection page locations
     ctx["web_base_path"] = secret_path
-    ctx["info_page_path"] = cluster.panel.sub_path if cluster.panel.sub_path else secrets.token_hex(8)
+    ctx["info_page_path"] = info_page_path or cluster.panel.sub_path or secrets.token_hex(8)
     # Provide xhttp/ws paths — reuse saved paths on redeploy, generate fresh otherwise
     ctx["xhttp_path"] = xhttp_path or secrets.token_hex(8)
     ctx["ws_path"] = ws_path or secrets.token_hex(8)
@@ -538,6 +547,7 @@ def _configure_panel_and_node(
     geo_block: bool = True,
     xhttp_path: str = "",
     ws_path: str = "",
+    info_page_path: str = "",
 ) -> None:
     """Configure the Remnawave panel via REST API after containers are running.
 
@@ -568,6 +578,7 @@ def _configure_panel_and_node(
             version=__version__,
             xhttp_path=xhttp_path,
             ws_path=ws_path,
+            info_page_path=info_page_path,
         )
     elif is_redeploy:
         _setup_redeploy(
@@ -606,6 +617,7 @@ def _setup_first_deploy(
     version: str,
     xhttp_path: str = "",
     ws_path: str = "",
+    info_page_path: str = "",
 ) -> None:
     """First deploy: full panel bootstrap from scratch."""
     base_url = _panel_base_url(resolved.ip, domain, secret_path)
@@ -647,7 +659,9 @@ def _setup_first_deploy(
 
     # Save admin credentials BEFORE API token step (lockout prevention:
     # if API token creation fails, we can still login with these creds)
-    sub_path = secrets.token_hex(8)
+    # Reuse the info_page_path generated for the provisioner (nginx uses it),
+    # so the connection page URL matches the nginx location.
+    sub_path = info_page_path or secrets.token_hex(8)
     cluster.panel = PanelConfig(
         url=base_url,
         api_token="",  # filled after API token creation
@@ -785,10 +799,24 @@ def _setup_first_deploy(
             existing_user = panel.get_user(client_name)
             if existing_user:
                 info(f"Client '{client_name}' already exists")
+                user = existing_user
             else:
                 squad_uuids = [cluster.squad_uuid] if cluster.squad_uuid else None
-                panel.create_user(client_name, squad_uuids=squad_uuids)
+                user = panel.create_user(client_name, squad_uuids=squad_uuids)
                 ok(f"Client '{client_name}' created")
+
+            # Deploy connection page for this client
+            if user and isinstance(getattr(user, "vless_uuid", None), str) and user.vless_uuid:
+                try:
+                    sub_url = panel.get_subscription_url(user.short_uuid) if user.short_uuid else ""
+                    page_url = _deploy_client_page(
+                        resolved.conn, cluster, node_entry, user.vless_uuid, client_name, sub_url
+                    )
+                    if page_url:
+                        ok("Connection page deployed")
+                        cluster._extra["_page_url"] = page_url
+                except Exception:
+                    pass  # Non-fatal — subscription URL still works
         except RemnawaveError as e:
             warn(f"Could not create client '{client_name}': {e}")
 
@@ -1405,6 +1433,108 @@ def _deploy_node_container(conn: ServerConnection, secret_key: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Connection page deployment
+# ---------------------------------------------------------------------------
+
+
+def _deploy_client_page(
+    conn: ServerConnection,
+    cluster: ClusterConfig,
+    node: NodeEntry,
+    user_uuid: str,
+    client_name: str,
+    sub_url: str = "",
+) -> str:
+    """Generate and upload a PWA connection page for a client.
+
+    Builds VLESS protocol URLs from cluster.yml node data + client UUID,
+    generates QR codes and PWA files, uploads to the server.
+
+    Returns the page URL on success, empty string on failure.
+    """
+    from meridian.models import ProtocolURL
+    from meridian.protocols import PROTOCOLS
+    from meridian.pwa import generate_client_files, upload_client_files
+    from meridian.urls import generate_qr_base64
+
+    host = node.domain or node.ip
+    info_page_path = cluster.panel.sub_path or ""
+    if not info_page_path:
+        return ""
+
+    page_url = f"https://{host}/{info_page_path}/{user_uuid}/"
+
+    # Build protocol URLs using the protocol registry's build_url() methods
+    protocol_urls: list[ProtocolURL] = []
+
+    # Reality (always)
+    if node.reality_public_key:
+        reality = PROTOCOLS.get("reality")
+        if reality:
+            url = reality.build_url(
+                user_uuid,
+                client_name,
+                ip=node.ip,
+                sni=node.sni,
+                public_key=node.reality_public_key,
+                short_id=node.reality_short_id or "",
+                server_name=cluster.branding.server_name,
+            )
+            qr = generate_qr_base64(url)
+            protocol_urls.append(ProtocolURL(key="reality", label=reality.display_label, url=url, qr_b64=qr))
+
+    # XHTTP (if path configured)
+    if node.xhttp_path:
+        xhttp = PROTOCOLS.get("xhttp")
+        if xhttp:
+            url = xhttp.build_url(
+                user_uuid,
+                client_name,
+                ip=node.ip,
+                xhttp_path=node.xhttp_path,
+                domain=node.domain or "",
+                server_name=cluster.branding.server_name,
+            )
+            qr = generate_qr_base64(url)
+            protocol_urls.append(ProtocolURL(key="xhttp", label=xhttp.display_label, url=url, qr_b64=qr))
+
+    # WSS (only in domain mode)
+    if node.domain and node.ws_path:
+        wss = PROTOCOLS.get("wss")
+        if wss:
+            url = wss.build_url(
+                user_uuid,
+                client_name,
+                domain=node.domain,
+                ws_path=node.ws_path,
+                server_name=cluster.branding.server_name,
+            )
+            qr = generate_qr_base64(url)
+            protocol_urls.append(ProtocolURL(key="wss", label=wss.display_label, url=url, qr_b64=qr))
+
+    if not protocol_urls:
+        return ""
+
+    files = generate_client_files(
+        protocol_urls,
+        server_ip=node.ip,
+        domain=node.domain or "",
+        client_name=client_name,
+        server_name=cluster.branding.server_name,
+        server_icon=cluster.branding.icon,
+        color=cluster.branding.color,
+        page_url=page_url,
+    )
+
+    error = upload_client_files(conn, user_uuid, files)
+    if error:
+        warn(f"Could not deploy connection page: {error}")
+        return ""
+
+    return page_url
+
+
+# ---------------------------------------------------------------------------
 # Port check
 # ---------------------------------------------------------------------------
 
@@ -1944,35 +2074,47 @@ def _print_success(
     err_console.print()
     err_console.print("  [bold]Next steps:[/bold]\n")
 
-    if sub_url:
-        err_console.print("  [ok]1.[/ok] Share this subscription link with whoever needs access:")
-        err_console.print(f"     [bold]{sub_url}[/bold]")
-        err_console.print("     [dim](Add to any Xray/V2Ray client as a subscription URL)[/dim]\n")
-    else:
-        err_console.print("  [ok]1.[/ok] View connection details:")
-        err_console.print(f"     [info]meridian client show {client_label}[/info]\n")
+    # Connection page URL (from _deploy_client_page, stashed in _extra)
+    page_url = cluster._extra.get("_page_url", "")
+    step = 1
 
-    err_console.print("  [ok]2.[/ok] Test that the proxy works:")
+    if page_url:
+        err_console.print(f"  [ok]{step}.[/ok] Share this link with whoever needs access:")
+        err_console.print(f"     [bold]{page_url}[/bold]")
+        err_console.print("     [dim](They open it, scan the QR code, and connect)[/dim]\n")
+        step += 1
+
+    if sub_url:
+        err_console.print(f"  [ok]{step}.[/ok] Or import as a subscription (for Xray/V2Ray apps):")
+        err_console.print(f"     [bold]{sub_url}[/bold]\n")
+        step += 1
+    elif not page_url:
+        err_console.print(f"  [ok]{step}.[/ok] View connection details:")
+        err_console.print(f"     [info]meridian client show {client_label}[/info]\n")
+        step += 1
+
+    err_console.print(f"  [ok]{step}.[/ok] Test that the proxy works:")
     err_console.print(f"     [info]meridian test {server_ip}[/info]")
     err_console.print("     [dim]Run it after deploy/redeploy to verify the live server state.[/dim]\n")
+    step += 1
 
     if cluster.panel.url:
-        err_console.print("  [ok]3.[/ok] Manage clients:")
+        err_console.print(f"  [ok]{step}.[/ok] Manage clients:")
         err_console.print("     [info]meridian client add alice[/info]")
         err_console.print("     [info]meridian client list[/info]\n")
+        step += 1
 
-    next_step = 4
     if domain:
-        err_console.print(f"  [ok]{next_step}.[/ok] Cloudflare setup:")
+        err_console.print(f"  [ok]{step}.[/ok] Cloudflare setup:")
         err_console.print(f"     [dim]A record {domain} -> {server_ip}[/dim]")
         err_console.print("     [dim]Keep it DNS only (grey cloud) during deploy/redeploy[/dim]")
         err_console.print("     [dim]After deploy succeeds: switch to Proxied (orange cloud)[/dim]")
         err_console.print("     [dim]Set SSL/TLS to Full (Strict) and enable WebSockets[/dim]\n")
         err_console.print("     [dim]Disable features that inject scripts or rewrite HTML on this hostname[/dim]")
         err_console.print("     [dim](for example Website Analytics / RUM), or the connection page can break[/dim]\n")
-        next_step = 5
+        step += 1
 
-    err_console.print(f"  [ok]{next_step}.[/ok] Add a relay for resilience (optional):")
+    err_console.print(f"  [ok]{step}.[/ok] Add a relay for resilience (optional):")
     err_console.print(f"     [info]meridian relay deploy RELAY_IP --exit {server_ip}[/info]")
     err_console.print("     [dim]Routes through a domestic IP when the exit gets blocked[/dim]\n")
 

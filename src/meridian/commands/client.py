@@ -98,6 +98,31 @@ def run_add(
         ok(f"Client '{name}' added")
         _print_subscription(panel, new_user)
 
+        # Deploy connection page on the panel host
+        page_url = ""
+        panel_node = cluster.panel_node
+        if new_user.vless_uuid and panel_node and cluster.panel.server_ip:
+            try:
+                from meridian.commands.setup import _deploy_client_page
+                from meridian.ssh import ServerConnection
+
+                sub_url = panel.get_subscription_url(new_user.short_uuid) if new_user.short_uuid else ""
+                with ServerConnection(
+                    cluster.panel.server_ip,
+                    user=cluster.panel.ssh_user or "root",
+                    port=getattr(cluster.panel, "ssh_port", 22) or 22,
+                ) as conn:
+                    page_url = _deploy_client_page(conn, cluster, panel_node, new_user.vless_uuid, name, sub_url)
+            except Exception:
+                pass  # Non-fatal — subscription URL still works
+
+    err_console.print()
+    if page_url:
+        err_console.print("  Share this link:")
+        err_console.print(f"  [bold]{page_url}[/bold]")
+        err_console.print()
+        err_console.print(f"  [dim]Send this URL to {name} --[/dim]")
+        err_console.print("  [dim]they open it, scan the QR code, and connect.[/dim]")
     err_console.print()
     err_console.print("  [dim]Show client:       meridian client show " + name + "[/dim]")
     err_console.print("  [dim]View all clients:  meridian client list[/dim]")
