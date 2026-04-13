@@ -355,23 +355,16 @@ class TestSetupRedeployConfigProfile:
         assert result["cluster"].config_profile_uuid == "new-cp-uuid"
 
     def test_reuses_existing_profile(self) -> None:
-        """When existing profile found, create with version-suffixed name."""
+        """When profile already exists, reuse it without creating."""
         panel = _make_panel_mock()
         existing = MagicMock()
         existing.uuid = "old-cp-uuid"
         existing.name = "meridian-default"
         panel.find_config_profile_by_name.return_value = existing
 
-        new_profile = MagicMock()
-        new_profile.uuid = "versioned-cp-uuid"
-        new_profile.name = f"meridian-default-{_VERSION}"
-        panel.create_config_profile.return_value = new_profile
-
         result = _run_redeploy(panel_mock=panel)
-        panel.create_config_profile.assert_called_once()
-        call_args = panel.create_config_profile.call_args[0]
-        assert call_args[0] == f"meridian-default-{_VERSION}"
-        assert result["cluster"].config_profile_uuid == "versioned-cp-uuid"
+        panel.create_config_profile.assert_not_called()
+        assert result["cluster"].config_profile_uuid == "old-cp-uuid"
 
     def test_profile_update_failure_warns_not_fails(self) -> None:
         """RemnawaveError during profile update is caught and warned, not fatal."""

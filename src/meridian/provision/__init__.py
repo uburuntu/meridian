@@ -63,6 +63,11 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     # -- Docker --
     steps.append(InstallDocker())
 
+    # -- Remove legacy 3x-ui if present (v3 → v4 upgrade) --
+    from meridian.provision.legacy_cleanup import CleanupLegacyPanel
+
+    steps.append(CleanupLegacyPanel())
+
     # -- Remnawave panel (node deployed after API setup, not here) --
     if ctx.is_panel_host:
         steps.append(DeployRemnawavePanel())

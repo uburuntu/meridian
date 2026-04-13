@@ -61,10 +61,10 @@ def domain_ctx(tmp_path: Path) -> ProvisionContext:
 class TestMinimalPipeline:
     def test_minimal_step_count(self, base_ctx: ProvisionContext):
         """Minimal config: disk check, packages, auto-upgrades, timezone, BBR,
-        ensure port 443, docker, remnawave panel = 8 steps (no nginx without hosted_page)."""
+        ensure port 443, docker, legacy cleanup, remnawave panel = 9 steps (no nginx without hosted_page)."""
         steps = build_setup_steps(base_ctx)
         names = [s.name for s in steps]
-        assert len(steps) == 8, f"Expected 8 minimal steps, got {len(steps)}: {names}"
+        assert len(steps) == 9, f"Expected 9 minimal steps, got {len(steps)}: {names}"
 
     def test_no_services_without_domain_or_hosted_page(self, base_ctx: ProvisionContext):
         names = step_names(base_ctx)

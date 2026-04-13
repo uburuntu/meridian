@@ -135,6 +135,7 @@ def run(
     )
     resolved = ensure_server_connection(resolved)
     _check_ports(resolved.conn, resolved.ip, yes)
+    _check_legacy_panel(resolved.conn, yes)
 
     # Validate client name
     if client_name and not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", client_name):
@@ -884,9 +885,8 @@ def _setup_redeploy(
             try:
                 existing_profile = panel.find_config_profile_by_name(profile_name)
                 if existing_profile:
-                    # Update existing profile with new Xray config
-                    profile = panel.create_config_profile(f"{profile_name}-{version}", xray_config)
-                    ok(f"Config profile updated: {profile.name}")
+                    profile = existing_profile
+                    info(f"Config profile '{profile_name}' already exists, reusing")
                 else:
                     profile = panel.create_config_profile(profile_name, xray_config)
                     ok("Config profile created")
@@ -1443,6 +1443,44 @@ def _check_ports(conn: ServerConnection, ip: str, yes: bool) -> None:
             choice = choose("Retry?", ["Yes", "No"])
             if choice == 2:
                 fail("Aborted -- port conflict", hint_type="user")
+
+
+def _check_legacy_panel(conn: ServerConnection, yes: bool) -> None:
+    """Detect a running 3x-ui panel from Meridian 3.x and warn the user.
+
+    Called before provisioning so the user can abort or run ``meridian migrate``
+    first.  The actual cleanup happens in the provisioner pipeline
+    (CleanupLegacyPanel step).
+    """
+    result = conn.run("docker inspect -f '{{.State.Status}}' 3x-ui 2>/dev/null", timeout=15)
+    if result.returncode != 0 or not result.stdout.strip():
+        return  # no 3x-ui container
+
+    from rich.panel import Panel
+
+    warning = (
+        "This server has a Meridian 3.x deployment (3x-ui).\n"
+        "Meridian 4.0 replaces 3x-ui with [bold]Remnawave[/bold] -- a new panel.\n"
+        "\n"
+        "  [yellow]\u2022[/yellow] 3x-ui will be stopped and removed (panel data is not transferred)\n"
+        "  [yellow]\u2022[/yellow] Existing client connection configs will stop working\n"
+        "  [yellow]\u2022[/yellow] Clients will need new QR codes / subscription links\n"
+        "\n"
+        "Tip: run [cyan]meridian migrate[/cyan] first to see a migration checklist."
+    )
+    err_console.print()
+    err_console.print(
+        Panel(
+            warning,
+            title="[bold yellow]Legacy panel detected[/bold yellow]",
+            border_style="yellow",
+            padding=(0, 2),
+        )
+    )
+
+    if not yes:
+        if not confirm("Continue with deployment?"):
+            raise typer.Exit(1)
 
 
 # ---------------------------------------------------------------------------
