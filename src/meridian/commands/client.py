@@ -204,11 +204,13 @@ def run_show(
             err_console.print(f"  [bold]Last seen[/bold] {client.online_at}")
 
     err_console.print()
+    if cluster.panel.url:
+        err_console.print(f"  [dim]Remnawave panel:   {cluster.panel.url}[/dim]")
+        if cluster.panel.admin_user:
+            creds = f"{cluster.panel.admin_user} / {cluster.panel.admin_pass}"
+            err_console.print(f"  [dim]                   {creds}[/dim]")
     err_console.print("  [dim]View all clients:  meridian client list[/dim]")
     err_console.print()
-
-
-# -- Client List --
 
 
 def run_list(
