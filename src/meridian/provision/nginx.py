@@ -353,6 +353,19 @@ def _render_nginx_server_block(
                 sub_filter 'src="/a' 'src="/{panel_web_base_path}/a';
             }}
 
+            # Remnawave SPA uses window.location.origin as API base,
+            # which strips the secret path.  Proxy /api/ at root so
+            # the panel's JS can reach its backend.  API calls still
+            # require JWT auth, so this doesn't bypass access control.
+            location /api/ {{
+                proxy_pass http://127.0.0.1:{panel_internal_port}/api/;
+                proxy_http_version 1.1;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }}
+
             # --- Connection Info Pages (PWA with per-client config) ---
             # alias strips the location prefix (like Caddy's handle_path).
             location /{info_page_path}/ {{
