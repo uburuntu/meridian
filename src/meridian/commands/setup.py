@@ -389,7 +389,7 @@ def _panel_base_url(ip: str, domain: str, secret_path: str) -> str:
     Once nginx is up, we use https://<host>/<secret_path>.
     """
     host = domain or ip
-    return f"https://{host}/{secret_path}"
+    return f"https://{host}/{secret_path}/"
 
 
 def _create_api_token(base_url: str, auth_token: str) -> str:
