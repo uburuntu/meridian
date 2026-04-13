@@ -135,7 +135,13 @@ def run(
     )
     resolved = ensure_server_connection(resolved)
     _check_ports(resolved.conn, resolved.ip, yes)
-    _check_legacy_panel(resolved.conn, resolved.ip, yes)
+
+    # Load existing cluster config
+    cluster = ClusterConfig.load()
+
+    # Only check for legacy 3x-ui on first deploy — redeploy means v4 is already running
+    if not cluster.is_configured:
+        _check_legacy_panel(resolved.conn, resolved.ip, yes)
 
     # Validate client name
     if client_name and not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", client_name):
