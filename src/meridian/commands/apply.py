@@ -91,14 +91,14 @@ def run(
 
             result = execute_plan(plan, panel=panel, cluster=cluster, callbacks=callbacks)
 
+            cluster.save()
+
             if result.all_succeeded:
                 ok(result.summary())
             else:
-                for failed in result.failed:
-                    warn(f"Failed: {failed.action.detail} — {failed.error}")
-                warn(result.summary())
-
-            cluster.save()
+                for failed_action in result.failed:
+                    warn(f"Failed: {failed_action.action.detail} — {failed_action.error}")
+                fail(result.summary(), hint_type="system")
 
     except RemnawaveError as e:
         fail(f"Panel API error: {e}", hint_type="system")

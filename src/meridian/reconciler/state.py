@@ -121,9 +121,10 @@ def build_desired_state(cluster: object) -> DesiredState:
 
 
 def build_actual_state(cluster: object, panel: object) -> ActualState:
-    """Build ActualState from a ClusterConfig + panel API.
+    """Build ActualState from the panel API (live infrastructure).
 
-    Fetches live data from the panel to compare with desired state.
+    Nodes and clients are fetched from the panel API — the authoritative
+    source. Relays come from cluster.yml (not tracked in the panel).
     """
     from meridian.cluster import ClusterConfig
     from meridian.remnawave import MeridianPanel
@@ -131,24 +132,21 @@ def build_actual_state(cluster: object, panel: object) -> ActualState:
     if not isinstance(cluster, ClusterConfig) or not isinstance(panel, MeridianPanel):
         return ActualState()
 
-    # Nodes: from cluster.yml (deployed topology) + panel API (connection status)
-    actual_nodes = []
-    api_nodes = {n.address: n for n in panel.list_nodes()}
-    for node in cluster.nodes:
-        api_node = api_nodes.get(node.ip)
-        actual_nodes.append(
-            ActualNodeState(
-                host=node.ip,
-                name=node.name,
-                uuid=node.uuid,
-                is_connected=api_node.is_connected if api_node else False,
-            )
+    # Nodes: from panel API (live state, not cluster.yml)
+    actual_nodes = [
+        ActualNodeState(
+            host=n.address,
+            name=n.name,
+            uuid=n.uuid,
+            is_connected=n.is_connected,
         )
+        for n in panel.list_nodes()
+    ]
 
     # Clients: from panel API
     actual_clients = [u.username for u in panel.list_users()]
 
-    # Relays: from cluster.yml
+    # Relays: from cluster.yml (relays aren't tracked in the panel API)
     actual_relays = [
         ActualRelayState(
             host=r.ip,
@@ -158,7 +156,8 @@ def build_actual_state(cluster: object, panel: object) -> ActualState:
         for r in cluster.relays
     ]
 
-    # Subscription page: check from cluster config
+    # Subscription page: from cluster config
+    # TODO: check via SSH if container is actually running for drift detection
     sub_running = cluster.subscription_page.enabled if cluster.subscription_page else False
 
     return ActualState(
