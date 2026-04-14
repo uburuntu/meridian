@@ -323,8 +323,9 @@ class XHTTPProtocol(Protocol):
         domain = kwargs.get("domain", "")
         fingerprint = kwargs.get("fingerprint", DEFAULT_FINGERPRINT)
         extra_suffix = kwargs.get("extra_suffix", "")
+        # sni kwarg overrides the derived SNI (used by relay URLs)
+        sni_host = kwargs.get("sni") or domain or _bracket_ipv6(ip)
         # connect_host overrides the @host in the URL (for relay connections)
-        sni_host = domain or _bracket_ipv6(ip)
         connect_host = kwargs.get("connect_host", sni_host)
         fragment = self._build_fragment(name, kwargs.get("server_name", ""), extra_suffix)
         return (
@@ -374,6 +375,7 @@ class XHTTPProtocol(Protocol):
             port=relay_port,
             xhttp_path=xhttp_path,
             domain=creds.server.domain or "",
+            sni=relay_sni,
             connect_host=_bracket_ipv6(relay_ip),
             server_name=server_name,
             extra_suffix=via,
@@ -407,13 +409,15 @@ class WSSProtocol(Protocol):
         domain = kwargs["domain"]
         port = kwargs.get("port", 443)
         ws_path = kwargs.get("ws_path", "")
+        # sni kwarg overrides the domain for TLS SNI (used by relay URLs)
+        sni = kwargs.get("sni") or domain
         # connect_host overrides the @host in the URL (for relay connections)
         connect_host = kwargs.get("connect_host", domain)
         extra_suffix = kwargs.get("extra_suffix", "")
         fragment = self._build_fragment(name, kwargs.get("server_name", ""), extra_suffix)
         return (
             f"vless://{uuid}@{connect_host}:{port}"
-            f"?encryption=none&security=tls&sni={domain}"
+            f"?encryption=none&security=tls&sni={sni}"
             f"&type=ws&host={domain}&path=%2F{ws_path}"
             f"{fragment}"
         )
@@ -458,6 +462,7 @@ class WSSProtocol(Protocol):
             domain=domain,
             port=relay_port,
             ws_path=ws_path,
+            sni=relay_sni,
             connect_host=relay_ip,
             server_name=server_name,
             extra_suffix=via,

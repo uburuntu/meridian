@@ -336,12 +336,25 @@ class ServerConnection:
         """Fetch credentials from server's /etc/meridian/ via SCP.
 
         In local mode (root), copies directly from /etc/meridian/.
-        In remote mode, uses SCP.
+        In remote mode, uses SCP for root or SSH+sudo for non-root users
+        (SCP can't read root-owned /etc/meridian/ without sudo).
         """
         if self.local_mode:
             return self._copy_local_credentials(local_creds_dir)
 
         local_creds_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+        if self.user != "root":
+            # Non-root: SCP can't read root-owned /etc/meridian/.
+            # Use SSH + sudo cat instead (conn.run() adds sudo automatically).
+            result = self.run("cat /etc/meridian/proxy.yml", timeout=30)
+            if result.returncode == 0 and result.stdout:
+                dst = local_creds_dir / "proxy.yml"
+                dst.write_text(result.stdout, encoding="utf-8")
+                dst.chmod(0o600)
+                return True
+            return False
+
         try:
             result = subprocess.run(
                 [
@@ -361,6 +374,79 @@ class ServerConnection:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
         return False
+
+    def write_file(self, local_path: Path, remote_path: str) -> bool:
+        """Write a local file to the server, using sudo for non-root users.
+
+        SCP can't write to root-owned directories (like /etc/meridian/) as a
+        non-root user.  This method uses SSH + sudo tee instead.
+        For root, plain SCP is used.
+        """
+        if self.local_mode:
+            dst = Path(remote_path)
+            if dst == local_path:
+                return True
+            if self.needs_sudo or self.user != "root":
+                try:
+                    result = subprocess.run(
+                        ["sudo", "-n", "tee", remote_path],
+                        input=local_path.read_bytes(),
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.PIPE,
+                        timeout=15,
+                    )
+                    if result.returncode != 0:
+                        return False
+                    subprocess.run(
+                        ["sudo", "-n", "chmod", "600", remote_path],
+                        capture_output=True,
+                        timeout=5,
+                        stdin=subprocess.DEVNULL,
+                    )
+                    return True
+                except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                    return False
+            try:
+                shutil.copy2(str(local_path), str(dst))
+                dst.chmod(0o600)
+                return True
+            except (PermissionError, OSError):
+                return False
+
+        if self.user != "root":
+            # Non-root: pipe file content through SSH with sudo tee
+            q_path = shlex.quote(remote_path)
+            remote_cmd = f"sudo -n tee {q_path} > /dev/null"
+            try:
+                result = subprocess.run(
+                    ["ssh", *self._ssh_opts, f"{self.user}@{self.ip}", remote_cmd],
+                    input=local_path.read_bytes(),
+                    capture_output=True,
+                    timeout=15,
+                )
+                if result.returncode == 0:
+                    chmod = self.run(f"chmod 600 {q_path}", timeout=5)
+                    return chmod.returncode == 0
+                return False
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                return False
+
+        # Root: SCP works fine
+        try:
+            result = subprocess.run(
+                [
+                    "scp",
+                    *self._scp_opts,
+                    str(local_path),
+                    f"{self.user}@{self._scp_host}:{remote_path}",
+                ],
+                capture_output=True,
+                timeout=15,
+                stdin=subprocess.DEVNULL,
+            )
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
 
     def _copy_local_credentials(self, local_creds_dir: Path) -> bool:
         """Copy credentials from /etc/meridian/ in local mode.

@@ -620,6 +620,29 @@ class VerifyXray:
     name = "Verify Xray configuration"
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
+        # Patch the live config: 3x-ui adds "password":"" to every client, which
+        # breaks Reality authentication in xray 26.x (connections get forwarded
+        # to dest instead of being authenticated).
+        patch = conn.run(
+            'docker exec 3x-ui python3 -c "'
+            "import json; "
+            "c = json.load(open('bin/config.json')); "
+            "dirty = False; "
+            "[dirty := True or cl.pop('password') "
+            "for ib in c.get('inbounds',[]) "
+            "for cl in ib.get('settings',{}).get('clients',[]) "
+            "if 'password' in cl and cl['password'] == '']; "
+            "dirty and json.dump(c, open('bin/config.json','w'))"
+            '"',
+            timeout=15,
+        )
+        if patch.returncode == 0:
+            # Restart xray to pick up the patched config
+            conn.run("docker exec 3x-ui pkill -f xray-linux", timeout=10)
+            import time
+
+            time.sleep(3)
+
         result = conn.run("docker exec 3x-ui pgrep -f xray", timeout=15)
         if result.returncode == 0:
             return StepResult(

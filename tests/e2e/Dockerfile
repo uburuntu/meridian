@@ -13,8 +13,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates gnupg sudo iptables ufw jq \
     socat unzip apt-transport-https \
     unattended-upgrades apt-listchanges fail2ban \
-    nginx libnginx-mod-stream \
     && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------
+# nginx from official repo (1.27+, needed for http2 on; directive)
+# ---------------------------------------------------------------------------
+RUN curl -fsSL https://nginx.org/keys/nginx_signing.key \
+      -o /etc/apt/keyrings/nginx.asc && \
+    chmod 644 /etc/apt/keyrings/nginx.asc && \
+    . /etc/os-release && \
+    echo "deb [signed-by=/etc/apt/keyrings/nginx.asc] \
+      https://nginx.org/packages/ubuntu $VERSION_CODENAME nginx" \
+      > /etc/apt/sources.list.d/nginx-official.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends nginx && \
+    rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
 # Docker CE (full package so InstallDocker step skips)

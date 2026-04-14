@@ -98,7 +98,6 @@ def _render_nginx_stream_config(
 
         server {{
             listen 443;
-            listen [::]:443;
             ssl_preread on;
             proxy_pass $meridian_backend;
             # Short timeout — don't wait 60s (default) if a backend is
@@ -321,7 +320,8 @@ def _render_nginx_server_block(
         }}
     {upstream_blocks}
         server {{
-            listen 127.0.0.1:{nginx_internal_port} ssl http2;
+            listen 127.0.0.1:{nginx_internal_port} ssl;
+            http2 on;
             server_name {host};
             server_tokens off;
 
@@ -368,7 +368,6 @@ def _render_nginx_server_block(
         # --- HTTP: ACME challenge{" + redirect" if redirect_http else " only (no redirect)"} ---
         server {{
             listen 80;
-            listen [::]:80;
             server_name {host};
             server_tokens off;
 
@@ -571,7 +570,7 @@ class InstallNginx:
             ver_check = conn.run("nginx -v 2>&1", timeout=15)
             ver_output = ver_check.stdout + ver_check.stderr
             m = re.search(r"nginx/(\d+)\.(\d+)", ver_output)
-            if m and (int(m.group(1)), int(m.group(2))) < (1, 16):
+            if m and (int(m.group(1)), int(m.group(2))) < (1, 25):
                 needs_official_repo = True
         else:
             # Not installed — try distro repo first, upgrade if too old
@@ -587,7 +586,7 @@ class InstallNginx:
                 ver_check = conn.run("nginx -v 2>&1", timeout=15)
                 ver_output = ver_check.stdout + ver_check.stderr
                 m = re.search(r"nginx/(\d+)\.(\d+)", ver_output)
-                if m and (int(m.group(1)), int(m.group(2))) < (1, 16):
+                if m and (int(m.group(1)), int(m.group(2))) < (1, 25):
                     needs_official_repo = True
 
         if needs_official_repo:
@@ -642,7 +641,8 @@ class InstallNginx:
 
             result = conn.run(
                 "DEBIAN_FRONTEND=noninteractive apt-get update -qq"
-                " && DEBIAN_FRONTEND=noninteractive apt-get install -y nginx",
+                " && DEBIAN_FRONTEND=noninteractive apt-get install -y"
+                " -o Dpkg::Options::=--force-confnew nginx",
                 timeout=180,
             )
             if result.returncode != 0:

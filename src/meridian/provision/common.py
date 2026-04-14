@@ -41,8 +41,8 @@ _BBR_SETTINGS = {
     "net.ipv4.tcp_congestion_control": "bbr",
 }
 
-_SSH_HARDENING_DROPIN_PATH = "/etc/ssh/sshd_config.d/00-meridian.conf"
-_SSH_HARDENING_DROPIN_OLD_PATH = "/etc/ssh/sshd_config.d/99-meridian.conf"
+_SSH_HARDENING_DROPIN_PATH = "/etc/ssh/sshd_config.d/99-meridian.conf"
+_SSH_HARDENING_DROPIN_OLD_PATH = "/etc/ssh/sshd_config.d/00-meridian.conf"
 _SSH_HARDENING_DROPIN = """\
 PasswordAuthentication no
 KbdInteractiveAuthentication no

@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import re
 import shlex
-import subprocess
 from pathlib import Path
 
 from meridian.commands.resolve import (
@@ -26,7 +25,7 @@ from meridian.config import (
 from meridian.console import choose, confirm, err_console, fail, info, line, ok, prompt, warn
 from meridian.credentials import ServerCredentials
 from meridian.servers import ServerEntry, ServerRegistry
-from meridian.ssh import SSH_OPTS, ServerConnection, scp_host
+from meridian.ssh import ServerConnection
 
 
 def _remote_meridian_state_exists(resolved: ResolvedServer) -> bool | None:
@@ -100,6 +99,9 @@ def _sync_credentials_to_server(resolved: ResolvedServer) -> bool:
 
     Server-side credentials are needed for cron scripts (update-stats.py) and
     for fail-closed refresh in client mutation commands.
+
+    Uses conn.write_file() which handles sudo for non-root users — SCP alone
+    can't write to root-owned /etc/meridian/.
     """
     if getattr(resolved, "local_mode", False):
         return True
@@ -108,22 +110,7 @@ def _sync_credentials_to_server(resolved: ResolvedServer) -> bool:
     if not proxy_file.exists():
         return False
 
-    try:
-        result = subprocess.run(
-            [
-                "scp",
-                *SSH_OPTS,
-                str(proxy_file),
-                f"{resolved.user}@{scp_host(resolved.ip)}:/etc/meridian/proxy.yml",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            stdin=subprocess.DEVNULL,
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False
+    return resolved.conn.write_file(proxy_file, "/etc/meridian/proxy.yml")
 
 
 def run(

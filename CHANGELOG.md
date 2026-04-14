@@ -4,6 +4,11 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.17.1] - 2026-04-14
+
+### Fixed
+- **Credential sync and fetch for non-root deploy users** — deploying with `--user` (non-root) silently failed to sync `proxy.yml` to the server because SCP can't write to root-owned `/etc/meridian/`. This caused `relay deploy` and other commands that force-refresh credentials to fail. Now uses SSH + sudo for non-root users instead of SCP
+
 ## [3.17.0] - 2026-04-11
 
 ### Added
@@ -20,7 +25,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - **Manual 3x-ui inbounds no longer crash client commands** — `list_inbounds()` handles empty or malformed JSON from manually-created panel inbounds (#16)
 - **DebianBanner no longer blocks deploy on some OpenSSH builds** — verification is skipped when `sshd -T` doesn't recognize the directive (#20)
 - **BBR no longer blocks deploy on containers** — `sysctl` failures due to missing kernel tunables (containers, old kernels) return a warning instead of failing the entire deploy. Other sysctl errors still fail
-- **SSH drop-in priority** — `00-meridian.conf` ensures Meridian's sshd hardening takes precedence over cloud-init overrides
+- **SSH drop-in priority** — `99-meridian.conf` ensures Meridian's sshd hardening takes precedence over cloud-init overrides (loads last, wins)
 - **SCP directory copy** — fixed `-r` flag compatibility with OpenSSH ≥ 9.0 (SFTP protocol default)
 
 ## [3.16.1] - 2026-04-10
