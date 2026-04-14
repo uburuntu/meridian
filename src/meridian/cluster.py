@@ -128,6 +128,7 @@ class SubscriptionPageConfig:
     """Remnawave subscription page deployment config."""
 
     enabled: bool = True
+    path: str = ""  # nginx proxy path (random hex, generated on first deploy)
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -519,7 +520,7 @@ _NODE_FIELDS = {
 _RELAY_FIELDS = {"ip", "name", "port", "exit_node_ip", "host_uuids", "sni", "ssh_user", "ssh_port"}
 _BRANDING_FIELDS = {"server_name", "icon", "color"}
 _INBOUND_REF_FIELDS = {"uuid", "tag"}
-_SUBSCRIPTION_PAGE_FIELDS = {"enabled"}
+_SUBSCRIPTION_PAGE_FIELDS = {"enabled", "path"}
 _DESIRED_NODE_FIELDS = {"host", "name", "ssh_user", "ssh_port", "domain", "sni", "warp"}
 _DESIRED_RELAY_FIELDS = {"host", "name", "exit_node", "sni", "ssh_user", "ssh_port"}
 _KNOWN_TOP = {

@@ -238,20 +238,55 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
     if not configure_subscription_page(conn, cluster.panel.api_token):
         raise RuntimeError("Failed to configure subscription page")
 
+    # Ensure nginx has a proxy route for the subscription page.
+    # Generate a random path if none exists (same approach as provisioner).
+    sub_path = cluster.subscription_page.path if cluster.subscription_page else ""
+    if not sub_path:
+        import secrets
+
+        sub_path = secrets.token_hex(8)
+
+    # Inject subscription page nginx location into the existing server block.
+    # Check if already configured, skip if so.
+    from meridian.config import REMNAWAVE_SUBSCRIPTION_PAGE_PORT
+
+    check_existing = conn.run(
+        f"grep -q {shlex.quote(sub_path)} /etc/nginx/conf.d/meridian-http.conf 2>/dev/null",
+        timeout=15,
+    )
+    if check_existing.returncode != 0:
+        # The location block must go inside the server{} block in meridian-http.conf.
+        # Insert before the "# Root:" comment (always present in rendered config).
+        location_block = (
+            f"        # --- Subscription Page (managed by meridian apply) ---\\n"
+            f"        location /{sub_path}/ {{\\n"
+            f"            proxy_pass http://127.0.0.1:{REMNAWAVE_SUBSCRIPTION_PAGE_PORT}/;\\n"
+            f"            proxy_http_version 1.1;\\n"
+            f"            proxy_set_header Host \\$host;\\n"
+            f"            proxy_set_header X-Real-IP \\$remote_addr;\\n"
+            f"            proxy_set_header X-Forwarded-For \\$proxy_add_x_forwarded_for;\\n"
+            f"            proxy_set_header X-Forwarded-Proto \\$scheme;\\n"
+            f"        }}\\n"
+        )
+        conn.run(
+            f"sed -i '/# Root:/i\\{location_block}' /etc/nginx/conf.d/meridian-http.conf",
+            timeout=15,
+        )
+        result = conn.run("nginx -t 2>&1", timeout=15)
+        if result.returncode == 0:
+            conn.run("systemctl reload nginx", timeout=15)
+        else:
+            import logging
+
+            logging.getLogger("meridian.operations").warning(
+                "nginx validation failed after adding subscription page location: %s",
+                result.stdout.strip()[:200],
+            )
+
     cluster.subscription_page.enabled = True
+    cluster.subscription_page.path = sub_path
     cluster.subscription_page._extra["deployed"] = True
     cluster.save()
-
-    # Note: nginx proxy route for the subscription page is only configured
-    # during full provisioning (meridian deploy). If this is a legacy host
-    # that was never provisioned with subscription page support, the container
-    # runs but may not be reachable. A redeploy will fix nginx routing.
-    import logging
-
-    logging.getLogger("meridian.operations").info(
-        "Subscription page container started. If not reachable, run: meridian deploy %s",
-        cluster.panel.server_ip,
-    )
 
 
 def _handle_remove_subscription_page(action: PlanAction, panel: object, cluster: object) -> None:
