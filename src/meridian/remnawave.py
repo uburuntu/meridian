@@ -556,6 +556,13 @@ class MeridianPanel:
         """Deregister a node."""
         _sdk_call(self._sdk.nodes.delete_node(uuid))
 
+    def update_node_name(self, uuid: str, name: str) -> None:
+        """Update a node's name in the panel."""
+        from remnawave.models.nodes import UpdateNodeRequestDto
+
+        body = UpdateNodeRequestDto(uuid=UUID(uuid), name=name)
+        _sdk_call(self._sdk.nodes.update_node(body))
+
     # --- Hosts (relays map here) ---
 
     def create_host(
