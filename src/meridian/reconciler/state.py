@@ -50,6 +50,7 @@ class DesiredState:
     manage_nodes: bool = False
     manage_clients: bool = False
     manage_relays: bool = False
+    manage_subscription_page: bool = False
 
 
 @dataclass
@@ -120,7 +121,7 @@ def build_desired_state(cluster: object) -> DesiredState:
         for dr in (cluster.desired_relays or [])
     ]
 
-    sub_enabled = cluster.subscription_page.enabled if cluster.subscription_page else True
+    sub_enabled = cluster.subscription_page.enabled if cluster.subscription_page else False
 
     # manage_* is True when the section is present (even if empty list).
     # desired_nodes=None means "not declared" → don't manage.
@@ -133,6 +134,7 @@ def build_desired_state(cluster: object) -> DesiredState:
         manage_nodes=cluster.desired_nodes is not None,
         manage_clients=cluster.desired_clients is not None,
         manage_relays=cluster.desired_relays is not None,
+        manage_subscription_page=cluster.subscription_page is not None,
     )
 
 

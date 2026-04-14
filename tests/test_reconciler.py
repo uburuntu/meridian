@@ -175,14 +175,14 @@ class TestComputePlanRelays:
 
 class TestComputePlanSubscriptionPage:
     def test_add_subscription_page(self) -> None:
-        desired = DesiredState(subscription_page_enabled=True)
+        desired = DesiredState(subscription_page_enabled=True, manage_subscription_page=True)
         actual = ActualState(subscription_page_running=False)
         plan = compute_plan(desired, actual)
         assert len(plan.actions) == 1
         assert plan.actions[0].kind == PlanActionKind.ADD_SUBSCRIPTION_PAGE
 
     def test_remove_subscription_page(self) -> None:
-        desired = DesiredState(subscription_page_enabled=False)
+        desired = DesiredState(subscription_page_enabled=False, manage_subscription_page=True)
         actual = ActualState(subscription_page_running=True)
         plan = compute_plan(desired, actual)
         assert len(plan.actions) == 1
@@ -190,7 +190,16 @@ class TestComputePlanSubscriptionPage:
         assert plan.actions[0].destructive
 
     def test_subscription_page_already_running(self) -> None:
-        desired = DesiredState(subscription_page_enabled=True)
+        desired = DesiredState(subscription_page_enabled=True, manage_subscription_page=True)
+        actual = ActualState(subscription_page_running=True)
+        plan = compute_plan(desired, actual)
+        sub_actions = [a for a in plan.actions if "subscription" in a.kind.value]
+        assert len(sub_actions) == 0
+
+
+    def test_unmanaged_subscription_page_not_touched(self) -> None:
+        """Legacy cluster without subscription_page section — no actions."""
+        desired = DesiredState(manage_subscription_page=False)
         actual = ActualState(subscription_page_running=True)
         plan = compute_plan(desired, actual)
         sub_actions = [a for a in plan.actions if "subscription" in a.kind.value]
@@ -254,6 +263,7 @@ class TestComputePlanComplex:
             manage_nodes=True,
             manage_clients=True,
             manage_relays=True,
+            manage_subscription_page=True,
         )
         actual = ActualState(
             nodes=[

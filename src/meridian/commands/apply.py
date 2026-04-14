@@ -83,14 +83,20 @@ def _handle_add_relay(action: PlanAction, panel: object, cluster: object) -> Non
     assert isinstance(cluster, ClusterConfig)
 
     desired = next((r for r in cluster.desired_relays if r.host == action.target), None)
+    # Resolve exit_node name → IP (desired.exit_node can be a name or IP)
+    exit_node_value = desired.exit_node if desired else ""
+    if exit_node_value:
+        exit_node_entry = cluster.find_node(exit_node_value)
+        if exit_node_entry:
+            exit_node_value = exit_node_entry.ip
     add_relay(
         cluster,
         panel,
         relay_ip=action.target,
-        exit_node_ip=desired.exit_node if desired else "",
+        exit_node_ip=exit_node_value,
         ssh_user=desired.ssh_user if desired else "root",
         ssh_port=desired.ssh_port if desired else 22,
-        name=desired.name if desired else "",
+        name=desired.name or desired.host if desired else "",
     )
 
 
@@ -111,11 +117,17 @@ def _handle_update_relay(action: PlanAction, panel: object, cluster: object) -> 
         None,
     )
     if desired:
+        # Resolve exit_node name → IP
+        exit_node_value = desired.exit_node
+        if exit_node_value:
+            exit_node_entry = cluster.find_node(exit_node_value)
+            if exit_node_entry:
+                exit_node_value = exit_node_entry.ip
         add_relay(
             cluster,
             panel,
             relay_ip=action.target,
-            exit_node_ip=desired.exit_node,
+            exit_node_ip=exit_node_value,
             ssh_user=desired.ssh_user,
             ssh_port=desired.ssh_port,
             name=desired.name or desired.host,

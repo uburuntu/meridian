@@ -174,8 +174,8 @@ class ClusterConfig:
     relays: list[RelayEntry] = field(default_factory=list)
     branding: BrandingConfig = field(default_factory=BrandingConfig)
     inbounds: dict[str, InboundRef] = field(default_factory=dict)
-    # v2: subscription page config
-    subscription_page: SubscriptionPageConfig = field(default_factory=SubscriptionPageConfig)
+    # v2: subscription page config (None = not declared, don't manage)
+    subscription_page: SubscriptionPageConfig | None = None
     # v2: desired state for declarative plan/apply workflow
     # None = not declared (don't manage). [] = declared empty (manage, want zero).
     desired_nodes: list[DesiredNode] | None = None
@@ -645,10 +645,11 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
         if inbounds_out:
             out["inbounds"] = inbounds_out
 
-    # Subscription page (v2)
-    sub_page_dict = _serialize_dataclass(cfg.subscription_page)
-    if sub_page_dict:
-        out["subscription_page"] = sub_page_dict
+    # Subscription page (v2 — only serialize if explicitly declared)
+    if cfg.subscription_page is not None:
+        sub_page_dict = _serialize_dataclass(cfg.subscription_page)
+        if sub_page_dict:
+            out["subscription_page"] = sub_page_dict
 
     # Desired state (v2 — serialize if present in config, even if empty)
     # An explicit empty list means "manage this type, want zero" vs absent = "don't manage".
@@ -787,14 +788,16 @@ def _load_cluster(data: dict[str, Any]) -> ClusterConfig:
     for key, ref_data in data.get("inbounds", {}).items():
         inbounds[key] = _load_dataclass(ref_data, InboundRef, _INBOUND_REF_FIELDS)
 
-    # Subscription page (v2)
-    subscription_page = _load_dataclass(
-        data.get("subscription_page", {}),
-        SubscriptionPageConfig,
-        _SUBSCRIPTION_PAGE_FIELDS,
-        defaults={"enabled": True},
-        transforms={"enabled": bool},
-    )
+    # Subscription page (v2 — None if absent, like desired_*)
+    subscription_page: SubscriptionPageConfig | None = None
+    if "subscription_page" in data:
+        subscription_page = _load_dataclass(
+            data.get("subscription_page") or {},
+            SubscriptionPageConfig,
+            _SUBSCRIPTION_PAGE_FIELDS,
+            defaults={"enabled": True},
+            transforms={"enabled": bool},
+        )
 
     # Desired state (v2)
     # None = key absent (not managed). [] = key present but empty (manage, want zero).

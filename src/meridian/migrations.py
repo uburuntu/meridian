@@ -47,10 +47,9 @@ def _migrate_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
     (they were deployed without it). Desired state fields are left empty
     (v1 clusters are managed imperatively).
     """
-    # Subscription page: enable for existing deployments that already have it
-    # (deployed by the panel provisioner). Disabling would tear it down.
-    if "subscription_page" not in data:
-        data["subscription_page"] = {"enabled": True}
+    # Subscription page: not managed for migrated v1 clusters.
+    # The section is absent, so plan/apply won't touch it.
+    # Users who want declarative management add it explicitly.
 
     # Desired state fields: empty by default (no breaking change)
     # These are optional — omitting them is valid.
