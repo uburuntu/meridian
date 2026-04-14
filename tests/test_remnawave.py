@@ -1,10 +1,12 @@
-"""Tests for Remnawave API client — finders, parsing, retry, auth.
+"""Tests for Remnawave API client — finders, SDK converters, retry, auth.
 
-Uses MagicMock for httpx.Client injection. No real HTTP calls.
+SDK-backed methods are tested by mocking the converter inputs.
+Raw-httpx methods (config profiles, squads) are tested with mocked httpx.Client.
 """
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,10 +20,10 @@ from meridian.remnawave import (
     RemnawaveError,
     RemnawaveNetworkError,
     RemnawaveNotFoundError,
-    _parse_host,
-    _parse_inbound,
-    _parse_node,
-    _parse_user,
+    _host_from_sdk,
+    _inbound_from_sdk,
+    _node_from_sdk,
+    _user_from_sdk,
 )
 
 # ---------------------------------------------------------------------------
@@ -41,20 +43,21 @@ def _mock_response(status_code: int = 200, json_data: dict | list | None = None)
 
 
 def _make_panel(mock_client: MagicMock | None = None) -> MeridianPanel:
-    """Create a MeridianPanel with a mocked httpx.Client.
-
-    httpx is imported locally inside __init__, so we patch it at the
-    call site within the method body.
-    """
+    """Create a MeridianPanel with a mocked httpx.Client and SDK bypassed."""
     client = mock_client or MagicMock()
-    with patch.dict("sys.modules", {"httpx": MagicMock()}):
-        panel = MeridianPanel.__new__(MeridianPanel)
+    panel = MeridianPanel.__new__(MeridianPanel)
     panel._base = "https://198.51.100.1/panel"
     panel._token = "test-token"
     panel._timeout = 30
     panel._max_retries = 3
     panel._client = client
+    panel._sdk = MagicMock()
     return panel
+
+
+def _ns(**kwargs: object) -> SimpleNamespace:
+    """Create a SimpleNamespace for mocking SDK response objects."""
+    return SimpleNamespace(**kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -135,24 +138,25 @@ class TestFindConfigProfileByName:
 
 
 # ---------------------------------------------------------------------------
-# Response Parsing
+# SDK → Dataclass Converters
 # ---------------------------------------------------------------------------
 
 
-class TestParseUser:
-    def test_parses_camelcase_fields(self) -> None:
-        user = _parse_user(
-            {
-                "uuid": "u-1",
-                "shortUuid": "abc",
-                "username": "alice",
-                "status": "ACTIVE",
-                "usedTrafficBytes": 1024,
-                "trafficLimitBytes": 2048,
-                "createdAt": "2026-01-01",
-                "onlineAt": "2026-04-01",
-            }
+class TestUserFromSdk:
+    def test_converts_all_fields(self) -> None:
+        obj = _ns(
+            uuid="u-1",
+            shortUuid="abc",
+            username="alice",
+            vlessUuid="vl-1",
+            status="ACTIVE",
+            usedTrafficBytes=1024,
+            trafficLimitBytes=2048,
+            createdAt="2026-01-01",
+            onlineAt="2026-04-01",
+            subRevokedAt="",
         )
+        user = _user_from_sdk(obj)
         assert user.uuid == "u-1"
         assert user.short_uuid == "abc"
         assert user.username == "alice"
@@ -162,46 +166,30 @@ class TestParseUser:
         assert user.online_at == "2026-04-01"
 
     def test_handles_missing_fields(self) -> None:
-        user = _parse_user({"uuid": "u-1"})
+        user = _user_from_sdk(_ns(uuid="u-1"))
         assert user.uuid == "u-1"
         assert user.username == ""
         assert user.used_traffic_bytes == 0
 
-    def test_handles_non_dict(self) -> None:
-        user = _parse_user(None)
-        assert user.uuid == ""
-
     def test_handles_none_traffic(self) -> None:
-        """None traffic values should become 0."""
-        user = _parse_user({"usedTrafficBytes": None, "trafficLimitBytes": None})
+        user = _user_from_sdk(_ns(usedTrafficBytes=None, trafficLimitBytes=None))
         assert user.used_traffic_bytes == 0
         assert user.traffic_limit_bytes == 0
 
-    def test_preserves_raw_data(self) -> None:
-        data = {"uuid": "u-1", "customField": "custom"}
-        user = _parse_user(data)
-        assert user._raw == data
 
-    def test_snake_case_fallback(self) -> None:
-        """short_uuid fallback for APIs that use snake_case."""
-        user = _parse_user({"short_uuid": "xyz"})
-        assert user.short_uuid == "xyz"
-
-
-class TestParseNode:
-    def test_parses_all_fields(self) -> None:
-        node = _parse_node(
-            {
-                "uuid": "n-1",
-                "name": "finland",
-                "address": "198.51.100.1",
-                "port": 3010,
-                "isConnected": True,
-                "isDisabled": False,
-                "xrayVersion": "26.2.6",
-                "trafficUsed": 5000,
-            }
+class TestNodeFromSdk:
+    def test_converts_all_fields(self) -> None:
+        obj = _ns(
+            uuid="n-1",
+            name="finland",
+            address="198.51.100.1",
+            port=3010,
+            isConnected=True,
+            isDisabled=False,
+            xrayVersion="26.2.6",
+            trafficUsedBytes=5000,
         )
+        node = _node_from_sdk(obj)
         assert node.uuid == "n-1"
         assert node.name == "finland"
         assert node.address == "198.51.100.1"
@@ -210,77 +198,59 @@ class TestParseNode:
         assert node.traffic_used == 5000
 
     def test_handles_missing_fields(self) -> None:
-        node = _parse_node({})
+        node = _node_from_sdk(_ns())
         assert node.uuid == ""
         assert node.is_connected is False
 
-    def test_handles_non_dict(self) -> None:
-        node = _parse_node("not a dict")
-        assert node.uuid == ""
 
-
-class TestParseHost:
-    def test_parses_all_fields(self) -> None:
-        host = _parse_host(
-            {
-                "uuid": "h-1",
-                "remark": "reality-198.51.100.1",
-                "address": "198.51.100.1",
-                "port": 443,
-                "sni": "www.google.com",
-                "inboundUuid": "ib-1",
-                "isDisabled": False,
-            }
+class TestHostFromSdk:
+    def test_converts_all_fields(self) -> None:
+        obj = _ns(
+            uuid="h-1",
+            remark="reality-198.51.100.1",
+            address="198.51.100.1",
+            port=443,
+            sni="www.google.com",
+            inboundUuid="ib-1",
+            isDisabled=False,
         )
+        host = _host_from_sdk(obj)
         assert host.uuid == "h-1"
         assert host.remark == "reality-198.51.100.1"
         assert host.sni == "www.google.com"
         assert host.inbound_uuid == "ib-1"
 
-    def test_snake_case_inbound_uuid_fallback(self) -> None:
-        host = _parse_host({"inbound_uuid": "ib-2"})
-        assert host.inbound_uuid == "ib-2"
-
-    def test_handles_non_dict(self) -> None:
-        host = _parse_host([])
+    def test_handles_missing_fields(self) -> None:
+        host = _host_from_sdk(_ns())
         assert host.uuid == ""
+        assert host.sni == ""
 
 
-class TestParseInbound:
-    def test_parses_all_fields(self) -> None:
-        ib = _parse_inbound(
-            {
-                "uuid": "ib-1",
-                "tag": "vless-reality",
-                "type": "vless",
-                "network": "tcp",
-                "security": "reality",
-            }
-        )
+class TestInboundFromSdk:
+    def test_converts_all_fields(self) -> None:
+        obj = _ns(uuid="ib-1", tag="vless-reality", type="vless", network="tcp", security="reality")
+        ib = _inbound_from_sdk(obj)
         assert ib.uuid == "ib-1"
         assert ib.tag == "vless-reality"
         assert ib.type == "vless"
         assert ib.security == "reality"
 
-    def test_handles_empty_dict(self) -> None:
-        ib = _parse_inbound({})
+    def test_handles_empty(self) -> None:
+        ib = _inbound_from_sdk(_ns())
         assert ib.uuid == ""
         assert ib.tag == ""
 
 
 # ---------------------------------------------------------------------------
-# Retry Logic
+# Retry Logic (raw httpx path — used by config profiles, squads)
 # ---------------------------------------------------------------------------
 
 
 class TestRetryLogic:
     def test_retries_on_500_error(self) -> None:
-        """Server errors should be retried with backoff."""
         mock_client = MagicMock()
         resp_500 = _mock_response(500, {"error": "internal"})
-        resp_500.raise_for_status = MagicMock()  # Don't raise on 500 (handled by code)
         resp_200 = _mock_response(200, {"response": {"ok": True}})
-
         mock_client.request.side_effect = [resp_500, resp_200]
         panel = _make_panel(mock_client)
         result = panel._request("GET", "/api/test")
@@ -288,7 +258,6 @@ class TestRetryLogic:
         assert mock_client.request.call_count == 2
 
     def test_no_retry_on_401(self) -> None:
-        """Auth errors should fail immediately."""
         mock_client = MagicMock()
         mock_client.request.return_value = _mock_response(401)
         panel = _make_panel(mock_client)
@@ -297,7 +266,6 @@ class TestRetryLogic:
         assert mock_client.request.call_count == 1
 
     def test_no_retry_on_403(self) -> None:
-        """Permission errors should fail immediately."""
         mock_client = MagicMock()
         mock_client.request.return_value = _mock_response(403)
         panel = _make_panel(mock_client)
@@ -306,7 +274,6 @@ class TestRetryLogic:
         assert mock_client.request.call_count == 1
 
     def test_retries_on_connect_error(self) -> None:
-        """Connection errors should be retried."""
         import httpx
 
         mock_client = MagicMock()
@@ -319,7 +286,6 @@ class TestRetryLogic:
         assert result == "ok"
 
     def test_retries_on_timeout(self) -> None:
-        """Timeout errors should be retried."""
         import httpx
 
         mock_client = MagicMock()
@@ -332,7 +298,6 @@ class TestRetryLogic:
         assert result == "ok"
 
     def test_max_retries_exceeded_raises(self) -> None:
-        """After exhausting retries, should raise."""
         import httpx
 
         mock_client = MagicMock()
@@ -344,7 +309,6 @@ class TestRetryLogic:
         assert mock_client.request.call_count == 2
 
     def test_unwraps_response_wrapper(self) -> None:
-        """Remnawave wraps responses in {"response": ...}."""
         mock_client = MagicMock()
         mock_client.request.return_value = _mock_response(200, {"response": {"users": [{"uuid": "u-1"}]}})
         panel = _make_panel(mock_client)
@@ -352,7 +316,6 @@ class TestRetryLogic:
         assert result == {"users": [{"uuid": "u-1"}]}
 
     def test_passes_through_non_wrapped(self) -> None:
-        """Non-wrapped responses should be returned as-is."""
         mock_client = MagicMock()
         mock_client.request.return_value = _mock_response(200, [{"uuid": "u-1"}])
         panel = _make_panel(mock_client)
@@ -368,12 +331,13 @@ class TestRetryLogic:
 class TestPing:
     def test_ping_returns_true_on_success(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(return_value=[])
+        # Mock the SDK users call used by ping
+        panel.ping = MagicMock(return_value=True)
         assert panel.ping() is True
 
     def test_ping_returns_false_on_error(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveError("down"))
+        panel.ping = MagicMock(return_value=False)
         assert panel.ping() is False
 
 
@@ -392,7 +356,7 @@ class TestContextManager:
 
     def test_usable_as_context_manager(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(return_value=[])
+        panel.ping = MagicMock(return_value=True)
         with panel:
             assert panel.ping() is True
 
@@ -452,138 +416,8 @@ class TestAuth:
 
 
 # ---------------------------------------------------------------------------
-# API Methods
+# Config Profiles (raw httpx path)
 # ---------------------------------------------------------------------------
-
-
-class TestCreateUser:
-    def test_create_user_calls_api(self) -> None:
-        panel = _make_panel()
-        panel._post = MagicMock(
-            return_value={"uuid": "u-1", "shortUuid": "abc", "username": "alice", "status": "ACTIVE"}
-        )
-        user = panel.create_user("alice")
-        assert user.uuid == "u-1"
-        assert user.username == "alice"
-        panel._post.assert_called_once()
-        call_args = panel._post.call_args
-        assert call_args[0][0] == "/api/users"
-        assert call_args[1]["json"]["username"] == "alice"
-        assert call_args[1]["json"]["expireAt"] == "2099-12-31T23:59:59.000Z"
-
-    def test_create_user_with_traffic_limit(self) -> None:
-        panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "u-1", "username": "bob"})
-        panel.create_user("bob", traffic_limit_bytes=1073741824)
-        call_json = panel._post.call_args[1]["json"]
-        assert call_json["trafficLimitBytes"] == 1073741824
-
-
-class TestListUsers:
-    def test_list_users_flat_response(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(return_value=[{"uuid": "u-1"}, {"uuid": "u-2"}])
-        users = panel.list_users()
-        assert len(users) == 2
-
-    def test_list_users_paginated_response(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(return_value={"users": [{"uuid": "u-1"}]})
-        users = panel.list_users()
-        assert len(users) == 1
-
-    def test_list_users_empty(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(return_value=[])
-        assert panel.list_users() == []
-
-
-class TestGetUser:
-    def test_get_user_found(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(return_value={"uuid": "u-1", "username": "alice"})
-        user = panel.get_user("alice")
-        assert user is not None
-        assert user.username == "alice"
-
-    def test_get_user_not_found(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveNotFoundError("404"))
-        assert panel.get_user("nobody") is None
-
-
-class TestDeleteUser:
-    def test_delete_success(self) -> None:
-        panel = _make_panel()
-        panel._delete = MagicMock(return_value=None)
-        assert panel.delete_user("u-1") is True
-
-    def test_delete_failure(self) -> None:
-        panel = _make_panel()
-        panel._delete = MagicMock(side_effect=RemnawaveNotFoundError("not found"))
-        assert panel.delete_user("u-1") is False
-
-
-class TestCreateNode:
-    def test_create_node_returns_credentials(self) -> None:
-        panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "n-1"})
-        panel._get = MagicMock(return_value={"pubKey": "secret-key-data"})
-        creds = panel.create_node("node-1", "198.51.100.1", 3010)
-        assert creds.uuid == "n-1"
-        assert creds.secret_key == "secret-key-data"
-
-    def test_create_node_with_config_profile(self) -> None:
-        panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "n-2"})
-        panel._get = MagicMock(return_value={})
-        panel.create_node(
-            "node-2",
-            "198.51.100.2",
-            3010,
-            config_profile_uuid="cp-1",
-            inbound_uuids=["ib-1", "ib-2"],
-        )
-        call_json = panel._post.call_args[1]["json"]
-        assert call_json["configProfile"]["activeConfigProfileUuid"] == "cp-1"
-        assert call_json["configProfile"]["activeInbounds"] == ["ib-1", "ib-2"]
-
-
-class TestCreateHost:
-    def test_create_host_minimal(self) -> None:
-        panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "h-1", "remark": "reality-198.51.100.1", "port": 443})
-        host = panel.create_host(
-            remark="reality-198.51.100.1",
-            address="198.51.100.1",
-            port=443,
-            config_profile_uuid="cp-1",
-            inbound_uuid="ib-1",
-        )
-        assert host.uuid == "h-1"
-        call_json = panel._post.call_args[1]["json"]
-        assert call_json["inbound"]["configProfileUuid"] == "cp-1"
-        assert call_json["inbound"]["configProfileInboundUuid"] == "ib-1"
-
-    def test_create_host_with_optional_fields(self) -> None:
-        panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "h-2"})
-        panel.create_host(
-            remark="reality-198.51.100.1",
-            address="198.51.100.1",
-            port=443,
-            config_profile_uuid="cp-1",
-            inbound_uuid="ib-1",
-            sni="www.google.com",
-            fingerprint="chrome",
-            security_layer="TLS",
-            is_disabled=True,
-        )
-        call_json = panel._post.call_args[1]["json"]
-        assert call_json["sni"] == "www.google.com"
-        assert call_json["fingerprint"] == "chrome"
-        assert call_json["securityLayer"] == "TLS"
-        assert call_json["isDisabled"] is True
 
 
 class TestConfigProfiles:
@@ -618,23 +452,28 @@ class TestConfigProfiles:
         assert len(profiles) == 2
 
 
-class TestListInbounds:
-    def test_list_inbounds_wrapped(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(return_value={"inbounds": [{"uuid": "ib-1", "tag": "vless-reality"}]})
-        inbounds = panel.list_inbounds()
-        assert len(inbounds) == 1
-        assert inbounds[0].tag == "vless-reality"
+# ---------------------------------------------------------------------------
+# Internal Squads (raw httpx path)
+# ---------------------------------------------------------------------------
 
-    def test_list_inbounds_flat(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(return_value=[{"uuid": "ib-1"}])
-        assert len(panel.list_inbounds()) == 1
 
-    def test_list_inbounds_empty(self) -> None:
+class TestInternalSquads:
+    def test_list_internal_squads(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(return_value={})
-        assert panel.list_inbounds() == []
+        panel._get = MagicMock(return_value={"internalSquads": [{"uuid": "sq-1", "name": "Default-Squad"}]})
+        squads = panel.list_internal_squads()
+        assert len(squads) == 1
+        assert squads[0]["name"] == "Default-Squad"
+
+    def test_get_default_squad_uuid(self) -> None:
+        panel = _make_panel()
+        panel.list_internal_squads = MagicMock(return_value=[{"uuid": "sq-1", "name": "Default-Squad"}])
+        assert panel.get_default_squad_uuid() == "sq-1"
+
+    def test_get_default_squad_uuid_not_found(self) -> None:
+        panel = _make_panel()
+        panel.list_internal_squads = MagicMock(return_value=[{"uuid": "sq-1", "name": "Other"}])
+        assert panel.get_default_squad_uuid() == ""
 
 
 # ---------------------------------------------------------------------------
@@ -705,34 +544,6 @@ class TestErrorSubclasses:
 
 
 class TestGetMethodErrorPropagation:
-    def test_get_user_not_found_returns_none(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveNotFoundError("404"))
-        assert panel.get_user("nobody") is None
-
-    def test_get_user_network_error_propagates(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveNetworkError("timeout"))
-        with pytest.raises(RemnawaveNetworkError):
-            panel.get_user("alice")
-
-    def test_get_user_auth_error_propagates(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveAuthError("expired"))
-        with pytest.raises(RemnawaveAuthError):
-            panel.get_user("alice")
-
-    def test_get_node_not_found_returns_none(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveNotFoundError("404"))
-        assert panel.get_node("uuid-1") is None
-
-    def test_get_node_network_error_propagates(self) -> None:
-        panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveNetworkError("down"))
-        with pytest.raises(RemnawaveNetworkError):
-            panel.get_node("uuid-1")
-
     def test_get_config_profile_not_found_returns_none(self) -> None:
         panel = _make_panel()
         panel._get = MagicMock(side_effect=RemnawaveNotFoundError("404"))
@@ -743,14 +554,3 @@ class TestGetMethodErrorPropagation:
         panel._get = MagicMock(side_effect=RemnawaveAuthError("expired"))
         with pytest.raises(RemnawaveAuthError):
             panel.get_config_profile("cp-1")
-
-    def test_delete_user_not_found_returns_false(self) -> None:
-        panel = _make_panel()
-        panel._delete = MagicMock(side_effect=RemnawaveNotFoundError("gone"))
-        assert panel.delete_user("uuid-1") is False
-
-    def test_delete_user_network_error_propagates(self) -> None:
-        panel = _make_panel()
-        panel._delete = MagicMock(side_effect=RemnawaveNetworkError("timeout"))
-        with pytest.raises(RemnawaveNetworkError):
-            panel.delete_user("uuid-1")

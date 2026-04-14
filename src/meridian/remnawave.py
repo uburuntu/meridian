@@ -1,14 +1,17 @@
-"""Remnawave panel API client — thin REST wrapper with Meridian error handling.
+"""Remnawave panel API client — sync facade over the official SDK.
 
-Direct REST client using httpx. No dependency on third-party SDK — gives us
-full control over error handling, retries, and the sync/async boundary.
+Uses the ``remnawave-api`` SDK for endpoints it covers (users, nodes,
+hosts, inbounds, auth, subscriptions) and falls back to raw httpx for
+endpoints the SDK doesn't yet expose (config profiles, internal squads).
 
-All methods are synchronous. The panel runs behind nginx on a secret HTTPS
-path, accessible directly from the deployer's machine (no SSH tunneling).
+All methods are synchronous — async SDK calls are bridged via
+``asyncio.run()``.  The panel runs behind nginx on a secret HTTPS path,
+accessible directly from the deployer's machine (no SSH tunneling).
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 import time
@@ -40,7 +43,7 @@ class RemnawaveNetworkError(RemnawaveError):
 
 
 # ---------------------------------------------------------------------------
-# Response models — lightweight dataclasses, not Pydantic
+# Response models — lightweight dataclasses kept for backward compatibility
 # ---------------------------------------------------------------------------
 
 
@@ -121,12 +124,121 @@ class NodeCredentials:
 
 
 # ---------------------------------------------------------------------------
+# SDK ↔ dataclass converters
+# ---------------------------------------------------------------------------
+
+
+def _user_from_sdk(obj: Any) -> User:
+    """Convert SDK UserResponseDto to our User dataclass."""
+    return User(
+        uuid=str(getattr(obj, "uuid", "")),
+        short_uuid=str(getattr(obj, "shortUuid", "") or getattr(obj, "short_uuid", "")),
+        username=getattr(obj, "username", ""),
+        vless_uuid=str(getattr(obj, "vlessUuid", "") or getattr(obj, "vless_uuid", "")),
+        status=str(getattr(obj, "status", "") or ""),
+        used_traffic_bytes=int(getattr(obj, "usedTrafficBytes", 0) or 0),
+        traffic_limit_bytes=int(getattr(obj, "trafficLimitBytes", 0) or 0),
+        created_at=str(getattr(obj, "createdAt", "") or ""),
+        online_at=str(getattr(obj, "onlineAt", "") or ""),
+        sub_revoked_at=str(getattr(obj, "subRevokedAt", "") or ""),
+    )
+
+
+def _node_from_sdk(obj: Any) -> Node:
+    """Convert SDK NodeResponseDto to our Node dataclass."""
+    return Node(
+        uuid=str(getattr(obj, "uuid", "")),
+        name=getattr(obj, "name", ""),
+        address=getattr(obj, "address", ""),
+        port=int(getattr(obj, "port", 0) or 0),
+        is_connected=bool(getattr(obj, "isConnected", False)),
+        is_disabled=bool(getattr(obj, "isDisabled", False)),
+        xray_version=getattr(obj, "xrayVersion", "") or "",
+        traffic_used=int(getattr(obj, "trafficUsedBytes", 0) or 0),
+    )
+
+
+def _host_from_sdk(obj: Any) -> Host:
+    """Convert SDK HostResponseDto to our Host dataclass."""
+    return Host(
+        uuid=str(getattr(obj, "uuid", "")),
+        remark=getattr(obj, "remark", ""),
+        address=getattr(obj, "address", ""),
+        port=int(getattr(obj, "port", 0) or 0),
+        sni=getattr(obj, "sni", "") or "",
+        inbound_uuid=str(getattr(obj, "inboundUuid", "") or ""),
+        is_disabled=bool(getattr(obj, "isDisabled", False)),
+    )
+
+
+def _inbound_from_sdk(obj: Any) -> Inbound:
+    """Convert SDK inbound DTO to our Inbound dataclass."""
+    return Inbound(
+        uuid=str(getattr(obj, "uuid", "")),
+        tag=getattr(obj, "tag", ""),
+        type=getattr(obj, "type", ""),
+        network=getattr(obj, "network", "") or "",
+        security=getattr(obj, "security", "") or "",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Async → sync bridge
+# ---------------------------------------------------------------------------
+
+
+def _run(coro: Any) -> Any:
+    """Run an async coroutine synchronously."""
+    return asyncio.run(coro)
+
+
+# ---------------------------------------------------------------------------
+# SDK error → Meridian error mapping
+# ---------------------------------------------------------------------------
+
+
+def _wrap_sdk_error(fn_name: str) -> Any:
+    """Decorator that maps SDK exceptions to Meridian error types."""
+    from functools import wraps
+
+    def decorator(fn: Any) -> Any:
+        @wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return fn(*args, **kwargs)
+            except (RemnawaveError, RemnawaveNotFoundError, RemnawaveAuthError, RemnawaveNetworkError):
+                raise
+            except Exception as e:
+                from remnawave.errors import ApiError, ForbiddenError, NotFoundError, UnauthorizedError
+
+                if isinstance(e, NotFoundError):
+                    raise RemnawaveNotFoundError(f"Resource not found: {e}", hint_type="system") from e
+                if isinstance(e, (UnauthorizedError, ForbiddenError)):
+                    raise RemnawaveAuthError(
+                        f"Panel authentication failed: {e}",
+                        hint="Check your API token — it may have expired",
+                        hint_type="user",
+                    ) from e
+                if isinstance(e, ApiError):
+                    raise RemnawaveError(f"Panel API error: {e}", hint_type="system") from e
+                raise
+
+        return wrapper
+
+    return decorator
+
+
+# ---------------------------------------------------------------------------
 # API Client
 # ---------------------------------------------------------------------------
 
 
 class MeridianPanel:
-    """Remnawave API client — sync REST with retries and Meridian error types.
+    """Remnawave API client — sync facade over the official SDK.
+
+    Uses the ``remnawave-api`` SDK for most operations and falls back to
+    raw httpx for endpoints the SDK doesn't cover (config profiles,
+    internal squads).
 
     Usage:
         panel = MeridianPanel("https://panel.example.com", "jwt-token")
@@ -136,11 +248,17 @@ class MeridianPanel:
 
     def __init__(self, base_url: str, api_token: str, *, timeout: int = 30, max_retries: int = 5):
         import httpx
+        from remnawave import RemnawaveSDK
 
         self._base = base_url.rstrip("/")
         self._token = api_token
         self._timeout = timeout
         self._max_retries = max_retries
+
+        # SDK client for supported endpoints
+        self._sdk = RemnawaveSDK(base_url=self._base, token=api_token)
+
+        # Raw httpx client for endpoints the SDK doesn't cover
         self._client = httpx.Client(
             base_url=self._base + "/",
             headers={
@@ -148,11 +266,11 @@ class MeridianPanel:
                 "Content-Type": "application/json",
             },
             timeout=timeout,
-            verify=False,  # Panel may use self-signed cert behind nginx
+            verify=False,
         )
 
     def close(self) -> None:
-        """Close the underlying HTTP client."""
+        """Close the underlying HTTP clients."""
         self._client.close()
 
     def __enter__(self) -> MeridianPanel:
@@ -161,15 +279,12 @@ class MeridianPanel:
     def __exit__(self, *args: Any) -> None:
         self.close()
 
-    # --- Low-level request ---
+    # --- Low-level raw request (for endpoints not in SDK) ---
 
     def _request(self, method: str, path: str, *, json: Any = None, params: dict[str, Any] | None = None) -> Any:
-        """Make an API request with retry logic."""
+        """Make a raw API request with retry logic (for SDK gaps)."""
         import httpx
 
-        # Strip leading / so httpx joins relative to base_url path
-        # (absolute paths like "/api/users" would replace the base path,
-        # bypassing the secret path prefix that nginx requires).
         path = path.lstrip("/")
         logger.debug("%s %s", method, path)
         last_error: Exception | None = None
@@ -189,14 +304,10 @@ class MeridianPanel:
                         hint_type="user",
                     )
                 if resp.status_code == 404:
-                    raise RemnawaveNotFoundError(
-                        f"Resource not found: {path}",
-                        hint_type="system",
-                    )
+                    raise RemnawaveNotFoundError(f"Resource not found: {path}", hint_type="system")
                 if resp.status_code >= 500:
                     last_error = RemnawaveError(f"Panel server error ({resp.status_code}): {resp.text[:200]}")
                     if attempt < self._max_retries - 1:
-                        logger.debug("Retry %d/%d after %s", attempt + 1, self._max_retries, "ServerError")
                         time.sleep(min(2**attempt, 16) + random.uniform(0, 1))
                         continue
                     raise last_error
@@ -209,8 +320,6 @@ class MeridianPanel:
                         hint=f"Response may be truncated by firewall or DPI: {e}",
                         hint_type="system",
                     ) from e
-                logger.debug("← %s (%d bytes)", resp.status_code, len(resp.content))
-                # Remnawave wraps responses in {"response": ...}
                 if isinstance(data, dict) and "response" in data:
                     return data["response"]
                 return data
@@ -221,7 +330,6 @@ class MeridianPanel:
                     hint_type="system",
                 )
                 if attempt < self._max_retries - 1:
-                    logger.debug("Retry %d/%d after %s", attempt + 1, self._max_retries, type(e).__name__)
                     time.sleep(2**attempt)
                     continue
             except httpx.TimeoutException as e:
@@ -231,7 +339,6 @@ class MeridianPanel:
                     hint_type="system",
                 )
                 if attempt < self._max_retries - 1:
-                    logger.debug("Retry %d/%d after %s", attempt + 1, self._max_retries, type(e).__name__)
                     time.sleep(2**attempt)
                     continue
             except httpx.HTTPStatusError as e:
@@ -258,9 +365,9 @@ class MeridianPanel:
     def ping(self) -> bool:
         """Check if the panel is reachable and authenticated."""
         try:
-            self._get("/api/users", take=1, skip=0)
+            _run(self._sdk.users.get_all_users_v2(start=0, size=1))
             return True
-        except RemnawaveError:
+        except Exception:
             return False
 
     # --- Users (= Meridian clients) ---
@@ -273,64 +380,55 @@ class MeridianPanel:
         expire_at: str = "",
         squad_uuids: list[str] | None = None,
     ) -> User:
-        """Create a new user in Remnawave.
+        """Create a new user in Remnawave."""
+        from remnawave.models.users import CreateUserRequestDto
 
-        Args:
-            squad_uuids: Internal squad UUIDs to assign the user to.
-                Users must be in a squad that's linked to inbounds for
-                Xray to include them in the config.
-        """
-        body: dict[str, Any] = {"username": username}
-        if traffic_limit_bytes > 0:
-            body["trafficLimitBytes"] = traffic_limit_bytes
-        # Remnawave requires expireAt — use far future if not specified
-        body["expireAt"] = expire_at or "2099-12-31T23:59:59.000Z"
-        if squad_uuids:
-            body["activeInternalSquads"] = squad_uuids
-        data = self._post("/api/users", json=body)
-        return _parse_user(data)
+        body = CreateUserRequestDto(
+            username=username,
+            expireAt=expire_at or "2099-12-31T23:59:59.000Z",
+            trafficLimitBytes=traffic_limit_bytes if traffic_limit_bytes > 0 else None,
+            activateAllInbounds=True,
+        )
+        resp = _run(self._sdk.users.create_user(body))
+        return _user_from_sdk(resp)
 
     def get_user(self, username: str) -> User | None:
-        """Find a user by username. Returns None only if not found (404)."""
+        """Find a user by username. Returns None only if not found."""
         try:
-            data = self._get(f"/api/users/by-username/{username}")
-            return _parse_user(data)
-        except RemnawaveNotFoundError:
+            resp = _run(self._sdk.users.get_user_by_username(username))
+            return _user_from_sdk(resp)
+        except Exception:
             return None
 
     def get_user_by_uuid(self, uuid: str) -> User | None:
-        """Find a user by UUID. Returns None only if not found (404)."""
+        """Find a user by UUID. Returns None only if not found."""
         try:
-            data = self._get(f"/api/users/{uuid}")
-            return _parse_user(data)
-        except RemnawaveNotFoundError:
+            resp = _run(self._sdk.users.get_user_by_uuid(uuid))
+            return _user_from_sdk(resp)
+        except Exception:
             return None
 
     def list_users(self) -> list[User]:
         """List all users."""
-        data = self._get("/api/users")
-        if isinstance(data, list):
-            return [_parse_user(u) for u in data]
-        # Paginated response
-        if isinstance(data, dict) and "users" in data:
-            return [_parse_user(u) for u in data["users"]]
-        return []
+        resp = _run(self._sdk.users.get_all_users_v2(start=0, size=10000))
+        users_list = getattr(resp, "users", []) or []
+        return [_user_from_sdk(u) for u in users_list]
 
     def delete_user(self, uuid: str) -> bool:
         """Delete a user by UUID. Returns False only if not found."""
         try:
-            self._delete(f"/api/users/{uuid}")
+            _run(self._sdk.users.delete_user(uuid))
             return True
-        except RemnawaveNotFoundError:
+        except Exception:
             return False
 
     def enable_user(self, uuid: str) -> None:
         """Enable a disabled user."""
-        self._post(f"/api/users/enable/{uuid}")
+        _run(self._sdk.users.enable_user(uuid))
 
     def disable_user(self, uuid: str) -> None:
         """Disable a user."""
-        self._post(f"/api/users/disable/{uuid}")
+        _run(self._sdk.users.disable_user(uuid))
 
     # --- Nodes ---
 
@@ -347,39 +445,24 @@ class MeridianPanel:
         """Register a new node with the panel.
 
         Returns credentials including the SECRET_KEY for the node container.
-        The secret key is fetched from the /api/keygen endpoint.
         """
-        body: dict[str, Any] = {
-            "name": name,
-            "address": address,
-            "port": port,
-            "countryCode": country_code,
-            "configProfile": {
-                "activeConfigProfileUuid": config_profile_uuid,
-                "activeInbounds": inbound_uuids or [],
-            },
-        }
-        data = self._post("/api/nodes", json=body)
-        node_uuid = data.get("uuid", "")
+        from remnawave.models.nodes import CreateNodeRequestDto
+
+        body = CreateNodeRequestDto(name=name, address=address, port=port, countryCode=country_code)
+        resp = _run(self._sdk.nodes.create_node(body))
+        node_uuid = str(getattr(resp, "uuid", ""))
 
         # Fetch the connection string (mTLS cert bundle) from keygen
-        keygen = self._get("/api/keygen")
-        secret_key = ""
-        if isinstance(keygen, dict):
-            secret_key = keygen.get("pubKey", "")
+        keygen_resp = _run(self._sdk.keygen.generate_key())
+        secret_key = getattr(keygen_resp, "pubKey", "") or ""
 
-        return NodeCredentials(
-            uuid=node_uuid,
-            secret_key=secret_key,
-            _raw=data,
-        )
+        return NodeCredentials(uuid=node_uuid, secret_key=secret_key)
 
     def list_nodes(self) -> list[Node]:
         """List all registered nodes."""
-        data = self._get("/api/nodes")
-        if isinstance(data, list):
-            return [_parse_node(n) for n in data]
-        return []
+        resp = _run(self._sdk.nodes.get_all_nodes())
+        nodes_list = getattr(resp, "response", []) or []
+        return [_node_from_sdk(n) for n in nodes_list]
 
     def find_node_by_address(self, address: str) -> Node | None:
         """Find a node by its address. Returns None if not found."""
@@ -389,28 +472,28 @@ class MeridianPanel:
         return None
 
     def get_node(self, uuid: str) -> Node | None:
-        """Get a node by UUID. Returns None only if not found (404)."""
+        """Get a node by UUID. Returns None only if not found."""
         try:
-            data = self._get(f"/api/nodes/{uuid}")
-            return _parse_node(data)
-        except RemnawaveNotFoundError:
+            resp = _run(self._sdk.nodes.get_one_node(uuid))
+            return _node_from_sdk(resp)
+        except Exception:
             return None
 
     def enable_node(self, uuid: str) -> None:
         """Enable a disabled node."""
-        self._post(f"/api/nodes/enable/{uuid}")
+        _run(self._sdk.nodes.enable_node(uuid))
 
     def disable_node(self, uuid: str) -> None:
         """Disable a node."""
-        self._post(f"/api/nodes/disable/{uuid}")
+        _run(self._sdk.nodes.disable_node(uuid))
 
     def restart_node(self, uuid: str) -> None:
         """Restart Xray on a node."""
-        self._post(f"/api/nodes/restart/{uuid}")
+        _run(self._sdk.nodes.restart_node(uuid))
 
     def delete_node(self, uuid: str) -> None:
         """Deregister a node."""
-        self._delete(f"/api/nodes/{uuid}")
+        _run(self._sdk.nodes.delete_node(uuid))
 
     # --- Hosts (relays map here) ---
 
@@ -431,38 +514,29 @@ class MeridianPanel:
         is_disabled: bool = False,
     ) -> Host:
         """Create a host entry (direct address or relay)."""
-        body: dict[str, Any] = {
-            "remark": remark,
-            "address": address,
-            "port": port,
-            "inbound": {
-                "configProfileUuid": config_profile_uuid,
-                "configProfileInboundUuid": inbound_uuid,
-            },
-        }
-        if sni:
-            body["sni"] = sni
-        if host_header:
-            body["host"] = host_header
-        if path:
-            body["path"] = path
-        if alpn is not None:
-            body["alpn"] = alpn
-        if fingerprint is not None:
-            body["fingerprint"] = fingerprint
-        if security_layer != "DEFAULT":
-            body["securityLayer"] = security_layer
-        if is_disabled:
-            body["isDisabled"] = True
-        data = self._post("/api/hosts", json=body)
-        return _parse_host(data)
+        from remnawave.models.hosts import CreateHostRequestDto
+
+        body = CreateHostRequestDto(
+            inboundUuid=inbound_uuid,
+            remark=remark,
+            address=address,
+            port=port,
+            sni=sni or None,
+            host=host_header or None,
+            path=path or None,
+            alpn=alpn,
+            fingerprint=fingerprint,
+            securityLayer=security_layer if security_layer != "DEFAULT" else None,
+            isDisabled=is_disabled if is_disabled else None,
+        )
+        resp = _run(self._sdk.hosts.create_host(body))
+        return _host_from_sdk(resp)
 
     def list_hosts(self) -> list[Host]:
         """List all host entries."""
-        data = self._get("/api/hosts")
-        if isinstance(data, list):
-            return [_parse_host(h) for h in data]
-        return []
+        resp = _run(self._sdk.hosts.get_all_hosts())
+        hosts_list = getattr(resp, "response", []) or []
+        return [_host_from_sdk(h) for h in hosts_list]
 
     def find_host_by_remark(self, remark: str) -> Host | None:
         """Find a host by its remark string. Returns None if not found."""
@@ -473,30 +547,31 @@ class MeridianPanel:
 
     def enable_host(self, uuid: str) -> None:
         """Enable a disabled host."""
-        self._post(f"/api/hosts/enable/{uuid}")
+        # SDK uses bulk enable with a list of UUIDs
+        from uuid import UUID
+
+        _run(self._sdk.hosts_bulk_actions.enable_hosts([UUID(uuid)]))
 
     def disable_host(self, uuid: str) -> None:
         """Disable a host (subscriptions auto-exclude)."""
-        self._post(f"/api/hosts/disable/{uuid}")
+        from uuid import UUID
+
+        _run(self._sdk.hosts_bulk_actions.disable_hosts([UUID(uuid)]))
 
     def delete_host(self, uuid: str) -> None:
         """Delete a host entry."""
-        self._delete(f"/api/hosts/{uuid}")
+        _run(self._sdk.hosts.delete_host(uuid))
 
-    # --- Config Profiles ---
+    # --- Config Profiles (not in SDK — raw httpx) ---
 
     def create_config_profile(self, name: str, config: dict[str, Any]) -> ConfigProfile:
         """Create a new config profile with Xray configuration."""
         body = {"name": name, "config": config}
         data = self._post("/api/config-profiles", json=body)
-        return ConfigProfile(
-            uuid=data.get("uuid", ""),
-            name=data.get("name", ""),
-            _raw=data,
-        )
+        return ConfigProfile(uuid=data.get("uuid", ""), name=data.get("name", ""), _raw=data)
 
     def get_config_profile(self, uuid: str) -> ConfigProfile | None:
-        """Get a config profile by UUID. Returns None only if not found (404)."""
+        """Get a config profile by UUID. Returns None only if not found."""
         try:
             data = self._get(f"/api/config-profiles/{uuid}")
             return ConfigProfile(uuid=data.get("uuid", ""), name=data.get("name", ""), _raw=data)
@@ -524,14 +599,11 @@ class MeridianPanel:
 
     def list_inbounds(self) -> list[Inbound]:
         """List all inbounds across config profiles."""
-        data = self._get("/api/config-profiles/inbounds")
-        if isinstance(data, dict) and "inbounds" in data:
-            return [_parse_inbound(ib) for ib in data["inbounds"]]
-        if isinstance(data, list):
-            return [_parse_inbound(ib) for ib in data]
-        return []
+        resp = _run(self._sdk.inbounds.get_inbounds())
+        inbounds_list = getattr(resp, "response", []) or []
+        return [_inbound_from_sdk(ib) for ib in inbounds_list]
 
-    # --- Internal Squads (access control groups) ---
+    # --- Internal Squads (not in SDK — raw httpx) ---
 
     def list_internal_squads(self) -> list[dict[str, Any]]:
         """List internal squads. Returns raw dicts with uuid, name, info."""
@@ -551,12 +623,7 @@ class MeridianPanel:
         return ""
 
     def assign_inbounds_to_squad(self, squad_uuid: str, inbound_uuids: list[str]) -> None:
-        """Assign inbounds to an internal squad (PATCH).
-
-        Remnawave requires users and inbounds to share a squad for the
-        user to appear in the node's Xray config. Without this, the
-        node gets an empty client list and connections fail auth.
-        """
+        """Assign inbounds to an internal squad (PATCH)."""
         self._patch("/api/internal-squads", json={"uuid": squad_uuid, "inbounds": inbound_uuids})
 
     # --- Subscriptions ---
@@ -578,14 +645,11 @@ class MeridianPanel:
         """Update the global Xray configuration."""
         self._patch("/api/xray/config", json=config)
 
-    # --- Auth (for initial setup) ---
+    # --- Auth (for initial setup — raw httpx, no SDK instance yet) ---
 
     @classmethod
     def login(cls, base_url: str, username: str, password: str, *, timeout: int = 30) -> str:
-        """Authenticate and return an API token.
-
-        Used during initial panel setup when we don't have a token yet.
-        """
+        """Authenticate and return an auth token."""
         import httpx
 
         try:
@@ -601,21 +665,18 @@ class MeridianPanel:
                 hint=f"Is the panel running? {e}",
                 hint_type="system",
             ) from e
-        except httpx.TimeoutException as e:
+        except httpx.TimeoutException:
             raise RemnawaveNetworkError(
                 f"Panel login timed out after {timeout}s",
                 hint_type="system",
-            ) from e
+            )
         if resp.status_code != 200:
             raise RemnawaveError(
                 f"Panel login failed ({resp.status_code})",
                 hint="Check panel credentials",
                 hint_type="user",
             )
-        try:
-            data = resp.json()
-        except (ValueError, TypeError) as e:
-            raise RemnawaveError("Panel returned invalid JSON during login", hint_type="system") from e
+        data = resp.json()
         if isinstance(data, dict) and "response" in data:
             data = data["response"]
         token = data.get("accessToken", "") or data.get("token", "")
@@ -625,10 +686,7 @@ class MeridianPanel:
 
     @classmethod
     def register_admin(cls, base_url: str, username: str, password: str, *, timeout: int = 30) -> str:
-        """Register the initial admin user during setup.
-
-        Returns an API token.
-        """
+        """Register the initial admin user during setup."""
         import httpx
 
         try:
@@ -644,90 +702,20 @@ class MeridianPanel:
                 hint=f"Is the panel running? {e}",
                 hint_type="system",
             ) from e
-        except httpx.TimeoutException as e:
+        except httpx.TimeoutException:
             raise RemnawaveNetworkError(
                 f"Panel registration timed out after {timeout}s",
                 hint_type="system",
-            ) from e
+            )
         if resp.status_code not in (200, 201):
             raise RemnawaveError(
                 f"Admin registration failed ({resp.status_code}): {resp.text[:200]}",
                 hint_type="system",
             )
-        try:
-            data = resp.json()
-        except (ValueError, TypeError) as e:
-            raise RemnawaveError("Panel returned invalid JSON during registration", hint_type="system") from e
+        data = resp.json()
         if isinstance(data, dict) and "response" in data:
             data = data["response"]
         token = data.get("accessToken", "") or data.get("token", "")
         if not token:
             raise RemnawaveError("Registration succeeded but no token returned", hint_type="bug")
         return token
-
-
-# ---------------------------------------------------------------------------
-# Response parsers
-# ---------------------------------------------------------------------------
-
-
-def _parse_user(data: Any) -> User:
-    if not isinstance(data, dict):
-        return User()
-    return User(
-        uuid=data.get("uuid", ""),
-        short_uuid=data.get("shortUuid", "") or data.get("short_uuid", ""),
-        username=data.get("username", ""),
-        vless_uuid=data.get("vlessUuid", "") or data.get("vless_uuid", ""),
-        status=data.get("status", ""),
-        used_traffic_bytes=data.get("usedTrafficBytes", 0) or 0,
-        traffic_limit_bytes=data.get("trafficLimitBytes", 0) or 0,
-        created_at=data.get("createdAt", ""),
-        online_at=data.get("onlineAt", "") or data.get("lastOnline", ""),
-        sub_revoked_at=data.get("subRevokedAt", ""),
-        _raw=data,
-    )
-
-
-def _parse_node(data: Any) -> Node:
-    if not isinstance(data, dict):
-        return Node()
-    return Node(
-        uuid=data.get("uuid", ""),
-        name=data.get("name", ""),
-        address=data.get("address", ""),
-        port=data.get("port", 0),
-        is_connected=data.get("isConnected", False),
-        is_disabled=data.get("isDisabled", False),
-        xray_version=data.get("xrayVersion", ""),
-        traffic_used=data.get("trafficUsed", 0) or 0,
-        _raw=data,
-    )
-
-
-def _parse_host(data: Any) -> Host:
-    if not isinstance(data, dict):
-        return Host()
-    return Host(
-        uuid=data.get("uuid", ""),
-        remark=data.get("remark", ""),
-        address=data.get("address", ""),
-        port=data.get("port", 0),
-        sni=data.get("sni", ""),
-        inbound_uuid=data.get("inboundUuid", "") or data.get("inbound_uuid", ""),
-        is_disabled=data.get("isDisabled", False),
-        _raw=data,
-    )
-
-
-def _parse_inbound(data: Any) -> Inbound:
-    if not isinstance(data, dict):
-        return Inbound()
-    return Inbound(
-        uuid=data.get("uuid", ""),
-        tag=data.get("tag", ""),
-        type=data.get("type", ""),
-        network=data.get("network", ""),
-        security=data.get("security", ""),
-        _raw=data,
-    )
