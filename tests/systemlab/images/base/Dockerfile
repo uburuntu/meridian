@@ -21,8 +21,20 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     qrencode dnsutils jq unzip socat \
     ufw cron fail2ban unattended-upgrades apt-listchanges \
     apt-transport-https gnupg software-properties-common \
-    nginx libnginx-mod-stream \
     procps psmisc less vim-tiny
+
+# ---------- nginx from official repo (1.27+, http2 on; directive) ----------
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    curl -fsSL https://nginx.org/keys/nginx_signing.key \
+      -o /etc/apt/keyrings/nginx.asc \
+    && chmod 644 /etc/apt/keyrings/nginx.asc \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/etc/apt/keyrings/nginx.asc] \
+       https://nginx.org/packages/ubuntu $VERSION_CODENAME nginx" \
+       > /etc/apt/sources.list.d/nginx-official.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nginx
 
 # ---------- Docker CE (Meridian checks dpkg-query -s docker-ce) ----------
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
