@@ -171,6 +171,7 @@ def build_actual_state(
         api_addr_to_public_ip[cn.ip] = cn.ip  # identity for non-gateway nodes
 
     actual_nodes = []
+    panel_server_ip = cluster.panel.server_ip
     for n in panel.list_nodes():
         # Try to resolve Docker gateway address back to public IP
         public_ip = n.address
@@ -179,13 +180,16 @@ def build_actual_state(
                 public_ip = cn.ip
                 break
         cn = cluster_nodes_by_ip.get(public_ip)
+        # Panel host detection: match by cluster.yml flag OR by panel server IP
+        # (handles UUID drift after DB restore/re-registration)
+        is_panel = (cn.is_panel_host if cn else False) or (public_ip == panel_server_ip)
         actual_nodes.append(
             ActualNodeState(
                 host=public_ip,
                 name=n.name,
                 uuid=n.uuid,
                 is_connected=n.is_connected,
-                is_panel_host=cn.is_panel_host if cn else False,
+                is_panel_host=is_panel,
                 sni=cn.sni if cn else "",
                 domain=cn.domain if cn else "",
                 warp=cn.warp if cn else False,
