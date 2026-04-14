@@ -60,6 +60,7 @@ class ActualNodeState:
     name: str = ""
     uuid: str = ""
     is_connected: bool = False
+    is_panel_host: bool = False
     sni: str = ""
     domain: str = ""
     warp: bool = False
@@ -184,6 +185,7 @@ def build_actual_state(
                 name=n.name,
                 uuid=n.uuid,
                 is_connected=n.is_connected,
+                is_panel_host=cn.is_panel_host if cn else False,
                 sni=cn.sni if cn else "",
                 domain=cn.domain if cn else "",
                 warp=cn.warp if cn else False,
