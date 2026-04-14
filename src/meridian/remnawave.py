@@ -380,32 +380,39 @@ class MeridianPanel:
         expire_at: str = "",
         squad_uuids: list[str] | None = None,
     ) -> User:
-        """Create a new user in Remnawave."""
-        from remnawave.models.users import CreateUserRequestDto
+        """Create a new user in Remnawave.
 
-        body = CreateUserRequestDto(
-            username=username,
-            expireAt=expire_at or "2099-12-31T23:59:59.000Z",
-            trafficLimitBytes=traffic_limit_bytes if traffic_limit_bytes > 0 else None,
-            activateAllInbounds=True,
-        )
-        resp = _run(self._sdk.users.create_user(body))
-        return _user_from_sdk(resp)
+        Uses raw httpx — SDK's CreateUserRequestDto doesn't support
+        activeInternalSquads, which is required for users to appear
+        in node Xray configs.
+        """
+        body: dict[str, Any] = {"username": username}
+        if traffic_limit_bytes > 0:
+            body["trafficLimitBytes"] = traffic_limit_bytes
+        body["expireAt"] = expire_at or "2099-12-31T23:59:59.000Z"
+        if squad_uuids:
+            body["activeInternalSquads"] = squad_uuids
+        data = self._post("/api/users", json=body)
+        return _parse_user(data)
 
     def get_user(self, username: str) -> User | None:
-        """Find a user by username. Returns None only if not found."""
+        """Find a user by username. Returns None only if not found (404)."""
+        from remnawave.errors import NotFoundError
+
         try:
             resp = _run(self._sdk.users.get_user_by_username(username))
             return _user_from_sdk(resp)
-        except Exception:
+        except NotFoundError:
             return None
 
     def get_user_by_uuid(self, uuid: str) -> User | None:
-        """Find a user by UUID. Returns None only if not found."""
+        """Find a user by UUID. Returns None only if not found (404)."""
+        from remnawave.errors import NotFoundError
+
         try:
             resp = _run(self._sdk.users.get_user_by_uuid(uuid))
             return _user_from_sdk(resp)
-        except Exception:
+        except NotFoundError:
             return None
 
     def list_users(self) -> list[User]:
@@ -416,10 +423,12 @@ class MeridianPanel:
 
     def delete_user(self, uuid: str) -> bool:
         """Delete a user by UUID. Returns False only if not found."""
+        from remnawave.errors import NotFoundError
+
         try:
             _run(self._sdk.users.delete_user(uuid))
             return True
-        except Exception:
+        except NotFoundError:
             return False
 
     def enable_user(self, uuid: str) -> None:
@@ -445,18 +454,29 @@ class MeridianPanel:
         """Register a new node with the panel.
 
         Returns credentials including the SECRET_KEY for the node container.
+        Uses raw httpx — SDK's CreateNodeRequestDto doesn't support the
+        configProfile nested object needed for profile/inbound binding.
         """
-        from remnawave.models.nodes import CreateNodeRequestDto
-
-        body = CreateNodeRequestDto(name=name, address=address, port=port, countryCode=country_code)
-        resp = _run(self._sdk.nodes.create_node(body))
-        node_uuid = str(getattr(resp, "uuid", ""))
+        body: dict[str, Any] = {
+            "name": name,
+            "address": address,
+            "port": port,
+            "countryCode": country_code,
+            "configProfile": {
+                "activeConfigProfileUuid": config_profile_uuid,
+                "activeInbounds": inbound_uuids or [],
+            },
+        }
+        data = self._post("/api/nodes", json=body)
+        node_uuid = data.get("uuid", "")
 
         # Fetch the connection string (mTLS cert bundle) from keygen
-        keygen_resp = _run(self._sdk.keygen.generate_key())
-        secret_key = getattr(keygen_resp, "pubKey", "") or ""
+        keygen = self._get("/api/keygen")
+        secret_key = ""
+        if isinstance(keygen, dict):
+            secret_key = keygen.get("pubKey", "")
 
-        return NodeCredentials(uuid=node_uuid, secret_key=secret_key)
+        return NodeCredentials(uuid=node_uuid, secret_key=secret_key, _raw=data)
 
     def list_nodes(self) -> list[Node]:
         """List all registered nodes."""
@@ -472,11 +492,13 @@ class MeridianPanel:
         return None
 
     def get_node(self, uuid: str) -> Node | None:
-        """Get a node by UUID. Returns None only if not found."""
+        """Get a node by UUID. Returns None only if not found (404)."""
+        from remnawave.errors import NotFoundError
+
         try:
             resp = _run(self._sdk.nodes.get_one_node(uuid))
             return _node_from_sdk(resp)
-        except Exception:
+        except NotFoundError:
             return None
 
     def enable_node(self, uuid: str) -> None:
@@ -513,24 +535,36 @@ class MeridianPanel:
         security_layer: str = "DEFAULT",
         is_disabled: bool = False,
     ) -> Host:
-        """Create a host entry (direct address or relay)."""
-        from remnawave.models.hosts import CreateHostRequestDto
+        """Create a host entry (direct address or relay).
 
-        body = CreateHostRequestDto(
-            inboundUuid=inbound_uuid,
-            remark=remark,
-            address=address,
-            port=port,
-            sni=sni or None,
-            host=host_header or None,
-            path=path or None,
-            alpn=alpn,
-            fingerprint=fingerprint,
-            securityLayer=security_layer if security_layer != "DEFAULT" else None,
-            isDisabled=is_disabled if is_disabled else None,
-        )
-        resp = _run(self._sdk.hosts.create_host(body))
-        return _host_from_sdk(resp)
+        Uses raw httpx — SDK's CreateHostRequestDto doesn't support the
+        nested inbound object with configProfileUuid that the panel expects.
+        """
+        body: dict[str, Any] = {
+            "remark": remark,
+            "address": address,
+            "port": port,
+            "inbound": {
+                "configProfileUuid": config_profile_uuid,
+                "configProfileInboundUuid": inbound_uuid,
+            },
+        }
+        if sni:
+            body["sni"] = sni
+        if host_header:
+            body["host"] = host_header
+        if path:
+            body["path"] = path
+        if alpn is not None:
+            body["alpn"] = alpn
+        if fingerprint is not None:
+            body["fingerprint"] = fingerprint
+        if security_layer != "DEFAULT":
+            body["securityLayer"] = security_layer
+        if is_disabled:
+            body["isDisabled"] = True
+        data = self._post("/api/hosts", json=body)
+        return _parse_host(data)
 
     def list_hosts(self) -> list[Host]:
         """List all host entries."""
@@ -719,3 +753,41 @@ class MeridianPanel:
         if not token:
             raise RemnawaveError("Registration succeeded but no token returned", hint_type="bug")
         return token
+
+
+# ---------------------------------------------------------------------------
+# Raw JSON → dataclass parsers (for endpoints using raw httpx)
+# ---------------------------------------------------------------------------
+
+
+def _parse_user(data: Any) -> User:
+    if not isinstance(data, dict):
+        return User()
+    return User(
+        uuid=data.get("uuid", ""),
+        short_uuid=data.get("shortUuid", "") or data.get("short_uuid", ""),
+        username=data.get("username", ""),
+        vless_uuid=data.get("vlessUuid", "") or data.get("vless_uuid", ""),
+        status=data.get("status", ""),
+        used_traffic_bytes=data.get("usedTrafficBytes", 0) or 0,
+        traffic_limit_bytes=data.get("trafficLimitBytes", 0) or 0,
+        created_at=data.get("createdAt", ""),
+        online_at=data.get("onlineAt", "") or data.get("lastOnline", ""),
+        sub_revoked_at=data.get("subRevokedAt", ""),
+        _raw=data,
+    )
+
+
+def _parse_host(data: Any) -> Host:
+    if not isinstance(data, dict):
+        return Host()
+    return Host(
+        uuid=data.get("uuid", ""),
+        remark=data.get("remark", ""),
+        address=data.get("address", ""),
+        port=data.get("port", 0),
+        sni=data.get("sni", ""),
+        inbound_uuid=data.get("inboundUuid", "") or data.get("inbound_uuid", ""),
+        is_disabled=data.get("isDisabled", False),
+        _raw=data,
+    )

@@ -416,6 +416,103 @@ class TestAuth:
 
 
 # ---------------------------------------------------------------------------
+# API Methods (raw httpx path — create_user, create_node, create_host)
+# ---------------------------------------------------------------------------
+
+
+class TestCreateUser:
+    def test_create_user_calls_api(self) -> None:
+        panel = _make_panel()
+        panel._post = MagicMock(
+            return_value={"uuid": "u-1", "shortUuid": "abc", "username": "alice", "status": "ACTIVE"}
+        )
+        user = panel.create_user("alice")
+        assert user.uuid == "u-1"
+        assert user.username == "alice"
+        panel._post.assert_called_once()
+        call_args = panel._post.call_args
+        assert call_args[0][0] == "/api/users"
+        assert call_args[1]["json"]["username"] == "alice"
+        assert call_args[1]["json"]["expireAt"] == "2099-12-31T23:59:59.000Z"
+
+    def test_create_user_with_squad_uuids(self) -> None:
+        panel = _make_panel()
+        panel._post = MagicMock(return_value={"uuid": "u-1", "username": "bob"})
+        panel.create_user("bob", squad_uuids=["sq-1", "sq-2"])
+        call_json = panel._post.call_args[1]["json"]
+        assert call_json["activeInternalSquads"] == ["sq-1", "sq-2"]
+
+    def test_create_user_with_traffic_limit(self) -> None:
+        panel = _make_panel()
+        panel._post = MagicMock(return_value={"uuid": "u-1", "username": "bob"})
+        panel.create_user("bob", traffic_limit_bytes=1073741824)
+        call_json = panel._post.call_args[1]["json"]
+        assert call_json["trafficLimitBytes"] == 1073741824
+
+
+class TestCreateNode:
+    def test_create_node_returns_credentials(self) -> None:
+        panel = _make_panel()
+        panel._post = MagicMock(return_value={"uuid": "n-1"})
+        panel._get = MagicMock(return_value={"pubKey": "secret-key-data"})
+        creds = panel.create_node("node-1", "198.51.100.1", 3010)
+        assert creds.uuid == "n-1"
+        assert creds.secret_key == "secret-key-data"
+
+    def test_create_node_with_config_profile(self) -> None:
+        panel = _make_panel()
+        panel._post = MagicMock(return_value={"uuid": "n-2"})
+        panel._get = MagicMock(return_value={})
+        panel.create_node(
+            "node-2",
+            "198.51.100.2",
+            3010,
+            config_profile_uuid="cp-1",
+            inbound_uuids=["ib-1", "ib-2"],
+        )
+        call_json = panel._post.call_args[1]["json"]
+        assert call_json["configProfile"]["activeConfigProfileUuid"] == "cp-1"
+        assert call_json["configProfile"]["activeInbounds"] == ["ib-1", "ib-2"]
+
+
+class TestCreateHost:
+    def test_create_host_minimal(self) -> None:
+        panel = _make_panel()
+        panel._post = MagicMock(return_value={"uuid": "h-1", "remark": "reality-198.51.100.1", "port": 443})
+        host = panel.create_host(
+            remark="reality-198.51.100.1",
+            address="198.51.100.1",
+            port=443,
+            config_profile_uuid="cp-1",
+            inbound_uuid="ib-1",
+        )
+        assert host.uuid == "h-1"
+        call_json = panel._post.call_args[1]["json"]
+        assert call_json["inbound"]["configProfileUuid"] == "cp-1"
+        assert call_json["inbound"]["configProfileInboundUuid"] == "ib-1"
+
+    def test_create_host_with_optional_fields(self) -> None:
+        panel = _make_panel()
+        panel._post = MagicMock(return_value={"uuid": "h-2"})
+        panel.create_host(
+            remark="reality-198.51.100.1",
+            address="198.51.100.1",
+            port=443,
+            config_profile_uuid="cp-1",
+            inbound_uuid="ib-1",
+            sni="www.google.com",
+            fingerprint="chrome",
+            security_layer="TLS",
+            is_disabled=True,
+        )
+        call_json = panel._post.call_args[1]["json"]
+        assert call_json["sni"] == "www.google.com"
+        assert call_json["fingerprint"] == "chrome"
+        assert call_json["securityLayer"] == "TLS"
+        assert call_json["isDisabled"] is True
+
+
+# ---------------------------------------------------------------------------
 # Config Profiles (raw httpx path)
 # ---------------------------------------------------------------------------
 
