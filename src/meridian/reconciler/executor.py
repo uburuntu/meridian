@@ -95,7 +95,9 @@ def execute_plan(
     # Execute in dependency order
     order = [
         PlanActionKind.ADD_NODE,
+        PlanActionKind.UPDATE_NODE,
         PlanActionKind.ADD_RELAY,
+        PlanActionKind.UPDATE_RELAY,
         PlanActionKind.ADD_SUBSCRIPTION_PAGE,
         PlanActionKind.ADD_CLIENT,
         PlanActionKind.REMOVE_CLIENT,

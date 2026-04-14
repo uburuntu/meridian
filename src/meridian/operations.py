@@ -100,6 +100,53 @@ def add_node(
     return node
 
 
+def update_node(
+    cluster: ClusterConfig,
+    panel: MeridianPanel,
+    *,
+    ip: str,
+    sni: str = "",
+    domain: str = "",
+    warp: bool = False,
+) -> None:
+    """Redeploy an existing node with updated configuration.
+
+    Calls the existing _setup_redeploy() flow from setup.py.
+    """
+    from meridian.commands.resolve import ResolvedServer
+    from meridian.commands.setup import _setup_redeploy
+    from meridian.ssh import ServerConnection
+
+    node = cluster.find_node(ip)
+    if node is None:
+        raise ValueError(f"Node {ip} not found in cluster")
+
+    conn = ServerConnection(ip, node.ssh_user, port=node.ssh_port)
+    resolved = ResolvedServer(ip=ip, user=node.ssh_user, port=node.ssh_port, conn=conn)
+
+    # Compute port layout (same scheme as deploy)
+    ip_hash = int(hashlib.sha256(ip.encode()).hexdigest()[:8], 16)
+    xhttp_port = 30000 + (ip_hash % 10000)
+    reality_port = 10000 + ip_hash % 1000
+    wss_port = 20000 + (ip_hash % 10000)
+
+    from meridian import __version__
+
+    _setup_redeploy(
+        resolved=resolved,
+        cluster=cluster,
+        domain=domain or node.domain,
+        sni=sni or node.sni,
+        reality_port=reality_port,
+        xhttp_port=xhttp_port,
+        wss_port=wss_port,
+        version=__version__,
+        warp=warp,
+        xhttp_path=node.xhttp_path,
+        ws_path=node.ws_path,
+    )
+
+
 def remove_node(
     cluster: ClusterConfig,
     panel: MeridianPanel,

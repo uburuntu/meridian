@@ -185,6 +185,13 @@ class ClusterConfig:
     desired_relays: list[DesiredRelay] = field(default_factory=list)
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
     _readonly: bool = field(default=False, repr=False)
+    _lock: Any = field(default=None, repr=False)  # threading.Lock for parallel save safety
+
+    def __post_init__(self) -> None:
+        import threading
+
+        if self._lock is None:
+            self._lock = threading.Lock()
 
     # --- Persistence ---
 
@@ -236,7 +243,16 @@ class ClusterConfig:
         return cfg
 
     def save(self, path: Path | None = None) -> None:
-        """Write to cluster.yml (atomic via tempfile+rename)."""
+        """Write to cluster.yml (atomic via tempfile+rename).
+
+        Thread-safe: acquires an internal lock to prevent concurrent
+        saves from parallel node provisioning.
+        """
+        with self._lock:
+            self._save_locked(path)
+
+    def _save_locked(self, path: Path | None = None) -> None:
+        """Internal save implementation (called under lock)."""
         if self._readonly:
             raise ValueError(
                 "Cannot save: cluster.yml has a newer version than this CLI supports. "

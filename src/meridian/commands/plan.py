@@ -21,7 +21,9 @@ def run() -> None:
     """Show what meridian apply would do, without changing anything."""
     cluster = ClusterConfig.load()
 
-    if not cluster.desired_nodes and not cluster.desired_clients and not cluster.desired_relays:
+    has_desired = cluster.desired_nodes or cluster.desired_clients or cluster.desired_relays
+    has_sub_page = cluster.subscription_page and cluster.subscription_page.enabled
+    if not has_desired and not has_sub_page:
         fail(
             "No desired state defined in cluster.yml",
             hint=("Add desired_nodes, desired_clients, or desired_relays to cluster.yml,\nthen run: meridian plan"),
