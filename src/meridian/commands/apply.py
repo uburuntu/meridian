@@ -97,6 +97,7 @@ def _handle_add_relay(action: PlanAction, panel: object, cluster: object) -> Non
         ssh_user=desired.ssh_user if desired else "root",
         ssh_port=desired.ssh_port if desired else 22,
         name=desired.name or desired.host if desired else "",
+        sni=desired.sni if desired else "",
     )
 
 
@@ -131,6 +132,7 @@ def _handle_update_relay(action: PlanAction, panel: object, cluster: object) -> 
             ssh_user=desired.ssh_user,
             ssh_port=desired.ssh_port,
             name=desired.name or desired.host,
+            sni=desired.sni,
         )
 
 
@@ -239,6 +241,17 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
     cluster.subscription_page.enabled = True
     cluster.subscription_page._extra["deployed"] = True
     cluster.save()
+
+    # Note: nginx proxy route for the subscription page is only configured
+    # during full provisioning (meridian deploy). If this is a legacy host
+    # that was never provisioned with subscription page support, the container
+    # runs but may not be reachable. A redeploy will fix nginx routing.
+    import logging
+
+    logging.getLogger("meridian.operations").info(
+        "Subscription page container started. If not reachable, run: meridian deploy %s",
+        cluster.panel.server_ip,
+    )
 
 
 def _handle_remove_subscription_page(action: PlanAction, panel: object, cluster: object) -> None:
