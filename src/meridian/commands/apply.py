@@ -69,7 +69,7 @@ def _handle_remove_node(action: PlanAction, panel: object, cluster: object) -> N
 
     assert isinstance(panel, MeridianPanel)
     assert isinstance(cluster, ClusterConfig)
-    remove_node(cluster, panel, node_ip=action.target, force=True)
+    remove_node(cluster, panel, node_ip=action.target)
 
 
 def _handle_add_relay(action: PlanAction, panel: object, cluster: object) -> None:
@@ -247,7 +247,9 @@ def run(
     has_desired = (
         cluster.desired_nodes is not None or cluster.desired_clients is not None or cluster.desired_relays is not None
     )
-    has_sub_page = cluster.subscription_page and cluster.subscription_page.enabled
+    has_sub_page = cluster.subscription_page and (
+        cluster.subscription_page.enabled or cluster.subscription_page._extra.get("deployed", False)
+    )
     if not has_desired and not has_sub_page:
         fail(
             "No desired state defined in cluster.yml",
@@ -263,11 +265,17 @@ def run(
 
     info("Fetching actual state from panel...")
     from meridian.remnawave import MeridianPanel, RemnawaveError
+    from meridian.ssh import ServerConnection
 
     try:
+        # SSH connection to panel host for live subscription page check
+        panel_conn = None
+        if cluster.panel.server_ip:
+            panel_conn = ServerConnection(cluster.panel.server_ip, cluster.panel.ssh_user, port=cluster.panel.ssh_port)
+
         with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
             desired = build_desired_state(cluster)
-            actual = build_actual_state(cluster, panel)
+            actual = build_actual_state(cluster, panel, panel_conn=panel_conn)
             plan = compute_plan(desired, actual)
 
             if plan.is_empty:

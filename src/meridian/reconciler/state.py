@@ -135,11 +135,20 @@ def build_desired_state(cluster: object) -> DesiredState:
     )
 
 
-def build_actual_state(cluster: object, panel: object) -> ActualState:
+def build_actual_state(
+    cluster: object,
+    panel: object,
+    panel_conn: object | None = None,
+) -> ActualState:
     """Build ActualState from the panel API (live infrastructure).
 
     Nodes and clients are fetched from the panel API — the authoritative
     source. Relays come from cluster.yml (not tracked in the panel).
+
+    Args:
+        panel_conn: Optional SSH connection to the panel host. When
+            provided, subscription page status is checked via
+            ``docker inspect`` for live drift detection.
     """
     from meridian.cluster import ClusterConfig
     from meridian.remnawave import MeridianPanel
@@ -194,19 +203,22 @@ def build_actual_state(cluster: object, panel: object) -> ActualState:
         for r in cluster.relays
     ]
 
-    # Subscription page: check if the container was previously deployed.
-    # We track this separately from the desired flag — the actual state is
-    # whether we've previously written the .env.subscription and started
-    # the container. For full drift detection (container actually running),
-    # an SSH check would be needed, but for now we track deployment state
-    # via a dedicated flag that's set when configure_subscription_page succeeds.
-    # As a heuristic: if any node is panel_host AND subscription_page was
-    # previously enabled, consider it running.
-    panel_node = next((n for n in cluster.nodes if n.is_panel_host), None)
-    # Use _extra to track actual deployment state independently of desired
-    sub_page = cluster.subscription_page
-    sub_previously_deployed = sub_page._extra.get("deployed", False) if sub_page else False
-    sub_running = bool(panel_node and sub_previously_deployed)
+    # Subscription page: check live container status via SSH when possible,
+    # fall back to the deployment flag when SSH is not available.
+    sub_running = False
+    if panel_conn is not None:
+        from meridian.ssh import ServerConnection
+
+        if isinstance(panel_conn, ServerConnection):
+            result = panel_conn.run(
+                "docker inspect -f '{{.State.Running}}' remnawave-subscription-page 2>/dev/null",
+                timeout=15,
+            )
+            sub_running = result.returncode == 0 and result.stdout.strip() == "true"
+    else:
+        # Fallback: trust the deployment flag from cluster.yml
+        sub_page = cluster.subscription_page
+        sub_running = bool(sub_page._extra.get("deployed", False)) if sub_page else False
 
     return ActualState(
         nodes=actual_nodes,
