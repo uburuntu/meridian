@@ -89,7 +89,7 @@ def _make_panel_mock() -> MagicMock:
     panel.create_config_profile.return_value = new_profile
 
     # Keygen for container redeploy
-    panel._get.return_value = {"pubKey": "new-secret-key"}
+    panel.get_node_secret_key.return_value = "new-secret-key"
 
     # Hosts
     panel.list_hosts.return_value = []
@@ -442,7 +442,7 @@ class TestSetupRedeployAuth:
     def test_remnawave_error_during_workflow_exits(self) -> None:
         """Any RemnawaveError that escapes the inner try/except fails the function."""
         panel = _make_panel_mock()
-        panel._get.side_effect = RemnawaveError("keygen endpoint unreachable")
+        panel.get_node_secret_key.side_effect = RemnawaveError("keygen endpoint unreachable")
 
         with pytest.raises(typer.Exit):
             _run_redeploy(panel_mock=panel)

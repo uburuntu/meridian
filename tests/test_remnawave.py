@@ -1,8 +1,4 @@
-"""Tests for Remnawave API client — finders, SDK converters, retry, auth.
-
-SDK-backed methods are tested by mocking the converter inputs.
-Raw-httpx methods (config profiles, squads) are tested with mocked httpx.Client.
-"""
+"""Tests for Remnawave API client — finders, SDK converters, retry, auth."""
 
 from __future__ import annotations
 
@@ -10,6 +6,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from remnawave.models.config_profiles import CreateConfigProfileRequestDto
+from remnawave.models.hosts import CreateHostRequestDto
+from remnawave.models.internal_squads import UpdateInternalSquadRequestDto
+from remnawave.models.nodes import CreateNodeRequestDto
+from remnawave.models.users import CreateUserRequestDto
 
 from meridian.remnawave import (
     ConfigProfile,
@@ -176,6 +177,11 @@ class TestUserFromSdk:
         assert user.used_traffic_bytes == 0
         assert user.traffic_limit_bytes == 0
 
+    def test_reads_nested_user_traffic_fields(self) -> None:
+        user = _user_from_sdk(_ns(userTraffic=_ns(usedTrafficBytes=4096, onlineAt="2026-04-02")))
+        assert user.used_traffic_bytes == 4096
+        assert user.online_at == "2026-04-02"
+
 
 class TestNodeFromSdk:
     def test_converts_all_fields(self) -> None:
@@ -224,6 +230,10 @@ class TestHostFromSdk:
         host = _host_from_sdk(_ns())
         assert host.uuid == ""
         assert host.sni == ""
+
+    def test_reads_nested_inbound_uuid(self) -> None:
+        host = _host_from_sdk(_ns(inbound=_ns(configProfileInboundUuid="ib-2")))
+        assert host.inbound_uuid == "ib-2"
 
 
 class TestInboundFromSdk:
@@ -416,151 +426,221 @@ class TestAuth:
 
 
 # ---------------------------------------------------------------------------
-# API Methods (raw httpx path — create_user, create_node, create_host)
+# API Methods (SDK-backed create_user, create_node, create_host)
 # ---------------------------------------------------------------------------
 
 
 class TestCreateUser:
     def test_create_user_calls_api(self) -> None:
         panel = _make_panel()
-        panel._post = MagicMock(
-            return_value={"uuid": "u-1", "shortUuid": "abc", "username": "alice", "status": "ACTIVE"}
-        )
-        user = panel.create_user("alice")
+        panel._sdk.users.create_user = MagicMock(return_value="sdk-coro")
+        with patch("meridian.remnawave._sdk_call", return_value=_ns(uuid="u-1", shortUuid="abc", username="alice")):
+            user = panel.create_user("alice")
         assert user.uuid == "u-1"
         assert user.username == "alice"
-        panel._post.assert_called_once()
-        call_args = panel._post.call_args
-        assert call_args[0][0] == "/api/users"
-        assert call_args[1]["json"]["username"] == "alice"
-        assert call_args[1]["json"]["expireAt"] == "2099-12-31T23:59:59.000Z"
+        panel._sdk.users.create_user.assert_called_once()
+        body = panel._sdk.users.create_user.call_args[0][0]
+        assert isinstance(body, CreateUserRequestDto)
+        assert body.username == "alice"
+        assert str(body.expire_at) == "2099-12-31 23:59:59+00:00"
 
     def test_create_user_with_squad_uuids(self) -> None:
         panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "u-1", "username": "bob"})
-        panel.create_user("bob", squad_uuids=["sq-1", "sq-2"])
-        call_json = panel._post.call_args[1]["json"]
-        assert call_json["activeInternalSquads"] == ["sq-1", "sq-2"]
+        panel._sdk.users.create_user = MagicMock(return_value="sdk-coro")
+        with patch("meridian.remnawave._sdk_call", return_value=_ns(uuid="u-1", username="bob")):
+            panel.create_user(
+                "bob",
+                squad_uuids=[
+                    "00000000-0000-0000-0000-000000000001",
+                    "00000000-0000-0000-0000-000000000002",
+                ],
+            )
+        body = panel._sdk.users.create_user.call_args[0][0]
+        assert [str(uuid) for uuid in body.active_internal_squads] == [
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-0000-0000-000000000002",
+        ]
 
     def test_create_user_with_traffic_limit(self) -> None:
         panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "u-1", "username": "bob"})
-        panel.create_user("bob", traffic_limit_bytes=1073741824)
-        call_json = panel._post.call_args[1]["json"]
-        assert call_json["trafficLimitBytes"] == 1073741824
+        panel._sdk.users.create_user = MagicMock(return_value="sdk-coro")
+        with patch("meridian.remnawave._sdk_call", return_value=_ns(uuid="u-1", username="bob")):
+            panel.create_user("bob", traffic_limit_bytes=1073741824)
+        body = panel._sdk.users.create_user.call_args[0][0]
+        assert body.traffic_limit_bytes == 1073741824
 
 
 class TestCreateNode:
     def test_create_node_returns_credentials(self) -> None:
         panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "n-1"})
-        panel._get = MagicMock(return_value={"pubKey": "secret-key-data"})
-        creds = panel.create_node("node-1", "198.51.100.1", 3010)
+        panel._sdk.nodes.create_node = MagicMock(return_value="create-node-coro")
+        panel._sdk.keygen.generate_key = MagicMock(return_value="keygen-coro")
+        with patch(
+            "meridian.remnawave._sdk_call",
+            side_effect=[_ns(uuid="n-1"), _ns(pubKey="secret-key-data")],
+        ):
+            creds = panel.create_node(
+                "node-1",
+                "198.51.100.1",
+                3010,
+                config_profile_uuid="00000000-0000-0000-0000-0000000000aa",
+            )
         assert creds.uuid == "n-1"
         assert creds.secret_key == "secret-key-data"
 
     def test_create_node_with_config_profile(self) -> None:
         panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "n-2"})
-        panel._get = MagicMock(return_value={})
-        panel.create_node(
-            "node-2",
-            "198.51.100.2",
-            3010,
-            config_profile_uuid="cp-1",
-            inbound_uuids=["ib-1", "ib-2"],
-        )
-        call_json = panel._post.call_args[1]["json"]
-        assert call_json["configProfile"]["activeConfigProfileUuid"] == "cp-1"
-        assert call_json["configProfile"]["activeInbounds"] == ["ib-1", "ib-2"]
+        panel._sdk.nodes.create_node = MagicMock(return_value="create-node-coro")
+        panel._sdk.keygen.generate_key = MagicMock(return_value="keygen-coro")
+        with patch(
+            "meridian.remnawave._sdk_call",
+            side_effect=[_ns(uuid="n-2"), _ns(pubKey="secret-key-data")],
+        ):
+            panel.create_node(
+                "node-2",
+                "198.51.100.2",
+                3010,
+                config_profile_uuid="00000000-0000-0000-0000-0000000000bb",
+                inbound_uuids=[
+                    "00000000-0000-0000-0000-0000000000c1",
+                    "00000000-0000-0000-0000-0000000000c2",
+                ],
+            )
+        body = panel._sdk.nodes.create_node.call_args[0][0]
+        assert isinstance(body, CreateNodeRequestDto)
+        assert str(body.config_profile.active_config_profile_uuid) == "00000000-0000-0000-0000-0000000000bb"
+        assert [str(uuid) for uuid in body.config_profile.active_inbounds] == [
+            "00000000-0000-0000-0000-0000000000c1",
+            "00000000-0000-0000-0000-0000000000c2",
+        ]
 
 
 class TestCreateHost:
     def test_create_host_minimal(self) -> None:
         panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "h-1", "remark": "reality-198.51.100.1", "port": 443})
-        host = panel.create_host(
-            remark="reality-198.51.100.1",
-            address="198.51.100.1",
-            port=443,
-            config_profile_uuid="cp-1",
-            inbound_uuid="ib-1",
-        )
+        panel._sdk.hosts.create_host = MagicMock(return_value="create-host-coro")
+        with patch(
+            "meridian.remnawave._sdk_call",
+            return_value=_ns(
+                uuid="h-1",
+                remark="reality-198.51.100.1",
+                port=443,
+                inbound=_ns(configProfileInboundUuid="00000000-0000-0000-0000-0000000000d1"),
+            ),
+        ):
+            host = panel.create_host(
+                remark="reality-198.51.100.1",
+                address="198.51.100.1",
+                port=443,
+                config_profile_uuid="00000000-0000-0000-0000-0000000000d0",
+                inbound_uuid="00000000-0000-0000-0000-0000000000d1",
+            )
         assert host.uuid == "h-1"
-        call_json = panel._post.call_args[1]["json"]
-        assert call_json["inbound"]["configProfileUuid"] == "cp-1"
-        assert call_json["inbound"]["configProfileInboundUuid"] == "ib-1"
+        body = panel._sdk.hosts.create_host.call_args[0][0]
+        assert isinstance(body, CreateHostRequestDto)
+        assert str(body.inbound.config_profile_uuid) == "00000000-0000-0000-0000-0000000000d0"
+        assert str(body.inbound.config_profile_inbound_uuid) == "00000000-0000-0000-0000-0000000000d1"
 
     def test_create_host_with_optional_fields(self) -> None:
         panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "h-2"})
-        panel.create_host(
-            remark="reality-198.51.100.1",
-            address="198.51.100.1",
-            port=443,
-            config_profile_uuid="cp-1",
-            inbound_uuid="ib-1",
-            sni="www.google.com",
-            fingerprint="chrome",
-            security_layer="TLS",
-            is_disabled=True,
-        )
-        call_json = panel._post.call_args[1]["json"]
-        assert call_json["sni"] == "www.google.com"
-        assert call_json["fingerprint"] == "chrome"
-        assert call_json["securityLayer"] == "TLS"
-        assert call_json["isDisabled"] is True
+        panel._sdk.hosts.create_host = MagicMock(return_value="create-host-coro")
+        with patch("meridian.remnawave._sdk_call", return_value=_ns(uuid="h-2")):
+            panel.create_host(
+                remark="reality-198.51.100.1",
+                address="198.51.100.1",
+                port=443,
+                config_profile_uuid="00000000-0000-0000-0000-0000000000e0",
+                inbound_uuid="00000000-0000-0000-0000-0000000000e1",
+                sni="www.google.com",
+                fingerprint="chrome",
+                security_layer="TLS",
+                is_disabled=True,
+            )
+        body = panel._sdk.hosts.create_host.call_args[0][0]
+        assert body.sni == "www.google.com"
+        assert body.fingerprint.value == "chrome"
+        assert body.security_layer.value == "TLS"
+        assert body.is_disabled is True
 
 
 # ---------------------------------------------------------------------------
-# Config Profiles (raw httpx path)
+# Config Profiles (SDK path)
 # ---------------------------------------------------------------------------
 
 
 class TestConfigProfiles:
     def test_create_config_profile(self) -> None:
         panel = _make_panel()
-        panel._post = MagicMock(return_value={"uuid": "cp-1", "name": "meridian-default"})
-        profile = panel.create_config_profile("meridian-default", {"inbounds": []})
+        panel._sdk.config_profiles.create_config_profile = MagicMock(return_value="create-config-profile-coro")
+        with patch("meridian.remnawave._sdk_call", return_value=_ns(uuid="cp-1", name="meridian-default")):
+            profile = panel.create_config_profile("meridian-default", {"inbounds": []})
         assert profile.uuid == "cp-1"
         assert profile.name == "meridian-default"
+        body = panel._sdk.config_profiles.create_config_profile.call_args[0][0]
+        assert isinstance(body, CreateConfigProfileRequestDto)
+        assert body.name == "meridian-default"
 
     def test_get_config_profile_found(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(return_value={"uuid": "cp-1", "name": "test"})
-        profile = panel.get_config_profile("cp-1")
-        assert profile is not None
-        assert profile.name == "test"
+        panel._sdk.config_profiles.get_config_profile_by_uuid = MagicMock(return_value="get-config-profile-coro")
+        with patch("meridian.remnawave._sdk_call", return_value=_ns(uuid="cp-1", name="test")):
+            profile = panel.get_config_profile("cp-1")
+            assert profile is not None
+            assert profile.name == "test"
 
     def test_get_config_profile_not_found(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveNotFoundError("404"))
-        assert panel.get_config_profile("nonexistent") is None
+        panel._sdk.config_profiles.get_config_profile_by_uuid = MagicMock(return_value="get-config-profile-coro")
+        with patch("meridian.remnawave._sdk_call", side_effect=RemnawaveNotFoundError("404")):
+            assert panel.get_config_profile("nonexistent") is None
 
     def test_list_config_profiles(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(
-            return_value=[
-                {"uuid": "cp-1", "name": "default"},
-                {"uuid": "cp-2", "name": "other"},
-            ]
-        )
-        profiles = panel.list_config_profiles()
+        panel._sdk.config_profiles.get_config_profiles = MagicMock(return_value="list-config-profiles-coro")
+        with patch(
+            "meridian.remnawave._sdk_call",
+            return_value=_ns(
+                configProfiles=[
+                    _ns(uuid="cp-1", name="default"),
+                    _ns(uuid="cp-2", name="other"),
+                ]
+            ),
+        ):
+            profiles = panel.list_config_profiles()
         assert len(profiles) == 2
 
 
 # ---------------------------------------------------------------------------
-# Internal Squads (raw httpx path)
+# Internal Squads (SDK path)
 # ---------------------------------------------------------------------------
 
 
 class TestInternalSquads:
     def test_list_internal_squads(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(return_value={"internalSquads": [{"uuid": "sq-1", "name": "Default-Squad"}]})
-        squads = panel.list_internal_squads()
+        panel._sdk.internal_squads.get_internal_squads = MagicMock(return_value="list-internal-squads-coro")
+        mock_squad = MagicMock()
+        mock_squad.model_dump.return_value = {"uuid": "sq-1", "name": "Default-Squad"}
+        with patch(
+            "meridian.remnawave._sdk_call",
+            return_value=_ns(internalSquads=[mock_squad]),
+        ):
+            squads = panel.list_internal_squads()
         assert len(squads) == 1
         assert squads[0]["name"] == "Default-Squad"
+
+    def test_assign_inbounds_to_squad_uses_sdk(self) -> None:
+        panel = _make_panel()
+        panel._sdk.internal_squads.update_internal_squad = MagicMock(return_value="update-internal-squad-coro")
+        with patch("meridian.remnawave._sdk_call", return_value=_ns(uuid="sq-1")):
+            panel.assign_inbounds_to_squad(
+                "00000000-0000-0000-0000-0000000000f0",
+                ["00000000-0000-0000-0000-0000000000f1"],
+            )
+        body = panel._sdk.internal_squads.update_internal_squad.call_args[0][0]
+        assert isinstance(body, UpdateInternalSquadRequestDto)
+        assert str(body.uuid) == "00000000-0000-0000-0000-0000000000f0"
+        assert [str(uuid) for uuid in body.inbounds] == ["00000000-0000-0000-0000-0000000000f1"]
 
     def test_get_default_squad_uuid(self) -> None:
         panel = _make_panel()
@@ -643,11 +723,13 @@ class TestErrorSubclasses:
 class TestGetMethodErrorPropagation:
     def test_get_config_profile_not_found_returns_none(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveNotFoundError("404"))
-        assert panel.get_config_profile("cp-1") is None
+        panel._sdk.config_profiles.get_config_profile_by_uuid = MagicMock(return_value="get-config-profile-coro")
+        with patch("meridian.remnawave._sdk_call", side_effect=RemnawaveNotFoundError("404")):
+            assert panel.get_config_profile("cp-1") is None
 
     def test_get_config_profile_auth_error_propagates(self) -> None:
         panel = _make_panel()
-        panel._get = MagicMock(side_effect=RemnawaveAuthError("expired"))
-        with pytest.raises(RemnawaveAuthError):
-            panel.get_config_profile("cp-1")
+        panel._sdk.config_profiles.get_config_profile_by_uuid = MagicMock(return_value="get-config-profile-coro")
+        with patch("meridian.remnawave._sdk_call", side_effect=RemnawaveAuthError("expired")):
+            with pytest.raises(RemnawaveAuthError):
+                panel.get_config_profile("cp-1")

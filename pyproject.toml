@@ -28,7 +28,7 @@ dependencies = [
     "jinja2>=3.0",
     "segno>=1.5",
     "httpx>=0.27",
-    "remnawave-api>=1.1.3",
+    "remnawave==2.7.1",
 ]
 
 [project.scripts]

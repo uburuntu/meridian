@@ -19,7 +19,7 @@ DEFAULT_FINGERPRINT = "chrome"
 ACME_SERVER = os.environ.get("MERIDIAN_ACME_SERVER", "letsencrypt").strip() or "letsencrypt"
 
 # Remnawave panel + node
-REMNAWAVE_BACKEND_IMAGE = "remnawave/backend:2"
+REMNAWAVE_BACKEND_IMAGE = "remnawave/backend:2.7.4"
 REMNAWAVE_NODE_IMAGE = "remnawave/node:latest"
 REMNAWAVE_SUBSCRIPTION_PAGE_IMAGE = "remnawave/subscription-page:7.1.8"
 REMNAWAVE_PANEL_PORT = 3000  # internal port, nginx reverse-proxied
