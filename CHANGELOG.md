@@ -25,7 +25,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - **Manual 3x-ui inbounds no longer crash client commands** — `list_inbounds()` handles empty or malformed JSON from manually-created panel inbounds (#16)
 - **DebianBanner no longer blocks deploy on some OpenSSH builds** — verification is skipped when `sshd -T` doesn't recognize the directive (#20)
 - **BBR no longer blocks deploy on containers** — `sysctl` failures due to missing kernel tunables (containers, old kernels) return a warning instead of failing the entire deploy. Other sysctl errors still fail
-- **SSH drop-in priority** — `00-meridian.conf` ensures Meridian's sshd hardening takes precedence over cloud-init overrides
+- **SSH drop-in priority** — `99-meridian.conf` ensures Meridian's sshd hardening takes precedence over cloud-init overrides (loads last, wins)
 - **SCP directory copy** — fixed `-r` flag compatibility with OpenSSH ≥ 9.0 (SFTP protocol default)
 
 ## [3.16.1] - 2026-04-10

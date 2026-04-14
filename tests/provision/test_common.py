@@ -140,7 +140,7 @@ class TestSetTimezone:
 class TestHardenSSH:
     def test_already_hardened_returns_ok(self, mock_conn: MockConnection, base_ctx):
         """When Meridian's drop-in is present and effective config matches, status is ok."""
-        mock_conn.when("cat /etc/ssh/sshd_config.d/00-meridian.conf", stdout=_SSH_HARDENING_DROPIN.strip())
+        mock_conn.when("cat /etc/ssh/sshd_config.d/99-meridian.conf", stdout=_SSH_HARDENING_DROPIN.strip())
         mock_conn.when("sshd -t", rc=0)
         mock_conn.when("sshd -T", rc=0)
 
@@ -150,9 +150,9 @@ class TestHardenSSH:
 
     def test_hardens_ssh_returns_changed(self, mock_conn: MockConnection, base_ctx):
         """When drop-in is missing, SSH is hardened and sshd restarted."""
-        mock_conn.when("cat /etc/ssh/sshd_config.d/00-meridian.conf", rc=1)
+        mock_conn.when("cat /etc/ssh/sshd_config.d/99-meridian.conf", rc=1)
         mock_conn.when("mkdir -p /etc/ssh/sshd_config.d", rc=0)
-        mock_conn.when("rm -f /etc/ssh/sshd_config.d/99-meridian.conf", rc=0)
+        mock_conn.when("rm -f /etc/ssh/sshd_config.d/00-meridian.conf", rc=0)
         mock_conn.when("sshd -t", rc=0)
         mock_conn.when("sshd -T", rc=0)
 
@@ -162,21 +162,21 @@ class TestHardenSSH:
         mock_conn.assert_called_with_pattern("systemctl restart sshd")
 
     def test_migrates_old_dropin_on_fresh_write(self, mock_conn: MockConnection, base_ctx):
-        """When writing the new 00-meridian.conf, old 99-meridian.conf is removed."""
-        mock_conn.when("cat /etc/ssh/sshd_config.d/00-meridian.conf", rc=1)
+        """When writing the new 99-meridian.conf, old 00-meridian.conf is removed."""
+        mock_conn.when("cat /etc/ssh/sshd_config.d/99-meridian.conf", rc=1)
         mock_conn.when("mkdir -p /etc/ssh/sshd_config.d", rc=0)
-        mock_conn.when("rm -f /etc/ssh/sshd_config.d/99-meridian.conf", rc=0)
+        mock_conn.when("rm -f /etc/ssh/sshd_config.d/00-meridian.conf", rc=0)
         mock_conn.when("sshd -t", rc=0)
         mock_conn.when("sshd -T", rc=0)
 
         result = HardenSSH().run(mock_conn, base_ctx)
 
         assert result.status == "changed"
-        mock_conn.assert_called_with_pattern("rm -f /etc/ssh/sshd_config.d/99-meridian.conf")
+        mock_conn.assert_called_with_pattern("rm -f /etc/ssh/sshd_config.d/00-meridian.conf")
 
     def test_sshd_validation_fails_returns_failed(self, mock_conn: MockConnection, base_ctx):
         """When sshd -t validation fails, status is failed."""
-        mock_conn.when("cat /etc/ssh/sshd_config.d/00-meridian.conf", rc=1)
+        mock_conn.when("cat /etc/ssh/sshd_config.d/99-meridian.conf", rc=1)
         mock_conn.when("sshd -t", rc=1, stderr="sshd_config: bad configuration")
 
         result = HardenSSH().run(mock_conn, base_ctx)
@@ -186,7 +186,7 @@ class TestHardenSSH:
 
     def test_effective_setting_mismatch_returns_failed(self, mock_conn: MockConnection, base_ctx):
         """When sshd -T still reports password auth enabled, fail clearly."""
-        mock_conn.when("cat /etc/ssh/sshd_config.d/00-meridian.conf", stdout=_SSH_HARDENING_DROPIN.strip())
+        mock_conn.when("cat /etc/ssh/sshd_config.d/99-meridian.conf", stdout=_SSH_HARDENING_DROPIN.strip())
         mock_conn.when("sshd -t", rc=0)
         mock_conn.when("sshd -T | grep -q '^passwordauthentication no$'", rc=1)
 
@@ -197,7 +197,7 @@ class TestHardenSSH:
 
     def test_debianbanner_unrecognized_skips_verification(self, mock_conn: MockConnection, base_ctx):
         """When sshd doesn't recognize DebianBanner, skip its verification (issue #20)."""
-        mock_conn.when("cat /etc/ssh/sshd_config.d/00-meridian.conf", stdout=_SSH_HARDENING_DROPIN.strip())
+        mock_conn.when("cat /etc/ssh/sshd_config.d/99-meridian.conf", stdout=_SSH_HARDENING_DROPIN.strip())
         mock_conn.when("sshd -t", rc=0)
         # Required settings pass
         mock_conn.when("sshd -T | grep -q '^passwordauthentication no$'", rc=0)
