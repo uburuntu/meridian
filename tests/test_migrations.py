@@ -17,11 +17,19 @@ class TestMigrations:
         result = migrate(data)
         assert result["version"] == 99
 
-    def test_missing_version_treated_as_v1(self) -> None:
+    def test_missing_version_treated_as_v1_and_migrated(self) -> None:
         data = {"panel": {"url": "https://test"}}
         result = migrate(data)
-        assert result.get("version", 1) == 1
+        assert result["version"] == CURRENT_VERSION
         assert result["panel"]["url"] == "https://test"
+        # v1→v2 adds subscription_page
+        assert result["subscription_page"]["enabled"] is False
+
+    def test_v1_migrates_to_v2(self) -> None:
+        data = {"version": 1, "panel": {"url": "https://test"}}
+        result = migrate(data)
+        assert result["version"] == 2
+        assert result["subscription_page"]["enabled"] is False
 
     def test_data_preserved_through_migration(self) -> None:
         data = {
@@ -31,5 +39,6 @@ class TestMigrations:
             "custom_field": "preserved",
         }
         result = migrate(data)
+        assert result["version"] == 2
         assert result["nodes"] == [{"ip": "198.51.100.1"}]
         assert result["custom_field"] == "preserved"
