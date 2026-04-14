@@ -49,6 +49,25 @@ SSH_OPTS: list[str] = [
     "StrictHostKeyChecking=yes",
 ]
 
+# SSH multiplexing: reuse a single TCP connection for multiple commands
+# to the same host. ControlPersist=300 keeps the master alive for 5min
+# after the last command, so sequential provisioner steps don't pay
+# the TCP+auth handshake each time.
+SSH_MULTIPLEX_OPTS: list[str] = [
+    "-o",
+    "ControlMaster=auto",
+    "-o",
+    "ControlPath=~/.meridian/ssh/%r@%h:%p",
+    "-o",
+    "ControlPersist=300",
+]
+
+
+def ensure_multiplex_dir() -> None:
+    """Create the SSH control socket directory if it doesn't exist."""
+    sock_dir = Path.home() / ".meridian" / "ssh"
+    sock_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+
 
 def scp_host(ip: str) -> str:
     """Format IP for SCP host:path syntax (brackets IPv6)."""
@@ -182,16 +201,28 @@ class ServerConnection:
     Passwordless sudo is required (standard on AWS/GCP/Azure/DO).
     """
 
-    def __init__(self, ip: str, user: str = "root", local_mode: bool = False, port: int = 22) -> None:
+    def __init__(
+        self,
+        ip: str,
+        user: str = "root",
+        local_mode: bool = False,
+        port: int = 22,
+        multiplex: bool = True,
+    ) -> None:
         self.ip = ip
         self.user = user
         self.port = port
         self.local_mode = local_mode
         self.needs_sudo = False  # on-server non-root — run commands via sudo
+        self.multiplex = multiplex
+        if multiplex and not local_mode:
+            ensure_multiplex_dir()
 
     @property
     def _ssh_opts(self) -> list[str]:
         opts = list(SSH_OPTS)
+        if self.multiplex and not self.local_mode:
+            opts.extend(SSH_MULTIPLEX_OPTS)
         if self.port != 22:
             opts.extend(["-p", str(self.port)])
         return opts
@@ -200,6 +231,8 @@ class ServerConnection:
     def _scp_opts(self) -> list[str]:
         """SSH options for SCP commands (uses -P for port, not -p)."""
         opts = list(SSH_OPTS)
+        if self.multiplex and not self.local_mode:
+            opts.extend(SSH_MULTIPLEX_OPTS)
         if self.port != 22:
             opts.extend(["-P", str(self.port)])
         return opts
