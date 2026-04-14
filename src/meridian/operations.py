@@ -133,16 +133,13 @@ def update_node(
     reality_port = 10000 + ip_hash % 1000
     wss_port = 20000 + (ip_hash % 10000)
 
-    # Update node metadata before redeploy so _setup_redeploy reads updated values.
+    # Save old values for rollback if redeploy fails
+    old_name, old_sni, old_domain, old_warp = node.name, node.sni, node.domain, node.warp
+
+    # Update metadata before redeploy so _setup_redeploy reads new values.
     # None = keep current, "" = clear to empty/default.
-    if name is not None and name != node.name:
+    if name is not None:
         node.name = name
-        # Also update in panel so actual state converges
-        if node.uuid:
-            try:
-                panel.update_node_name(node.uuid, name)
-            except RemnawaveError as e:
-                logger.warning("Could not update node name in panel: %s", e)
     if sni is not None:
         node.sni = sni
     if domain is not None:
@@ -151,19 +148,31 @@ def update_node(
 
     from meridian import __version__
 
-    _setup_redeploy(
-        resolved=resolved,
-        cluster=cluster,
-        domain=node.domain,
-        sni=node.sni,
-        reality_port=reality_port,
-        xhttp_port=xhttp_port,
-        wss_port=wss_port,
-        version=__version__,
-        warp=warp,
-        xhttp_path=node.xhttp_path,
-        ws_path=node.ws_path,
-    )
+    try:
+        _setup_redeploy(
+            resolved=resolved,
+            cluster=cluster,
+            domain=node.domain,
+            sni=node.sni,
+            reality_port=reality_port,
+            xhttp_port=xhttp_port,
+            wss_port=wss_port,
+            version=__version__,
+            warp=warp,
+            xhttp_path=node.xhttp_path,
+            ws_path=node.ws_path,
+        )
+    except Exception:
+        # Rollback metadata on failure so cluster.yml stays accurate
+        node.name, node.sni, node.domain, node.warp = old_name, old_sni, old_domain, old_warp
+        raise
+
+    # Update name in panel after successful redeploy
+    if name is not None and name != old_name and node.uuid:
+        try:
+            panel.update_node_name(node.uuid, name)
+        except RemnawaveError as e:
+            logger.warning("Could not update node name in panel: %s", e)
 
 
 def remove_node(

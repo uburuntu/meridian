@@ -55,9 +55,9 @@ def _handle_update_node(action: PlanAction, panel: object, cluster: object) -> N
         cluster,
         panel,
         ip=action.target,
-        name=desired.name if desired else None,
-        sni=desired.sni if desired else "",
-        domain=desired.domain if desired else "",
+        name=desired.name if desired and desired.name else None,
+        sni=desired.sni if desired else None,
+        domain=desired.domain if desired else None,
         warp=desired.warp if desired else False,
     )
 
@@ -118,7 +118,7 @@ def _handle_update_relay(action: PlanAction, panel: object, cluster: object) -> 
             exit_node_ip=desired.exit_node,
             ssh_user=desired.ssh_user,
             ssh_port=desired.ssh_port,
-            name=desired.name,
+            name=desired.name or desired.host,
         )
 
 
