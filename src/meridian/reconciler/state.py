@@ -107,7 +107,7 @@ def build_desired_state(cluster: object) -> DesiredState:
             sni=dn.sni,
             warp=dn.warp,
         )
-        for dn in cluster.desired_nodes
+        for dn in (cluster.desired_nodes or [])
     ]
 
     relays = [
@@ -118,7 +118,7 @@ def build_desired_state(cluster: object) -> DesiredState:
             ssh_user=dr.ssh_user,
             ssh_port=dr.ssh_port,
         )
-        for dr in cluster.desired_relays
+        for dr in (cluster.desired_relays or [])
     ]
 
     sub_enabled = cluster.subscription_page.enabled if cluster.subscription_page else True

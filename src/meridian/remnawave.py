@@ -696,7 +696,10 @@ class MeridianPanel:
                 hint="Check panel credentials",
                 hint_type="user",
             )
-        data = resp.json()
+        try:
+            data = resp.json()
+        except (ValueError, TypeError) as e:
+            raise RemnawaveError("Panel returned invalid JSON during login", hint_type="system") from e
         if isinstance(data, dict) and "response" in data:
             data = data["response"]
         token = data.get("accessToken", "") or data.get("token", "")
@@ -732,7 +735,10 @@ class MeridianPanel:
                 f"Admin registration failed ({resp.status_code}): {resp.text[:200]}",
                 hint_type="system",
             )
-        data = resp.json()
+        try:
+            data = resp.json()
+        except (ValueError, TypeError) as e:
+            raise RemnawaveError("Panel returned invalid JSON during registration", hint_type="system") from e
         if isinstance(data, dict) and "response" in data:
             data = data["response"]
         token = data.get("accessToken", "") or data.get("token", "")

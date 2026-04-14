@@ -93,6 +93,34 @@ def _handle_add_relay(action: PlanAction, panel: object, cluster: object) -> Non
     )
 
 
+def _handle_update_relay(action: PlanAction, panel: object, cluster: object) -> None:
+    """Update a relay (remove + re-add with new config)."""
+    from meridian.cluster import ClusterConfig
+    from meridian.operations import add_relay, remove_relay
+    from meridian.remnawave import MeridianPanel
+
+    assert isinstance(panel, MeridianPanel)
+    assert isinstance(cluster, ClusterConfig)
+
+    # Remove old relay, then re-add with desired config
+    remove_relay(cluster, panel, relay_ip=action.target)
+
+    desired = next(
+        (r for r in (cluster.desired_relays or []) if r.host == action.target),
+        None,
+    )
+    if desired:
+        add_relay(
+            cluster,
+            panel,
+            relay_ip=action.target,
+            exit_node_ip=desired.exit_node,
+            ssh_user=desired.ssh_user,
+            ssh_port=desired.ssh_port,
+            name=desired.name,
+        )
+
+
 def _handle_remove_relay(action: PlanAction, panel: object, cluster: object) -> None:
     """Remove a relay."""
     from meridian.cluster import ClusterConfig
@@ -224,6 +252,7 @@ def run(
                 PlanActionKind.UPDATE_NODE: _handle_update_node,
                 PlanActionKind.REMOVE_NODE: _handle_remove_node,
                 PlanActionKind.ADD_RELAY: _handle_add_relay,
+                PlanActionKind.UPDATE_RELAY: _handle_update_relay,
                 PlanActionKind.REMOVE_RELAY: _handle_remove_relay,
                 PlanActionKind.ADD_CLIENT: _handle_add_client,
                 PlanActionKind.REMOVE_CLIENT: _handle_remove_client,
