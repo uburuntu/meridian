@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-CURRENT_VERSION = 1
+CURRENT_VERSION = 2
 
 
 def migrate(data: dict[str, Any]) -> dict[str, Any]:
@@ -23,7 +23,7 @@ def migrate(data: dict[str, Any]) -> dict[str, Any]:
         return data
 
     migrations: dict[int, Any] = {
-        # Future: 1: _migrate_v1_to_v2,
+        1: _migrate_v1_to_v2,
     }
 
     while version < CURRENT_VERSION:
@@ -33,5 +33,25 @@ def migrate(data: dict[str, Any]) -> dict[str, Any]:
         data = migrator(data)
         version += 1
         data["version"] = version
+
+    return data
+
+
+def _migrate_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate cluster.yml from v1 to v2.
+
+    v2 adds: subscription_page config, desired state fields
+    (desired_nodes, desired_clients, desired_relays).
+
+    Subscription page is disabled by default for existing v1 deployments
+    (they were deployed without it). Desired state fields are left empty
+    (v1 clusters are managed imperatively).
+    """
+    # Subscription page: disabled for existing deployments
+    if "subscription_page" not in data:
+        data["subscription_page"] = {"enabled": False}
+
+    # Desired state fields: empty by default (no breaking change)
+    # These are optional — omitting them is valid.
 
     return data

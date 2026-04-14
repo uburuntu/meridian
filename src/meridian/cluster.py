@@ -124,6 +124,43 @@ class InboundRef:
 
 
 @dataclass
+class SubscriptionPageConfig:
+    """Remnawave subscription page deployment config."""
+
+    enabled: bool = True
+    port: int = 3020  # host port (container uses 3010 internally)
+    image: str = ""  # override default image tag
+    _extra: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass
+class DesiredNode:
+    """A node that should exist in the fleet (desired state for plan/apply)."""
+
+    host: str = ""  # IP address
+    name: str = ""  # friendly name (e.g., "de-fra-1")
+    ssh_user: str = "root"
+    ssh_port: int = 22
+    protocols: list[str] = field(default_factory=list)  # ["reality", "xhttp", "wss"]
+    domain: str = ""  # optional domain for WSS/XHTTP
+    sni: str = ""  # Reality SNI target
+    warp: bool = False
+    _extra: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass
+class DesiredRelay:
+    """A relay that should exist in the fleet (desired state for plan/apply)."""
+
+    host: str = ""  # IP address
+    name: str = ""  # friendly name (e.g., "relay-msk")
+    exit_node: str = ""  # name or IP of the exit node
+    ssh_user: str = "root"
+    ssh_port: int = 22
+    _extra: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass
 class ClusterConfig:
     """Fleet-wide configuration — the sole local state for Meridian 4.0.
 
@@ -131,7 +168,7 @@ class ClusterConfig:
     Client/user state lives in Remnawave's database, not here.
     """
 
-    version: int = 1
+    version: int = 2
     panel: PanelConfig = field(default_factory=PanelConfig)
     config_profile_uuid: str = ""
     config_profile_name: str = ""
@@ -140,6 +177,12 @@ class ClusterConfig:
     relays: list[RelayEntry] = field(default_factory=list)
     branding: BrandingConfig = field(default_factory=BrandingConfig)
     inbounds: dict[str, InboundRef] = field(default_factory=dict)
+    # v2: subscription page config
+    subscription_page: SubscriptionPageConfig = field(default_factory=SubscriptionPageConfig)
+    # v2: desired state for declarative plan/apply workflow
+    desired_nodes: list[DesiredNode] = field(default_factory=list)
+    desired_clients: list[str] = field(default_factory=list)
+    desired_relays: list[DesiredRelay] = field(default_factory=list)
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
     _readonly: bool = field(default=False, repr=False)
 
@@ -166,9 +209,9 @@ class ClusterConfig:
         if not isinstance(data, dict):
             return cls()
         version = data.get("version", 1)
-        if isinstance(version, int) and version > 1:
+        if isinstance(version, int) and version > 2:
             print(
-                f"Warning: cluster.yml has version {version}, but this CLI only understands version 1. "
+                f"Warning: cluster.yml has version {version}, but this CLI only understands version 2. "
                 "Some fields may be ignored. Upgrade Meridian: pip install --upgrade meridian-vpn",
                 file=sys.stderr,
             )
@@ -178,7 +221,7 @@ class ClusterConfig:
         cfg = _load_cluster(data)
 
         # Mark future-version configs as read-only to prevent data loss
-        if isinstance(version, int) and version > 1:
+        if isinstance(version, int) and version > 2:
             cfg._readonly = True
 
         # Warn about validation errors on load (don't hard-fail — recover/doctor need corrupt configs)
@@ -444,6 +487,9 @@ _NODE_FIELDS = {
 _RELAY_FIELDS = {"ip", "name", "port", "exit_node_ip", "host_uuids", "sni", "ssh_user", "ssh_port"}
 _BRANDING_FIELDS = {"server_name", "icon", "color"}
 _INBOUND_REF_FIELDS = {"uuid", "tag"}
+_SUBSCRIPTION_PAGE_FIELDS = {"enabled", "port", "image"}
+_DESIRED_NODE_FIELDS = {"host", "name", "ssh_user", "ssh_port", "protocols", "domain", "sni", "warp"}
+_DESIRED_RELAY_FIELDS = {"host", "name", "exit_node", "ssh_user", "ssh_port"}
 _KNOWN_TOP = {
     "version",
     "panel",
@@ -454,6 +500,10 @@ _KNOWN_TOP = {
     "relays",
     "branding",
     "inbounds",
+    "subscription_page",
+    "desired_nodes",
+    "desired_clients",
+    "desired_relays",
 }
 
 
@@ -564,6 +614,46 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
         if inbounds_out:
             out["inbounds"] = inbounds_out
 
+    # Subscription page (v2)
+    sub_page_dict = _serialize_dataclass(cfg.subscription_page)
+    # Remove defaults to keep YAML clean
+    if sub_page_dict.get("port") == 3020:
+        sub_page_dict.pop("port", None)
+    if not sub_page_dict.get("image"):
+        sub_page_dict.pop("image", None)
+    if sub_page_dict:
+        out["subscription_page"] = sub_page_dict
+
+    # Desired state (v2 — only serialize if non-empty)
+    if cfg.desired_nodes:
+        desired_nodes_out = []
+        for dn in cfg.desired_nodes:
+            d = _serialize_dataclass(dn)
+            if d.get("ssh_user") == "root":
+                d.pop("ssh_user", None)
+            if d.get("ssh_port") == 22:
+                d.pop("ssh_port", None)
+            if not d.get("warp"):
+                d.pop("warp", None)
+            if not d.get("protocols"):
+                d.pop("protocols", None)
+            desired_nodes_out.append(d)
+        out["desired_nodes"] = desired_nodes_out
+
+    if cfg.desired_clients:
+        out["desired_clients"] = list(cfg.desired_clients)
+
+    if cfg.desired_relays:
+        desired_relays_out = []
+        for dr in cfg.desired_relays:
+            d = _serialize_dataclass(dr)
+            if d.get("ssh_user") == "root":
+                d.pop("ssh_user", None)
+            if d.get("ssh_port") == 22:
+                d.pop("ssh_port", None)
+            desired_relays_out.append(d)
+        out["desired_relays"] = desired_relays_out
+
     # Extra fields (forward-compat)
     for k, v in cfg._extra.items():
         if k not in out:
@@ -672,11 +762,46 @@ def _load_cluster(data: dict[str, Any]) -> ClusterConfig:
     for key, ref_data in data.get("inbounds", {}).items():
         inbounds[key] = _load_dataclass(ref_data, InboundRef, _INBOUND_REF_FIELDS)
 
+    # Subscription page (v2)
+    subscription_page = _load_dataclass(
+        data.get("subscription_page", {}),
+        SubscriptionPageConfig,
+        _SUBSCRIPTION_PAGE_FIELDS,
+        defaults={"enabled": True, "port": 3020, "image": ""},
+        transforms={"enabled": bool},
+    )
+
+    # Desired state (v2)
+    desired_nodes: list[DesiredNode] = []
+    for dn in data.get("desired_nodes", []):
+        desired_nodes.append(
+            _load_dataclass(
+                dn,
+                DesiredNode,
+                _DESIRED_NODE_FIELDS,
+                defaults={"ssh_user": "root", "ssh_port": 22, "warp": False},
+                transforms={"warp": bool},
+            )
+        )
+
+    desired_clients: list[str] = list(data.get("desired_clients", []))
+
+    desired_relays: list[DesiredRelay] = []
+    for dr in data.get("desired_relays", []):
+        desired_relays.append(
+            _load_dataclass(
+                dr,
+                DesiredRelay,
+                _DESIRED_RELAY_FIELDS,
+                defaults={"ssh_user": "root", "ssh_port": 22},
+            )
+        )
+
     # Extra fields
     extra = {k: v for k, v in data.items() if k not in _KNOWN_TOP}
 
     return ClusterConfig(
-        version=data.get("version", 1),
+        version=data.get("version", 2),
         panel=panel,
         config_profile_uuid=data.get("config_profile_uuid", ""),
         config_profile_name=data.get("config_profile_name", ""),
@@ -685,5 +810,9 @@ def _load_cluster(data: dict[str, Any]) -> ClusterConfig:
         relays=relays,
         branding=branding,
         inbounds=inbounds,
+        subscription_page=subscription_page,
+        desired_nodes=desired_nodes,
+        desired_clients=desired_clients,
+        desired_relays=desired_relays,
         _extra=extra,
     )
