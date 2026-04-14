@@ -93,10 +93,21 @@ def add_node(
         ws_path=ws_path,
     )
 
-    # Return the newly added node
+    # Return the newly added node, applying desired name if provided
     node = cluster.find_node(ip)
     if node is None:
         raise RuntimeError(f"Node {ip} was provisioned but not found in cluster config")
+
+    # _setup_new_node uses "domain or ip" as name. Override with desired name.
+    if name and name != node.name:
+        node.name = name
+        if node.uuid:
+            try:
+                panel.update_node_name(node.uuid, name)
+            except RemnawaveError as e:
+                logger.warning("Could not set node name in panel: %s", e)
+        cluster.save()
+
     return node
 
 
@@ -306,6 +317,9 @@ def add_relay(
             host_uuids[key] = host.uuid
         except RemnawaveError as e:
             logger.warning("Could not create relay host %s: %s", remark, e)
+
+    if not host_uuids:
+        raise RuntimeError(f"Relay {relay_ip}: no panel hosts created — all create_host calls failed")
 
     # Configure nginx SNI on exit node
     from meridian.commands.relay import _deploy_relay_nginx
