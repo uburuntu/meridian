@@ -350,6 +350,8 @@ def _run_provisioner(
     # Provide xhttp/ws paths — reuse saved paths on redeploy, generate fresh otherwise
     ctx["xhttp_path"] = xhttp_path or secrets.token_hex(8)
     ctx["ws_path"] = ws_path or secrets.token_hex(8)
+    # Subscription page path for nginx reverse proxy
+    ctx["subscription_page_path"] = secrets.token_hex(8)
 
     err_console.print()
     info(f"Configuring server at {ctx.ip}...")
@@ -699,6 +701,12 @@ def _setup_first_deploy(
     cluster.panel.api_token = api_token
     cluster.save()
 
+    # Configure subscription page with the real API token
+    from meridian.provision.remnawave_panel import configure_subscription_page
+
+    configure_subscription_page(resolved.conn, api_token)
+    ok("Subscription page configured")
+
     with MeridianPanel(base_url, api_token) as panel:
         # Create config profile (Xray inbound definitions)
         profile_name = "meridian-default"
@@ -1000,6 +1008,12 @@ def _setup_redeploy(
             cluster.backup()
             cluster.save()
             ok("Node configuration updated")
+
+            # Ensure subscription page has a valid token (upgrade from pre-subscription deploys)
+            if node.is_panel_host:
+                from meridian.provision.remnawave_panel import configure_subscription_page
+
+                configure_subscription_page(resolved.conn, cluster.panel.api_token)
 
     except RemnawaveError as e:
         fail(f"Panel API error: {e}", hint_type="system")
