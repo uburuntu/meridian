@@ -177,7 +177,7 @@ class TestBuildRelayUrls:
         assert len(xhttp_urls) == 1
         xhttp_url = xhttp_urls[0].url
         assert "@1.2.3.4:" in xhttp_url  # connects to relay
-        assert "sni=5.6.7.8" in xhttp_url  # TLS identity is exit IP
+        assert "sni=5.6.7.8" in xhttp_url  # no relay SNI, no domain → falls back to exit IP
         assert "fp=chrome" in xhttp_url  # TLS fingerprint
         assert "xhttp123" in xhttp_url  # path preserved
 
@@ -204,10 +204,10 @@ class TestBuildRelayUrls:
         assert "sni=yandex.ru" in reality_url.url
         assert "sni=www.microsoft.com" not in reality_url.url
 
-        # XHTTP should still use exit's IP/domain (not relay SNI)
+        # XHTTP should also use relay SNI
         xhttp_urls = [u for u in result.urls if u.key == "xhttp"]
         if xhttp_urls:
-            assert "sni=5.6.7.8" in xhttp_urls[0].url  # exit IP, not yandex.ru
+            assert "sni=yandex.ru" in xhttp_urls[0].url
 
     def test_build_all_relay_urls_uses_relay_sni(self, sample_proxy_with_relays: Path) -> None:
         """build_all_relay_urls passes relay.sni from each RelayEntry."""

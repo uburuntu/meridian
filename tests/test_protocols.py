@@ -546,6 +546,14 @@ class TestBuildRelayUrl:
         url = XHTTPProtocol().build_relay_url("r-uuid", "", creds, "bob", "198.51.100.50")
         assert url == ""
 
+    def test_xhttp_relay_with_relay_sni(self) -> None:
+        creds = _make_test_creds(domain="example.com", xhttp_path="xp123")
+        url = XHTTPProtocol().build_relay_url(
+            "r-uuid", "", creds, "bob", "198.51.100.50", relay_sni="yandex.ru", relay_name="moscow"
+        )
+        assert "sni=yandex.ru" in url
+        assert "sni=example.com" not in url
+
     def test_wss_relay_url(self) -> None:
         creds = _make_test_creds(domain="example.com", ws_path="ws789")
         url = WSSProtocol().build_relay_url("", "w-uuid", creds, "carol", "198.51.100.50", 8443, relay_name="moscow")
@@ -553,6 +561,15 @@ class TestBuildRelayUrl:
         assert "sni=example.com" in url
         assert "host=example.com" in url
         assert "#carol-via-moscow-WSS" in url
+
+    def test_wss_relay_with_relay_sni(self) -> None:
+        creds = _make_test_creds(domain="example.com", ws_path="ws789")
+        url = WSSProtocol().build_relay_url(
+            "", "w-uuid", creds, "carol", "198.51.100.50", relay_sni="yandex.ru", relay_name="moscow"
+        )
+        assert "sni=yandex.ru" in url
+        assert "sni=example.com" not in url
+        assert "host=example.com" in url  # host stays as exit domain for routing
 
     def test_wss_relay_returns_empty_without_domain(self) -> None:
         creds = _make_test_creds(ws_path="ws789")
