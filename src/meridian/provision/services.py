@@ -98,7 +98,6 @@ def _render_nginx_stream_config(
 
         server {{
             listen 443;
-            listen [::]:443;
             ssl_preread on;
             proxy_pass $meridian_backend;
             # Short timeout — don't wait 60s (default) if a backend is
@@ -321,7 +320,8 @@ def _render_nginx_server_block(
         }}
     {upstream_blocks}
         server {{
-            listen 127.0.0.1:{nginx_internal_port} ssl http2;
+            listen 127.0.0.1:{nginx_internal_port} ssl;
+            http2 on;
             server_name {host};
             server_tokens off;
 
@@ -368,7 +368,6 @@ def _render_nginx_server_block(
         # --- HTTP: ACME challenge{" + redirect" if redirect_http else " only (no redirect)"} ---
         server {{
             listen 80;
-            listen [::]:80;
             server_name {host};
             server_tokens off;
 
