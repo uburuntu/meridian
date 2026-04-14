@@ -55,6 +55,7 @@ def _handle_update_node(action: PlanAction, panel: object, cluster: object) -> N
         cluster,
         panel,
         ip=action.target,
+        name=desired.name if desired else None,
         sni=desired.sni if desired else "",
         domain=desired.domain if desired else "",
         warp=desired.warp if desired else False,

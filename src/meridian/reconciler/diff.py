@@ -184,6 +184,9 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
 
         for node in actual.nodes:
             if node.host not in desired_node_hosts:
+                # Never plan removal of the panel host — use teardown instead
+                if node.is_panel_host:
+                    continue
                 actions.append(
                     PlanAction(
                         kind=PlanActionKind.REMOVE_NODE,

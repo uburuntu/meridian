@@ -105,6 +105,7 @@ def update_node(
     panel: MeridianPanel,
     *,
     ip: str,
+    name: str | None = None,
     sni: str | None = None,
     domain: str | None = None,
     warp: bool = False,
@@ -151,6 +152,11 @@ def update_node(
         xhttp_path=node.xhttp_path,
         ws_path=node.ws_path,
     )
+
+    # Update name in cluster.yml if changed
+    if name is not None and name != node.name:
+        node.name = name
+        cluster.save()
 
 
 def remove_node(
