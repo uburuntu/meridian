@@ -320,8 +320,7 @@ def _render_nginx_server_block(
         }}
     {upstream_blocks}
         server {{
-            listen 127.0.0.1:{nginx_internal_port} ssl;
-            http2 on;
+            listen 127.0.0.1:{nginx_internal_port} ssl http2;
             server_name {host};
             server_tokens off;
 
