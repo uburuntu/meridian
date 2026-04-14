@@ -24,7 +24,9 @@ def run() -> None:
     has_desired = (
         cluster.desired_nodes is not None or cluster.desired_clients is not None or cluster.desired_relays is not None
     )
-    has_sub_page = cluster.subscription_page and cluster.subscription_page.enabled
+    has_sub_page = cluster.subscription_page and (
+        cluster.subscription_page.enabled or cluster.subscription_page._extra.get("deployed", False)
+    )
     if not has_desired and not has_sub_page:
         fail(
             "No desired state defined in cluster.yml",
@@ -40,11 +42,17 @@ def run() -> None:
 
     info("Fetching actual state from panel...")
     from meridian.remnawave import MeridianPanel, RemnawaveError
+    from meridian.ssh import ServerConnection
 
     try:
+        # SSH connection to panel host for live subscription page check
+        panel_conn = None
+        if cluster.panel.server_ip:
+            panel_conn = ServerConnection(cluster.panel.server_ip, cluster.panel.ssh_user, port=cluster.panel.ssh_port)
+
         with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
             desired = build_desired_state(cluster)
-            actual = build_actual_state(cluster, panel)
+            actual = build_actual_state(cluster, panel, panel_conn=panel_conn)
     except RemnawaveError as e:
         fail(f"Cannot reach panel: {e}", hint_type="system")
 

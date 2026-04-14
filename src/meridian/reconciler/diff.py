@@ -213,6 +213,7 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
                             kind=PlanActionKind.UPDATE_RELAY,
                             target=relay.host,
                             detail=f"update relay {relay.name or relay.host}: {', '.join(changes)}",
+                            destructive=True,  # implemented as delete + recreate
                         )
                     )
 

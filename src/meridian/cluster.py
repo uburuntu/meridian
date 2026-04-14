@@ -128,8 +128,6 @@ class SubscriptionPageConfig:
     """Remnawave subscription page deployment config."""
 
     enabled: bool = True
-    port: int = 3020  # host port (container uses 3010 internally)
-    image: str = ""  # override default image tag
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -503,7 +501,7 @@ _NODE_FIELDS = {
 _RELAY_FIELDS = {"ip", "name", "port", "exit_node_ip", "host_uuids", "sni", "ssh_user", "ssh_port"}
 _BRANDING_FIELDS = {"server_name", "icon", "color"}
 _INBOUND_REF_FIELDS = {"uuid", "tag"}
-_SUBSCRIPTION_PAGE_FIELDS = {"enabled", "port", "image"}
+_SUBSCRIPTION_PAGE_FIELDS = {"enabled"}
 _DESIRED_NODE_FIELDS = {"host", "name", "ssh_user", "ssh_port", "domain", "sni", "warp"}
 _DESIRED_RELAY_FIELDS = {"host", "name", "exit_node", "ssh_user", "ssh_port"}
 _KNOWN_TOP = {
@@ -632,11 +630,6 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
 
     # Subscription page (v2)
     sub_page_dict = _serialize_dataclass(cfg.subscription_page)
-    # Remove defaults to keep YAML clean
-    if sub_page_dict.get("port") == 3020:
-        sub_page_dict.pop("port", None)
-    if not sub_page_dict.get("image"):
-        sub_page_dict.pop("image", None)
     if sub_page_dict:
         out["subscription_page"] = sub_page_dict
 
@@ -782,7 +775,7 @@ def _load_cluster(data: dict[str, Any]) -> ClusterConfig:
         data.get("subscription_page", {}),
         SubscriptionPageConfig,
         _SUBSCRIPTION_PAGE_FIELDS,
-        defaults={"enabled": True, "port": 3020, "image": ""},
+        defaults={"enabled": True},
         transforms={"enabled": bool},
     )
 
