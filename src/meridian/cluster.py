@@ -371,6 +371,23 @@ class ClusterConfig:
             if hasattr(ref, "uuid") and ref.uuid and not _is_valid_uuid(ref.uuid):
                 errors.append(f"inbounds[{key}].uuid is not a valid UUID: {ref.uuid}")
 
+        # Desired state: duplicate host detection
+        if self.desired_nodes is not None:
+            desired_node_hosts: list[str] = []
+            for i, dn in enumerate(self.desired_nodes):
+                if dn.host:
+                    if dn.host in desired_node_hosts:
+                        errors.append(f"desired_nodes[{i}].host is a duplicate: {dn.host}")
+                    desired_node_hosts.append(dn.host)
+
+        if self.desired_relays is not None:
+            desired_relay_hosts: list[str] = []
+            for i, dr in enumerate(self.desired_relays):
+                if dr.host:
+                    if dr.host in desired_relay_hosts:
+                        errors.append(f"desired_relays[{i}].host is a duplicate: {dr.host}")
+                    desired_relay_hosts.append(dr.host)
+
         return errors
 
     def backup(self, path: Path | None = None) -> None:
