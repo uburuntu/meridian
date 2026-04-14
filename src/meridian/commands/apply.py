@@ -155,9 +155,26 @@ def _handle_remove_client(action: PlanAction, panel: object, cluster: object) ->
 
 
 def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: object) -> None:
-    """Deploy the subscription page container."""
+    """Deploy the subscription page container.
+
+    Handles both fresh deploys (container not in compose) and restarts
+    (container exists but stopped). Regenerates docker-compose.yml if the
+    subscription page service is missing, then configures with API token.
+    """
+    import shlex
+
     from meridian.cluster import ClusterConfig
-    from meridian.provision.remnawave_panel import configure_subscription_page
+    from meridian.config import (
+        REMNAWAVE_BACKEND_IMAGE,
+        REMNAWAVE_PANEL_DIR,
+        REMNAWAVE_PANEL_PORT,
+        REMNAWAVE_SUBSCRIPTION_PAGE_IMAGE,
+        REMNAWAVE_SUBSCRIPTION_PAGE_PORT,
+    )
+    from meridian.provision.remnawave_panel import (
+        _render_panel_compose,
+        configure_subscription_page,
+    )
     from meridian.remnawave import MeridianPanel
     from meridian.ssh import ServerConnection
 
@@ -168,6 +185,26 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
         raise RuntimeError("Panel server IP not set in cluster config")
 
     conn = ServerConnection(cluster.panel.server_ip, cluster.panel.ssh_user, port=cluster.panel.ssh_port)
+
+    # Check if subscription page container exists in docker-compose
+    q_dir = shlex.quote(REMNAWAVE_PANEL_DIR)
+    check = conn.run(
+        f"cd {q_dir} && docker compose config --services 2>/dev/null | grep -q subscription",
+        timeout=15,
+    )
+    if check.returncode != 0:
+        # Container not in compose — regenerate compose file and bring up
+        compose = _render_panel_compose(
+            image=REMNAWAVE_BACKEND_IMAGE,
+            panel_port=REMNAWAVE_PANEL_PORT,
+            subscription_page_image=REMNAWAVE_SUBSCRIPTION_PAGE_IMAGE,
+            subscription_page_host_port=REMNAWAVE_SUBSCRIPTION_PAGE_PORT,
+        )
+        compose_path = f"{REMNAWAVE_PANEL_DIR}/docker-compose.yml"
+        write_cmd = f"cat > {shlex.quote(compose_path)} << 'MERIDIAN_EOF'\n{compose}MERIDIAN_EOF"
+        conn.run(write_cmd, timeout=15)
+        conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
+
     if not configure_subscription_page(conn, cluster.panel.api_token):
         raise RuntimeError("Failed to configure subscription page")
 
