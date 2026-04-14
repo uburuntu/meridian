@@ -21,7 +21,9 @@ def run() -> None:
     """Show what meridian apply would do, without changing anything."""
     cluster = ClusterConfig.load()
 
-    has_desired = cluster.desired_nodes or cluster.desired_clients or cluster.desired_relays
+    has_desired = (
+        cluster.desired_nodes is not None or cluster.desired_clients is not None or cluster.desired_relays is not None
+    )
     has_sub_page = cluster.subscription_page and cluster.subscription_page.enabled
     if not has_desired and not has_sub_page:
         fail(

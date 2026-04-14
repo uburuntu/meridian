@@ -104,8 +104,9 @@ class Plan:
 def _node_changes(desired: DesiredNodeState, actual: ActualNodeState) -> list[str]:
     """Compare attributes of a matching node and return list of change descriptions."""
     changes: list[str] = []
-    if desired.sni and desired.sni != actual.sni:
-        changes.append(f"sni: {actual.sni or '(none)'} → {desired.sni}")
+    # Compare sni — empty string in desired means "clear to default"
+    if desired.sni != actual.sni:
+        changes.append(f"sni: {actual.sni or '(default)'} → {desired.sni or '(default)'}")
     if desired.domain != actual.domain:
         changes.append(f"domain: {actual.domain or '(none)'} → {desired.domain or '(none)'}")
     if desired.warp != actual.warp:
@@ -113,11 +114,20 @@ def _node_changes(desired: DesiredNodeState, actual: ActualNodeState) -> list[st
     return changes
 
 
-def _relay_changes(desired: DesiredRelayState, actual: ActualRelayState) -> list[str]:
+def _relay_changes(
+    desired: DesiredRelayState,
+    actual: ActualRelayState,
+    node_name_to_ip: dict[str, str] | None = None,
+) -> list[str]:
     """Compare attributes of a matching relay."""
     changes: list[str] = []
-    if desired.exit_node and desired.exit_node != actual.exit_node_ip:
-        changes.append(f"exit_node: {actual.exit_node_ip or '(none)'} → {desired.exit_node}")
+    if desired.exit_node:
+        # Resolve node name to IP if needed
+        resolved_exit = desired.exit_node
+        if node_name_to_ip and resolved_exit in node_name_to_ip:
+            resolved_exit = node_name_to_ip[resolved_exit]
+        if resolved_exit != actual.exit_node_ip:
+            changes.append(f"exit_node: {actual.exit_node_ip or '(none)'} → {desired.exit_node}")
     return changes
 
 
@@ -133,6 +143,15 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
     Action ordering: nodes → relays → clients → subscription page.
     """
     actions: list[PlanAction] = []
+
+    # Build node name → IP map for relay exit_node resolution
+    node_name_to_ip: dict[str, str] = {}
+    for n in actual.nodes:
+        if n.name:
+            node_name_to_ip[n.name] = n.host
+    for n in desired.nodes:
+        if n.name:
+            node_name_to_ip[n.name] = n.host
 
     # --- Nodes ---
     if desired.manage_nodes:
@@ -187,7 +206,7 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
                     )
                 )
             else:
-                changes = _relay_changes(relay, actual_relay)
+                changes = _relay_changes(relay, actual_relay, node_name_to_ip)
                 if changes:
                     actions.append(
                         PlanAction(

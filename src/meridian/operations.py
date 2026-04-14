@@ -105,13 +105,15 @@ def update_node(
     panel: MeridianPanel,
     *,
     ip: str,
-    sni: str = "",
-    domain: str = "",
+    sni: str | None = None,
+    domain: str | None = None,
     warp: bool = False,
 ) -> None:
     """Redeploy an existing node with updated configuration.
 
     Calls the existing _setup_redeploy() flow from setup.py.
+    Uses None as sentinel for "not specified" (keep current).
+    Empty string means "clear to default/empty".
     """
     from meridian.commands.resolve import ResolvedServer
     from meridian.commands.setup import _setup_redeploy
@@ -130,13 +132,17 @@ def update_node(
     reality_port = 10000 + ip_hash % 1000
     wss_port = 20000 + (ip_hash % 10000)
 
+    # None = keep current, "" = clear to empty/default
+    effective_domain = domain if domain is not None else node.domain
+    effective_sni = sni if sni is not None else node.sni
+
     from meridian import __version__
 
     _setup_redeploy(
         resolved=resolved,
         cluster=cluster,
-        domain=domain or node.domain,
-        sni=sni or node.sni,
+        domain=effective_domain,
+        sni=effective_sni,
         reality_port=reality_port,
         xhttp_port=xhttp_port,
         wss_port=wss_port,

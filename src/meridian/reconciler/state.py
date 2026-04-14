@@ -123,14 +123,17 @@ def build_desired_state(cluster: object) -> DesiredState:
 
     sub_enabled = cluster.subscription_page.enabled if cluster.subscription_page else True
 
+    # manage_* is True when the section is present (even if empty list).
+    # desired_nodes=None means "not declared" → don't manage.
+    # desired_nodes=[] means "declared, want zero" → manage (delete all).
     return DesiredState(
         nodes=nodes,
-        clients=list(cluster.desired_clients),
+        clients=list(cluster.desired_clients) if cluster.desired_clients is not None else [],
         relays=relays,
         subscription_page_enabled=sub_enabled,
-        manage_nodes=bool(cluster.desired_nodes),
-        manage_clients=bool(cluster.desired_clients),
-        manage_relays=bool(cluster.desired_relays),
+        manage_nodes=cluster.desired_nodes is not None,
+        manage_clients=cluster.desired_clients is not None,
+        manage_relays=cluster.desired_relays is not None,
     )
 
 
@@ -146,15 +149,31 @@ def build_actual_state(cluster: object, panel: object) -> ActualState:
     if not isinstance(cluster, ClusterConfig) or not isinstance(panel, MeridianPanel):
         return ActualState()
 
-    # Nodes: from panel API (live state) enriched with cluster.yml attributes
-    # Panel API provides connectivity; cluster.yml provides sni/domain/warp
+    # Nodes: from panel API (live state) enriched with cluster.yml attributes.
+    # Panel API provides connectivity; cluster.yml provides sni/domain/warp.
+    #
+    # Panel host nodes are registered under the Docker gateway IP (e.g. 172.17.0.1)
+    # because the panel container can't reach 127.0.0.1 on the host. We map
+    # these back to the public IP using cluster.yml so the diff works correctly.
     cluster_nodes_by_ip = {n.ip: n for n in cluster.nodes}
+    # Build reverse map: panel API address → public IP (for Docker gateway nodes)
+    api_addr_to_public_ip: dict[str, str] = {}
+    for cn in cluster.nodes:
+        # If a node's UUID matches an API node with a different address, map it
+        api_addr_to_public_ip[cn.ip] = cn.ip  # identity for non-gateway nodes
+
     actual_nodes = []
     for n in panel.list_nodes():
-        cn = cluster_nodes_by_ip.get(n.address)
+        # Try to resolve Docker gateway address back to public IP
+        public_ip = n.address
+        for cn in cluster.nodes:
+            if cn.uuid == n.uuid:
+                public_ip = cn.ip
+                break
+        cn = cluster_nodes_by_ip.get(public_ip)
         actual_nodes.append(
             ActualNodeState(
-                host=n.address,
+                host=public_ip,
                 name=n.name,
                 uuid=n.uuid,
                 is_connected=n.is_connected,
@@ -177,9 +196,19 @@ def build_actual_state(cluster: object, panel: object) -> ActualState:
         for r in cluster.relays
     ]
 
-    # Subscription page: from cluster config
-    # TODO: check via SSH if container is actually running for drift detection
-    sub_running = cluster.subscription_page.enabled if cluster.subscription_page else False
+    # Subscription page: check if the container was previously deployed.
+    # We track this separately from the desired flag — the actual state is
+    # whether we've previously written the .env.subscription and started
+    # the container. For full drift detection (container actually running),
+    # an SSH check would be needed, but for now we track deployment state
+    # via a dedicated flag that's set when configure_subscription_page succeeds.
+    # As a heuristic: if any node is panel_host AND subscription_page was
+    # previously enabled, consider it running.
+    panel_node = next((n for n in cluster.nodes if n.is_panel_host), None)
+    # Use _extra to track actual deployment state independently of desired
+    sub_page = cluster.subscription_page
+    sub_previously_deployed = sub_page._extra.get("deployed", False) if sub_page else False
+    sub_running = bool(panel_node and sub_previously_deployed)
 
     return ActualState(
         nodes=actual_nodes,

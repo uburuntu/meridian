@@ -180,9 +180,10 @@ class ClusterConfig:
     # v2: subscription page config
     subscription_page: SubscriptionPageConfig = field(default_factory=SubscriptionPageConfig)
     # v2: desired state for declarative plan/apply workflow
-    desired_nodes: list[DesiredNode] = field(default_factory=list)
-    desired_clients: list[str] = field(default_factory=list)
-    desired_relays: list[DesiredRelay] = field(default_factory=list)
+    # None = not declared (don't manage). [] = declared empty (manage, want zero).
+    desired_nodes: list[DesiredNode] | None = None
+    desired_clients: list[str] | None = None
+    desired_relays: list[DesiredRelay] | None = None
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
     _readonly: bool = field(default=False, repr=False)
     _lock: Any = field(default=None, repr=False)  # threading.Lock for parallel save safety
@@ -640,8 +641,9 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
     if sub_page_dict:
         out["subscription_page"] = sub_page_dict
 
-    # Desired state (v2 — only serialize if non-empty)
-    if cfg.desired_nodes:
+    # Desired state (v2 — serialize if present in config, even if empty)
+    # An explicit empty list means "manage this type, want zero" vs absent = "don't manage".
+    if cfg.desired_nodes is not None:
         desired_nodes_out = []
         for dn in cfg.desired_nodes:
             d = _serialize_dataclass(dn)
@@ -656,10 +658,10 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
             desired_nodes_out.append(d)
         out["desired_nodes"] = desired_nodes_out
 
-    if cfg.desired_clients:
+    if cfg.desired_clients is not None:
         out["desired_clients"] = list(cfg.desired_clients)
 
-    if cfg.desired_relays:
+    if cfg.desired_relays is not None:
         desired_relays_out = []
         for dr in cfg.desired_relays:
             d = _serialize_dataclass(dr)
@@ -788,30 +790,37 @@ def _load_cluster(data: dict[str, Any]) -> ClusterConfig:
     )
 
     # Desired state (v2)
-    desired_nodes: list[DesiredNode] = []
-    for dn in data.get("desired_nodes", []):
-        desired_nodes.append(
-            _load_dataclass(
-                dn,
-                DesiredNode,
-                _DESIRED_NODE_FIELDS,
-                defaults={"ssh_user": "root", "ssh_port": 22, "warp": False},
-                transforms={"warp": bool},
+    # None = key absent (not managed). [] = key present but empty (manage, want zero).
+    desired_nodes: list[DesiredNode] | None = None
+    if "desired_nodes" in data:
+        desired_nodes = []
+        for dn in data.get("desired_nodes") or []:
+            desired_nodes.append(
+                _load_dataclass(
+                    dn,
+                    DesiredNode,
+                    _DESIRED_NODE_FIELDS,
+                    defaults={"ssh_user": "root", "ssh_port": 22, "warp": False},
+                    transforms={"warp": bool},
+                )
             )
-        )
 
-    desired_clients: list[str] = list(data.get("desired_clients", []))
+    desired_clients: list[str] | None = None
+    if "desired_clients" in data:
+        desired_clients = list(data.get("desired_clients") or [])
 
-    desired_relays: list[DesiredRelay] = []
-    for dr in data.get("desired_relays", []):
-        desired_relays.append(
-            _load_dataclass(
-                dr,
-                DesiredRelay,
-                _DESIRED_RELAY_FIELDS,
-                defaults={"ssh_user": "root", "ssh_port": 22},
+    desired_relays: list[DesiredRelay] | None = None
+    if "desired_relays" in data:
+        desired_relays = []
+        for dr in data.get("desired_relays") or []:
+            desired_relays.append(
+                _load_dataclass(
+                    dr,
+                    DesiredRelay,
+                    _DESIRED_RELAY_FIELDS,
+                    defaults={"ssh_user": "root", "ssh_port": 22},
+                )
             )
-        )
 
     # Extra fields
     extra = {k: v for k, v in data.items() if k not in _KNOWN_TOP}
