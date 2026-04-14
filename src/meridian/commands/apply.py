@@ -193,7 +193,8 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
         timeout=15,
     )
     if check.returncode != 0:
-        # Container not in compose — regenerate compose file and bring up
+        # Container not in compose — regenerate compose file, create placeholder
+        # .env.subscription (required by compose), then bring up
         compose = _render_panel_compose(
             image=REMNAWAVE_BACKEND_IMAGE,
             panel_port=REMNAWAVE_PANEL_PORT,
@@ -202,8 +203,22 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
         )
         compose_path = f"{REMNAWAVE_PANEL_DIR}/docker-compose.yml"
         write_cmd = f"cat > {shlex.quote(compose_path)} << 'MERIDIAN_EOF'\n{compose}MERIDIAN_EOF"
-        conn.run(write_cmd, timeout=15)
-        conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
+        result = conn.run(write_cmd, timeout=15)
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to write docker-compose.yml: {result.stderr.strip()[:200]}")
+
+        # Create placeholder .env.subscription so docker compose up doesn't fail
+        from meridian.provision.remnawave_panel import _render_subscription_env
+
+        sub_env = _render_subscription_env()
+        sub_env_path = f"{REMNAWAVE_PANEL_DIR}/.env.subscription"
+        write_env = f"cat > {shlex.quote(sub_env_path)} << 'MERIDIAN_EOF'\n{sub_env}MERIDIAN_EOF"
+        conn.run(write_env, timeout=15)
+        conn.run(f"chmod 600 {shlex.quote(sub_env_path)}", timeout=15)
+
+        result = conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to start containers: {result.stderr.strip()[:200]}")
 
     if not configure_subscription_page(conn, cluster.panel.api_token):
         raise RuntimeError("Failed to configure subscription page")

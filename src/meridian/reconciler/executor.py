@@ -111,6 +111,7 @@ def execute_plan(
 
     # Destructive kinds — skip if a prior phase had failures (dependency safety)
     destructive_kinds = {
+        PlanActionKind.UPDATE_RELAY,  # implemented as delete + recreate
         PlanActionKind.REMOVE_CLIENT,
         PlanActionKind.REMOVE_RELAY,
         PlanActionKind.REMOVE_SUBSCRIPTION_PAGE,
