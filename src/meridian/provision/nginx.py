@@ -11,7 +11,7 @@ import shlex
 import textwrap
 from typing import TypeVar
 
-from meridian.config import REMNAWAVE_PANEL_PORT
+from meridian.config import REMNAWAVE_PANEL_PORT, REMNAWAVE_SUBSCRIPTION_PAGE_PORT
 from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
@@ -173,6 +173,8 @@ def _render_nginx_http_config(
     info_page_path: str,
     xhttp_path: str = "",
     xhttp_internal_port: int = 0,
+    subscription_page_path: str = "",
+    subscription_page_port: int = 0,
 ) -> str:
     """Render the nginx http configuration for domain mode.
 
@@ -217,6 +219,8 @@ def _render_nginx_http_config(
         mode_comment="Domain Mode",
         tls_comment=(f"TLS: certificates issued by acme.sh for {domain}"),
         redirect_http=True,
+        subscription_page_path=subscription_page_path,
+        subscription_page_port=subscription_page_port,
     )
 
 
@@ -228,6 +232,8 @@ def _render_nginx_ip_config(
     info_page_path: str,
     xhttp_path: str = "",
     xhttp_internal_port: int = 0,
+    subscription_page_path: str = "",
+    subscription_page_port: int = 0,
 ) -> str:
     """Render nginx http configuration for IP certificate mode (no domain).
 
@@ -257,6 +263,8 @@ def _render_nginx_ip_config(
         mode_comment="IP Certificate Mode",
         tls_comment=("TLS: Let's Encrypt IP certificate (acme.sh, shortlived profile)"),
         redirect_http=False,
+        subscription_page_path=subscription_page_path,
+        subscription_page_port=subscription_page_port,
     )
 
 
@@ -273,6 +281,8 @@ def _render_nginx_server_block(
     tls_comment: str,
     redirect_http: bool = True,
     upstream_blocks: str = "",
+    subscription_page_path: str = "",
+    subscription_page_port: int = 0,
 ) -> str:
     """Render the shared nginx server block structure.
 
@@ -290,6 +300,22 @@ def _render_nginx_server_block(
         http_default = "return 301 https://$host$request_uri;"
     else:
         http_default = "return 403;"
+
+    # Subscription page proxy (Remnawave subscription frontend)
+    subscription_block = ""
+    if subscription_page_path and subscription_page_port > 0:
+        subscription_block = textwrap.dedent(f"""\
+
+            # --- Subscription Page (Remnawave subscription frontend) ---
+            location /{subscription_page_path}/ {{
+                proxy_pass http://127.0.0.1:{subscription_page_port}/;
+                proxy_http_version 1.1;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }}
+        """).rstrip()
 
     return textwrap.dedent(f"""\
         # Meridian Proxy Configuration ({mode_comment})
@@ -366,6 +392,8 @@ def _render_nginx_server_block(
                 sub_filter '"/oauth2/' '"/{panel_web_base_path}/oauth2/';
                 sub_filter '"/lotties/' '"/{panel_web_base_path}/lotties/';
             }}
+
+    {subscription_block}
 
             # --- Connection Info Pages (PWA with per-client config) ---
             # alias strips the location prefix (like Caddy's handle_path).
@@ -659,6 +687,8 @@ class ConfigureNginx:
         ip_mode: bool = False,
         xhttp_path: str | None = None,
         xhttp_internal_port: int | None = None,
+        subscription_page_path: str | None = None,
+        subscription_page_port: int | None = None,
     ) -> None:
         self.domain = domain
         self.reality_sni = reality_sni
@@ -674,6 +704,8 @@ class ConfigureNginx:
         self.ip_mode = ip_mode
         self.xhttp_path = xhttp_path
         self.xhttp_internal_port = xhttp_internal_port
+        self.subscription_page_path = subscription_page_path
+        self.subscription_page_port = subscription_page_port
 
     def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
         # Resolve runtime values from context (populated by ConfigurePanel).
@@ -690,6 +722,8 @@ class ConfigureNginx:
         wss_internal_port = _resolve_ctx(self.wss_internal_port, ctx.wss_port)
         reality_sni = _resolve_ctx(self.reality_sni, ctx.sni)
         reality_backend_port = _resolve_ctx(self.reality_backend_port, ctx.reality_port)
+        sub_page_path = _resolve_ctx(self.subscription_page_path, ctx.get("subscription_page_path", ""))
+        sub_page_port = _resolve_ctx(self.subscription_page_port, REMNAWAVE_SUBSCRIPTION_PAGE_PORT)
 
         # -- DNS pre-check (domain mode only) --
         if not self.ip_mode and not self.skip_dns_check:
@@ -749,6 +783,8 @@ class ConfigureNginx:
                 info_page_path=info_page_path,
                 xhttp_path=xhttp_path,
                 xhttp_internal_port=xhttp_internal_port,
+                subscription_page_path=sub_page_path,
+                subscription_page_port=sub_page_port,
             )
         else:
             http_config = _render_nginx_http_config(
@@ -761,6 +797,8 @@ class ConfigureNginx:
                 info_page_path=info_page_path,
                 xhttp_path=xhttp_path,
                 xhttp_internal_port=xhttp_internal_port,
+                subscription_page_path=sub_page_path,
+                subscription_page_port=sub_page_port,
             )
         q_http = shlex.quote(http_config)
         result = conn.run(

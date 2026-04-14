@@ -21,8 +21,10 @@ ACME_SERVER = os.environ.get("MERIDIAN_ACME_SERVER", "letsencrypt").strip() or "
 # Remnawave panel + node
 REMNAWAVE_BACKEND_IMAGE = "remnawave/backend:2"
 REMNAWAVE_NODE_IMAGE = "remnawave/node:latest"
+REMNAWAVE_SUBSCRIPTION_PAGE_IMAGE = "remnawave/subscription-page:7.1.8"
 REMNAWAVE_PANEL_PORT = 3000  # internal port, nginx reverse-proxied
 REMNAWAVE_NODE_API_PORT = 3010  # node API port (panel→node mTLS communication)
+REMNAWAVE_SUBSCRIPTION_PAGE_PORT = 3020  # host port (internal 3010 remapped to avoid node API conflict)
 REMNAWAVE_PANEL_DIR = "/opt/remnawave"
 REMNAWAVE_NODE_DIR = "/opt/remnanode"
 
