@@ -152,6 +152,7 @@ class DesiredRelay:
     host: str = ""  # IP address
     name: str = ""  # friendly name (e.g., "relay-msk")
     exit_node: str = ""  # name or IP of the exit node
+    sni: str = ""  # camouflage target (empty = use DEFAULT_SNI)
     ssh_user: str = "root"
     ssh_port: int = 22
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
@@ -520,7 +521,7 @@ _BRANDING_FIELDS = {"server_name", "icon", "color"}
 _INBOUND_REF_FIELDS = {"uuid", "tag"}
 _SUBSCRIPTION_PAGE_FIELDS = {"enabled"}
 _DESIRED_NODE_FIELDS = {"host", "name", "ssh_user", "ssh_port", "domain", "sni", "warp"}
-_DESIRED_RELAY_FIELDS = {"host", "name", "exit_node", "ssh_user", "ssh_port"}
+_DESIRED_RELAY_FIELDS = {"host", "name", "exit_node", "sni", "ssh_user", "ssh_port"}
 _KNOWN_TOP = {
     "version",
     "panel",

@@ -30,6 +30,7 @@ class DesiredRelayState:
     host: str = ""
     name: str = ""
     exit_node: str = ""
+    sni: str = ""
     ssh_user: str = "root"
     ssh_port: int = 22
 
@@ -115,6 +116,7 @@ def build_desired_state(cluster: object) -> DesiredState:
             host=dr.host,
             name=dr.name,
             exit_node=dr.exit_node,
+            sni=dr.sni,
             ssh_user=dr.ssh_user,
             ssh_port=dr.ssh_port,
         )

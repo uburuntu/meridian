@@ -304,9 +304,12 @@ def add_relay(
     if not host_uuids:
         raise RuntimeError(f"Relay {relay_ip}: no panel hosts created")
 
-    # Configure nginx SNI on exit node (checked — raises on validation failure)
-    if not _deploy_relay_nginx(exit_conn, effective_sni, relay_ip, relay_name):
-        raise RuntimeError(f"Relay {relay_ip}: nginx configuration failed on exit node")
+    # Configure nginx SNI on exit node — only when relay SNI differs from
+    # exit node's own SNI (same guard as imperative relay deploy).
+    # Deploying nginx with the same SNI would hijack the exit node's Reality routing.
+    if effective_sni and effective_sni != (exit_node.sni or ""):
+        if not _deploy_relay_nginx(exit_conn, effective_sni, relay_ip, relay_name):
+            raise RuntimeError(f"Relay {relay_ip}: nginx configuration failed on exit node")
 
     # Save local relay metadata (same as imperative path)
     _save_relay_local(relay_ip, exit_node.ip, port, port)
