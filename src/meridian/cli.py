@@ -85,6 +85,45 @@ def main_callback(
 
 
 # =============================================================================
+# Plan / Apply (declarative workflow)
+# =============================================================================
+
+
+@app.command("plan")
+def plan_cmd() -> None:
+    """Show what would change — compare desired state with actual.
+
+    Reads desired_nodes, desired_clients, and desired_relays from cluster.yml
+    and compares with the live panel state.
+
+    [dim]Exit codes:[/dim]
+      [green]0[/green] = already converged
+      [yellow]2[/yellow] = changes pending
+    """
+    from meridian.commands.plan import run
+
+    run()
+
+
+@app.command("apply")
+def apply_cmd(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts"),
+    parallel: int = typer.Option(4, "--parallel", help="Max parallel node provisioning"),
+) -> None:
+    """Apply desired state — converge infrastructure to cluster.yml.
+
+    Computes a plan, shows it, asks for confirmation, then executes.
+
+    [dim]Examples:[/dim]
+      [cyan]meridian apply[/cyan]              Show plan and confirm
+      [cyan]meridian apply --yes[/cyan]        Apply without confirmation
+    """
+    from meridian.commands.apply import run
+
+    run(yes=yes, parallel=parallel)
+
+
+# =============================================================================
 # Deploy
 # =============================================================================
 
