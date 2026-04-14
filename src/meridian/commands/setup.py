@@ -975,9 +975,15 @@ def _setup_redeploy(
                     inbound_uuids = [
                         ref.uuid for ref in cluster.inbounds.values() if isinstance(ref, InboundRef) and ref.uuid
                     ]
+                    # Panel-host nodes must use Docker gateway address (panel
+                    # runs in bridge network, can't reach 127.0.0.1 on host).
+                    if node.is_panel_host:
+                        node_address = _get_docker_gateway(resolved.conn)
+                    else:
+                        node_address = resolved.ip
                     node_creds = panel.create_node(
                         name=domain or resolved.ip,
-                        address=resolved.ip,
+                        address=node_address,
                         port=REMNAWAVE_NODE_API_PORT,
                         config_profile_uuid=cluster.config_profile_uuid,
                         inbound_uuids=inbound_uuids,

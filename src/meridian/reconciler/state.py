@@ -204,18 +204,24 @@ def build_actual_state(
     ]
 
     # Subscription page: check live container status via SSH when possible,
-    # fall back to the deployment flag when SSH is not available.
+    # fall back to the deployment flag when SSH is not available or fails.
     sub_running = False
+    ssh_checked = False
     if panel_conn is not None:
         from meridian.ssh import ServerConnection
 
         if isinstance(panel_conn, ServerConnection):
-            result = panel_conn.run(
-                "docker inspect -f '{{.State.Running}}' remnawave-subscription-page 2>/dev/null",
-                timeout=15,
-            )
-            sub_running = result.returncode == 0 and result.stdout.strip() == "true"
-    else:
+            try:
+                result = panel_conn.run(
+                    "docker inspect -f '{{.State.Running}}' remnawave-subscription-page 2>/dev/null",
+                    timeout=15,
+                )
+                sub_running = result.returncode == 0 and result.stdout.strip() == "true"
+                ssh_checked = True
+            except Exception:
+                # SSH failure (auth, connectivity, timeout) — fall back to flag
+                pass
+    if not ssh_checked:
         # Fallback: trust the deployment flag from cluster.yml
         sub_page = cluster.subscription_page
         sub_running = bool(sub_page._extra.get("deployed", False)) if sub_page else False
