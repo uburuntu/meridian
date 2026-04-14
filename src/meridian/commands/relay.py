@@ -6,7 +6,6 @@ import hashlib
 import json
 import re
 import shlex
-import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,7 +29,7 @@ from meridian.config import (
 from meridian.console import confirm, err_console, fail, info, line, ok, warn
 from meridian.credentials import RelayEntry, ServerCredentials
 from meridian.servers import SERVER_ROLE_RELAY, ServerEntry, ServerRegistry
-from meridian.ssh import SSH_OPTS, ServerConnection, SSHError, scp_host
+from meridian.ssh import ServerConnection, SSHError
 
 # ---------------------------------------------------------------------------
 # Relay inbound helpers
@@ -381,33 +380,21 @@ def _save_relay_local(relay_ip: str, exit_ip: str, exit_port: int, listen_port: 
 
 
 def _sync_exit_credentials_to_server(resolved_exit: ResolvedServer) -> bool:
-    """Sync exit server credentials back to /etc/meridian/ after relay changes."""
+    """Sync exit server credentials back to /etc/meridian/ after relay changes.
+
+    Uses conn.write_file() which handles sudo for non-root users — SCP alone
+    can't write to root-owned /etc/meridian/.
+    """
     if resolved_exit.local_mode:
         return True
-    dest = f"{resolved_exit.user}@{scp_host(resolved_exit.ip)}"
-    scp_opts = list(SSH_OPTS)
-    if resolved_exit.conn.port != 22:
-        scp_opts.extend(["-P", str(resolved_exit.conn.port)])
     try:
         for path in resolved_exit.creds_dir.iterdir():
             if not path.is_file():
                 continue
-            result = subprocess.run(
-                [
-                    "scp",
-                    *scp_opts,
-                    str(path),
-                    f"{dest}:/etc/meridian/{path.name}",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                stdin=subprocess.DEVNULL,
-            )
-            if result.returncode != 0:
+            if not resolved_exit.conn.write_file(path, f"/etc/meridian/{path.name}"):
                 return False
         return True
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    except OSError:
         return False
 
 

@@ -300,6 +300,7 @@ class TestRunWithExplicitIP:
             patch("meridian.commands.setup._check_ports"),
             patch("meridian.commands.setup.fetch_credentials", return_value=True),
             patch("meridian.commands.setup._run_provisioner"),
+            patch("meridian.commands.setup._sync_credentials_to_server", return_value=True),
             patch("meridian.commands.setup._regenerate_connection_pages_after_deploy") as mock_regen,
             patch("meridian.commands.setup._print_success"),
             patch("meridian.commands.setup._offer_relay"),
@@ -325,6 +326,7 @@ class TestRunWithExplicitIP:
             patch("meridian.commands.setup._check_ports"),
             patch("meridian.commands.setup.fetch_credentials", return_value=True),
             patch("meridian.commands.setup._run_provisioner"),
+            patch("meridian.commands.setup._sync_credentials_to_server", return_value=True),
             patch(
                 "meridian.commands.setup._regenerate_connection_pages_after_deploy",
                 side_effect=RuntimeError("boom"),
