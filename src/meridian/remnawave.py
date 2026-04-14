@@ -1,11 +1,10 @@
 """Remnawave panel API client — sync facade over the official SDK.
 
-Uses the ``remnawave-api`` SDK for endpoints it covers (users, nodes,
-hosts, inbounds, auth, subscriptions) and falls back to raw httpx for
-endpoints the SDK doesn't yet expose (config profiles, internal squads).
+Uses the official ``remnawave`` SDK for panel operations and falls back
+to raw ``httpx`` only for auth helpers and generic escape hatches.
 
 All methods are synchronous — async SDK calls are bridged via
-``asyncio.run()``.  The panel runs behind nginx on a secret HTTPS path,
+``asyncio.run()``. The panel runs behind nginx on a secret HTTPS path,
 accessible directly from the deployer's machine (no SSH tunneling).
 """
 
@@ -17,6 +16,15 @@ import random
 import time
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import UUID
+
+from remnawave import RemnawaveSDK
+from remnawave.exceptions import ApiError, ForbiddenError, NetworkError, NotFoundError, UnauthorizedError
+from remnawave.models.config_profiles import CreateConfigProfileRequestDto
+from remnawave.models.hosts import CreateHostInboundData, CreateHostRequestDto
+from remnawave.models.internal_squads import UpdateInternalSquadRequestDto
+from remnawave.models.nodes import CreateNodeRequestDto, NodeConfigProfileRequestDto
+from remnawave.models.users import CreateUserRequestDto
 
 logger = logging.getLogger("meridian.api")
 
@@ -130,16 +138,17 @@ class NodeCredentials:
 
 def _user_from_sdk(obj: Any) -> User:
     """Convert SDK UserResponseDto to our User dataclass."""
+    traffic = getattr(obj, "userTraffic", None)
     return User(
         uuid=str(getattr(obj, "uuid", "")),
         short_uuid=str(getattr(obj, "shortUuid", "") or getattr(obj, "short_uuid", "")),
         username=getattr(obj, "username", ""),
         vless_uuid=str(getattr(obj, "vlessUuid", "") or getattr(obj, "vless_uuid", "")),
         status=str(getattr(obj, "status", "") or ""),
-        used_traffic_bytes=int(getattr(obj, "usedTrafficBytes", 0) or 0),
+        used_traffic_bytes=int(getattr(obj, "usedTrafficBytes", None) or getattr(traffic, "usedTrafficBytes", 0) or 0),
         traffic_limit_bytes=int(getattr(obj, "trafficLimitBytes", 0) or 0),
         created_at=str(getattr(obj, "createdAt", "") or ""),
-        online_at=str(getattr(obj, "onlineAt", "") or ""),
+        online_at=str(getattr(obj, "onlineAt", None) or getattr(traffic, "onlineAt", "") or ""),
         sub_revoked_at=str(getattr(obj, "subRevokedAt", "") or ""),
     )
 
@@ -160,13 +169,14 @@ def _node_from_sdk(obj: Any) -> Node:
 
 def _host_from_sdk(obj: Any) -> Host:
     """Convert SDK HostResponseDto to our Host dataclass."""
+    inbound = getattr(obj, "inbound", None)
     return Host(
         uuid=str(getattr(obj, "uuid", "")),
         remark=getattr(obj, "remark", ""),
         address=getattr(obj, "address", ""),
         port=int(getattr(obj, "port", 0) or 0),
         sni=getattr(obj, "sni", "") or "",
-        inbound_uuid=str(getattr(obj, "inboundUuid", "") or ""),
+        inbound_uuid=str(getattr(obj, "inboundUuid", "") or getattr(inbound, "configProfileInboundUuid", "") or ""),
         is_disabled=bool(getattr(obj, "isDisabled", False)),
     )
 
@@ -180,6 +190,44 @@ def _inbound_from_sdk(obj: Any) -> Inbound:
         network=getattr(obj, "network", "") or "",
         security=getattr(obj, "security", "") or "",
     )
+
+
+def _config_profile_from_sdk(obj: Any) -> ConfigProfile:
+    """Convert SDK ConfigProfileDto to our ConfigProfile dataclass."""
+    return ConfigProfile(
+        uuid=str(getattr(obj, "uuid", "")),
+        name=getattr(obj, "name", ""),
+        _raw=_sdk_to_dict(obj) if obj is not None else {},
+    )
+
+
+def _sdk_items(resp: Any, *, attr: str | None = None) -> list[Any]:
+    """Extract list payloads from SDK responses with mixed shapes."""
+    if resp is None:
+        return []
+    if attr:
+        items = getattr(resp, attr, None)
+        if isinstance(items, list):
+            return items
+    root = getattr(resp, "root", None)
+    if isinstance(root, list):
+        return root
+    if isinstance(resp, list):
+        return resp
+    return []
+
+
+def _sdk_to_dict(obj: Any) -> Any:
+    """Recursively convert SDK models to plain Python containers."""
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump(mode="python")
+    if isinstance(obj, list):
+        return [_sdk_to_dict(item) for item in obj]
+    if isinstance(obj, tuple):
+        return [_sdk_to_dict(item) for item in obj]
+    if isinstance(obj, dict):
+        return {key: _sdk_to_dict(value) for key, value in obj.items()}
+    return obj
 
 
 # ---------------------------------------------------------------------------
@@ -206,9 +254,9 @@ def _sdk_call(coro: Any) -> Any:
         return _run(coro)
     except (RemnawaveError, RemnawaveNotFoundError, RemnawaveAuthError, RemnawaveNetworkError):
         raise
+    except NetworkError as e:
+        raise RemnawaveNetworkError(f"Panel network error: {e}", hint_type="system") from e
     except Exception as e:
-        from remnawave.errors import ApiError, ForbiddenError, NotFoundError, UnauthorizedError
-
         if isinstance(e, NotFoundError):
             raise RemnawaveNotFoundError(f"Resource not found: {e}", hint_type="system") from e
         if isinstance(e, (UnauthorizedError, ForbiddenError)):
@@ -230,9 +278,8 @@ def _sdk_call(coro: Any) -> Any:
 class MeridianPanel:
     """Remnawave API client — sync facade over the official SDK.
 
-    Uses the ``remnawave-api`` SDK for most operations and falls back to
-    raw httpx for endpoints the SDK doesn't cover (config profiles,
-    internal squads).
+    Uses the official ``remnawave`` SDK for panel operations and falls
+    back to raw httpx only for auth helpers and generic low-level access.
 
     Usage:
         panel = MeridianPanel("https://panel.example.com", "jwt-token")
@@ -242,7 +289,6 @@ class MeridianPanel:
 
     def __init__(self, base_url: str, api_token: str, *, timeout: int = 30, max_retries: int = 5):
         import httpx
-        from remnawave import RemnawaveSDK
 
         self._base = base_url.rstrip("/")
         self._token = api_token
@@ -359,7 +405,7 @@ class MeridianPanel:
     def ping(self) -> bool:
         """Check if the panel is reachable and authenticated."""
         try:
-            _sdk_call(self._sdk.users.get_all_users_v2(start=0, size=1))
+            _sdk_call(self._sdk.users.get_all_users(start=0, size=1))
             return True
         except Exception:
             return False
@@ -376,18 +422,16 @@ class MeridianPanel:
     ) -> User:
         """Create a new user in Remnawave.
 
-        Uses raw httpx — SDK's CreateUserRequestDto doesn't support
-        activeInternalSquads, which is required for users to appear
-        in node Xray configs.
+        SDK v2 supports ``active_internal_squads`` directly.
         """
-        body: dict[str, Any] = {"username": username}
-        if traffic_limit_bytes > 0:
-            body["trafficLimitBytes"] = traffic_limit_bytes
-        body["expireAt"] = expire_at or "2099-12-31T23:59:59.000Z"
-        if squad_uuids:
-            body["activeInternalSquads"] = squad_uuids
-        data = self._post("/api/users", json=body)
-        return _parse_user(data)
+        body = CreateUserRequestDto(
+            username=username,
+            expire_at=expire_at or "2099-12-31T23:59:59.000Z",
+            traffic_limit_bytes=traffic_limit_bytes if traffic_limit_bytes > 0 else None,
+            active_internal_squads=squad_uuids or None,
+        )
+        resp = _sdk_call(self._sdk.users.create_user(body))
+        return _user_from_sdk(resp)
 
     def get_user(self, username: str) -> User | None:
         """Find a user by username. Returns None only if not found (404)."""
@@ -407,7 +451,7 @@ class MeridianPanel:
 
     def list_users(self) -> list[User]:
         """List all users."""
-        resp = _sdk_call(self._sdk.users.get_all_users_v2(start=0, size=10000))
+        resp = _sdk_call(self._sdk.users.get_all_users(start=0, size=10000))
         users_list = getattr(resp, "users", []) or []
         return [_user_from_sdk(u) for u in users_list]
 
@@ -442,34 +486,43 @@ class MeridianPanel:
         """Register a new node with the panel.
 
         Returns credentials including the SECRET_KEY for the node container.
-        Uses raw httpx — SDK's CreateNodeRequestDto doesn't support the
-        configProfile nested object needed for profile/inbound binding.
         """
-        body: dict[str, Any] = {
-            "name": name,
-            "address": address,
-            "port": port,
-            "countryCode": country_code,
-            "configProfile": {
-                "activeConfigProfileUuid": config_profile_uuid,
-                "activeInbounds": inbound_uuids or [],
-            },
-        }
-        data = self._post("/api/nodes", json=body)
-        node_uuid = data.get("uuid", "")
+        if config_profile_uuid:
+            body = CreateNodeRequestDto(
+                name=name,
+                address=address,
+                port=port,
+                country_code=country_code,
+                config_profile=NodeConfigProfileRequestDto(
+                    activeConfigProfileUuid=config_profile_uuid,
+                    activeInbounds=inbound_uuids or [],
+                ),
+            )
+            resp = _sdk_call(self._sdk.nodes.create_node(body))
+            data = _sdk_to_dict(resp)
+            node_uuid = str(getattr(resp, "uuid", ""))
+        else:
+            # Keep a raw fallback for compatibility with callers that do not
+            # yet provide a config profile binding.
+            body = {
+                "name": name,
+                "address": address,
+                "port": port,
+                "countryCode": country_code,
+                "configProfile": {
+                    "activeConfigProfileUuid": config_profile_uuid,
+                    "activeInbounds": inbound_uuids or [],
+                },
+            }
+            data = self._post("/api/nodes", json=body)
+            node_uuid = data.get("uuid", "")
 
-        # Fetch the connection string (mTLS cert bundle) from keygen
-        keygen = self._get("/api/keygen")
-        secret_key = ""
-        if isinstance(keygen, dict):
-            secret_key = keygen.get("pubKey", "")
-
-        return NodeCredentials(uuid=node_uuid, secret_key=secret_key, _raw=data)
+        return NodeCredentials(uuid=node_uuid, secret_key=self.get_node_secret_key(), _raw=data)
 
     def list_nodes(self) -> list[Node]:
         """List all registered nodes."""
         resp = _sdk_call(self._sdk.nodes.get_all_nodes())
-        nodes_list = getattr(resp, "response", []) or []
+        nodes_list = _sdk_items(resp)
         return [_node_from_sdk(n) for n in nodes_list]
 
     def find_node_by_address(self, address: str) -> Node | None:
@@ -523,39 +576,31 @@ class MeridianPanel:
     ) -> Host:
         """Create a host entry (direct address or relay).
 
-        Uses raw httpx — SDK's CreateHostRequestDto doesn't support the
-        nested inbound object with configProfileUuid that the panel expects.
+        SDK v2 supports the nested inbound payload directly.
         """
-        body: dict[str, Any] = {
-            "remark": remark,
-            "address": address,
-            "port": port,
-            "inbound": {
-                "configProfileUuid": config_profile_uuid,
-                "configProfileInboundUuid": inbound_uuid,
-            },
-        }
-        if sni:
-            body["sni"] = sni
-        if host_header:
-            body["host"] = host_header
-        if path:
-            body["path"] = path
-        if alpn is not None:
-            body["alpn"] = alpn
-        if fingerprint is not None:
-            body["fingerprint"] = fingerprint
-        if security_layer != "DEFAULT":
-            body["securityLayer"] = security_layer
-        if is_disabled:
-            body["isDisabled"] = True
-        data = self._post("/api/hosts", json=body)
-        return _parse_host(data)
+        body = CreateHostRequestDto(
+            remark=remark,
+            address=address,
+            port=port,
+            inbound=CreateHostInboundData(
+                config_profile_uuid=config_profile_uuid,
+                config_profile_inbound_uuid=inbound_uuid,
+            ),
+            sni=sni or None,
+            host=host_header or None,
+            path=path or None,
+            alpn=alpn,
+            fingerprint=fingerprint,
+            security_layer=security_layer,
+            is_disabled=is_disabled,
+        )
+        resp = _sdk_call(self._sdk.hosts.create_host(body))
+        return _host_from_sdk(resp)
 
     def list_hosts(self) -> list[Host]:
         """List all host entries."""
         resp = _sdk_call(self._sdk.hosts.get_all_hosts())
-        hosts_list = getattr(resp, "response", []) or []
+        hosts_list = _sdk_items(resp)
         return [_host_from_sdk(h) for h in hosts_list]
 
     def find_host_by_remark(self, remark: str) -> Host | None:
@@ -567,15 +612,10 @@ class MeridianPanel:
 
     def enable_host(self, uuid: str) -> None:
         """Enable a disabled host."""
-        # SDK uses bulk enable with a list of UUIDs
-        from uuid import UUID
-
         _sdk_call(self._sdk.hosts_bulk_actions.enable_hosts([UUID(uuid)]))
 
     def disable_host(self, uuid: str) -> None:
         """Disable a host (subscriptions auto-exclude)."""
-        from uuid import UUID
-
         _sdk_call(self._sdk.hosts_bulk_actions.disable_hosts([UUID(uuid)]))
 
     def delete_host(self, uuid: str) -> None:
@@ -583,30 +623,27 @@ class MeridianPanel:
         _sdk_call(self._sdk.hosts.delete_host(uuid))
 
     # --- Config Profiles (not in SDK — raw httpx) ---
+    # --- Config Profiles ---
 
     def create_config_profile(self, name: str, config: dict[str, Any]) -> ConfigProfile:
         """Create a new config profile with Xray configuration."""
-        body = {"name": name, "config": config}
-        data = self._post("/api/config-profiles", json=body)
-        return ConfigProfile(uuid=data.get("uuid", ""), name=data.get("name", ""), _raw=data)
+        body = CreateConfigProfileRequestDto(name=name, config=config)
+        resp = _sdk_call(self._sdk.config_profiles.create_config_profile(body))
+        return _config_profile_from_sdk(resp)
 
     def get_config_profile(self, uuid: str) -> ConfigProfile | None:
         """Get a config profile by UUID. Returns None only if not found."""
         try:
-            data = self._get(f"/api/config-profiles/{uuid}")
-            return ConfigProfile(uuid=data.get("uuid", ""), name=data.get("name", ""), _raw=data)
+            resp = _sdk_call(self._sdk.config_profiles.get_config_profile_by_uuid(uuid))
+            return _config_profile_from_sdk(resp)
         except RemnawaveNotFoundError:
             return None
 
     def list_config_profiles(self) -> list[ConfigProfile]:
         """List all config profiles."""
-        data = self._get("/api/config-profiles")
-        items: list[dict[str, Any]] = []
-        if isinstance(data, list):
-            items = data
-        elif isinstance(data, dict) and "configProfiles" in data:
-            items = data["configProfiles"]
-        return [ConfigProfile(uuid=p.get("uuid", ""), name=p.get("name", ""), _raw=p) for p in items]
+        resp = _sdk_call(self._sdk.config_profiles.get_config_profiles())
+        items = getattr(resp, "configProfiles", []) or []
+        return [_config_profile_from_sdk(profile) for profile in items]
 
     def find_config_profile_by_name(self, name: str) -> ConfigProfile | None:
         """Find a config profile by name. Returns None if not found."""
@@ -619,20 +656,16 @@ class MeridianPanel:
 
     def list_inbounds(self) -> list[Inbound]:
         """List all inbounds across config profiles."""
-        resp = _sdk_call(self._sdk.inbounds.get_inbounds())
-        inbounds_list = getattr(resp, "response", []) or []
+        resp = _sdk_call(self._sdk.inbounds.get_all_inbounds())
+        inbounds_list = getattr(resp, "inbounds", []) or []
         return [_inbound_from_sdk(ib) for ib in inbounds_list]
 
-    # --- Internal Squads (not in SDK — raw httpx) ---
+    # --- Internal Squads ---
 
     def list_internal_squads(self) -> list[dict[str, Any]]:
         """List internal squads. Returns raw dicts with uuid, name, info."""
-        data = self._get("/api/internal-squads")
-        if isinstance(data, dict) and "internalSquads" in data:
-            return data["internalSquads"]
-        if isinstance(data, list):
-            return data
-        return []
+        resp = _sdk_call(self._sdk.internal_squads.get_internal_squads())
+        return [_sdk_to_dict(squad) for squad in getattr(resp, "internalSquads", []) or []]
 
     def get_default_squad_uuid(self) -> str:
         """Get the UUID of the Default-Squad. Returns empty string if not found."""
@@ -644,7 +677,15 @@ class MeridianPanel:
 
     def assign_inbounds_to_squad(self, squad_uuid: str, inbound_uuids: list[str]) -> None:
         """Assign inbounds to an internal squad (PATCH)."""
-        self._patch("/api/internal-squads", json={"uuid": squad_uuid, "inbounds": inbound_uuids})
+        body = UpdateInternalSquadRequestDto(uuid=UUID(squad_uuid), inbounds=[UUID(uuid) for uuid in inbound_uuids])
+        _sdk_call(self._sdk.internal_squads.update_internal_squad(body))
+
+    # --- Keygen ---
+
+    def get_node_secret_key(self) -> str:
+        """Fetch the node mTLS secret bundle from the keygen controller."""
+        resp = _sdk_call(self._sdk.keygen.generate_key())
+        return str(getattr(resp, "pubKey", "") or "")
 
     # --- Subscriptions ---
 

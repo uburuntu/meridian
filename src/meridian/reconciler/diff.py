@@ -104,7 +104,8 @@ class Plan:
 def _node_changes(desired: DesiredNodeState, actual: ActualNodeState) -> list[str]:
     """Compare attributes of a matching node and return list of change descriptions."""
     changes: list[str] = []
-    # Compare sni — empty string in desired means "clear to default"
+    if desired.name and desired.name != actual.name:
+        changes.append(f"name: {actual.name or '(none)'} → {desired.name}")
     if desired.sni != actual.sni:
         changes.append(f"sni: {actual.sni or '(default)'} → {desired.sni or '(default)'}")
     if desired.domain != actual.domain:
@@ -121,6 +122,8 @@ def _relay_changes(
 ) -> list[str]:
     """Compare attributes of a matching relay."""
     changes: list[str] = []
+    if desired.name and desired.name != actual.name:
+        changes.append(f"name: {actual.name or '(none)'} → {desired.name}")
     if desired.exit_node:
         # Resolve node name to IP if needed
         resolved_exit = desired.exit_node

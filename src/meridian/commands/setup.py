@@ -776,8 +776,7 @@ def _setup_first_deploy(
             if existing_api_node:
                 info(f"Node at {node_address} already registered, reusing")
                 # Re-fetch keygen for secret key (needed for container .env)
-                keygen = panel._get("/api/keygen")
-                secret_key = keygen.get("pubKey", "") if isinstance(keygen, dict) else ""
+                secret_key = panel.get_node_secret_key()
                 node_creds = NodeCredentials(uuid=existing_api_node.uuid, secret_key=secret_key)
             else:
                 node_creds = panel.create_node(
@@ -995,8 +994,7 @@ def _setup_redeploy(
 
             # Redeploy node container (refresh secret key + image)
             if node.uuid:
-                keygen = panel._get("/api/keygen")
-                secret_key = keygen.get("pubKey", "") if isinstance(keygen, dict) else ""
+                secret_key = panel.get_node_secret_key()
                 if secret_key:
                     _deploy_node_container(resolved.conn, secret_key)
 
@@ -1063,8 +1061,7 @@ def _setup_new_node(
             existing_api_node = panel.find_node_by_address(resolved.ip)
             if existing_api_node:
                 info(f"Node at {resolved.ip} already registered, reusing")
-                keygen = panel._get("/api/keygen")
-                secret_key = keygen.get("pubKey", "") if isinstance(keygen, dict) else ""
+                secret_key = panel.get_node_secret_key()
                 node_creds = NodeCredentials(uuid=existing_api_node.uuid, secret_key=secret_key)
             else:
                 node_creds = panel.create_node(

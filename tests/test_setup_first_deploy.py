@@ -647,7 +647,7 @@ class TestSetupFirstDeployNodeRegistration:
         existing_node = MagicMock()
         existing_node.uuid = "existing-node-uuid"
         panel.find_node_by_address.return_value = existing_node
-        panel._get.return_value = {"pubKey": "existing-secret"}
+        panel.get_node_secret_key.return_value = "existing-secret"
 
         with (
             patch("meridian.commands.setup._wait_for_panel_api", return_value=True),
