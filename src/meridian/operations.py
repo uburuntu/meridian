@@ -254,10 +254,15 @@ def add_relay(
 ) -> RelayEntry:
     """Provision a relay and register host entries in the panel.
 
-    Runs the Realm TCP forwarder provisioner on the relay server,
-    creates Remnawave Host entries, and configures nginx SNI routing
-    on the exit node.
+    Reuses the same functions as the imperative ``meridian relay deploy``:
+    Realm provisioner, ``_create_relay_hosts()``, ``_deploy_relay_nginx()``,
+    and ``_save_relay_local()``.
     """
+    from meridian.commands.relay import (
+        _create_relay_hosts,
+        _deploy_relay_nginx,
+        _save_relay_local,
+    )
     from meridian.commands.resolve import ResolvedServer, ensure_server_connection
     from meridian.config import DEFAULT_SNI
     from meridian.ssh import ServerConnection
@@ -293,38 +298,18 @@ def add_relay(
     if any(r.status == "failed" for r in results):
         raise RuntimeError(f"Relay provisioning failed on {relay_ip}")
 
-    # Create host entries in panel
-    host_uuids: dict[str, str] = {}
-    from meridian.cluster import InboundRef
-
-    for key, ref in cluster.inbounds.items():
-        if not isinstance(ref, InboundRef) or not ref.uuid:
-            continue
-        remark = f"{key}-relay-{relay_name}"
-        try:
-            existing = panel.find_host_by_remark(remark)
-            if existing:
-                host_uuids[key] = existing.uuid
-                continue
-            host = panel.create_host(
-                remark=remark,
-                address=relay_ip,
-                port=port,
-                config_profile_uuid=cluster.config_profile_uuid,
-                inbound_uuid=ref.uuid,
-                sni=effective_sni,
-            )
-            host_uuids[key] = host.uuid
-        except RemnawaveError as e:
-            logger.warning("Could not create relay host %s: %s", remark, e)
-
+    # Create host entries — uses the same function as imperative relay deploy
+    # (creates REALITY + XHTTP hosts with correct security_layer/fingerprint)
+    host_uuids = _create_relay_hosts(panel, cluster, relay_ip, port, effective_sni, relay_name)
     if not host_uuids:
-        raise RuntimeError(f"Relay {relay_ip}: no panel hosts created — all create_host calls failed")
+        raise RuntimeError(f"Relay {relay_ip}: no panel hosts created")
 
-    # Configure nginx SNI on exit node
-    from meridian.commands.relay import _deploy_relay_nginx
+    # Configure nginx SNI on exit node (checked — raises on validation failure)
+    if not _deploy_relay_nginx(exit_conn, effective_sni, relay_ip, relay_name):
+        raise RuntimeError(f"Relay {relay_ip}: nginx configuration failed on exit node")
 
-    _deploy_relay_nginx(exit_conn, effective_sni, relay_ip, relay_name)
+    # Save local relay metadata (same as imperative path)
+    _save_relay_local(relay_ip, exit_node.ip, port, port)
 
     # Save relay to cluster
     relay = RelayEntry(
@@ -349,34 +334,48 @@ def remove_relay(
     *,
     relay_ip: str,
 ) -> None:
-    """Remove a relay: delete hosts, clean up nginx, remove from cluster.yml."""
+    """Remove a relay: delete hosts, stop Realm, clean nginx, remove from cluster.yml.
+
+    Reuses the same functions as the imperative ``meridian relay remove``.
+    """
+    from meridian.commands.relay import _delete_relay_hosts, _remove_relay_nginx
+    from meridian.config import RELAY_SERVICE_NAME, sanitize_ip_for_path
+    from meridian.ssh import ServerConnection
+
     relay = cluster.find_relay(relay_ip)
     if relay is None:
         raise ValueError(f"Relay {relay_ip} not found in cluster")
 
-    # Delete host entries from panel
-    for key, host_uuid in relay.host_uuids.items():
-        if host_uuid:
-            try:
-                panel.delete_host(host_uuid)
-            except RemnawaveError as e:
-                logger.warning("Could not delete relay host %s: %s", key, e)
+    # Delete host entries from panel (same function as imperative path)
+    _delete_relay_hosts(panel, relay)
 
     # Clean up nginx on exit node (best-effort)
     exit_node = cluster.find_node(relay.exit_node_ip)
     if exit_node:
         try:
-            from meridian.ssh import ServerConnection
-
             exit_conn = ServerConnection(exit_node.ip, exit_node.ssh_user, port=exit_node.ssh_port)
-            from meridian.commands.relay import _remove_relay_nginx
-
             _remove_relay_nginx(exit_conn, relay)
         except Exception as e:
             logger.warning("Could not clean up nginx for relay %s: %s", relay_ip, e)
 
+    # Stop Realm service on relay host (same as imperative path)
+    try:
+        relay_conn = ServerConnection(relay_ip, relay.ssh_user, port=relay.ssh_port)
+        relay_conn.run(f"systemctl stop {RELAY_SERVICE_NAME} 2>/dev/null", timeout=15)
+        relay_conn.run(f"systemctl disable {RELAY_SERVICE_NAME} 2>/dev/null", timeout=10)
+    except Exception as e:
+        logger.warning("Could not stop relay service on %s: %s", relay_ip, e)
+
+    # Remove from cluster.yml
     cluster.relays = [r for r in cluster.relays if r.ip != relay_ip]
     cluster.save()
+
+    # Clean local relay metadata
+    from meridian.config import CREDS_BASE
+
+    relay_file = CREDS_BASE / sanitize_ip_for_path(relay_ip) / "relay.yml"
+    if relay_file.exists():
+        relay_file.unlink()
 
 
 # ---------------------------------------------------------------------------
