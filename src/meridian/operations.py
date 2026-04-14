@@ -133,17 +133,29 @@ def update_node(
     reality_port = 10000 + ip_hash % 1000
     wss_port = 20000 + (ip_hash % 10000)
 
-    # None = keep current, "" = clear to empty/default
-    effective_domain = domain if domain is not None else node.domain
-    effective_sni = sni if sni is not None else node.sni
+    # Update node metadata before redeploy so _setup_redeploy reads updated values.
+    # None = keep current, "" = clear to empty/default.
+    if name is not None and name != node.name:
+        node.name = name
+        # Also update in panel so actual state converges
+        if node.uuid:
+            try:
+                panel.update_node_name(node.uuid, name)
+            except RemnawaveError as e:
+                logger.warning("Could not update node name in panel: %s", e)
+    if sni is not None:
+        node.sni = sni
+    if domain is not None:
+        node.domain = domain
+    node.warp = warp
 
     from meridian import __version__
 
     _setup_redeploy(
         resolved=resolved,
         cluster=cluster,
-        domain=effective_domain,
-        sni=effective_sni,
+        domain=node.domain,
+        sni=node.sni,
         reality_port=reality_port,
         xhttp_port=xhttp_port,
         wss_port=wss_port,
@@ -153,11 +165,6 @@ def update_node(
         ws_path=node.ws_path,
     )
 
-    # Update name in cluster.yml if changed
-    if name is not None and name != node.name:
-        node.name = name
-        cluster.save()
-
 
 def remove_node(
     cluster: ClusterConfig,
@@ -166,32 +173,45 @@ def remove_node(
     node_ip: str,
     force: bool = False,
 ) -> None:
-    """Deregister a node from the panel and remove from cluster.yml."""
+    """Deregister a node from the panel and remove from cluster.yml.
+
+    Handles both cluster-tracked nodes (in cluster.yml) and panel-only
+    nodes (registered in panel but not in local config — e.g. stale or
+    manually added nodes).
+    """
     node = cluster.find_node(node_ip)
-    if node is None:
-        raise ValueError(f"Node {node_ip} not found in cluster")
 
-    if node.is_panel_host:
-        raise ValueError("Cannot remove the panel node — use meridian teardown instead")
+    if node is not None:
+        if node.is_panel_host:
+            raise ValueError("Cannot remove the panel node — use meridian teardown instead")
 
-    # Guard: check for dependent relays
-    dependent_relays = [r for r in cluster.relays if r.exit_node_ip == node.ip]
-    if dependent_relays and not force:
-        relay_names = ", ".join(r.name or r.ip for r in dependent_relays)
-        raise ValueError(f"Cannot remove node {node.ip} — relays depend on it: {relay_names}")
+        # Guard: check for dependent relays
+        dependent_relays = [r for r in cluster.relays if r.exit_node_ip == node.ip]
+        if dependent_relays and not force:
+            relay_names = ", ".join(r.name or r.ip for r in dependent_relays)
+            raise ValueError(f"Cannot remove node {node.ip} — relays depend on it: {relay_names}")
+
+    # Find node UUID — from cluster.yml or panel API
+    node_uuid = node.uuid if node else ""
+    if not node_uuid:
+        # Panel-only node: look up by address
+        api_node = panel.find_node_by_address(node_ip)
+        if api_node:
+            node_uuid = api_node.uuid
 
     # Disable + delete in panel
-    if node.uuid:
+    if node_uuid:
         try:
-            panel.disable_node(node.uuid)
+            panel.disable_node(node_uuid)
         except RemnawaveError:
-            logger.warning("Could not disable node %s in panel", node.ip)
+            logger.warning("Could not disable node %s in panel", node_ip)
         try:
-            panel.delete_node(node.uuid)
+            panel.delete_node(node_uuid)
         except RemnawaveError as e:
-            logger.warning("Could not delete node %s from panel: %s", node.ip, e)
+            logger.warning("Could not delete node %s from panel: %s", node_ip, e)
 
-    cluster.nodes = [n for n in cluster.nodes if n.ip != node.ip]
+    # Remove from cluster.yml (no-op if panel-only node)
+    cluster.nodes = [n for n in cluster.nodes if n.ip != node_ip]
     cluster.save()
 
 

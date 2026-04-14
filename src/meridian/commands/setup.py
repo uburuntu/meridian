@@ -999,11 +999,19 @@ def _setup_redeploy(
                     _deploy_node_container(resolved.conn, secret_key)
 
             # Recreate hosts (idempotent)
-            _create_hosts_for_node(panel, cluster, resolved.ip, domain or node.domain, sni or node.sni, reality_port)
+            # Use provided values; only fall back to stored values if caller passed ""
+            # (which means "not specified" from imperative commands, or "clear" from apply)
+            effective_domain = domain if domain else node.domain
+            effective_sni = sni if sni else node.sni
+            _create_hosts_for_node(panel, cluster, resolved.ip, effective_domain, effective_sni, reality_port)
 
             # Update node metadata
-            node.sni = sni or node.sni
-            node.domain = domain or node.domain
+            # For sni/domain: empty string from declarative apply means "clear",
+            # non-empty means "set". Imperative commands always pass the resolved value.
+            if sni:
+                node.sni = sni
+            if domain:
+                node.domain = domain
             node.deployed_with = version
             node.warp = warp
             node.reality_public_key = reality_public_key
