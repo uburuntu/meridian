@@ -144,6 +144,7 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
         raise RuntimeError("Failed to configure subscription page")
 
     cluster.subscription_page.enabled = True
+    cluster.subscription_page._extra["deployed"] = True
     cluster.save()
 
 
@@ -167,6 +168,7 @@ def _handle_remove_subscription_page(action: PlanAction, panel: object, cluster:
         raise RuntimeError(f"Failed to stop subscription page: {result.stderr.strip()[:200]}")
 
     cluster.subscription_page.enabled = False
+    cluster.subscription_page._extra["deployed"] = False
     cluster.save()
 
 
@@ -177,7 +179,9 @@ def run(
     """Converge actual state to desired state declared in cluster.yml."""
     cluster = ClusterConfig.load()
 
-    has_desired = cluster.desired_nodes or cluster.desired_clients or cluster.desired_relays
+    has_desired = (
+        cluster.desired_nodes is not None or cluster.desired_clients is not None or cluster.desired_relays is not None
+    )
     has_sub_page = cluster.subscription_page and cluster.subscription_page.enabled
     if not has_desired and not has_sub_page:
         fail(
