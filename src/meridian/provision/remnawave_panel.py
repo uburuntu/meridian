@@ -229,24 +229,37 @@ def configure_subscription_page(
     conn: ServerConnection,
     api_token: str,
     panel_dir: str = REMNAWAVE_PANEL_DIR,
-) -> None:
+) -> bool:
     """Write the subscription page .env with a real API token and restart the container.
 
     Called from setup.py after the API token is created. The subscription page
     container starts with an empty token (from initial compose up) and gets
     restarted here with the valid token.
+
+    Returns True on success, False on failure (non-fatal — logged as warning).
     """
+    import logging
+
+    logger = logging.getLogger("meridian.provision")
+
     env_content = _render_subscription_env(api_token=api_token)
     env_path = f"{panel_dir}/.env.subscription"
     write_cmd = f"cat > {shlex.quote(env_path)} << 'MERIDIAN_EOF'\n{env_content}MERIDIAN_EOF"
-    conn.run(write_cmd, timeout=15)
+    result = conn.run(write_cmd, timeout=15)
+    if result.returncode != 0:
+        logger.warning("Failed to write subscription page .env: %s", result.stderr.strip()[:200])
+        return False
     conn.run(f"chmod 600 {shlex.quote(env_path)}", timeout=15)
 
     q_dir = shlex.quote(panel_dir)
-    conn.run(
+    result = conn.run(
         f"cd {q_dir} && docker compose restart {_SUBSCRIPTION_PAGE_CONTAINER}",
         timeout=60,
     )
+    if result.returncode != 0:
+        logger.warning("Failed to restart subscription page: %s", result.stderr.strip()[:200])
+        return False
+    return True
 
 
 def _wait_for_remnawave_panel(

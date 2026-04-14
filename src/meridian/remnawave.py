@@ -197,35 +197,29 @@ def _run(coro: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _wrap_sdk_error(fn_name: str) -> Any:
-    """Decorator that maps SDK exceptions to Meridian error types."""
-    from functools import wraps
+def _sdk_call(coro: Any) -> Any:
+    """Run an async SDK coroutine, converting SDK exceptions to Meridian types.
 
-    def decorator(fn: Any) -> Any:
-        @wraps(fn)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            try:
-                return fn(*args, **kwargs)
-            except (RemnawaveError, RemnawaveNotFoundError, RemnawaveAuthError, RemnawaveNetworkError):
-                raise
-            except Exception as e:
-                from remnawave.errors import ApiError, ForbiddenError, NotFoundError, UnauthorizedError
+    All SDK-backed methods should use this instead of bare ``_run()``.
+    """
+    try:
+        return _run(coro)
+    except (RemnawaveError, RemnawaveNotFoundError, RemnawaveAuthError, RemnawaveNetworkError):
+        raise
+    except Exception as e:
+        from remnawave.errors import ApiError, ForbiddenError, NotFoundError, UnauthorizedError
 
-                if isinstance(e, NotFoundError):
-                    raise RemnawaveNotFoundError(f"Resource not found: {e}", hint_type="system") from e
-                if isinstance(e, (UnauthorizedError, ForbiddenError)):
-                    raise RemnawaveAuthError(
-                        f"Panel authentication failed: {e}",
-                        hint="Check your API token — it may have expired",
-                        hint_type="user",
-                    ) from e
-                if isinstance(e, ApiError):
-                    raise RemnawaveError(f"Panel API error: {e}", hint_type="system") from e
-                raise
-
-        return wrapper
-
-    return decorator
+        if isinstance(e, NotFoundError):
+            raise RemnawaveNotFoundError(f"Resource not found: {e}", hint_type="system") from e
+        if isinstance(e, (UnauthorizedError, ForbiddenError)):
+            raise RemnawaveAuthError(
+                f"Panel authentication failed: {e}",
+                hint="Check your API token — it may have expired",
+                hint_type="user",
+            ) from e
+        if isinstance(e, ApiError):
+            raise RemnawaveError(f"Panel API error: {e}", hint_type="system") from e
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -365,7 +359,7 @@ class MeridianPanel:
     def ping(self) -> bool:
         """Check if the panel is reachable and authenticated."""
         try:
-            _run(self._sdk.users.get_all_users_v2(start=0, size=1))
+            _sdk_call(self._sdk.users.get_all_users_v2(start=0, size=1))
             return True
         except Exception:
             return False
@@ -397,47 +391,41 @@ class MeridianPanel:
 
     def get_user(self, username: str) -> User | None:
         """Find a user by username. Returns None only if not found (404)."""
-        from remnawave.errors import NotFoundError
-
         try:
-            resp = _run(self._sdk.users.get_user_by_username(username))
+            resp = _sdk_call(self._sdk.users.get_user_by_username(username))
             return _user_from_sdk(resp)
-        except NotFoundError:
+        except RemnawaveNotFoundError:
             return None
 
     def get_user_by_uuid(self, uuid: str) -> User | None:
         """Find a user by UUID. Returns None only if not found (404)."""
-        from remnawave.errors import NotFoundError
-
         try:
-            resp = _run(self._sdk.users.get_user_by_uuid(uuid))
+            resp = _sdk_call(self._sdk.users.get_user_by_uuid(uuid))
             return _user_from_sdk(resp)
-        except NotFoundError:
+        except RemnawaveNotFoundError:
             return None
 
     def list_users(self) -> list[User]:
         """List all users."""
-        resp = _run(self._sdk.users.get_all_users_v2(start=0, size=10000))
+        resp = _sdk_call(self._sdk.users.get_all_users_v2(start=0, size=10000))
         users_list = getattr(resp, "users", []) or []
         return [_user_from_sdk(u) for u in users_list]
 
     def delete_user(self, uuid: str) -> bool:
         """Delete a user by UUID. Returns False only if not found."""
-        from remnawave.errors import NotFoundError
-
         try:
-            _run(self._sdk.users.delete_user(uuid))
+            _sdk_call(self._sdk.users.delete_user(uuid))
             return True
-        except NotFoundError:
+        except RemnawaveNotFoundError:
             return False
 
     def enable_user(self, uuid: str) -> None:
         """Enable a disabled user."""
-        _run(self._sdk.users.enable_user(uuid))
+        _sdk_call(self._sdk.users.enable_user(uuid))
 
     def disable_user(self, uuid: str) -> None:
         """Disable a user."""
-        _run(self._sdk.users.disable_user(uuid))
+        _sdk_call(self._sdk.users.disable_user(uuid))
 
     # --- Nodes ---
 
@@ -480,7 +468,7 @@ class MeridianPanel:
 
     def list_nodes(self) -> list[Node]:
         """List all registered nodes."""
-        resp = _run(self._sdk.nodes.get_all_nodes())
+        resp = _sdk_call(self._sdk.nodes.get_all_nodes())
         nodes_list = getattr(resp, "response", []) or []
         return [_node_from_sdk(n) for n in nodes_list]
 
@@ -493,29 +481,27 @@ class MeridianPanel:
 
     def get_node(self, uuid: str) -> Node | None:
         """Get a node by UUID. Returns None only if not found (404)."""
-        from remnawave.errors import NotFoundError
-
         try:
-            resp = _run(self._sdk.nodes.get_one_node(uuid))
+            resp = _sdk_call(self._sdk.nodes.get_one_node(uuid))
             return _node_from_sdk(resp)
-        except NotFoundError:
+        except RemnawaveNotFoundError:
             return None
 
     def enable_node(self, uuid: str) -> None:
         """Enable a disabled node."""
-        _run(self._sdk.nodes.enable_node(uuid))
+        _sdk_call(self._sdk.nodes.enable_node(uuid))
 
     def disable_node(self, uuid: str) -> None:
         """Disable a node."""
-        _run(self._sdk.nodes.disable_node(uuid))
+        _sdk_call(self._sdk.nodes.disable_node(uuid))
 
     def restart_node(self, uuid: str) -> None:
         """Restart Xray on a node."""
-        _run(self._sdk.nodes.restart_node(uuid))
+        _sdk_call(self._sdk.nodes.restart_node(uuid))
 
     def delete_node(self, uuid: str) -> None:
         """Deregister a node."""
-        _run(self._sdk.nodes.delete_node(uuid))
+        _sdk_call(self._sdk.nodes.delete_node(uuid))
 
     # --- Hosts (relays map here) ---
 
@@ -568,7 +554,7 @@ class MeridianPanel:
 
     def list_hosts(self) -> list[Host]:
         """List all host entries."""
-        resp = _run(self._sdk.hosts.get_all_hosts())
+        resp = _sdk_call(self._sdk.hosts.get_all_hosts())
         hosts_list = getattr(resp, "response", []) or []
         return [_host_from_sdk(h) for h in hosts_list]
 
@@ -584,17 +570,17 @@ class MeridianPanel:
         # SDK uses bulk enable with a list of UUIDs
         from uuid import UUID
 
-        _run(self._sdk.hosts_bulk_actions.enable_hosts([UUID(uuid)]))
+        _sdk_call(self._sdk.hosts_bulk_actions.enable_hosts([UUID(uuid)]))
 
     def disable_host(self, uuid: str) -> None:
         """Disable a host (subscriptions auto-exclude)."""
         from uuid import UUID
 
-        _run(self._sdk.hosts_bulk_actions.disable_hosts([UUID(uuid)]))
+        _sdk_call(self._sdk.hosts_bulk_actions.disable_hosts([UUID(uuid)]))
 
     def delete_host(self, uuid: str) -> None:
         """Delete a host entry."""
-        _run(self._sdk.hosts.delete_host(uuid))
+        _sdk_call(self._sdk.hosts.delete_host(uuid))
 
     # --- Config Profiles (not in SDK — raw httpx) ---
 
@@ -633,7 +619,7 @@ class MeridianPanel:
 
     def list_inbounds(self) -> list[Inbound]:
         """List all inbounds across config profiles."""
-        resp = _run(self._sdk.inbounds.get_inbounds())
+        resp = _sdk_call(self._sdk.inbounds.get_inbounds())
         inbounds_list = getattr(resp, "response", []) or []
         return [_inbound_from_sdk(ib) for ib in inbounds_list]
 
