@@ -635,10 +635,7 @@ def run_deploy(
         err_console.print("  [dim]This makes the relay look like it hosts a nearby website.[/dim]")
         err_console.print()
 
-        from rich.status import Status
-
-        with Status("  [cyan]\u2192 Scanning relay subnet...[/cyan]", console=err_console, spinner="dots"):
-            candidates = scan_for_sni(relay_conn, relay_ip)
+        candidates = scan_for_sni(relay_conn, relay_ip)
 
         if candidates:
             from meridian.console import choose
