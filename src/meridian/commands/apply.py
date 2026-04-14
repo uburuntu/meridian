@@ -41,6 +41,26 @@ def _handle_add_node(action: PlanAction, panel: object, cluster: object) -> None
     )
 
 
+def _handle_update_node(action: PlanAction, panel: object, cluster: object) -> None:
+    """Redeploy a node with updated configuration."""
+    from meridian.cluster import ClusterConfig
+    from meridian.operations import update_node
+    from meridian.remnawave import MeridianPanel
+
+    assert isinstance(panel, MeridianPanel)
+    assert isinstance(cluster, ClusterConfig)
+
+    desired = next((n for n in cluster.desired_nodes if n.host == action.target), None)
+    update_node(
+        cluster,
+        panel,
+        ip=action.target,
+        sni=desired.sni if desired else "",
+        domain=desired.domain if desired else "",
+        warp=desired.warp if desired else False,
+    )
+
+
 def _handle_remove_node(action: PlanAction, panel: object, cluster: object) -> None:
     """Deregister and remove a node."""
     from meridian.cluster import ClusterConfig
@@ -157,7 +177,9 @@ def run(
     """Converge actual state to desired state declared in cluster.yml."""
     cluster = ClusterConfig.load()
 
-    if not cluster.desired_nodes and not cluster.desired_clients and not cluster.desired_relays:
+    has_desired = cluster.desired_nodes or cluster.desired_clients or cluster.desired_relays
+    has_sub_page = cluster.subscription_page and cluster.subscription_page.enabled
+    if not has_desired and not has_sub_page:
         fail(
             "No desired state defined in cluster.yml",
             hint=("Add desired_nodes, desired_clients, or desired_relays to cluster.yml,\nthen run: meridian apply"),
@@ -195,6 +217,7 @@ def run(
             info("Applying plan...")
             callbacks = {
                 PlanActionKind.ADD_NODE: _handle_add_node,
+                PlanActionKind.UPDATE_NODE: _handle_update_node,
                 PlanActionKind.REMOVE_NODE: _handle_remove_node,
                 PlanActionKind.ADD_RELAY: _handle_add_relay,
                 PlanActionKind.REMOVE_RELAY: _handle_remove_relay,

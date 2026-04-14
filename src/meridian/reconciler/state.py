@@ -37,12 +37,20 @@ class DesiredRelayState:
 
 @dataclass
 class DesiredState:
-    """What the cluster should look like (from cluster.yml v2)."""
+    """What the cluster should look like (from cluster.yml v2).
+
+    The ``manage_*`` flags indicate whether each resource type is
+    explicitly declared. An empty list with ``manage_*=False`` means
+    "don't touch this resource type" (not "delete everything").
+    """
 
     nodes: list[DesiredNodeState] = field(default_factory=list)
     clients: list[str] = field(default_factory=list)
     relays: list[DesiredRelayState] = field(default_factory=list)
     subscription_page_enabled: bool = False
+    manage_nodes: bool = False
+    manage_clients: bool = False
+    manage_relays: bool = False
 
 
 @dataclass
@@ -53,6 +61,9 @@ class ActualNodeState:
     name: str = ""
     uuid: str = ""
     is_connected: bool = False
+    sni: str = ""
+    domain: str = ""
+    warp: bool = False
 
 
 @dataclass
@@ -117,6 +128,9 @@ def build_desired_state(cluster: object) -> DesiredState:
         clients=list(cluster.desired_clients),
         relays=relays,
         subscription_page_enabled=sub_enabled,
+        manage_nodes=bool(cluster.desired_nodes),
+        manage_clients=bool(cluster.desired_clients),
+        manage_relays=bool(cluster.desired_relays),
     )
 
 
@@ -132,16 +146,23 @@ def build_actual_state(cluster: object, panel: object) -> ActualState:
     if not isinstance(cluster, ClusterConfig) or not isinstance(panel, MeridianPanel):
         return ActualState()
 
-    # Nodes: from panel API (live state, not cluster.yml)
-    actual_nodes = [
-        ActualNodeState(
-            host=n.address,
-            name=n.name,
-            uuid=n.uuid,
-            is_connected=n.is_connected,
+    # Nodes: from panel API (live state) enriched with cluster.yml attributes
+    # Panel API provides connectivity; cluster.yml provides sni/domain/warp
+    cluster_nodes_by_ip = {n.ip: n for n in cluster.nodes}
+    actual_nodes = []
+    for n in panel.list_nodes():
+        cn = cluster_nodes_by_ip.get(n.address)
+        actual_nodes.append(
+            ActualNodeState(
+                host=n.address,
+                name=n.name,
+                uuid=n.uuid,
+                is_connected=n.is_connected,
+                sni=cn.sni if cn else "",
+                domain=cn.domain if cn else "",
+                warp=cn.warp if cn else False,
+            )
         )
-        for n in panel.list_nodes()
-    ]
 
     # Clients: from panel API
     actual_clients = [u.username for u in panel.list_users()]
