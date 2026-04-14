@@ -641,7 +641,8 @@ class InstallNginx:
 
             result = conn.run(
                 "DEBIAN_FRONTEND=noninteractive apt-get update -qq"
-                " && DEBIAN_FRONTEND=noninteractive apt-get install -y nginx",
+                " && DEBIAN_FRONTEND=noninteractive apt-get install -y"
+                " -o Dpkg::Options::=--force-confnew nginx",
                 timeout=180,
             )
             if result.returncode != 0:
