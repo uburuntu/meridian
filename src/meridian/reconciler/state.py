@@ -18,7 +18,6 @@ class DesiredNodeState:
     name: str = ""
     ssh_user: str = "root"
     ssh_port: int = 22
-    protocols: list[str] = field(default_factory=list)
     domain: str = ""
     sni: str = ""
     warp: bool = False
@@ -102,7 +101,6 @@ def build_desired_state(cluster: object) -> DesiredState:
             name=dn.name,
             ssh_user=dn.ssh_user,
             ssh_port=dn.ssh_port,
-            protocols=list(dn.protocols),
             domain=dn.domain,
             sni=dn.sni,
             warp=dn.warp,

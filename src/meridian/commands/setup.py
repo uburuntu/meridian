@@ -704,7 +704,9 @@ def _setup_first_deploy(
     # Configure subscription page with the real API token
     from meridian.provision.remnawave_panel import configure_subscription_page
 
-    configure_subscription_page(resolved.conn, api_token)
+    if configure_subscription_page(resolved.conn, api_token):
+        cluster.subscription_page._extra["deployed"] = True
+        cluster.save()
     ok("Subscription page configured")
 
     with MeridianPanel(base_url, api_token) as panel:
@@ -1013,7 +1015,9 @@ def _setup_redeploy(
             if node.is_panel_host:
                 from meridian.provision.remnawave_panel import configure_subscription_page
 
-                configure_subscription_page(resolved.conn, cluster.panel.api_token)
+                if configure_subscription_page(resolved.conn, cluster.panel.api_token):
+                    cluster.subscription_page._extra["deployed"] = True
+                    cluster.save()
 
     except RemnawaveError as e:
         fail(f"Panel API error: {e}", hint_type="system")

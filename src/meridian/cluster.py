@@ -141,7 +141,6 @@ class DesiredNode:
     name: str = ""  # friendly name (e.g., "de-fra-1")
     ssh_user: str = "root"
     ssh_port: int = 22
-    protocols: list[str] = field(default_factory=list)  # ["reality", "xhttp", "wss"]
     domain: str = ""  # optional domain for WSS/XHTTP
     sni: str = ""  # Reality SNI target
     warp: bool = False
@@ -505,7 +504,7 @@ _RELAY_FIELDS = {"ip", "name", "port", "exit_node_ip", "host_uuids", "sni", "ssh
 _BRANDING_FIELDS = {"server_name", "icon", "color"}
 _INBOUND_REF_FIELDS = {"uuid", "tag"}
 _SUBSCRIPTION_PAGE_FIELDS = {"enabled", "port", "image"}
-_DESIRED_NODE_FIELDS = {"host", "name", "ssh_user", "ssh_port", "protocols", "domain", "sni", "warp"}
+_DESIRED_NODE_FIELDS = {"host", "name", "ssh_user", "ssh_port", "domain", "sni", "warp"}
 _DESIRED_RELAY_FIELDS = {"host", "name", "exit_node", "ssh_user", "ssh_port"}
 _KNOWN_TOP = {
     "version",
@@ -653,8 +652,6 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
                 d.pop("ssh_port", None)
             if not d.get("warp"):
                 d.pop("warp", None)
-            if not d.get("protocols"):
-                d.pop("protocols", None)
             desired_nodes_out.append(d)
         out["desired_nodes"] = desired_nodes_out
 
