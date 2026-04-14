@@ -109,14 +109,35 @@ def execute_plan(
     # Kinds that can be parallelized (independent per-server operations)
     parallel_kinds = {PlanActionKind.ADD_NODE}
 
+    # Destructive kinds — skip if a prior phase had failures (dependency safety)
+    destructive_kinds = {
+        PlanActionKind.REMOVE_CLIENT,
+        PlanActionKind.REMOVE_RELAY,
+        PlanActionKind.REMOVE_SUBSCRIPTION_PAGE,
+        PlanActionKind.REMOVE_NODE,
+    }
+
     # Group actions by kind, preserving order within each kind
     by_kind: dict[PlanActionKind, list[PlanAction]] = {}
     for action in plan.actions:
         by_kind.setdefault(action.kind, []).append(action)
 
+    has_failures = False
     for kind in order:
         actions = by_kind.get(kind, [])
         if not actions:
+            continue
+
+        # Skip destructive phases if prior phases failed
+        if has_failures and kind in destructive_kinds:
+            for action in actions:
+                results.append(
+                    ActionResult(
+                        action=action,
+                        success=False,
+                        error="skipped: prior phase had failures",
+                    )
+                )
             continue
 
         handler = callbacks.get(kind)
@@ -124,6 +145,7 @@ def execute_plan(
             for action in actions:
                 logger.warning("No handler for action kind: %s", kind)
                 results.append(ActionResult(action=action, success=False, error="no handler registered"))
+            has_failures = True
             continue
 
         # Parallelize independent actions (e.g., node provisioning)
@@ -131,9 +153,15 @@ def execute_plan(
             with ThreadPoolExecutor(max_workers=min(max_parallel, len(actions))) as pool:
                 futures = {pool.submit(_run_action, action, handler, panel, cluster): action for action in actions}
                 for future in as_completed(futures):
-                    results.append(future.result())
+                    r = future.result()
+                    results.append(r)
+                    if not r.success:
+                        has_failures = True
         else:
             for action in actions:
-                results.append(_run_action(action, handler, panel, cluster))
+                r = _run_action(action, handler, panel, cluster)
+                results.append(r)
+                if not r.success:
+                    has_failures = True
 
     return ExecutionResult(results=results)
