@@ -102,14 +102,18 @@ class Plan:
 
 
 def _node_changes(desired: DesiredNodeState, actual: ActualNodeState) -> list[str]:
-    """Compare attributes of a matching node and return list of change descriptions."""
+    """Compare attributes of a matching node and return list of change descriptions.
+
+    Empty desired values mean "not specified, keep current" — not "clear".
+    Only non-empty desired values trigger drift detection.
+    """
     changes: list[str] = []
     if desired.name and desired.name != actual.name:
         changes.append(f"name: {actual.name or '(none)'} → {desired.name}")
-    if desired.sni != actual.sni:
-        changes.append(f"sni: {actual.sni or '(default)'} → {desired.sni or '(default)'}")
-    if desired.domain != actual.domain:
-        changes.append(f"domain: {actual.domain or '(none)'} → {desired.domain or '(none)'}")
+    if desired.sni and desired.sni != actual.sni:
+        changes.append(f"sni: {actual.sni or '(default)'} → {desired.sni}")
+    if desired.domain and desired.domain != actual.domain:
+        changes.append(f"domain: {actual.domain or '(none)'} → {desired.domain}")
     if desired.warp != actual.warp:
         changes.append(f"warp: {actual.warp} → {desired.warp}")
     return changes
@@ -258,8 +262,8 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
                 )
             )
 
-    # --- Subscription page ---
-    if desired.subscription_page_enabled and not actual.subscription_page_running:
+    # --- Subscription page (only if explicitly declared in cluster.yml) ---
+    if desired.manage_subscription_page and desired.subscription_page_enabled and not actual.subscription_page_running:
         actions.append(
             PlanAction(
                 kind=PlanActionKind.ADD_SUBSCRIPTION_PAGE,
@@ -267,7 +271,9 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
                 detail="deploy subscription page container",
             )
         )
-    elif not desired.subscription_page_enabled and actual.subscription_page_running:
+    elif (
+        desired.manage_subscription_page and not desired.subscription_page_enabled and actual.subscription_page_running
+    ):
         actions.append(
             PlanAction(
                 kind=PlanActionKind.REMOVE_SUBSCRIPTION_PAGE,

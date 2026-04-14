@@ -705,6 +705,10 @@ def _setup_first_deploy(
     from meridian.provision.remnawave_panel import configure_subscription_page
 
     if configure_subscription_page(resolved.conn, api_token):
+        from meridian.cluster import SubscriptionPageConfig
+
+        if cluster.subscription_page is None:
+            cluster.subscription_page = SubscriptionPageConfig()
         cluster.subscription_page._extra["deployed"] = True
         cluster.save()
     ok("Subscription page configured")
@@ -1028,6 +1032,10 @@ def _setup_redeploy(
                 from meridian.provision.remnawave_panel import configure_subscription_page
 
                 if configure_subscription_page(resolved.conn, cluster.panel.api_token):
+                    from meridian.cluster import SubscriptionPageConfig
+
+                    if cluster.subscription_page is None:
+                        cluster.subscription_page = SubscriptionPageConfig()
                     cluster.subscription_page._extra["deployed"] = True
                     cluster.save()
 

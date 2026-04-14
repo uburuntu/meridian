@@ -22,14 +22,14 @@ class TestMigrations:
         result = migrate(data)
         assert result["version"] == CURRENT_VERSION
         assert result["panel"]["url"] == "https://test"
-        # v1→v2 adds subscription_page (enabled by default to preserve running containers)
-        assert result["subscription_page"]["enabled"] is True
+        # v1→v2 does NOT add subscription_page (legacy clusters unmanaged)
+        assert "subscription_page" not in result
 
     def test_v1_migrates_to_v2(self) -> None:
         data = {"version": 1, "panel": {"url": "https://test"}}
         result = migrate(data)
         assert result["version"] == 2
-        assert result["subscription_page"]["enabled"] is True
+        assert "subscription_page" not in result
 
     def test_data_preserved_through_migration(self) -> None:
         data = {
