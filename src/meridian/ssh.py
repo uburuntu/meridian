@@ -425,8 +425,8 @@ class ServerConnection:
                     timeout=15,
                 )
                 if result.returncode == 0:
-                    self.run(f"chmod 600 {q_path}", timeout=5)
-                    return True
+                    chmod = self.run(f"chmod 600 {q_path}", timeout=5)
+                    return chmod.returncode == 0
                 return False
             except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
                 return False
@@ -438,10 +438,9 @@ class ServerConnection:
                     "scp",
                     *self._scp_opts,
                     str(local_path),
-                    f"root@{self._scp_host}:{remote_path}",
+                    f"{self.user}@{self._scp_host}:{remote_path}",
                 ],
                 capture_output=True,
-                text=True,
                 timeout=15,
                 stdin=subprocess.DEVNULL,
             )

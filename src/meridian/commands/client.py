@@ -82,13 +82,13 @@ def _sync_credentials_to_server(resolved: ResolvedServer) -> bool:
     if resolved.local_mode:
         return True  # Already on the server
 
-    ok = True
+    all_ok = True
     for path in resolved.creds_dir.iterdir():
         if not path.is_file():
             continue
         if not resolved.conn.write_file(path, f"/etc/meridian/{path.name}"):
-            ok = False
-    return ok
+            all_ok = False
+    return all_ok
 
 
 def _refresh_credentials_or_fail(resolved: ResolvedServer, *, action: str) -> None:
