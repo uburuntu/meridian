@@ -865,3 +865,146 @@ class TestGetMethodErrorPropagation:
         with patch("meridian.remnawave._sdk_call", side_effect=RemnawaveAuthError("expired")):
             with pytest.raises(RemnawaveAuthError):
                 panel.get_config_profile("cp-1")
+
+
+class TestListUsersPagination:
+    """The panel rejects page sizes >1000 with a 400. Pagination logic must
+    iterate until a short page is returned, not stop at the first page."""
+
+    def test_paginates_until_partial_page(self) -> None:
+        panel = _make_panel()
+        panel._sdk.users.get_all_users = MagicMock(return_value="coro")
+
+        # Build 2.5 pages worth of fake users (2500 users).
+        # _sdk_call return values, one per loop iteration.
+        page1 = _ns(users=[_ns(uuid=f"u-{i}", username=f"u{i}") for i in range(1000)])
+        page2 = _ns(users=[_ns(uuid=f"u-{i}", username=f"u{i}") for i in range(1000, 2000)])
+        page3 = _ns(users=[_ns(uuid=f"u-{i}", username=f"u{i}") for i in range(2000, 2500)])
+
+        with patch("meridian.remnawave._sdk_call", side_effect=[page1, page2, page3]):
+            users = panel.list_users()
+
+        assert len(users) == 2500
+        assert users[0].uuid == "u-0"
+        assert users[2499].uuid == "u-2499"
+
+    def test_stops_on_first_empty_page(self) -> None:
+        panel = _make_panel()
+        panel._sdk.users.get_all_users = MagicMock(return_value="coro")
+
+        with patch("meridian.remnawave._sdk_call", side_effect=[_ns(users=[])]):
+            users = panel.list_users()
+
+        assert users == []
+
+    def test_uses_max_page_size_within_panel_limit(self) -> None:
+        """Panel rejects size > 1000 — we must pass exactly 1000 (or less)."""
+        panel = _make_panel()
+        panel._sdk.users.get_all_users = MagicMock(return_value="coro")
+
+        with patch("meridian.remnawave._sdk_call", side_effect=[_ns(users=[])]):
+            panel.list_users()
+        kwargs = panel._sdk.users.get_all_users.call_args.kwargs
+        assert kwargs.get("size", 0) <= 1000
+
+
+class TestSdkExceptionTranslation:
+    """_sdk_call must convert the official SDK's exception hierarchy into our
+    RemnawaveError types. The handlers in commands/ rely on RemnawaveNotFoundError
+    vs RemnawaveAuthError vs RemnawaveError to decide what to do — if SDK
+    upgrades change exception types we must trip these tests, not silently
+    let bare exceptions bubble up."""
+
+    def test_remnawave_errors_pass_through_unchanged(self) -> None:
+        from meridian.remnawave import _sdk_call
+
+        original = RemnawaveAuthError("token expired")
+
+        async def coro() -> None:
+            raise original
+
+        with pytest.raises(RemnawaveAuthError) as exc_info:
+            _sdk_call(coro())
+        # Identity is preserved; we did not double-wrap.
+        assert exc_info.value is original
+
+    def _api_err(self, msg: str):
+        from remnawave.exceptions.general import ApiErrorResponse
+
+        return ApiErrorResponse(message=msg)
+
+    def test_sdk_not_found_becomes_remnawave_not_found(self) -> None:
+        from remnawave.exceptions import NotFoundError
+
+        from meridian.remnawave import _sdk_call
+
+        err = self._api_err("user does not exist")
+
+        async def coro() -> None:
+            raise NotFoundError(404, err)
+
+        with pytest.raises(RemnawaveNotFoundError):
+            _sdk_call(coro())
+
+    def test_sdk_unauthorized_becomes_remnawave_auth_error(self) -> None:
+        from remnawave.exceptions import UnauthorizedError
+
+        from meridian.remnawave import _sdk_call
+
+        err = self._api_err("bad token")
+
+        async def coro() -> None:
+            raise UnauthorizedError(401, err)
+
+        with pytest.raises(RemnawaveAuthError):
+            _sdk_call(coro())
+
+    def test_sdk_forbidden_becomes_remnawave_auth_error(self) -> None:
+        from remnawave.exceptions import ForbiddenError
+
+        from meridian.remnawave import _sdk_call
+
+        err = self._api_err("scope insufficient")
+
+        async def coro() -> None:
+            raise ForbiddenError(403, err)
+
+        with pytest.raises(RemnawaveAuthError):
+            _sdk_call(coro())
+
+    def test_sdk_network_error_becomes_remnawave_network_error(self) -> None:
+        from remnawave.exceptions import NetworkError
+
+        from meridian.remnawave import _sdk_call
+
+        err = self._api_err("connection refused")
+
+        async def coro() -> None:
+            raise NetworkError(0, err)
+
+        with pytest.raises(RemnawaveNetworkError):
+            _sdk_call(coro())
+
+    def test_sdk_api_error_becomes_remnawave_error(self) -> None:
+        from remnawave.exceptions import ApiError
+
+        from meridian.remnawave import _sdk_call
+
+        err = self._api_err("server exploded")
+
+        async def coro() -> None:
+            raise ApiError(500, err)
+
+        with pytest.raises(RemnawaveError):
+            _sdk_call(coro())
+
+    def test_unknown_exception_bubbles_up_unchanged(self) -> None:
+        """An unrelated exception (programmer error, attribute error, etc.)
+        must not be silently wrapped — that would hide bugs."""
+        from meridian.remnawave import _sdk_call
+
+        async def coro() -> None:
+            raise AttributeError("some_attr")
+
+        with pytest.raises(AttributeError):
+            _sdk_call(coro())

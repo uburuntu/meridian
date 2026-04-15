@@ -485,8 +485,20 @@ fi
 # Verify clients still work after redeploy
 if [ -n "$CLIENT_UUID" ]; then
   echo ">>> Re-testing connections after redeploy..."
-  # Xray node restarts during redeploy — wait for it to reinitialize
-  sleep 10
+  # Xray node restarts during redeploy. The xray container needs time to
+  # initialize Reality keys, register inbounds, and start accepting TLS.
+  # 10s used to be enough but produced flaky 'connection reset' on direct
+  # Reality (relay-forwarded paths kept passing because they took longer
+  # before issuing the request, giving xray more head room). Wait long
+  # enough that the direct path has the same head room as the indirect.
+  sleep 30
+  # Wait for the xray service inside the node container to report active.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if ssh root@"$EXIT_IP" "docker exec remnawave-node xray version >/dev/null 2>&1"; then
+      break
+    fi
+    sleep 2
+  done
   if python3 /workspace/tests/systemlab/scripts/test-connections.py; then
     pass "connections still work after redeploy"
   else

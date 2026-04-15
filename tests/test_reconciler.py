@@ -420,6 +420,80 @@ class TestExecutor:
             f"Expected REMOVE before ADD, got {execution_order}"
         )
 
+    def test_destructive_removes_skipped_after_add_failure_in_same_run(self) -> None:
+        """REMOVE_NODE/REMOVE_RELAY/REMOVE_SUBSCRIPTION_PAGE that come AFTER
+        the ADDs in the order list must be skipped if any add/update failed,
+        so we don't tear down infra when the replacement never came up.
+
+        REMOVE_CLIENT comes BEFORE the adds in the new order, so it runs
+        first and is not affected by the gate.
+        """
+        events: list[str] = []
+
+        def add_node_fails(action: PlanAction, panel: object, cluster: object) -> None:
+            events.append(f"ADD_NODE:{action.target}")
+            raise RuntimeError("provisioner died")
+
+        def remove_node_handler(action: PlanAction, panel: object, cluster: object) -> None:
+            events.append(f"REMOVE_NODE:{action.target}")
+
+        plan = Plan(
+            actions=[
+                PlanAction(kind=PlanActionKind.ADD_NODE, target="198.51.100.10"),
+                PlanAction(kind=PlanActionKind.REMOVE_NODE, target="198.51.100.99", destructive=True),
+            ]
+        )
+        result = execute_plan(
+            plan,
+            panel=None,
+            cluster=None,
+            callbacks={
+                PlanActionKind.ADD_NODE: add_node_fails,
+                PlanActionKind.REMOVE_NODE: remove_node_handler,
+            },
+        )
+        # ADD_NODE ran (and failed); REMOVE_NODE was skipped.
+        assert "ADD_NODE:198.51.100.10" in events
+        assert "REMOVE_NODE:198.51.100.99" not in events
+        # The REMOVE result must be present and marked as skipped.
+        skip = next(r for r in result.results if r.action.kind == PlanActionKind.REMOVE_NODE)
+        assert not skip.success
+        assert "skipped" in skip.error.lower() or "prior phase" in skip.error.lower()
+
+    def test_max_parallel_one_runs_serially(self) -> None:
+        """Bug #2 regression: parallel ADD_NODE was disabled. Verify max_parallel
+        is honored (no ThreadPoolExecutor spawned for parallel_kinds={}).
+        """
+        events: list[str] = []
+
+        def slow_handler(action: PlanAction, panel: object, cluster: object) -> None:
+            import time
+
+            events.append(f"start:{action.target}")
+            time.sleep(0.05)
+            events.append(f"end:{action.target}")
+
+        plan = Plan(
+            actions=[
+                PlanAction(kind=PlanActionKind.ADD_NODE, target="a"),
+                PlanAction(kind=PlanActionKind.ADD_NODE, target="b"),
+                PlanAction(kind=PlanActionKind.ADD_NODE, target="c"),
+            ]
+        )
+        execute_plan(
+            plan,
+            panel=None,
+            cluster=None,
+            callbacks={PlanActionKind.ADD_NODE: slow_handler},
+            max_parallel=4,  # would parallelize if executor allowed it
+        )
+        # Serial execution: each start must be immediately followed by its end
+        # before the next start. Parallel would interleave starts.
+        for i in range(0, len(events), 2):
+            assert events[i].startswith("start:"), f"Out-of-order at {events}"
+            assert events[i + 1].startswith("end:"), f"Out-of-order at {events}"
+            assert events[i].split(":")[1] == events[i + 1].split(":")[1]
+
     def test_remove_node_still_runs_last(self) -> None:
         """REMOVE_NODE must run after ADDs/UPDATEs to avoid orphaning relays
         whose host metadata still references the old node UUID. Only the

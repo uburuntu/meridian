@@ -142,3 +142,118 @@ class TestUpdateNode:
 
         assert node.name == "new-name"
         panel.update_node_name.assert_called_once_with("uuid-2", "new-name")
+
+
+# ---------------------------------------------------------------------------
+# Error/failure paths surfaced by the Codex test-quality review
+# ---------------------------------------------------------------------------
+
+
+class TestRemoveNodeErrorPaths:
+    """Codex review: panel-side failures during remove_node should not leave
+    cluster.yml in an inconsistent state, and remove_node should still finish
+    its local cleanup so a retry can proceed.
+    """
+
+    def test_panel_disable_failure_does_not_block_local_remove(self) -> None:
+        from meridian.remnawave import RemnawaveError
+
+        node = NodeEntry(ip="198.51.100.2", uuid="uuid-2", name="x")
+        cluster = _make_cluster(nodes=[node])
+        panel = _mock_panel()
+        panel.disable_node.side_effect = RemnawaveError("panel down")
+        # delete_node still attempted — also failing here exercises the warn path
+        panel.delete_node.side_effect = RemnawaveError("panel down")
+
+        # remove_node must NOT raise — it logs and proceeds with local cleanup
+        # so the operator can retry without manual cluster.yml surgery.
+        remove_node(cluster, panel, node_ip="198.51.100.2")
+        assert cluster.nodes == []
+
+    def test_force_overrides_dependent_relay_check(self) -> None:
+        node = NodeEntry(ip="198.51.100.2", uuid="uuid-2")
+        relay = RelayEntry(ip="198.51.100.10", exit_node_ip="198.51.100.2")
+        cluster = _make_cluster(nodes=[node], relays=[relay])
+        panel = _mock_panel()
+        # Without force, the dependent-relays check refuses the remove.
+        # With force=True, the operator accepts the orphan and we proceed.
+        remove_node(cluster, panel, node_ip="198.51.100.2", force=True)
+        assert cluster.nodes == []
+        # Relay is intentionally not auto-removed — operator can clean separately
+        assert len(cluster.relays) == 1
+
+
+class TestUpdateNodeMetadataConsistency:
+    """update_node mutates the node metadata BEFORE the redeploy runs so that
+    _setup_redeploy reads the new SNI/name. If redeploy fails, the rollback
+    must restore EVERY field that was tentatively changed — otherwise
+    cluster.yml claims state that the server never reached.
+    """
+
+    def test_rollback_restores_all_changed_fields(self) -> None:
+        node = NodeEntry(
+            ip="198.51.100.2",
+            uuid="uuid-2",
+            name="old-name",
+            sni="old.sni",
+            domain="old.dom",
+            warp=False,
+        )
+        cluster = _make_cluster(nodes=[node])
+        panel = _mock_panel()
+
+        with (
+            patch("meridian.commands.setup._setup_redeploy", side_effect=RuntimeError("provisioner died")),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.resolve.ResolvedServer"),
+        ):
+            with pytest.raises(RuntimeError):
+                update_node(
+                    cluster,
+                    panel,
+                    ip="198.51.100.2",
+                    name="new-name",
+                    sni="new.sni",
+                    domain="new.dom",
+                    warp=True,
+                )
+
+        # Every changed field must be the original value.
+        assert node.name == "old-name"
+        assert node.sni == "old.sni"
+        assert node.domain == "old.dom"
+        assert node.warp is False
+        # Panel update should NOT have been called when redeploy never finished.
+        panel.update_node_name.assert_not_called()
+
+    def test_panel_name_update_failure_does_not_undo_local_change(self) -> None:
+        from meridian.remnawave import RemnawaveError
+
+        node = NodeEntry(ip="198.51.100.2", uuid="uuid-2", name="old-name")
+        cluster = _make_cluster(nodes=[node])
+        panel = _mock_panel()
+        panel.update_node_name.side_effect = RemnawaveError("panel down")
+
+        with (
+            patch("meridian.commands.setup._setup_redeploy"),  # provisioner OK
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.resolve.ResolvedServer"),
+        ):
+            update_node(cluster, panel, ip="198.51.100.2", name="new-name")
+
+        # The redeploy succeeded so the local rename should stick even if the
+        # panel name sync fails — the panel name is cosmetic and we recover
+        # next apply.
+        assert node.name == "new-name"
+
+
+class TestAddClientErrorPaths:
+    def test_panel_create_failure_propagates(self) -> None:
+        from meridian.remnawave import RemnawaveError
+
+        cluster = _make_cluster(squad_uuid="sq-1")
+        panel = _mock_panel()
+        panel.create_user.side_effect = RemnawaveError("user already exists")
+
+        with pytest.raises(RemnawaveError, match="already exists"):
+            add_client(cluster, panel, name="alice")

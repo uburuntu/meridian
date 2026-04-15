@@ -9,11 +9,14 @@ import pytest
 from meridian.cluster import (
     BrandingConfig,
     ClusterConfig,
+    DesiredNode,
+    DesiredRelay,
     InboundRef,
     NodeEntry,
     PanelConfig,
     ProtocolKey,
     RelayEntry,
+    SubscriptionPageConfig,
 )
 
 # ---------------------------------------------------------------------------
@@ -245,6 +248,121 @@ class TestClusterYAMLRoundTrip:
         ref = loaded.get_inbound("reality")
         assert ref is not None
         assert ref.uuid == _UUID_A
+
+    def test_desired_clients_round_trip(self, tmp_path: Path) -> None:
+        cfg = _configured_cluster(desired_clients=["alice", "bob", "default"])
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        assert loaded.desired_clients == ["alice", "bob", "default"]
+
+    def test_desired_clients_none_means_unmanaged(self, tmp_path: Path) -> None:
+        # None semantically differs from [] — None = "do not manage clients
+        # declaratively"; [] = "manage and the desired set is empty (remove all)".
+        cfg = _configured_cluster(desired_clients=None)
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        assert loaded.desired_clients is None
+
+    def test_desired_clients_empty_list_round_trip(self, tmp_path: Path) -> None:
+        cfg = _configured_cluster(desired_clients=[])
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        assert loaded.desired_clients == []
+
+    def test_desired_nodes_round_trip(self, tmp_path: Path) -> None:
+        desired = [
+            DesiredNode(
+                host="198.51.100.10",
+                name="de-fra-1",
+                ssh_user="deploy",
+                ssh_port=2222,
+                domain="de.example.com",
+                sni="www.google.com",
+                warp=True,
+            ),
+        ]
+        cfg = _configured_cluster(desired_nodes=desired)
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        assert loaded.desired_nodes is not None
+        assert len(loaded.desired_nodes) == 1
+        n = loaded.desired_nodes[0]
+        assert n.host == "198.51.100.10"
+        assert n.name == "de-fra-1"
+        assert n.ssh_user == "deploy"
+        assert n.ssh_port == 2222
+        assert n.domain == "de.example.com"
+        assert n.sni == "www.google.com"
+        assert n.warp is True
+
+    def test_desired_relays_round_trip(self, tmp_path: Path) -> None:
+        desired = [
+            DesiredRelay(
+                host="198.51.100.20",
+                name="msk-relay",
+                exit_node="finland",
+                sni="www.cloudflare.com",
+                ssh_user="root",
+                ssh_port=22,
+            ),
+        ]
+        cfg = _configured_cluster(desired_relays=desired)
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        assert loaded.desired_relays is not None
+        assert len(loaded.desired_relays) == 1
+        r = loaded.desired_relays[0]
+        assert r.host == "198.51.100.20"
+        assert r.name == "msk-relay"
+        assert r.exit_node == "finland"
+        assert r.sni == "www.cloudflare.com"
+
+    def test_subscription_page_round_trip(self, tmp_path: Path) -> None:
+        cfg = _configured_cluster(
+            subscription_page=SubscriptionPageConfig(enabled=True, path="abcdef0123456789")
+        )
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        assert loaded.subscription_page is not None
+        assert loaded.subscription_page.enabled is True
+        assert loaded.subscription_page.path == "abcdef0123456789"
+
+    def test_subscription_page_disabled_round_trip(self, tmp_path: Path) -> None:
+        cfg = _configured_cluster(
+            subscription_page=SubscriptionPageConfig(enabled=False, path="xx")
+        )
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        assert loaded.subscription_page is not None
+        assert loaded.subscription_page.enabled is False
+        # path is preserved even when disabled, so re-enable picks the same nginx route
+        assert loaded.subscription_page.path == "xx"
+
+    def test_save_uses_lock_for_concurrency(self, tmp_path: Path) -> None:
+        """Concurrent saves from the executor must serialize so the file is
+        never partially written. Verifies the lock attribute is wired up."""
+        import threading
+
+        cfg = _configured_cluster()
+        p = tmp_path / "cluster.yml"
+
+        # The lock should be a real Lock, not None / sentinel.
+        assert cfg._lock is not None
+        # And it should be a primitive lock, NOT an RLock — RLock would let
+        # the same thread re-enter and bypass the contract we're documenting
+        # (one writer at a time across threads).
+        assert isinstance(cfg._lock, type(threading.Lock()))
+
+        # Smoke: save runs without the lock blocking on itself.
+        cfg.save(p)
+        assert p.exists()
 
     def test_load_missing_file_returns_empty(self, tmp_path: Path) -> None:
         cfg = ClusterConfig.load(tmp_path / "nonexistent.yml")
