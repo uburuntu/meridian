@@ -108,7 +108,12 @@ def plan_cmd() -> None:
 @app.command("apply")
 def apply_cmd(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts"),
-    parallel: int = typer.Option(4, "--parallel", help="Max parallel node provisioning"),
+    parallel: int = typer.Option(
+        1,
+        "--parallel",
+        help="Max parallel node provisioning (currently capped to 1 — see TODO)",
+        hidden=True,
+    ),
 ) -> None:
     """Apply desired state — converge infrastructure to cluster.yml.
 
@@ -120,6 +125,8 @@ def apply_cmd(
     """
     from meridian.commands.apply import run
 
+    # Parallel node provisioning is temporarily disabled — see executor.py
+    # for the reasoning. The flag is hidden but still accepted.
     run(yes=yes, parallel=parallel)
 
 
