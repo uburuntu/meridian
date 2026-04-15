@@ -40,7 +40,7 @@ def _handle_add_node(action: PlanAction, panel: object, cluster: object) -> None
     assert isinstance(cluster, ClusterConfig)
 
     # Find the desired node spec to get SSH/domain/sni params
-    desired = next((n for n in cluster.desired_nodes if n.host == action.target), None)
+    desired = next((n for n in (cluster.desired_nodes or []) if n.host == action.target), None)
     add_node(
         cluster,
         panel,
@@ -63,7 +63,7 @@ def _handle_update_node(action: PlanAction, panel: object, cluster: object) -> N
     assert isinstance(panel, MeridianPanel)
     assert isinstance(cluster, ClusterConfig)
 
-    desired = next((n for n in cluster.desired_nodes if n.host == action.target), None)
+    desired = next((n for n in (cluster.desired_nodes or []) if n.host == action.target), None)
     update_node(
         cluster,
         panel,
@@ -95,7 +95,7 @@ def _handle_add_relay(action: PlanAction, panel: object, cluster: object) -> Non
     assert isinstance(panel, MeridianPanel)
     assert isinstance(cluster, ClusterConfig)
 
-    desired = next((r for r in cluster.desired_relays if r.host == action.target), None)
+    desired = next((r for r in (cluster.desired_relays or []) if r.host == action.target), None)
     # Resolve exit_node name → IP (desired.exit_node can be a name or IP)
     exit_node_value = desired.exit_node if desired else ""
     if exit_node_value:
@@ -179,10 +179,7 @@ def _handle_update_relay(action: PlanAction, panel: object, cluster: object) -> 
                 f"returned exit {result.returncode} — refusing to remove the running relay"
             )
     except Exception as e:
-        raise RuntimeError(
-            f"UPDATE_RELAY preflight failed for {action.target}: {e}. "
-            "Old relay left intact."
-        ) from e
+        raise RuntimeError(f"UPDATE_RELAY preflight failed for {action.target}: {e}. Old relay left intact.") from e
 
     # Preflight passed — proceed with the destructive swap.
     remove_relay(cluster, panel, relay_ip=action.target)
@@ -340,6 +337,12 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
         else:
             raise RuntimeError(f"nginx validation failed after adding subscription page: {result.stdout.strip()[:200]}")
 
+    # Initialize subscription_page config if missing — apply was triggered by
+    # a desired enable, so the config must exist after this handler runs.
+    if cluster.subscription_page is None:
+        from meridian.cluster import SubscriptionPageConfig
+
+        cluster.subscription_page = SubscriptionPageConfig()
     cluster.subscription_page.enabled = True
     cluster.subscription_page.path = sub_path
     cluster.subscription_page._extra["deployed"] = True
@@ -377,8 +380,9 @@ def _handle_remove_subscription_page(action: PlanAction, panel: object, cluster:
         if result.returncode == 0:
             conn.run("systemctl reload nginx", timeout=15)
 
-    cluster.subscription_page.enabled = False
-    cluster.subscription_page._extra["deployed"] = False
+    if cluster.subscription_page is not None:
+        cluster.subscription_page.enabled = False
+        cluster.subscription_page._extra["deployed"] = False
     cluster.save()
 
 

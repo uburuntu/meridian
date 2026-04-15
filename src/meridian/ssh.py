@@ -218,6 +218,19 @@ class ServerConnection:
         if multiplex and not local_mode:
             ensure_multiplex_dir()
 
+    def __enter__(self) -> ServerConnection:
+        # Several call sites use ``with ServerConnection(...) as conn:``. The
+        # SSH ControlMaster (multiplex) layer manages its own connection
+        # lifetime, so __enter__/__exit__ are no-ops; defining them prevents
+        # AttributeError that was silently swallowed by surrounding try/except
+        # in commands/client.py and commands/recover.py.
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        # Multiplexed connections persist for SSH_MULTIPLEX_OPTS' lifetime;
+        # nothing to release here.
+        return None
+
     @property
     def _ssh_opts(self) -> list[str]:
         opts = list(SSH_OPTS)

@@ -155,49 +155,49 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
 
     # Build node name → IP map for relay exit_node resolution
     node_name_to_ip: dict[str, str] = {}
-    for n in actual.nodes:
-        if n.name:
-            node_name_to_ip[n.name] = n.host
-    for n in desired.nodes:
-        if n.name:
-            node_name_to_ip[n.name] = n.host
+    for actual_node in actual.nodes:
+        if actual_node.name:
+            node_name_to_ip[actual_node.name] = actual_node.host
+    for desired_node in desired.nodes:
+        if desired_node.name:
+            node_name_to_ip[desired_node.name] = desired_node.host
 
     # --- Nodes ---
     if desired.manage_nodes:
         actual_nodes_by_host = {n.host: n for n in actual.nodes}
         desired_node_hosts = {n.host for n in desired.nodes}
 
-        for node in desired.nodes:
-            actual_node = actual_nodes_by_host.get(node.host)
-            if actual_node is None:
+        for d_node in desired.nodes:
+            existing = actual_nodes_by_host.get(d_node.host)
+            if existing is None:
                 actions.append(
                     PlanAction(
                         kind=PlanActionKind.ADD_NODE,
-                        target=node.host,
-                        detail=f"provision node {node.name or node.host}",
+                        target=d_node.host,
+                        detail=f"provision node {d_node.name or d_node.host}",
                     )
                 )
             else:
-                changes = _node_changes(node, actual_node)
+                changes = _node_changes(d_node, existing)
                 if changes:
                     actions.append(
                         PlanAction(
                             kind=PlanActionKind.UPDATE_NODE,
-                            target=node.host,
-                            detail=f"redeploy node {node.name or node.host}: {', '.join(changes)}",
+                            target=d_node.host,
+                            detail=f"redeploy node {d_node.name or d_node.host}: {', '.join(changes)}",
                         )
                     )
 
-        for node in actual.nodes:
-            if node.host not in desired_node_hosts:
+        for a_node in actual.nodes:
+            if a_node.host not in desired_node_hosts:
                 # Never plan removal of the panel host — use teardown instead
-                if node.is_panel_host:
+                if a_node.is_panel_host:
                     continue
                 actions.append(
                     PlanAction(
                         kind=PlanActionKind.REMOVE_NODE,
-                        target=node.host,
-                        detail=f"deregister node {node.name or node.host}",
+                        target=a_node.host,
+                        detail=f"deregister node {a_node.name or a_node.host}",
                         destructive=True,
                     )
                 )
@@ -207,35 +207,35 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
         actual_relays_by_host = {r.host: r for r in actual.relays}
         desired_relay_hosts = {r.host for r in desired.relays}
 
-        for relay in desired.relays:
-            actual_relay = actual_relays_by_host.get(relay.host)
-            if actual_relay is None:
+        for d_relay in desired.relays:
+            existing_relay = actual_relays_by_host.get(d_relay.host)
+            if existing_relay is None:
                 actions.append(
                     PlanAction(
                         kind=PlanActionKind.ADD_RELAY,
-                        target=relay.host,
-                        detail=f"deploy relay {relay.name or relay.host} → {relay.exit_node}",
+                        target=d_relay.host,
+                        detail=f"deploy relay {d_relay.name or d_relay.host} → {d_relay.exit_node}",
                     )
                 )
             else:
-                changes = _relay_changes(relay, actual_relay, node_name_to_ip)
+                changes = _relay_changes(d_relay, existing_relay, node_name_to_ip)
                 if changes:
                     actions.append(
                         PlanAction(
                             kind=PlanActionKind.UPDATE_RELAY,
-                            target=relay.host,
-                            detail=f"update relay {relay.name or relay.host}: {', '.join(changes)}",
+                            target=d_relay.host,
+                            detail=f"update relay {d_relay.name or d_relay.host}: {', '.join(changes)}",
                             destructive=True,  # implemented as delete + recreate
                         )
                     )
 
-        for relay in actual.relays:
-            if relay.host not in desired_relay_hosts:
+        for a_relay in actual.relays:
+            if a_relay.host not in desired_relay_hosts:
                 actions.append(
                     PlanAction(
                         kind=PlanActionKind.REMOVE_RELAY,
-                        target=relay.host,
-                        detail=f"remove relay {relay.name or relay.host}",
+                        target=a_relay.host,
+                        detail=f"remove relay {a_relay.name or a_relay.host}",
                         destructive=True,
                     )
                 )

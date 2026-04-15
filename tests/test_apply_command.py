@@ -12,7 +12,8 @@ import pytest
 import typer
 
 from meridian.cluster import ClusterConfig, DesiredRelay, NodeEntry, PanelConfig, RelayEntry
-from meridian.commands.apply import _handle_update_relay, run as apply_run
+from meridian.commands.apply import _handle_update_relay
+from meridian.commands.apply import run as apply_run
 from meridian.reconciler.diff import Plan, PlanAction, PlanActionKind
 from meridian.reconciler.executor import ActionResult, ExecutionResult
 
@@ -157,9 +158,7 @@ class TestApplyRunFailureSafety:
 
         # An execution result with one failed action — apply.run should react.
         failed_action = PlanAction(kind=PlanActionKind.ADD_CLIENT, target="alice")
-        exec_result = ExecutionResult(
-            results=[ActionResult(action=failed_action, success=False, error="API down")]
-        )
+        exec_result = ExecutionResult(results=[ActionResult(action=failed_action, success=False, error="API down")])
         plan = Plan(actions=[failed_action])
 
         with (

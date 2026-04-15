@@ -183,9 +183,7 @@ class TestUserFromSdk:
         assert user.traffic_limit_bytes == 0
 
     def test_reads_nested_user_traffic_fields(self) -> None:
-        user = _user_from_sdk(
-            _ns(user_traffic=_ns(used_traffic_bytes=4096, online_at="2026-04-02"))
-        )
+        user = _user_from_sdk(_ns(user_traffic=_ns(used_traffic_bytes=4096, online_at="2026-04-02")))
         assert user.used_traffic_bytes == 4096
         assert user.online_at == "2026-04-02"
 
