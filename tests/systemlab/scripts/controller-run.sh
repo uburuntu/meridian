@@ -494,10 +494,95 @@ if [ -n "$CLIENT_UUID" ]; then
   fi
 fi
 
-# ── Stage 9: Hardening verification ─────────────────────
+# ── Stage 9: Declarative plan/apply ──────────────────────
 echo ""
 echo "═══════════════════════════════════════"
-echo "  Stage 9: Hardening verification"
+echo "  Stage 9: Declarative plan/apply"
+echo "═══════════════════════════════════════"
+
+# Write a declarative cluster.yml v2 with desired state
+echo ">>> Writing desired state to cluster.yml..."
+CLUSTER_FILE="$MERIDIAN_HOME/cluster.yml"
+# Read existing cluster.yml and append desired state
+python3 -c "
+import yaml, sys
+with open('$CLUSTER_FILE') as f:
+    data = yaml.safe_load(f)
+# Add desired_clients (should already exist from Stage 4)
+data['desired_clients'] = ['bob']  # bob was kept in Stage 4
+data['version'] = 2
+with open('$CLUSTER_FILE', 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+print('    desired_clients: [bob]')
+"
+
+echo ">>> Running meridian plan..."
+if meridian plan 2>&1; then
+  pass "plan reports converged (bob exists, desired_clients matches)"
+else
+  EXIT_CODE=$?
+  if [ "$EXIT_CODE" -eq 2 ]; then
+    fail_test "plan reports changes needed (exit 2) — expected convergence"
+  else
+    fail_test "plan failed unexpectedly (exit $EXIT_CODE)"
+  fi
+fi
+
+# Add a new client via apply
+echo ">>> Adding client 'charlie' via declarative apply..."
+python3 -c "
+import yaml
+with open('$CLUSTER_FILE') as f:
+    data = yaml.safe_load(f)
+data['desired_clients'] = ['bob', 'charlie']
+with open('$CLUSTER_FILE', 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+"
+
+if meridian apply --yes 2>&1; then
+  pass "apply added client charlie"
+else
+  fail_test "apply failed to add client charlie"
+fi
+
+# Verify charlie exists in panel
+if meridian client show charlie 2>&1 | grep -q "charlie"; then
+  pass "charlie visible in panel after apply"
+else
+  fail_test "charlie not found after apply"
+fi
+
+# Plan should now show converged
+if meridian plan 2>&1; then
+  pass "plan converged after apply"
+else
+  EXIT_CODE=$?
+  if [ "$EXIT_CODE" -eq 2 ]; then
+    fail_test "plan still shows changes after apply"
+  fi
+fi
+
+# Clean up charlie
+echo ">>> Removing charlie via declarative apply..."
+python3 -c "
+import yaml
+with open('$CLUSTER_FILE') as f:
+    data = yaml.safe_load(f)
+data['desired_clients'] = ['bob']
+with open('$CLUSTER_FILE', 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+"
+
+if meridian apply --yes 2>&1; then
+  pass "apply removed client charlie"
+else
+  fail_test "apply failed to remove client charlie"
+fi
+
+# ── Stage 10: Hardening verification ────────────────────
+echo ""
+echo "═══════════════════════════════════════"
+echo "  Stage 10: Hardening verification"
 echo "═══════════════════════════════════════"
 
 # The stage 8 redeploy runs WITHOUT --no-harden, so hardening is applied.
@@ -556,10 +641,10 @@ else
   fail_test "fail2ban not active after hardened deploy"
 fi
 
-# ── Stage 10: Teardown ───────────────────────────────────
+# ── Stage 11: Teardown ───────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════"
-echo "  Stage 10: Teardown"
+echo "  Stage 11: Teardown"
 echo "═══════════════════════════════════════"
 
 echo ">>> Removing relay..."
