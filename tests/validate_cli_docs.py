@@ -67,20 +67,43 @@ MIN_FLAGS_BY_COMMAND: dict[str, int] = {
 }
 
 
+def _resolve_meridian_binary() -> str:
+    """Find the meridian entry-point installed by `pip install` / `uv sync`.
+
+    Prefers a binary on PATH (e.g. ``.venv/bin/meridian`` under uv) so the
+    ``--help`` output uses the canonical script-name layout. Falls back to
+    ``python -m meridian`` when no binary is on PATH.
+    """
+    import shutil
+
+    binary = shutil.which("meridian")
+    if binary:
+        return binary
+    return ""
+
+
 def get_flags_from_help(command: str) -> set[str]:
     """Run ``meridian <command> --help`` and extract all --flag names.
 
-    Resolves ``meridian`` from the current Python environment instead of
-    nesting ``uv run`` inside ``uv run`` (which can fail silently on CI and
-    return an empty stdout — see Codex investigation in commit history).
-    Fails loudly on non-zero return code.
+    Calls the installed `meridian` binary directly when available (avoids
+    nesting `uv run` inside `uv run`, which can fail silently on CI). Forces
+    a wide `COLUMNS` so typer prints the full Options table — typer
+    truncates on narrow terminals and the regex would then find nothing,
+    silently passing the whole validator. Fails loudly on non-zero return
+    code or zero-flag extraction (see ``MIN_FLAGS_BY_COMMAND``).
     """
-    args = [sys.executable, "-m", "meridian"] + command.split() + ["--help"]
-    result = subprocess.run(args, capture_output=True, text=True)
+    binary = _resolve_meridian_binary()
+    if binary:
+        args = [binary] + command.split() + ["--help"]
+    else:
+        args = [sys.executable, "-m", "meridian"] + command.split() + ["--help"]
+
+    # COLUMNS=200 + NO_COLOR=1 make typer's help output deterministic across
+    # CI runners and local terminals; otherwise option tables can wrap or
+    # truncate flag names and the regex below misses them.
+    env = {**__import__("os").environ, "COLUMNS": "200", "NO_COLOR": "1"}
+    result = subprocess.run(args, capture_output=True, text=True, env=env)
     if result.returncode != 0:
-        # Typer help exits 0 normally; non-zero means the binary itself
-        # crashed (import error, missing dep, missing entry point). That
-        # used to be invisible because we ignored the return code.
         raise RuntimeError(
             f"`meridian {command} --help` exited {result.returncode}\n"
             f"stdout: {result.stdout[:500]}\n"
@@ -94,7 +117,8 @@ def get_flags_from_help(command: str) -> set[str]:
         raise RuntimeError(
             f"`meridian {command} --help` reported only {len(flags)} flag(s) "
             f"({sorted(flags)}); expected at least {floor}. "
-            f"Help extraction is broken — investigate the meridian binary or this script."
+            f"Binary used: {binary or sys.executable + ' -m meridian'}. "
+            f"stdout (first 800 chars): {result.stdout[:800]!r}"
         )
     return flags
 
