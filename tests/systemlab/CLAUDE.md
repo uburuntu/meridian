@@ -25,8 +25,9 @@ The system lab deploys Meridian across two containers via SSH — exactly like a
 | 6 | Relay deploy | Realm install, systemd service, relay host entries in panel |
 | 7 | Connection test | Reality tunnel (fatal), negative test with bogus UUID |
 | 8 | Redeploy | Key preservation — Reality keys unchanged, connections still work (fatal) |
-| 9 | Hardening verification | UFW rules (22/80/443), SSH password auth disabled, fail2ban active |
-| 10 | Teardown | Container removal, port freed, nginx cleaned |
+| 9 | Declarative plan/apply | Write desired state, plan convergence, apply add/remove client, verify |
+| 10 | Hardening verification | UFW rules (22/80/443), SSH password auth disabled, fail2ban active |
+| 11 | Teardown | Container removal, port freed, nginx cleaned |
 
 ## Design decisions
 
