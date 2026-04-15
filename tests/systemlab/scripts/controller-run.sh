@@ -729,6 +729,16 @@ if [ -n "$SUB_PATH" ]; then
       pass "subscription page nginx route returned HTTP $HTTP_CODE"
       ;;
     *)
+      # Diagnostics: inspect the container directly so any future debugging
+      # has the raw evidence instead of just the 502.
+      echo "    DIAG: docker ps --filter name=remnawave-subscription-page:"
+      ssh root@"$EXIT_IP" "docker ps --filter name=remnawave-subscription-page --format '{{.Status}} | {{.Ports}}'" 2>/dev/null | sed 's/^/      /'
+      echo "    DIAG: last 30 lines of subscription-page logs:"
+      ssh root@"$EXIT_IP" "docker logs --tail 30 remnawave-subscription-page 2>&1" | sed 's/^/      /' || true
+      echo "    DIAG: host-side listen on 3020:"
+      ssh root@"$EXIT_IP" "ss -ltnp 2>/dev/null | grep :3020 || echo '      (nothing listening on 3020)'" | sed 's/^/      /'
+      echo "    DIAG: curl directly to 127.0.0.1:3020 on exit-node:"
+      ssh root@"$EXIT_IP" "curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3020/ 2>&1" | sed 's/^/      /' || true
       fail_test "subscription page nginx route returned HTTP $HTTP_CODE after polling (expected 2xx/3xx/404)"
       ;;
   esac
