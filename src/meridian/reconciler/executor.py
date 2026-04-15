@@ -92,17 +92,25 @@ def execute_plan(
     callbacks = callbacks or {}
     results: list[ActionResult] = []
 
-    # Execute in dependency order
+    # Execute in dependency order.
+    #
+    # REMOVE_RELAY runs BEFORE ADD_RELAY so that when a relay is
+    # replaced by another with the same human-readable name (different
+    # IP), the new ADD does not match the old relay's hosts by remark
+    # and inherit doomed UUIDs that the later REMOVE then deletes.
+    # See Bug #3 in the v4-declarative plan. REMOVE_NODE stays last —
+    # nodes may still be referenced by relay/host metadata until those
+    # are cleaned up.
     order = [
+        PlanActionKind.REMOVE_CLIENT,
+        PlanActionKind.REMOVE_RELAY,
+        PlanActionKind.REMOVE_SUBSCRIPTION_PAGE,
         PlanActionKind.ADD_NODE,
         PlanActionKind.UPDATE_NODE,
         PlanActionKind.ADD_RELAY,
         PlanActionKind.UPDATE_RELAY,
         PlanActionKind.ADD_SUBSCRIPTION_PAGE,
         PlanActionKind.ADD_CLIENT,
-        PlanActionKind.REMOVE_CLIENT,
-        PlanActionKind.REMOVE_RELAY,
-        PlanActionKind.REMOVE_SUBSCRIPTION_PAGE,
         PlanActionKind.REMOVE_NODE,
     ]
 
