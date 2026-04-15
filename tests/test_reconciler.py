@@ -387,6 +387,76 @@ class TestExecutor:
         assert result.all_succeeded
         assert len(result.results) == 0
 
+    def test_remove_relay_runs_before_add_relay(self) -> None:
+        """Bug #3 regression: relay replacement (same name, different IP) used to
+        bind the new relay to the old relay's hosts via remark reuse, then the
+        later REMOVE wiped them. REMOVE_RELAY must execute before ADD_RELAY so
+        the old hosts are gone before the new add looks for matching remarks.
+        """
+        execution_order: list[str] = []
+
+        def add_handler(action: PlanAction, panel: object, cluster: object) -> None:
+            execution_order.append(f"ADD:{action.target}")
+
+        def remove_handler(action: PlanAction, panel: object, cluster: object) -> None:
+            execution_order.append(f"REMOVE:{action.target}")
+
+        plan = Plan(
+            actions=[
+                PlanAction(kind=PlanActionKind.ADD_RELAY, target="198.51.100.5"),
+                PlanAction(kind=PlanActionKind.REMOVE_RELAY, target="198.51.100.4", destructive=True),
+            ]
+        )
+        execute_plan(
+            plan,
+            panel=None,
+            cluster=None,
+            callbacks={
+                PlanActionKind.ADD_RELAY: add_handler,
+                PlanActionKind.REMOVE_RELAY: remove_handler,
+            },
+        )
+        assert execution_order == ["REMOVE:198.51.100.4", "ADD:198.51.100.5"], (
+            f"Expected REMOVE before ADD, got {execution_order}"
+        )
+
+    def test_remove_node_still_runs_last(self) -> None:
+        """REMOVE_NODE must run after ADDs/UPDATEs to avoid orphaning relays
+        whose host metadata still references the old node UUID. Only the
+        REMOVE_RELAY/REMOVE_CLIENT/REMOVE_SUBSCRIPTION_PAGE moved earlier.
+        """
+        execution_order: list[str] = []
+
+        def handler_factory(label: str):
+            def h(action: PlanAction, panel: object, cluster: object) -> None:
+                execution_order.append(f"{label}:{action.target}")
+
+            return h
+
+        plan = Plan(
+            actions=[
+                PlanAction(kind=PlanActionKind.REMOVE_NODE, target="198.51.100.9", destructive=True),
+                PlanAction(kind=PlanActionKind.ADD_NODE, target="198.51.100.10"),
+                PlanAction(kind=PlanActionKind.REMOVE_RELAY, target="198.51.100.20", destructive=True),
+                PlanAction(kind=PlanActionKind.ADD_RELAY, target="198.51.100.21"),
+            ]
+        )
+        execute_plan(
+            plan,
+            panel=None,
+            cluster=None,
+            callbacks={
+                PlanActionKind.REMOVE_NODE: handler_factory("RM_NODE"),
+                PlanActionKind.ADD_NODE: handler_factory("ADD_NODE"),
+                PlanActionKind.REMOVE_RELAY: handler_factory("RM_RELAY"),
+                PlanActionKind.ADD_RELAY: handler_factory("ADD_RELAY"),
+            },
+        )
+        # REMOVE_NODE must come after every relay action.
+        last_relay_idx = max(i for i, x in enumerate(execution_order) if "RELAY" in x)
+        node_remove_idx = next(i for i, x in enumerate(execution_order) if x.startswith("RM_NODE"))
+        assert node_remove_idx > last_relay_idx, f"REMOVE_NODE must be last; got order {execution_order}"
+
 
 # ---------------------------------------------------------------------------
 # Display
@@ -401,6 +471,14 @@ class TestDisplay:
         assert any("No changes" in s for s in call_args)
 
     def test_print_plan_with_actions(self) -> None:
+        # Capture real output instead of asserting on the mocked call_count —
+        # the latter would pass even if print_plan emitted blank lines.
+        from io import StringIO
+
+        from rich.console import Console
+
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, width=120, no_color=True)
         plan = Plan(
             actions=[
                 PlanAction(kind=PlanActionKind.ADD_NODE, target="198.51.100.1", detail="provision"),
@@ -408,9 +486,17 @@ class TestDisplay:
                 PlanAction(kind=PlanActionKind.REMOVE_CLIENT, target="bob", detail="delete", destructive=True),
             ]
         )
-        console = MagicMock()
         print_plan(plan, console=console)
-        assert console.print.call_count >= 4  # actions + summary + warning
+        output = buf.getvalue()
+        # Each action must appear in output by target and detail
+        assert "198.51.100.1" in output
+        assert "provision" in output
+        assert "198.51.100.2" in output
+        assert "sni changed" in output
+        assert "bob" in output
+        assert "delete" in output
+        # Destructive marker shown
+        assert "destructive" in output.lower() or "remove" in output.lower()
 
 
 # ---------------------------------------------------------------------------
