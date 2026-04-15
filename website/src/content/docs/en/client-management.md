@@ -101,3 +101,16 @@ Client names map to 3x-ui `email` fields with protocol prefixes:
 - `wss-alice` — WSS inbound (domain mode)
 
 Each client gets a unique UUID across all inbounds on the server.
+
+## Declarative client list
+
+For fleet-wide setups you can manage clients declaratively instead of imperatively. Add a `desired_clients` list to `~/.meridian/cluster.yml`:
+
+```yaml
+desired_clients:
+  - alice
+  - bob
+  - charlie
+```
+
+Then `meridian plan` shows the diff against the panel's actual user list, and `meridian apply` converges — adds any missing clients, removes any extra ones. `meridian client add/remove` still works alongside this; the two approaches coexist. See the [declarative workflow](/docs/en/getting-started/#declarative-workflow) for the full story.
