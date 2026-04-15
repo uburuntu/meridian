@@ -47,14 +47,56 @@ COMMANDS: dict[str, str] = {
 # Flags that appear on every command — don't require per-command docs.
 SKIP_FLAGS = {"--help", "--version", "--install-completion", "--show-completion"}
 
+# Lower bound on flags `meridian <cmd> --help` must report. Defends against the
+# regression Codex caught: a previous version shelled out via nested `uv run`
+# inside `uv run` and `get_flags_from_help` returned `set()` whenever the
+# inner invocation failed silently. The validator then treated empty as
+# "command has no flags" and printed OK while real drift accumulated.
+#
+# Set the floor to the count of *required* (non-skipped) flags each command
+# documents today. Any future regression where help extraction silently
+# returns nothing trips this assertion.
+MIN_FLAGS_BY_COMMAND: dict[str, int] = {
+    "deploy": 10,
+    "client remove": 1,
+    "relay deploy": 4,
+    "relay remove": 1,
+    "preflight": 1,
+    "apply": 1,
+    "plan": 1,
+}
+
 
 def get_flags_from_help(command: str) -> set[str]:
-    """Run `meridian <command> --help` and extract all --flag names."""
-    args = ["uv", "run", "meridian"] + command.split() + ["--help"]
+    """Run ``meridian <command> --help`` and extract all --flag names.
+
+    Resolves ``meridian`` from the current Python environment instead of
+    nesting ``uv run`` inside ``uv run`` (which can fail silently on CI and
+    return an empty stdout — see Codex investigation in commit history).
+    Fails loudly on non-zero return code.
+    """
+    args = [sys.executable, "-m", "meridian"] + command.split() + ["--help"]
     result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        # Typer help exits 0 normally; non-zero means the binary itself
+        # crashed (import error, missing dep, missing entry point). That
+        # used to be invisible because we ignored the return code.
+        raise RuntimeError(
+            f"`meridian {command} --help` exited {result.returncode}\n"
+            f"stdout: {result.stdout[:500]}\n"
+            f"stderr: {result.stderr[:500]}"
+        )
     output = result.stdout + result.stderr
-    flags = set(re.findall(r"--[a-z][\w-]*", output))
-    return flags - SKIP_FLAGS
+    flags = set(re.findall(r"--[a-z][\w-]*", output)) - SKIP_FLAGS
+
+    floor = MIN_FLAGS_BY_COMMAND.get(command, 0)
+    if floor and len(flags) < floor:
+        raise RuntimeError(
+            f"`meridian {command} --help` reported only {len(flags)} flag(s) "
+            f"({sorted(flags)}); expected at least {floor}. "
+            f"Help extraction is broken — investigate the meridian binary or this script."
+        )
+    return flags
 
 
 def parse_doc_sections(path: Path) -> dict[str, str]:
