@@ -303,9 +303,7 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
             timeout=120,
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                f"Failed to start subscription page container: {result.stderr.strip()[:200]}"
-            )
+            raise RuntimeError(f"Failed to start subscription page container: {result.stderr.strip()[:200]}")
 
     if not configure_subscription_page(conn, cluster.panel.api_token):
         raise RuntimeError("Failed to configure subscription page")
