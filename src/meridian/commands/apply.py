@@ -308,6 +308,18 @@ def _handle_remove_subscription_page(action: PlanAction, panel: object, cluster:
     if result.returncode != 0:
         raise RuntimeError(f"Failed to stop subscription page: {result.stderr.strip()[:200]}")
 
+    # Remove nginx location block for subscription page
+    sub_path = cluster.subscription_page.path if cluster.subscription_page else ""
+    if sub_path:
+        conn.run(
+            f"grep -q {shlex.quote(sub_path)} /etc/nginx/conf.d/meridian-http.conf 2>/dev/null"
+            f" && sed -i '/Subscription Page/,/}}/d' /etc/nginx/conf.d/meridian-http.conf",
+            timeout=15,
+        )
+        result = conn.run("nginx -t 2>&1", timeout=15)
+        if result.returncode == 0:
+            conn.run("systemctl reload nginx", timeout=15)
+
     cluster.subscription_page.enabled = False
     cluster.subscription_page._extra["deployed"] = False
     cluster.save()
