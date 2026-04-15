@@ -54,16 +54,18 @@ class TestHandleAddSubscriptionPage:
         with pytest.raises(RuntimeError, match="server IP not set"):
             _handle_add_subscription_page(action, _make_panel(), cluster)
 
-    def test_skips_compose_regen_when_service_already_present(self) -> None:
+    def test_starts_stopped_container_when_service_already_in_compose(self) -> None:
+        # Covers the disable-then-re-enable path: service exists in compose
+        # but was stopped by a prior REMOVE_SUBSCRIPTION_PAGE. The handler
+        # must `docker compose up -d` it so nginx has something to proxy to.
         cluster = _make_cluster(SubscriptionPageConfig(enabled=True, path="aaa111"))
         action = PlanAction(kind=PlanActionKind.ADD_SUBSCRIPTION_PAGE, target="subscription-page")
 
         conn = MagicMock()
-        # docker compose config check returns rc=0 (service present)
-        # nginx grep returns rc=0 (location already present) → no nginx mutation
         conn.run.side_effect = [
-            _result(0),  # docker compose config | grep subscription
-            _result(0),  # grep subscription path in nginx
+            _result(0),  # docker compose config | grep subscription → service present
+            _result(0),  # docker compose up -d remnawave-subscription-page → idempotent
+            _result(0),  # grep subscription path in nginx → already present
         ]
 
         with (
@@ -76,11 +78,14 @@ class TestHandleAddSubscriptionPage:
         ):
             _handle_add_subscription_page(action, _make_panel(), cluster)
 
-        # Only the two checks should have run — no compose write, no docker up
         commands = [c.args[0] for c in conn.run.call_args_list]
         assert any("docker compose config" in c for c in commands)
+        # Critical: we run `docker compose up -d` against the specific service
+        # to restart it if it was stopped — not a full compose up.
+        assert any(
+            "docker compose up -d remnawave-subscription-page" in c for c in commands
+        )
         assert any("grep -q aaa111" in c for c in commands)
-        assert not any("docker compose up" in c for c in commands)
         assert not any("sed -i" in c for c in commands)
 
         assert cluster.subscription_page.enabled is True
@@ -172,8 +177,9 @@ class TestHandleAddSubscriptionPage:
 
         conn = MagicMock()
         conn.run.side_effect = [
-            _result(0),  # service present
-            _result(1),  # nginx grep — not present
+            _result(0),  # service present in compose
+            _result(0),  # docker compose up -d remnawave-subscription-page
+            _result(1),  # nginx grep — location block not present yet
             _result(0),  # sed inject
             _result(1, stdout="syntax error"),  # nginx -t fails
         ]
