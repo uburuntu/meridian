@@ -10,7 +10,6 @@ Usage:
 from __future__ import annotations
 
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -67,58 +66,39 @@ MIN_FLAGS_BY_COMMAND: dict[str, int] = {
 }
 
 
-def _resolve_meridian_binary() -> str:
-    """Find the meridian entry-point installed by `pip install` / `uv sync`.
-
-    Prefers a binary on PATH (e.g. ``.venv/bin/meridian`` under uv) so the
-    ``--help`` output uses the canonical script-name layout. Falls back to
-    ``python -m meridian`` when no binary is on PATH.
-    """
-    import shutil
-
-    binary = shutil.which("meridian")
-    if binary:
-        return binary
-    return ""
-
-
 def get_flags_from_help(command: str) -> set[str]:
-    """Run ``meridian <command> --help`` and extract all --flag names.
+    """Extract --flag names from the typer help for ``meridian <command>``.
 
-    Calls the installed `meridian` binary directly when available (avoids
-    nesting `uv run` inside `uv run`, which can fail silently on CI). Forces
-    a wide `COLUMNS` so typer prints the full Options table — typer
-    truncates on narrow terminals and the regex would then find nothing,
-    silently passing the whole validator. Fails loudly on non-zero return
-    code or zero-flag extraction (see ``MIN_FLAGS_BY_COMMAND``).
+    Uses ``typer.testing.CliRunner`` instead of ``subprocess`` because typer
+    auto-detects terminal width / TTY-ness and on CI runners (or under
+    capture_output) it sometimes truncates the Options table to just the
+    Usage line, leaving the regex with nothing to match. CliRunner gives
+    deterministic full-help output regardless of environment.
+
+    Fails loudly on non-zero exit code or extraction below
+    ``MIN_FLAGS_BY_COMMAND``. The empty-stdout silent-pass regression
+    (CI was reporting OK while the same commit failed locally) is the bug
+    this entire helper is built to prevent.
     """
-    binary = _resolve_meridian_binary()
-    if binary:
-        args = [binary] + command.split() + ["--help"]
-    else:
-        args = [sys.executable, "-m", "meridian"] + command.split() + ["--help"]
+    from typer.testing import CliRunner
 
-    # COLUMNS=200 + NO_COLOR=1 make typer's help output deterministic across
-    # CI runners and local terminals; otherwise option tables can wrap or
-    # truncate flag names and the regex below misses them.
-    env = {**__import__("os").environ, "COLUMNS": "200", "NO_COLOR": "1"}
-    result = subprocess.run(args, capture_output=True, text=True, env=env)
-    if result.returncode != 0:
+    from meridian.cli import app
+
+    runner = CliRunner()
+    result = runner.invoke(app, command.split() + ["--help"], color=False)
+    if result.exit_code != 0:
         raise RuntimeError(
-            f"`meridian {command} --help` exited {result.returncode}\n"
-            f"stdout: {result.stdout[:500]}\n"
-            f"stderr: {result.stderr[:500]}"
+            f"`meridian {command} --help` exited {result.exit_code}\n"
+            f"output: {result.output[:500]}"
         )
-    output = result.stdout + result.stderr
-    flags = set(re.findall(r"--[a-z][\w-]*", output)) - SKIP_FLAGS
+    flags = set(re.findall(r"--[a-z][\w-]*", result.output)) - SKIP_FLAGS
 
     floor = MIN_FLAGS_BY_COMMAND.get(command, 0)
     if floor and len(flags) < floor:
         raise RuntimeError(
             f"`meridian {command} --help` reported only {len(flags)} flag(s) "
             f"({sorted(flags)}); expected at least {floor}. "
-            f"Binary used: {binary or sys.executable + ' -m meridian'}. "
-            f"stdout (first 800 chars): {result.stdout[:800]!r}"
+            f"output (first 800 chars): {result.output[:800]!r}"
         )
     return flags
 
