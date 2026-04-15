@@ -82,9 +82,7 @@ class TestHandleAddSubscriptionPage:
         assert any("docker compose config" in c for c in commands)
         # Critical: we run `docker compose up -d` against the specific service
         # to restart it if it was stopped — not a full compose up.
-        assert any(
-            "docker compose up -d remnawave-subscription-page" in c for c in commands
-        )
+        assert any("docker compose up -d remnawave-subscription-page" in c for c in commands)
         assert any("grep -q aaa111" in c for c in commands)
         assert not any("sed -i" in c for c in commands)
 
