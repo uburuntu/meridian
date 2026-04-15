@@ -91,13 +91,34 @@ Show the reconciliation plan — what `meridian apply` would do to converge the 
 Reads `desired_nodes`, `desired_relays`, `desired_clients`, and `subscription_page` from `cluster.yml`, fetches actual state from the panel, and prints a Terraform-style diff with `+` for adds, `-` for removes, `~` for updates.
 
 ```
-meridian plan
+meridian plan [--json]
 ```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--json` | | Emit the plan as JSON for CI/CD consumption. Same exit codes; the rendered terraform-style output is suppressed |
 
 **Exit codes**:
 - `0` — converged (no changes needed)
 - `2` — changes pending (run `meridian apply` to converge)
 - non-zero (1, 3) — error
+
+**JSON shape** (`--json` mode):
+```json
+{
+  "converged": false,
+  "summary": "Plan: 1 to add, 1 to remove",
+  "exit_code": 2,
+  "actions": [
+    {"kind": "add_client", "target": "alice", "detail": "create client alice",
+     "destructive": false, "from_extras": false, "symbol": "+"},
+    {"kind": "remove_client", "target": "ghost", "detail": "delete client ghost",
+     "destructive": true, "from_extras": true, "symbol": "-"}
+  ]
+}
+```
+
+`from_extras: true` flags resources that exist on the panel but are missing from `cluster.yml` — the inputs `meridian apply --prune-extras` operates on.
 
 See [Declarative workflow](/docs/en/getting-started/#declarative-workflow) for how to compose `cluster.yml`.
 
