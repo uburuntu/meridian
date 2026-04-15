@@ -17,6 +17,19 @@ from meridian.reconciler.executor import execute_plan
 from meridian.reconciler.state import build_actual_state, build_desired_state
 
 
+def _looks_like_ip(s: str) -> bool:
+    """Cheap guard for the UPDATE_RELAY exit-node resolution path.
+
+    Used only to distinguish "user wrote an IP literally" from "user wrote a
+    node name that doesn't exist in the cluster". Strict IP validation is not
+    required — we just need to know we should not refuse.
+    """
+    parts = s.split(".")
+    if len(parts) != 4:
+        return False
+    return all(part.isdigit() and 0 <= int(part) <= 255 for part in parts)
+
+
 def _handle_add_node(action: PlanAction, panel: object, cluster: object) -> None:
     """Provision and register a new node."""
     from meridian.cluster import ClusterConfig
@@ -102,38 +115,87 @@ def _handle_add_relay(action: PlanAction, panel: object, cluster: object) -> Non
 
 
 def _handle_update_relay(action: PlanAction, panel: object, cluster: object) -> None:
-    """Update a relay (remove + re-add with new config)."""
+    """Update a relay by removing the old config and re-provisioning with the new one.
+
+    Failure semantics: this action is destructive — once the old relay is
+    removed, traffic for clients pointing to it stops. To keep the window as
+    short as possible (and avoid leaving the cluster with no relay at all when
+    the new config is unreachable), we preflight the new exit node + new SSH
+    target before we touch the existing relay. If preflight fails we leave
+    the old relay alone and surface a RuntimeError.
+
+    NOTE: this is best-effort safety. A successful preflight does not
+    guarantee that the subsequent provisioning will succeed — but it catches
+    the common cases (panel cannot reach new exit node, SSH cannot reach new
+    relay host) before we do any irreversible work.
+    """
     from meridian.cluster import ClusterConfig
     from meridian.operations import add_relay, remove_relay
     from meridian.remnawave import MeridianPanel
+    from meridian.ssh import ServerConnection
 
     assert isinstance(panel, MeridianPanel)
     assert isinstance(cluster, ClusterConfig)
-
-    # Remove old relay, then re-add with desired config
-    remove_relay(cluster, panel, relay_ip=action.target)
 
     desired = next(
         (r for r in (cluster.desired_relays or []) if r.host == action.target),
         None,
     )
-    if desired:
-        # Resolve exit_node name → IP
-        exit_node_value = desired.exit_node
-        if exit_node_value:
-            exit_node_entry = cluster.find_node(exit_node_value)
-            if exit_node_entry:
-                exit_node_value = exit_node_entry.ip
-        add_relay(
-            cluster,
-            panel,
-            relay_ip=action.target,
-            exit_node_ip=exit_node_value,
-            ssh_user=desired.ssh_user,
-            ssh_port=desired.ssh_port,
-            name=desired.name or desired.host,
-            sni=desired.sni,
+    if desired is None:
+        # Nothing to update to — the diff should not have produced this case,
+        # but be defensive and avoid wiping the existing relay for nothing.
+        raise RuntimeError(
+            f"UPDATE_RELAY for {action.target} but no matching desired relay in cluster.yml — refusing to delete"
         )
+
+    # Resolve exit_node name → IP. If desired.exit_node is already an IP
+    # (no matching node entry by that name), leave it as-is — but if it
+    # looks like a name and there is no such node, refuse to proceed.
+    exit_node_value = desired.exit_node or ""
+    resolved = False
+    if exit_node_value:
+        exit_node_entry = cluster.find_node(exit_node_value)
+        if exit_node_entry:
+            exit_node_value = exit_node_entry.ip
+            resolved = True
+        elif _looks_like_ip(exit_node_value):
+            resolved = True
+
+    if not exit_node_value or not resolved:
+        raise RuntimeError(
+            f"UPDATE_RELAY for {action.target}: desired exit_node "
+            f"'{desired.exit_node}' could not be resolved to an IP — refusing to delete old relay"
+        )
+
+    # --- Preflight: SSH connectivity to the new relay host ---
+    # If we can't even open a session to the new target, there is no point
+    # tearing down the old relay first.
+    try:
+        ssh_check = ServerConnection(action.target, desired.ssh_user, port=desired.ssh_port)
+        result = ssh_check.run("true", timeout=15)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"SSH preflight to {desired.ssh_user}@{action.target}:{desired.ssh_port} "
+                f"returned exit {result.returncode} — refusing to remove the running relay"
+            )
+    except Exception as e:
+        raise RuntimeError(
+            f"UPDATE_RELAY preflight failed for {action.target}: {e}. "
+            "Old relay left intact."
+        ) from e
+
+    # Preflight passed — proceed with the destructive swap.
+    remove_relay(cluster, panel, relay_ip=action.target)
+    add_relay(
+        cluster,
+        panel,
+        relay_ip=action.target,
+        exit_node_ip=exit_node_value,
+        ssh_user=desired.ssh_user,
+        ssh_port=desired.ssh_port,
+        name=desired.name or desired.host,
+        sni=desired.sni,
+    )
 
 
 def _handle_remove_relay(action: PlanAction, panel: object, cluster: object) -> None:
