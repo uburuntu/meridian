@@ -128,6 +128,8 @@ def _relay_changes(
     changes: list[str] = []
     if desired.name and desired.name != actual.name:
         changes.append(f"name: {actual.name or '(none)'} → {desired.name}")
+    if desired.sni and desired.sni != actual.sni:
+        changes.append(f"sni: {actual.sni or '(default)'} → {desired.sni}")
     if desired.exit_node:
         # Resolve node name to IP if needed
         resolved_exit = desired.exit_node

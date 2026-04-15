@@ -75,6 +75,7 @@ class ActualRelayState:
     host: str = ""
     name: str = ""
     exit_node_ip: str = ""
+    sni: str = ""
 
 
 @dataclass
@@ -176,16 +177,30 @@ def build_actual_state(
 
     actual_nodes = []
     panel_server_ip = cluster.panel.server_ip
+    panel_host_cn = next((n for n in cluster.nodes if n.is_panel_host), None)
     for n in panel.list_nodes():
-        # Try to resolve Docker gateway address back to public IP
+        # Try to resolve Docker gateway address back to public IP.
+        # Panel host nodes use Docker gateway IP (172.x) because the panel
+        # container can't reach 127.0.0.1. We map back via UUID match,
+        # or by detecting private IPs when UUID drifted (DB restore).
         public_ip = n.address
+        matched_by_uuid = False
         for cn in cluster.nodes:
             if cn.uuid == n.uuid:
                 public_ip = cn.ip
+                matched_by_uuid = True
                 break
+        # UUID drift fallback: private address + panel host exists → map to panel IP
+        if not matched_by_uuid and panel_host_cn and n.address not in cluster_nodes_by_ip:
+            import ipaddress
+
+            try:
+                if ipaddress.ip_address(n.address).is_private:
+                    public_ip = panel_host_cn.ip
+            except ValueError:
+                pass
         cn = cluster_nodes_by_ip.get(public_ip)
         # Panel host detection: match by cluster.yml flag OR by panel server IP
-        # (handles UUID drift after DB restore/re-registration)
         is_panel = (cn.is_panel_host if cn else False) or (public_ip == panel_server_ip)
         actual_nodes.append(
             ActualNodeState(
@@ -209,6 +224,7 @@ def build_actual_state(
             host=r.ip,
             name=r.name,
             exit_node_ip=r.exit_node_ip,
+            sni=r.sni,
         )
         for r in cluster.relays
     ]
