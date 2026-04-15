@@ -95,6 +95,17 @@ for container in remnawave remnawave-db remnawave-redis remnawave-node; do
   fi
 done
 
+# remnawave-node MUST have NET_ADMIN capability — required by upstream Remnawave
+# panel 2.6.2+ for node plugins (Torrent Blocker, Ingress/Egress Filter,
+# Connection Drop) and the IP Control panel feature. These all push nftables
+# rules into the host network namespace; without NET_ADMIN the kernel rejects
+# them with EPERM and the panel UI silently reports nothing.
+if ssh root@"$EXIT_IP" "docker inspect remnawave-node --format '{{range .HostConfig.CapAdd}}{{.}} {{end}}'" 2>/dev/null | grep -q "NET_ADMIN"; then
+  pass "remnawave-node has NET_ADMIN capability (required for plugins + IP Control)"
+else
+  fail_test "remnawave-node missing NET_ADMIN — plugins and IP Control will silently fail"
+fi
+
 # Check nginx
 if ssh root@"$EXIT_IP" nginx -t 2>&1 | grep -q "syntax is ok"; then
   pass "nginx config valid"

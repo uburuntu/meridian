@@ -32,6 +32,17 @@ services:
     image: {image}
     container_name: {_NODE_CONTAINER}
     restart: unless-stopped
+    # NET_ADMIN is MANDATORY per upstream docs (panel 2.6.2+, 2.7.0+). It
+    # enables the node plugin system (Torrent Blocker, Ingress/Egress Filter,
+    # Connection Drop) and the IP Control panel feature — all of which push
+    # nftables rules into the host network namespace. Without NET_ADMIN the
+    # kernel rejects those syscalls with EPERM and the panel UI silently
+    # reports nothing. Reality/XHTTP/WSS proxying does not need it, but
+    # since the panel lets the operator enable those features without any
+    # Meridian-CLI involvement, dropping the capability is a UX regression
+    # waiting to happen.
+    cap_add:
+      - NET_ADMIN
     # Host networking required so Xray can bind to specific ports
     network_mode: host
     env_file:
