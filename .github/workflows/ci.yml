@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Allow manually triggering CI on any branch from the Actions UI or via
+  # `gh workflow run ci.yml --ref <branch>`. Useful for validating feature
+  # branches on the fork before opening an upstream PR.
+  workflow_dispatch:
 
 jobs:
   python-test:
