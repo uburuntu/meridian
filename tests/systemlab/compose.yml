@@ -53,7 +53,7 @@ services:
       start_period: 15s
 
   pebble:
-    image: ghcr.io/letsencrypt/pebble:latest
+    image: ghcr.io/letsencrypt/pebble:2.10.0
     hostname: pebble
     environment:
       # Skip challenge validation — just issue certs
