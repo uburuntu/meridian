@@ -598,6 +598,123 @@ else
   fail_test "apply failed to remove client charlie"
 fi
 
+# Verify charlie is actually gone — REMOVE_CLIENT must be observable on the panel
+if meridian --json client list 2>/dev/null | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+clients = data if isinstance(data, list) else data.get('clients', [])
+names = [c.get('username', '') for c in clients]
+assert 'charlie' not in names, f'charlie still in panel: {names}'
+" 2>/dev/null; then
+  pass "charlie actually absent from panel after remove apply"
+else
+  fail_test "charlie still present after apply removed it (cluster.yml says removed but panel disagrees)"
+fi
+
+# Drift detection: panel-side change should be re-detected by plan.
+# Manually delete the bootstrap user via the panel SDK and verify the next
+# `meridian plan` proposes recreating it (since desired_clients still says
+# 'default'). This is the core declarative property.
+echo ">>> Drift test: deleting 'default' user directly via panel API..."
+python3 << 'PYEOF'
+from meridian.cluster import ClusterConfig
+from meridian.remnawave import MeridianPanel
+
+cluster = ClusterConfig.load()
+with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
+    user = panel.get_user('default')
+    if user and user.uuid:
+        panel.delete_user(user.uuid)
+        print('    panel-side delete of default user OK')
+    else:
+        print('    WARN: default user not found, drift test will be partial')
+PYEOF
+
+# Plan should now show ADD_CLIENT default (or exit 2 = changes pending)
+PLAN_OUT=$(meridian plan 2>&1 || true)
+if echo "$PLAN_OUT" | grep -qE "add.*client.*default|default.*add"; then
+  pass "drift detected: plan re-proposes default client"
+else
+  echo "$PLAN_OUT" | tail -5
+  fail_test "drift NOT detected: plan didn't propose recreating default"
+fi
+
+# Apply should converge again — re-create default
+if meridian apply --yes 2>&1; then
+  pass "apply re-created default after drift"
+else
+  fail_test "apply failed to re-create default after drift"
+fi
+
+# Subscription page lifecycle through apply.
+# Stage 5 only verifies the PWA / connection page; the Remnawave subscription
+# page container path was untested end-to-end before this stage was added.
+echo ">>> Subscription page: enabling via cluster.yml + apply..."
+python3 -c "
+import yaml
+with open('$CLUSTER_FILE') as f:
+    data = yaml.safe_load(f)
+data['subscription_page'] = {'enabled': True, 'path': ''}
+with open('$CLUSTER_FILE', 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+"
+
+if meridian apply --yes 2>&1; then
+  pass "apply deployed subscription page container"
+else
+  fail_test "apply failed to deploy subscription page"
+fi
+
+# Verify container is running
+if ssh root@"$EXIT_IP" "docker ps --filter name=remnawave-subscription-page --format '{{.Status}}'" 2>/dev/null | grep -q "Up"; then
+  pass "subscription page container is running"
+else
+  fail_test "subscription page container not running after apply"
+fi
+
+# Verify nginx route serves a response (HTTP 200 or 30x)
+SUB_PATH=$(python3 -c "
+from meridian.cluster import ClusterConfig
+c = ClusterConfig.load()
+print(c.subscription_page.path if c.subscription_page else '')
+")
+if [ -n "$SUB_PATH" ]; then
+  HTTP_CODE=$(curl -k -o /dev/null -s -w '%{http_code}' "https://$EXIT_IP/$SUB_PATH/" || echo "000")
+  if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+    pass "subscription page nginx route returned HTTP $HTTP_CODE"
+  else
+    fail_test "subscription page nginx route returned HTTP $HTTP_CODE (expected 200/301/302)"
+  fi
+fi
+
+# Disable subscription page via apply
+echo ">>> Subscription page: disabling via cluster.yml + apply..."
+python3 -c "
+import yaml
+with open('$CLUSTER_FILE') as f:
+    data = yaml.safe_load(f)
+data['subscription_page']['enabled'] = False
+with open('$CLUSTER_FILE', 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+"
+
+if meridian apply --yes 2>&1; then
+  pass "apply removed subscription page"
+else
+  fail_test "apply failed to remove subscription page"
+fi
+
+if ssh root@"$EXIT_IP" "docker ps --filter name=remnawave-subscription-page --format '{{.Status}}'" 2>/dev/null | grep -qv "Up"; then
+  pass "subscription page container stopped after remove apply"
+else
+  # `docker ps` returned empty (no matching container or container stopped) — that's OK too
+  if ! ssh root@"$EXIT_IP" "docker ps --filter name=remnawave-subscription-page --format '{{.Status}}' | grep -q Up" 2>/dev/null; then
+    pass "subscription page container stopped after remove apply"
+  else
+    fail_test "subscription page container still running after remove apply"
+  fi
+fi
+
 # ── Stage 10: Hardening verification ────────────────────
 echo ""
 echo "═══════════════════════════════════════"
