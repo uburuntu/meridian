@@ -100,6 +100,43 @@ meridian server remove finland     # remove from registry
 
 The `--server` flag lets you target a specific server for any command: `meridian client add alice --server finland`.
 
+## Declarative workflow
+
+Once you have more than one server, you can manage the whole fleet declaratively. Describe the desired state in `~/.meridian/cluster.yml`, run `meridian plan` to preview the diff, and `meridian apply` to converge.
+
+A minimal desired-state block:
+
+```yaml
+desired_nodes:
+  - host: 198.51.100.1
+    name: germany-1
+    sni: www.microsoft.com
+  - host: 198.51.100.2
+    name: finland-1
+    sni: www.microsoft.com
+
+desired_relays:
+  - host: 198.51.100.10
+    name: moscow-relay
+    exit_node: germany-1          # name or IP
+
+desired_clients:
+  - alice
+  - bob
+
+subscription_page:
+  enabled: true                    # self-hosted Remnawave subscription page
+```
+
+```
+meridian plan                      # shows a Terraform-style diff: + adds, - removes, ~ updates
+meridian apply --yes               # converge (destructive actions still prompt once)
+```
+
+Each section is independent. Omitting `desired_clients` entirely leaves client management imperative (`meridian client add/remove` still works); listing it with `[]` tells Meridian to remove every client. Same pattern for `desired_nodes` and `desired_relays`.
+
+`meridian plan` exits `0` when the cluster is converged, `2` when changes are pending — so you can gate CI workflows on it. See [CLI reference](/docs/en/cli-reference/#meridian-plan) for full options.
+
 ## Next steps
 
 - [Deploy guide](/docs/en/deploy/) — full deployment walkthrough with all options
