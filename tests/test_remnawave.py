@@ -143,18 +143,24 @@ class TestFindConfigProfileByName:
 
 
 class TestUserFromSdk:
+    """Tests use snake_case field names because real SDK Pydantic models expose
+    Python attributes in snake_case (camelCase is only the JSON serialization alias).
+    Reading via camelCase silently returns defaults — see _user_from_sdk docstring.
+    """
+
     def test_converts_all_fields(self) -> None:
+        # Real shape: traffic counters live on the nested user_traffic sub-model;
+        # built top-level user fields are short_uuid, traffic_limit_bytes, etc.
         obj = _ns(
             uuid="u-1",
-            shortUuid="abc",
+            short_uuid="abc",
             username="alice",
-            vlessUuid="vl-1",
+            vless_uuid="vl-1",
             status="ACTIVE",
-            usedTrafficBytes=1024,
-            trafficLimitBytes=2048,
-            createdAt="2026-01-01",
-            onlineAt="2026-04-01",
-            subRevokedAt="",
+            traffic_limit_bytes=2048,
+            created_at="2026-01-01",
+            sub_revoked_at="",
+            user_traffic=_ns(used_traffic_bytes=1024, online_at="2026-04-01"),
         )
         user = _user_from_sdk(obj)
         assert user.uuid == "u-1"
@@ -172,14 +178,65 @@ class TestUserFromSdk:
         assert user.used_traffic_bytes == 0
 
     def test_handles_none_traffic(self) -> None:
-        user = _user_from_sdk(_ns(usedTrafficBytes=None, trafficLimitBytes=None))
+        user = _user_from_sdk(_ns(traffic_limit_bytes=None, user_traffic=None))
         assert user.used_traffic_bytes == 0
         assert user.traffic_limit_bytes == 0
 
     def test_reads_nested_user_traffic_fields(self) -> None:
-        user = _user_from_sdk(_ns(userTraffic=_ns(usedTrafficBytes=4096, onlineAt="2026-04-02")))
+        user = _user_from_sdk(
+            _ns(user_traffic=_ns(used_traffic_bytes=4096, online_at="2026-04-02"))
+        )
         assert user.used_traffic_bytes == 4096
         assert user.online_at == "2026-04-02"
+
+    def test_camelcase_attributes_silently_drop_data(self) -> None:
+        # Regression: SDK 2.7.x Pydantic models do not expose camelCase aliases as
+        # Python attributes. If we ever revert to getattr(..., "shortUuid", ...) the
+        # field will become empty without any error.
+        obj = _ns(uuid="u-1", shortUuid="WRONG_CAMEL", short_uuid="right_snake")
+        user = _user_from_sdk(obj)
+        assert user.short_uuid == "right_snake"
+
+
+class TestUserFromRealSdkModel:
+    """Round-trip parsing through actual SDK Pydantic models — catches any future
+    SDK upgrade that renames fields or changes alias mapping."""
+
+    def test_parses_real_user_response_dto(self) -> None:
+        from remnawave.models.users import GetUserByUsernameResponseDto
+
+        # JSON-shaped payload (camelCase) — what the panel returns and what
+        # the SDK consumes through Field(alias=...).
+        payload = {
+            "uuid": "00000000-0000-0000-0000-000000000001",
+            "id": 1,
+            "shortUuid": "short_42",
+            "username": "alice",
+            "vlessUuid": "00000000-0000-0000-0000-000000000002",
+            "trojanPassword": "trojanpwd_long",
+            "ssPassword": "sspwd_long",
+            "lastTriggeredThreshold": 0,
+            "trafficLimitBytes": 5000,
+            "expireAt": "2099-01-01T00:00:00Z",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "updatedAt": "2026-01-02T00:00:00Z",
+            "activeInternalSquads": [],
+            "userTraffic": {
+                "usedTrafficBytes": 1234,
+                "lifetimeUsedTrafficBytes": 9999,
+                "onlineAt": "2026-04-15T10:00:00Z",
+            },
+            "subscriptionUrl": "https://panel/api/sub/short_42",
+        }
+        sdk_obj = GetUserByUsernameResponseDto.model_validate(payload)
+        user = _user_from_sdk(sdk_obj)
+        # All these would be defaults if we read camelCase aliases via getattr.
+        assert user.short_uuid == "short_42"
+        assert user.vless_uuid == "00000000-0000-0000-0000-000000000002"
+        assert user.traffic_limit_bytes == 5000
+        assert user.used_traffic_bytes == 1234
+        assert user.online_at.startswith("2026-04-15")
+        assert user.created_at.startswith("2026-01-01")
 
 
 class TestNodeFromSdk:
@@ -189,10 +246,10 @@ class TestNodeFromSdk:
             name="finland",
             address="198.51.100.1",
             port=3010,
-            isConnected=True,
-            isDisabled=False,
-            xrayVersion="26.2.6",
-            trafficUsedBytes=5000,
+            is_connected=True,
+            is_disabled=False,
+            xray_version="26.2.6",
+            traffic_used_bytes=5000,
         )
         node = _node_from_sdk(obj)
         assert node.uuid == "n-1"
@@ -208,16 +265,53 @@ class TestNodeFromSdk:
         assert node.is_connected is False
 
 
+class TestNodeFromRealSdkModel:
+    def test_parses_real_node_response_dto(self) -> None:
+        from remnawave.models.nodes import NodeResponseDto
+
+        payload = {
+            "uuid": "00000000-0000-0000-0000-0000000000ab",
+            "name": "finland",
+            "address": "198.51.100.1",
+            "port": 3010,
+            "isConnected": True,
+            "isDisabled": False,
+            "isConnecting": False,
+            "xrayVersion": "26.2.6",
+            "trafficUsedBytes": 5000,
+            "isTrafficTrackingActive": False,
+            "trafficResetDay": 1,
+            "notifyPercent": 80,
+            "usersOnline": 0,
+            "viewPosition": 0,
+            "countryCode": "FI",
+            "consumptionMultiplier": 1,
+            "createdAt": "2026-01-01T00:00:00Z",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "configProfile": {
+                "activeConfigProfileUuid": "00000000-0000-0000-0000-0000000000aa",
+                "activeInbounds": [],
+            },
+        }
+        sdk_obj = NodeResponseDto.model_validate(payload)
+        node = _node_from_sdk(sdk_obj)
+        assert node.is_connected is True
+        assert node.xray_version == "26.2.6"
+        assert node.traffic_used == 5000
+
+
 class TestHostFromSdk:
     def test_converts_all_fields(self) -> None:
+        # Real SDK Host uses nested inbound.config_profile_inbound_uuid;
+        # there is no top-level inbound_uuid attribute.
         obj = _ns(
             uuid="h-1",
             remark="reality-198.51.100.1",
             address="198.51.100.1",
             port=443,
             sni="www.google.com",
-            inboundUuid="ib-1",
-            isDisabled=False,
+            is_disabled=False,
+            inbound=_ns(config_profile_inbound_uuid="ib-1"),
         )
         host = _host_from_sdk(obj)
         assert host.uuid == "h-1"
@@ -231,7 +325,7 @@ class TestHostFromSdk:
         assert host.sni == ""
 
     def test_reads_nested_inbound_uuid(self) -> None:
-        host = _host_from_sdk(_ns(inbound=_ns(configProfileInboundUuid="ib-2")))
+        host = _host_from_sdk(_ns(inbound=_ns(config_profile_inbound_uuid="ib-2")))
         assert host.inbound_uuid == "ib-2"
 
 
@@ -476,7 +570,7 @@ class TestCreateNode:
         panel._sdk.keygen.generate_key = MagicMock(return_value="keygen-coro")
         with patch(
             "meridian.remnawave._sdk_call",
-            side_effect=[_ns(uuid="n-1"), _ns(pubKey="secret-key-data")],
+            side_effect=[_ns(uuid="n-1"), _ns(pub_key="secret-key-data")],
         ):
             creds = panel.create_node(
                 "node-1",
@@ -595,7 +689,7 @@ class TestConfigProfiles:
         with patch(
             "meridian.remnawave._sdk_call",
             return_value=_ns(
-                configProfiles=[
+                config_profiles=[
                     _ns(uuid="cp-1", name="default"),
                     _ns(uuid="cp-2", name="other"),
                 ]
@@ -603,6 +697,43 @@ class TestConfigProfiles:
         ):
             profiles = panel.list_config_profiles()
         assert len(profiles) == 2
+
+    def test_list_config_profiles_real_sdk_dto(self) -> None:
+        # Round-trip through real SDK Pydantic model — guards against
+        # camelCase regression in attribute access.
+        from remnawave.models.config_profiles import GetAllConfigProfilesResponseDto
+
+        payload = {
+            "total": 2,
+            "configProfiles": [
+                {
+                    "uuid": "00000000-0000-0000-0000-000000000aa1",
+                    "name": "default",
+                    "viewPosition": 0,
+                    "config": {},
+                    "inbounds": [],
+                    "nodes": [],
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "updatedAt": "2026-01-01T00:00:00Z",
+                },
+                {
+                    "uuid": "00000000-0000-0000-0000-000000000aa2",
+                    "name": "other",
+                    "viewPosition": 0,
+                    "config": {},
+                    "inbounds": [],
+                    "nodes": [],
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "updatedAt": "2026-01-01T00:00:00Z",
+                },
+            ],
+        }
+        sdk_resp = GetAllConfigProfilesResponseDto.model_validate(payload)
+        panel = _make_panel()
+        panel._sdk.config_profiles.get_config_profiles = MagicMock(return_value="coro")
+        with patch("meridian.remnawave._sdk_call", return_value=sdk_resp):
+            profiles = panel.list_config_profiles()
+        assert [p.name for p in profiles] == ["default", "other"]
 
 
 # ---------------------------------------------------------------------------
