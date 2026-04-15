@@ -622,6 +622,44 @@ else
   fail_test "charlie still present after apply removed it (cluster.yml says removed but panel disagrees)"
 fi
 
+# Hybrid sync: imperative `client add` should also append to desired_clients
+# when the user is managing clients declaratively. Otherwise the next plan
+# would see the imperatively-added user as drift and remove them.
+echo ">>> Hybrid: imperative client add should mirror into desired_clients..."
+meridian client add hybrid-bob 2>&1 >/dev/null
+if python3 -c "
+import yaml
+with open('$CLUSTER_FILE') as f:
+    data = yaml.safe_load(f)
+desired = data.get('desired_clients') or []
+assert 'hybrid-bob' in desired, f'hybrid-bob not in desired_clients: {desired}'
+" 2>/dev/null; then
+  pass "imperative client add mirrored into desired_clients (hybrid sync)"
+else
+  fail_test "imperative client add did NOT update desired_clients — next apply would remove hybrid-bob"
+fi
+
+# And plan must report converged (no REMOVE_CLIENT for hybrid-bob).
+if meridian plan 2>&1 | grep -qE "remove.*hybrid-bob"; then
+  fail_test "plan proposes removing hybrid-bob — hybrid sync did not actually close the gap"
+else
+  pass "plan reports converged after imperative add (no spurious REMOVE proposed)"
+fi
+
+# Symmetric: imperative remove should also drop from desired_clients.
+meridian client remove hybrid-bob --yes 2>&1 >/dev/null || true
+if python3 -c "
+import yaml
+with open('$CLUSTER_FILE') as f:
+    data = yaml.safe_load(f)
+desired = data.get('desired_clients') or []
+assert 'hybrid-bob' not in desired, f'hybrid-bob still in desired_clients: {desired}'
+" 2>/dev/null; then
+  pass "imperative client remove mirrored into desired_clients (hybrid sync)"
+else
+  fail_test "imperative client remove did NOT update desired_clients — next apply would re-create hybrid-bob"
+fi
+
 # Drift detection: panel-side change should be re-detected by plan.
 # Manually delete the bootstrap user via the panel SDK and verify the next
 # `meridian plan` proposes recreating it (since desired_clients still says
