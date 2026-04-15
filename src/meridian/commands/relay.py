@@ -408,6 +408,16 @@ def run_deploy(
     _save_relay_local(relay_ip, exit_ip, 443, listen_port)
     if relay_ip != exit_ip:
         registry.add(ServerEntry(host=relay_ip, user=user, name=relay_name, role=SERVER_ROLE_RELAY, port=ssh_port))
+
+    # Hybrid sync — mirror the relay into desired_relays when the user manages
+    # relays declaratively. Use the exit node's name when available so the
+    # desired entry stays human-readable; fall back to the IP otherwise.
+    from meridian.operations import hybrid_sync_desired_relays_add
+
+    exit_node_for_sync = cluster.find_node(exit_ip)
+    exit_ref = exit_node_for_sync.name if exit_node_for_sync and exit_node_for_sync.name else exit_ip
+    hybrid_sync_desired_relays_add(cluster, relay_entry, exit_node_ref=exit_ref)
+
     ok("Relay saved to cluster")
 
     # Success output
@@ -578,6 +588,12 @@ def run_remove(
     cluster.relays = [r for r in cluster.relays if r.ip != relay_ip]
     cluster.backup()
     cluster.save()
+
+    # Hybrid sync — drop from desired_relays (only if managed declaratively).
+    from meridian.operations import hybrid_sync_desired_relays_remove
+
+    hybrid_sync_desired_relays_remove(cluster, relay_ip)
+
     relay_file = CREDS_BASE / sanitize_ip_for_path(relay_ip) / "relay.yml"
     if relay_file.exists():
         relay_file.unlink()

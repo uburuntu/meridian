@@ -109,6 +109,19 @@ def run_add(
         ws_path=ws_path,
     )
 
+    # Hybrid sync — when desired_nodes is non-None, mirror this imperative
+    # add into the desired list so a subsequent `meridian apply` does not
+    # see the newly provisioned node as drift and propose REMOVE_NODE.
+    new_node = cluster.find_node(resolved.ip)
+    if new_node is not None:
+        # Apply the user-requested name override (matches reconciler semantics).
+        if name and new_node.name != name:
+            new_node.name = name
+            cluster.save()
+        from meridian.operations import hybrid_sync_desired_nodes_add
+
+        hybrid_sync_desired_nodes_add(cluster, new_node, ssh_user=user, ssh_port=ssh_port)
+
     ok(f"Node {resolved.ip} provisioned and added to cluster")
 
     err_console.print()
@@ -393,6 +406,11 @@ def run_remove(ip_or_name: str, yes: bool = False, force: bool = False) -> None:
 
     cluster.nodes = [n for n in cluster.nodes if n.ip != node.ip]
     cluster.save()
+
+    # Hybrid sync — drop from desired_nodes (only if managed declaratively).
+    from meridian.operations import hybrid_sync_desired_nodes_remove
+
+    hybrid_sync_desired_nodes_remove(cluster, node.ip)
 
     ok(f"Node {node.ip} removed from cluster")
 

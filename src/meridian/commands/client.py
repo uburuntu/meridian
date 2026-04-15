@@ -120,6 +120,14 @@ def run_add(
                 hint_type=e.hint_type,
             )
 
+        # Hybrid sync — when the user is managing clients declaratively
+        # (cluster.yml has desired_clients), mirror the imperative add into
+        # that list so the next `meridian apply` does not see drift and
+        # remove the freshly-added user. No-op when desired_clients is None.
+        from meridian.operations import hybrid_sync_desired_clients_add
+
+        hybrid_sync_desired_clients_add(cluster, name)
+
         ok(f"Client '{name}' added")
 
         # Build page URL (deterministic from cluster data)
@@ -316,6 +324,12 @@ def run_remove(
                 hint="The panel may be unreachable. Try again.",
                 hint_type="system",
             )
+
+        # Hybrid sync — drop from desired_clients (if managed declaratively)
+        # so the next `meridian apply` does not re-create the just-removed user.
+        from meridian.operations import hybrid_sync_desired_clients_remove
+
+        hybrid_sync_desired_clients_remove(cluster, name)
 
         ok(f"Client '{name}' removed")
 
