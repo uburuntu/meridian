@@ -42,14 +42,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ruff
-        run: pip install 'ruff>=0.4,<1.0'
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install dev dependencies
+        run: uv sync --extra dev
 
       - name: Ruff check
-        run: ruff check src/ tests/
+        run: uv run ruff check src/ tests/
 
       - name: Ruff format check
-        run: ruff format --check src/ tests/
+        run: uv run ruff format --check src/ tests/
 
   typecheck:
     name: Type Check
