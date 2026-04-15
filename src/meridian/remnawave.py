@@ -136,19 +136,24 @@ class NodeCredentials:
 
 
 def _user_from_sdk(obj: Any) -> User:
-    """Convert SDK UserResponseDto to our User dataclass."""
-    traffic = getattr(obj, "userTraffic", None)
+    """Convert SDK UserResponseDto to our User dataclass.
+
+    SDK Pydantic models declare fields as ``snake_case = Field(alias="camelCase")`` —
+    Python attribute access requires snake_case. Reading the camelCase alias via
+    ``getattr`` returns the default and silently drops data.
+    """
+    traffic = getattr(obj, "user_traffic", None)
     return User(
         uuid=str(getattr(obj, "uuid", "")),
-        short_uuid=str(getattr(obj, "shortUuid", "") or getattr(obj, "short_uuid", "")),
-        username=getattr(obj, "username", ""),
-        vless_uuid=str(getattr(obj, "vlessUuid", "") or getattr(obj, "vless_uuid", "")),
+        short_uuid=str(getattr(obj, "short_uuid", "") or ""),
+        username=getattr(obj, "username", "") or "",
+        vless_uuid=str(getattr(obj, "vless_uuid", "") or ""),
         status=str(getattr(obj, "status", "") or ""),
-        used_traffic_bytes=int(getattr(obj, "usedTrafficBytes", None) or getattr(traffic, "usedTrafficBytes", 0) or 0),
-        traffic_limit_bytes=int(getattr(obj, "trafficLimitBytes", 0) or 0),
-        created_at=str(getattr(obj, "createdAt", "") or ""),
-        online_at=str(getattr(obj, "onlineAt", None) or getattr(traffic, "onlineAt", "") or ""),
-        sub_revoked_at=str(getattr(obj, "subRevokedAt", "") or ""),
+        used_traffic_bytes=int(getattr(traffic, "used_traffic_bytes", 0) or 0),
+        traffic_limit_bytes=int(getattr(obj, "traffic_limit_bytes", 0) or 0),
+        created_at=str(getattr(obj, "created_at", "") or ""),
+        online_at=str(getattr(traffic, "online_at", "") or ""),
+        sub_revoked_at=str(getattr(obj, "sub_revoked_at", "") or ""),
     )
 
 
@@ -156,13 +161,13 @@ def _node_from_sdk(obj: Any) -> Node:
     """Convert SDK NodeResponseDto to our Node dataclass."""
     return Node(
         uuid=str(getattr(obj, "uuid", "")),
-        name=getattr(obj, "name", ""),
-        address=getattr(obj, "address", ""),
+        name=getattr(obj, "name", "") or "",
+        address=getattr(obj, "address", "") or "",
         port=int(getattr(obj, "port", 0) or 0),
-        is_connected=bool(getattr(obj, "isConnected", False)),
-        is_disabled=bool(getattr(obj, "isDisabled", False)),
-        xray_version=getattr(obj, "xrayVersion", "") or "",
-        traffic_used=int(getattr(obj, "trafficUsedBytes", 0) or 0),
+        is_connected=bool(getattr(obj, "is_connected", False)),
+        is_disabled=bool(getattr(obj, "is_disabled", False)),
+        xray_version=getattr(obj, "xray_version", "") or "",
+        traffic_used=int(getattr(obj, "traffic_used_bytes", 0) or 0),
     )
 
 
@@ -171,12 +176,12 @@ def _host_from_sdk(obj: Any) -> Host:
     inbound = getattr(obj, "inbound", None)
     return Host(
         uuid=str(getattr(obj, "uuid", "")),
-        remark=getattr(obj, "remark", ""),
-        address=getattr(obj, "address", ""),
+        remark=getattr(obj, "remark", "") or "",
+        address=getattr(obj, "address", "") or "",
         port=int(getattr(obj, "port", 0) or 0),
         sni=getattr(obj, "sni", "") or "",
-        inbound_uuid=str(getattr(obj, "inboundUuid", "") or getattr(inbound, "configProfileInboundUuid", "") or ""),
-        is_disabled=bool(getattr(obj, "isDisabled", False)),
+        inbound_uuid=str(getattr(inbound, "config_profile_inbound_uuid", "") or ""),
+        is_disabled=bool(getattr(obj, "is_disabled", False)),
     )
 
 
@@ -681,7 +686,9 @@ class MeridianPanel:
     def list_config_profiles(self) -> list[ConfigProfile]:
         """List all config profiles."""
         resp = _sdk_call(self._sdk.config_profiles.get_config_profiles())
-        items = getattr(resp, "configProfiles", []) or []
+        # SDK 2.7.x: GetAllConfigProfilesResponseDto.config_profiles
+        # (Pydantic snake_case attribute, not the camelCase serialization alias)
+        items = getattr(resp, "config_profiles", []) or []
         return [_config_profile_from_sdk(profile) for profile in items]
 
     def find_config_profile_by_name(self, name: str) -> ConfigProfile | None:
@@ -731,9 +738,15 @@ class MeridianPanel:
     # --- Keygen ---
 
     def get_node_secret_key(self) -> str:
-        """Fetch the node mTLS secret bundle from the keygen controller."""
+        """Fetch the node mTLS secret bundle from the keygen controller.
+
+        SDK 2.7.x: GetPubKeyResponseDto.pub_key (snake_case attribute, with
+        camelCase serialization alias). Reading ``getattr(resp, "pubKey", ...)``
+        returns the default empty string and silently breaks node container
+        deployment for re-registers.
+        """
         resp = _sdk_call(self._sdk.keygen.generate_key())
-        return str(getattr(resp, "pubKey", "") or "")
+        return str(getattr(resp, "pub_key", "") or "")
 
     # --- Subscriptions ---
 
