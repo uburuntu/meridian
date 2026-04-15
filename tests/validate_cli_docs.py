@@ -9,9 +9,22 @@ Usage:
 
 from __future__ import annotations
 
-import re
-import sys
-from pathlib import Path
+import os
+
+# Force the rich console used by typer's --help renderer to a wide,
+# non-color terminal BEFORE any typer / meridian import. On narrow runners
+# (notably GitHub Actions, where the default terminal width is 80) rich
+# truncates the Options table to the Usage line + description, leaving
+# the regex below with nothing to match — the validator would then
+# silently pass while real drift accumulated. Setting this here, before
+# any typer import, is the only reliable way to override.
+os.environ["COLUMNS"] = "200"
+os.environ["NO_COLOR"] = "1"
+os.environ["TERM"] = "dumb"
+
+import re  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
