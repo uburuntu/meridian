@@ -350,18 +350,16 @@ def _run_provisioner(
     # Provide xhttp/ws paths — reuse saved paths on redeploy, generate fresh otherwise
     ctx["xhttp_path"] = xhttp_path or secrets.token_hex(8)
     ctx["ws_path"] = ws_path or secrets.token_hex(8)
-    # Subscription page path for nginx reverse proxy — reuse if already set
+    # Subscription page path for nginx reverse proxy — reuse if already set.
+    # Only persist to cluster.yml if subscription_page was already declared
+    # (don't auto-opt legacy clusters into subscription page management).
     sub_page_path = ""
     if cluster.subscription_page and cluster.subscription_page.path:
         sub_page_path = cluster.subscription_page.path
     sub_page_path = sub_page_path or secrets.token_hex(8)
     ctx["subscription_page_path"] = sub_page_path
-    # Persist path so apply can reuse it later
-    from meridian.cluster import SubscriptionPageConfig
-
-    if cluster.subscription_page is None:
-        cluster.subscription_page = SubscriptionPageConfig()
-    cluster.subscription_page.path = sub_page_path
+    if cluster.subscription_page is not None:
+        cluster.subscription_page.path = sub_page_path
 
     err_console.print()
     info(f"Configuring server at {ctx.ip}...")
