@@ -6,6 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [4.0.0] - 2026-04-12
 
+### Remnawave compatibility matrix
+This release pins a single tested version tuple. Upgrading any one component
+without the rest is not supported — move the whole set together.
+
+| Component | Pinned version |
+|---|---|
+| `remnawave/backend` | `2.7.4` |
+| `remnawave/node` | `2.7.0` |
+| `remnawave/subscription-page` | `7.1.8` |
+| `remnawave` Python SDK | `2.7.1` |
+| Xray-core client (test binary) | `26.3.27` |
+| Realm (relay forwarder) | `2.9.3` |
+| Pebble (system-lab ACME CA) | `2.10.0` |
+
 ### Changed
 - **Remnawave replaces 3x-ui** — modern panel with panel/node separation (NestJS + PostgreSQL + Valkey), proper REST API, built-in subscriptions, native multi-node support
 - **Single `cluster.yml` replaces per-server `proxy.yml`** — fleet-wide manifest with panel URL, API token, nodes, relays. Client state lives in Remnawave's database, not locally
