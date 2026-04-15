@@ -9,10 +9,12 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+import typer
 
 from meridian.cluster import ClusterConfig, DesiredRelay, NodeEntry, PanelConfig, RelayEntry
-from meridian.commands.apply import _handle_update_relay
-from meridian.reconciler.diff import PlanAction, PlanActionKind
+from meridian.commands.apply import _handle_update_relay, run as apply_run
+from meridian.reconciler.diff import Plan, PlanAction, PlanActionKind
+from meridian.reconciler.executor import ActionResult, ExecutionResult
 
 
 def _make_cluster_with_relay(relay_ip: str = "198.51.100.20") -> ClusterConfig:
@@ -117,3 +119,137 @@ class TestHandleUpdateRelayPreflight:
             add.assert_called_once()
             # remove must run BEFORE add — verify ordering by looking at MagicMock parents
             assert rm.call_args.kwargs.get("relay_ip") == "198.51.100.20"
+
+
+# ---------------------------------------------------------------------------
+# apply.run() command-level failure-safety
+# ---------------------------------------------------------------------------
+
+
+class TestApplyRunFailureSafety:
+    """Codex review's #1 highest-value addition: when an early action fails,
+    apply.run() must report failure (non-zero exit) and the destructive
+    follow-up actions must be skipped — the executor enforces that, but the
+    command wrapper must surface the result to the user.
+    """
+
+    def _build_cluster_with_desired_clients(self) -> ClusterConfig:
+        return ClusterConfig(
+            version=2,
+            panel=PanelConfig(
+                url="https://198.51.100.1/panel",
+                api_token="tok",
+                server_ip="198.51.100.1",
+            ),
+            nodes=[
+                NodeEntry(
+                    ip="198.51.100.1",
+                    uuid="00000000-0000-0000-0000-000000000001",
+                    name="exit-1",
+                    is_panel_host=True,
+                )
+            ],
+            desired_clients=["alice", "bob"],
+        )
+
+    def test_failed_action_causes_nonzero_exit(self) -> None:
+        cluster = self._build_cluster_with_desired_clients()
+
+        # An execution result with one failed action — apply.run should react.
+        failed_action = PlanAction(kind=PlanActionKind.ADD_CLIENT, target="alice")
+        exec_result = ExecutionResult(
+            results=[ActionResult(action=failed_action, success=False, error="API down")]
+        )
+        plan = Plan(actions=[failed_action])
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.execute_plan", return_value=exec_result),
+            patch("meridian.commands.apply.print_plan"),
+            # `fail()` raises typer.Exit with hint_type-derived code
+            patch.object(ClusterConfig, "save"),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                apply_run(yes=True, parallel=1)
+            assert exc_info.value.exit_code != 0
+
+    def test_skipped_destructive_action_marks_failure(self) -> None:
+        """When the executor skips a REMOVE_NODE because of an earlier failure
+        in the same run, the result still has success=False with a 'skipped'
+        error. apply.run must treat this as overall failure, not as a no-op.
+        """
+        cluster = self._build_cluster_with_desired_clients()
+
+        failed_add = ActionResult(
+            action=PlanAction(kind=PlanActionKind.ADD_CLIENT, target="alice"),
+            success=False,
+            error="provisioner died",
+        )
+        skipped_remove = ActionResult(
+            action=PlanAction(kind=PlanActionKind.REMOVE_NODE, target="198.51.100.99", destructive=True),
+            success=False,
+            error="skipped: prior phase had failures",
+        )
+        exec_result = ExecutionResult(results=[failed_add, skipped_remove])
+        plan = Plan(actions=[failed_add.action, skipped_remove.action])
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.execute_plan", return_value=exec_result),
+            patch("meridian.commands.apply.print_plan"),
+            patch.object(ClusterConfig, "save"),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                apply_run(yes=True, parallel=1)
+            assert exc_info.value.exit_code != 0
+
+    def test_empty_plan_exits_zero(self) -> None:
+        cluster = self._build_cluster_with_desired_clients()
+        empty_plan = Plan(actions=[])
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=empty_plan),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                apply_run(yes=True, parallel=1)
+            # Exit 0 = no changes needed
+            assert exc_info.value.exit_code == 0
+
+    def test_aborts_when_no_desired_state_or_sub_page(self) -> None:
+        # A cluster with neither desired state nor subscription page declared —
+        # apply has nothing to converge to.
+        cluster = ClusterConfig(
+            version=2,
+            panel=PanelConfig(
+                url="https://198.51.100.1/panel",
+                api_token="tok",
+                server_ip="198.51.100.1",
+            ),
+        )
+        with patch.object(ClusterConfig, "load", return_value=cluster):
+            with pytest.raises(typer.Exit) as exc_info:
+                apply_run(yes=True, parallel=1)
+            assert exc_info.value.exit_code != 0
+
+    def test_aborts_when_panel_not_configured(self) -> None:
+        # Has desired state but the panel is not configured yet
+        cluster = ClusterConfig(version=2, desired_clients=["alice"])
+        with patch.object(ClusterConfig, "load", return_value=cluster):
+            with pytest.raises(typer.Exit) as exc_info:
+                apply_run(yes=True, parallel=1)
+            assert exc_info.value.exit_code != 0
