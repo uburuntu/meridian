@@ -29,6 +29,8 @@ meridian deploy [IP] [flags]
 | `--warp / --no-warp` | disabled | Route outgoing traffic through Cloudflare WARP |
 | `--server NAME` | | Target server (name or IP) |
 | `--decoy MODE` | none | Decoy response for unknown paths (`none` / `403`) |
+| `--geo-block` / `--no-geo-block` | enabled | Block Russian domains and IPs (geosite:category-ru + geoip:ru) |
+| `--ssh-port PORT` | 22 | SSH port (if non-standard) |
 | `--yes` | | Skip confirmation prompts |
 
 ### meridian client
@@ -39,8 +41,12 @@ Manage client access keys and connection details.
 meridian client add NAME [--server NAME]
 meridian client show NAME [--server NAME]
 meridian client list [--server NAME]
-meridian client remove NAME [--server NAME]
+meridian client remove NAME [--server NAME] [--yes]
 ```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--yes`, `-y` | | Skip removal confirmation (applies to `client remove`) |
 
 ### meridian server
 
@@ -73,9 +79,41 @@ meridian relay check RELAY_IP [--exit EXIT]
 | `--name NAME` | (auto) | Friendly name for the relay (e.g., "ru-moscow") |
 | `--port/-p PORT` | 443 | Listen port on relay server |
 | `--user/-u USER` | root | SSH user on relay |
+| `--ssh-port PORT` | 22 | SSH port on the relay server (if non-standard) |
 | `--yes/-y` | | Skip confirmation prompts |
 
 **How relays work**: Client connects to the relay's domestic IP. Relay forwards raw TCP to the exit server abroad. All encryption is end-to-end between client and exit — the relay never sees plaintext. All protocols (Reality, XHTTP, WSS) work through the relay.
+
+### meridian plan
+
+Show the reconciliation plan — what `meridian apply` would do to converge the cluster to the desired state declared in `cluster.yml`.
+
+Reads `desired_nodes`, `desired_relays`, `desired_clients`, and `subscription_page` from `cluster.yml`, fetches actual state from the panel, and prints a Terraform-style diff with `+` for adds, `-` for removes, `~` for updates.
+
+```
+meridian plan
+```
+
+**Exit codes**:
+- `0` — converged (no changes needed)
+- `2` — changes pending (run `meridian apply` to converge)
+- non-zero (1, 3) — error
+
+See [Declarative workflow](/docs/en/getting-started/#declarative-workflow) for how to compose `cluster.yml`.
+
+### meridian apply
+
+Converge the cluster to the desired state declared in `cluster.yml`. Runs `plan` internally, shows the diff, asks for confirmation, then executes the actions in dependency order (removals first, then adds, then removals of nodes last).
+
+```
+meridian apply [--yes]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--yes`, `-y` | | Skip confirmation prompts |
+
+Destructive actions (removals, UPDATE_RELAY re-provisioning) print a warning and require a separate confirmation. A failure early in the plan skips remaining destructive actions — `cluster.yml` stays truthful.
 
 ### meridian preflight
 
