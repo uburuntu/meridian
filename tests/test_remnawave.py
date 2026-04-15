@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from remnawave.models.config_profiles import CreateConfigProfileRequestDto
-from remnawave.models.hosts import CreateHostRequestDto
 from remnawave.models.internal_squads import UpdateInternalSquadRequestDto
 from remnawave.models.nodes import CreateNodeRequestDto
 from remnawave.models.users import CreateUserRequestDto
@@ -518,49 +517,45 @@ class TestCreateNode:
 class TestCreateHost:
     def test_create_host_minimal(self) -> None:
         panel = _make_panel()
-        panel._sdk.hosts.create_host = MagicMock(return_value="create-host-coro")
-        with patch(
-            "meridian.remnawave._sdk_call",
-            return_value=_ns(
-                uuid="h-1",
-                remark="reality-198.51.100.1",
-                port=443,
-                inbound=_ns(configProfileInboundUuid="00000000-0000-0000-0000-0000000000d1"),
-            ),
-        ):
-            host = panel.create_host(
-                remark="reality-198.51.100.1",
-                address="198.51.100.1",
-                port=443,
-                config_profile_uuid="00000000-0000-0000-0000-0000000000d0",
-                inbound_uuid="00000000-0000-0000-0000-0000000000d1",
-            )
+        panel._post = MagicMock(
+            return_value={
+                "uuid": "h-1",
+                "remark": "reality-198.51.100.1",
+                "port": 443,
+                "inboundUuid": "00000000-0000-0000-0000-0000000000d1",
+            }
+        )
+        host = panel.create_host(
+            remark="reality-198.51.100.1",
+            address="198.51.100.1",
+            port=443,
+            config_profile_uuid="00000000-0000-0000-0000-0000000000d0",
+            inbound_uuid="00000000-0000-0000-0000-0000000000d1",
+        )
         assert host.uuid == "h-1"
-        body = panel._sdk.hosts.create_host.call_args[0][0]
-        assert isinstance(body, CreateHostRequestDto)
-        assert str(body.inbound.config_profile_uuid) == "00000000-0000-0000-0000-0000000000d0"
-        assert str(body.inbound.config_profile_inbound_uuid) == "00000000-0000-0000-0000-0000000000d1"
+        call_json = panel._post.call_args[1]["json"]
+        assert call_json["inbound"]["configProfileUuid"] == "00000000-0000-0000-0000-0000000000d0"
+        assert call_json["inbound"]["configProfileInboundUuid"] == "00000000-0000-0000-0000-0000000000d1"
 
     def test_create_host_with_optional_fields(self) -> None:
         panel = _make_panel()
-        panel._sdk.hosts.create_host = MagicMock(return_value="create-host-coro")
-        with patch("meridian.remnawave._sdk_call", return_value=_ns(uuid="h-2")):
-            panel.create_host(
-                remark="reality-198.51.100.1",
-                address="198.51.100.1",
-                port=443,
-                config_profile_uuid="00000000-0000-0000-0000-0000000000e0",
-                inbound_uuid="00000000-0000-0000-0000-0000000000e1",
-                sni="www.google.com",
-                fingerprint="chrome",
-                security_layer="TLS",
-                is_disabled=True,
-            )
-        body = panel._sdk.hosts.create_host.call_args[0][0]
-        assert body.sni == "www.google.com"
-        assert body.fingerprint.value == "chrome"
-        assert body.security_layer.value == "TLS"
-        assert body.is_disabled is True
+        panel._post = MagicMock(return_value={"uuid": "h-2"})
+        panel.create_host(
+            remark="reality-198.51.100.1",
+            address="198.51.100.1",
+            port=443,
+            config_profile_uuid="00000000-0000-0000-0000-0000000000e0",
+            inbound_uuid="00000000-0000-0000-0000-0000000000e1",
+            sni="www.google.com",
+            fingerprint="chrome",
+            security_layer="REALITY",
+            is_disabled=True,
+        )
+        call_json = panel._post.call_args[1]["json"]
+        assert call_json["sni"] == "www.google.com"
+        assert call_json["fingerprint"] == "chrome"
+        assert call_json["securityLayer"] == "REALITY"
+        assert call_json["isDisabled"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -647,9 +642,15 @@ class TestInternalSquads:
         panel.list_internal_squads = MagicMock(return_value=[{"uuid": "sq-1", "name": "Default-Squad"}])
         assert panel.get_default_squad_uuid() == "sq-1"
 
-    def test_get_default_squad_uuid_not_found(self) -> None:
+    def test_get_default_squad_uuid_falls_back_to_first(self) -> None:
+        """Panel v2.7+ may not have Default-Squad — fall back to first available."""
         panel = _make_panel()
         panel.list_internal_squads = MagicMock(return_value=[{"uuid": "sq-1", "name": "Other"}])
+        assert panel.get_default_squad_uuid() == "sq-1"
+
+    def test_get_default_squad_uuid_empty_list(self) -> None:
+        panel = _make_panel()
+        panel.list_internal_squads = MagicMock(return_value=[])
         assert panel.get_default_squad_uuid() == ""
 
 

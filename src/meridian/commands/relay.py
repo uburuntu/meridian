@@ -167,8 +167,10 @@ def _create_relay_hosts(
     host_uuids: dict[str, str] = {}
     label = _relay_label(RelayEntry(ip=relay_ip, name=relay_name))
 
+    # Panel v2.7+ only accepts DEFAULT/TLS/NONE for securityLayer.
+    # Reality hosts use "DEFAULT" (panel infers reality from inbound type).
     _PROTO_CONFIG: list[tuple[ProtocolKey, str]] = [
-        (ProtocolKey.REALITY, "REALITY"),
+        (ProtocolKey.REALITY, "DEFAULT"),
         (ProtocolKey.XHTTP, "TLS"),
     ]
     for proto_key, security in _PROTO_CONFIG:

@@ -276,9 +276,7 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
         if result.returncode == 0:
             conn.run("systemctl reload nginx", timeout=15)
         else:
-            raise RuntimeError(
-                f"nginx validation failed after adding subscription page: {result.stdout.strip()[:200]}"
-            )
+            raise RuntimeError(f"nginx validation failed after adding subscription page: {result.stdout.strip()[:200]}")
 
     cluster.subscription_page.enabled = True
     cluster.subscription_page.path = sub_path
