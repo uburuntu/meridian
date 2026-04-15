@@ -136,6 +136,8 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 | Command | Description |
 |---------|-------------|
 | `meridian deploy [IP\|local]` | Deploy proxy server (interactive wizard if no IP) |
+| `meridian plan` | Show the reconciliation plan — diff between `cluster.yml` and actual panel state |
+| `meridian apply [--yes]` | Converge the cluster to the desired state in `cluster.yml` |
 | `meridian client add NAME` | Add a named client key |
 | `meridian client show NAME` | Show connection info (QR code, URLs, shareable link) |
 | `meridian client list` | List all clients |
