@@ -199,9 +199,12 @@ def build_actual_state(
                     public_ip = panel_host_cn.ip
             except ValueError:
                 pass
-        cn = cluster_nodes_by_ip.get(public_ip)
+        # Re-resolve the cluster entry for the post-mapping public_ip — the
+        # earlier `cn` binding from the for-loop above was used only to find
+        # a UUID match, so it may belong to a different host now.
+        public_cn = cluster_nodes_by_ip.get(public_ip)
         # Panel host detection: match by cluster.yml flag OR by panel server IP
-        is_panel = (cn.is_panel_host if cn else False) or (public_ip == panel_server_ip)
+        is_panel = (public_cn.is_panel_host if public_cn else False) or (public_ip == panel_server_ip)
         actual_nodes.append(
             ActualNodeState(
                 host=public_ip,
@@ -209,9 +212,9 @@ def build_actual_state(
                 uuid=n.uuid,
                 is_connected=n.is_connected,
                 is_panel_host=is_panel,
-                sni=cn.sni if cn else "",
-                domain=cn.domain if cn else "",
-                warp=cn.warp if cn else False,
+                sni=public_cn.sni if public_cn else "",
+                domain=public_cn.domain if public_cn else "",
+                warp=public_cn.warp if public_cn else False,
             )
         )
 

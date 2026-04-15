@@ -49,8 +49,19 @@ def add_node(
 
     effective_sni = sni or DEFAULT_SNI
 
-    # Establish SSH connection
-    resolved = ResolvedServer(ip=ip, user=ssh_user, port=ssh_port, conn=ServerConnection(ip, ssh_user, port=ssh_port))
+    # Establish SSH connection. ResolvedServer stores ip/user/local_mode/
+    # creds_dir/conn — the port already lives on `conn`. We start with
+    # local_mode=False; ensure_server_connection() flips it (and refreshes
+    # creds_dir) if the target turns out to be the deployer's own machine.
+    from meridian.config import creds_dir_for
+
+    resolved = ResolvedServer(
+        ip=ip,
+        user=ssh_user,
+        local_mode=False,
+        creds_dir=creds_dir_for(ip, local_mode=False),
+        conn=ServerConnection(ip, ssh_user, port=ssh_port),
+    )
     ensure_server_connection(resolved)
 
     # Compute deterministic port layout
@@ -135,8 +146,16 @@ def update_node(
     if node is None:
         raise ValueError(f"Node {ip} not found in cluster")
 
+    from meridian.config import creds_dir_for
+
     conn = ServerConnection(ip, node.ssh_user, port=node.ssh_port)
-    resolved = ResolvedServer(ip=ip, user=node.ssh_user, port=node.ssh_port, conn=conn)
+    resolved = ResolvedServer(
+        ip=ip,
+        user=node.ssh_user,
+        local_mode=False,
+        creds_dir=creds_dir_for(ip, local_mode=False),
+        conn=conn,
+    )
 
     # Compute port layout (same scheme as deploy)
     ip_hash = int(hashlib.sha256(ip.encode()).hexdigest()[:8], 16)
@@ -276,8 +295,16 @@ def add_relay(
         raise ValueError(f"Exit node {exit_node_ip} not found in cluster")
 
     # SSH connections
+    from meridian.config import creds_dir_for
+
     relay_conn = ServerConnection(relay_ip, ssh_user, port=ssh_port)
-    relay_resolved = ResolvedServer(ip=relay_ip, user=ssh_user, port=ssh_port, conn=relay_conn)
+    relay_resolved = ResolvedServer(
+        ip=relay_ip,
+        user=ssh_user,
+        local_mode=False,
+        creds_dir=creds_dir_for(relay_ip, local_mode=False),
+        conn=relay_conn,
+    )
     ensure_server_connection(relay_resolved)
 
     exit_conn = ServerConnection(exit_node.ip, exit_node.ssh_user, port=exit_node.ssh_port)

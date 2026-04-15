@@ -323,9 +323,7 @@ class TestClusterYAMLRoundTrip:
         assert r.sni == "www.cloudflare.com"
 
     def test_subscription_page_round_trip(self, tmp_path: Path) -> None:
-        cfg = _configured_cluster(
-            subscription_page=SubscriptionPageConfig(enabled=True, path="abcdef0123456789")
-        )
+        cfg = _configured_cluster(subscription_page=SubscriptionPageConfig(enabled=True, path="abcdef0123456789"))
         p = tmp_path / "cluster.yml"
         cfg.save(p)
         loaded = ClusterConfig.load(p)
@@ -334,9 +332,7 @@ class TestClusterYAMLRoundTrip:
         assert loaded.subscription_page.path == "abcdef0123456789"
 
     def test_subscription_page_disabled_round_trip(self, tmp_path: Path) -> None:
-        cfg = _configured_cluster(
-            subscription_page=SubscriptionPageConfig(enabled=False, path="xx")
-        )
+        cfg = _configured_cluster(subscription_page=SubscriptionPageConfig(enabled=False, path="xx"))
         p = tmp_path / "cluster.yml"
         cfg.save(p)
         loaded = ClusterConfig.load(p)
