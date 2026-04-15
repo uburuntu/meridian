@@ -293,6 +293,19 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
         result = conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
         if result.returncode != 0:
             raise RuntimeError(f"Failed to start containers: {result.stderr.strip()[:200]}")
+    else:
+        # Service exists in compose but may be stopped (e.g. from a prior
+        # REMOVE_SUBSCRIPTION_PAGE that ran `docker compose stop`). Bring it
+        # up — `docker compose up -d <service>` is idempotent and a no-op
+        # when the container is already running.
+        result = conn.run(
+            f"cd {q_dir} && docker compose up -d remnawave-subscription-page",
+            timeout=120,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Failed to start subscription page container: {result.stderr.strip()[:200]}"
+            )
 
     if not configure_subscription_page(conn, cluster.panel.api_token):
         raise RuntimeError("Failed to configure subscription page")
