@@ -706,21 +706,32 @@ else
   fail_test "subscription page container not running after re-enable apply"
 fi
 
-# Verify nginx route serves a response (HTTP 200 or 30x)
+# Verify nginx route serves a response. The subscription-page container
+# needs a few seconds after re-deploy before it accepts upstream connections;
+# nginx returns 502 in that window. Poll up to ~30s, accept any non-5xx
+# response (200/30x/404 all mean nginx → app is wired up correctly).
 SUB_PATH=$(python3 -c "
 from meridian.cluster import ClusterConfig
 c = ClusterConfig.load()
 print(c.subscription_page.path if c.subscription_page else '')
 ")
 if [ -n "$SUB_PATH" ]; then
-  # Wait briefly for nginx reload to settle
-  sleep 2
-  HTTP_CODE=$(curl -k -o /dev/null -s -w '%{http_code}' "https://$EXIT_IP/$SUB_PATH/" || echo "000")
-  if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "404" ]; then
-    pass "subscription page nginx route returned HTTP $HTTP_CODE"
-  else
-    fail_test "subscription page nginx route returned HTTP $HTTP_CODE (expected 200/301/302/404)"
-  fi
+  HTTP_CODE="000"
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    HTTP_CODE=$(curl -k -o /dev/null -s -w '%{http_code}' "https://$EXIT_IP/$SUB_PATH/" 2>/dev/null || echo "000")
+    case "$HTTP_CODE" in
+      2*|3*|404) break ;;
+    esac
+    sleep 2
+  done
+  case "$HTTP_CODE" in
+    2*|3*|404)
+      pass "subscription page nginx route returned HTTP $HTTP_CODE"
+      ;;
+    *)
+      fail_test "subscription page nginx route returned HTTP $HTTP_CODE after polling (expected 2xx/3xx/404)"
+      ;;
+  esac
 else
   fail_test "subscription page path not persisted after apply"
 fi
