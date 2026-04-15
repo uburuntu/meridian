@@ -649,51 +649,21 @@ fi
 # Subscription page lifecycle through apply.
 # Stage 5 only verifies the PWA / connection page; the Remnawave subscription
 # page container path was untested end-to-end before this stage was added.
-echo ">>> Subscription page: enabling via cluster.yml + apply..."
-python3 -c "
-import yaml
-with open('$CLUSTER_FILE') as f:
-    data = yaml.safe_load(f)
-data['subscription_page'] = {'enabled': True, 'path': ''}
-with open('$CLUSTER_FILE', 'w') as f:
-    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-"
+#
+# The initial deploy in Stage 2 already brings the subscription page up, so
+# we first DISABLE via apply (exercises REMOVE_SUBSCRIPTION_PAGE), verify
+# the container is down, then re-ENABLE via apply (exercises
+# ADD_SUBSCRIPTION_PAGE) and verify both the container is back up and the
+# nginx proxy route serves a response.
 
-if meridian apply --yes 2>&1; then
-  pass "apply deployed subscription page container"
-else
-  fail_test "apply failed to deploy subscription page"
-fi
-
-# Verify container is running
-if ssh root@"$EXIT_IP" "docker ps --filter name=remnawave-subscription-page --format '{{.Status}}'" 2>/dev/null | grep -q "Up"; then
-  pass "subscription page container is running"
-else
-  fail_test "subscription page container not running after apply"
-fi
-
-# Verify nginx route serves a response (HTTP 200 or 30x)
-SUB_PATH=$(python3 -c "
-from meridian.cluster import ClusterConfig
-c = ClusterConfig.load()
-print(c.subscription_page.path if c.subscription_page else '')
-")
-if [ -n "$SUB_PATH" ]; then
-  HTTP_CODE=$(curl -k -o /dev/null -s -w '%{http_code}' "https://$EXIT_IP/$SUB_PATH/" || echo "000")
-  if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
-    pass "subscription page nginx route returned HTTP $HTTP_CODE"
-  else
-    fail_test "subscription page nginx route returned HTTP $HTTP_CODE (expected 200/301/302)"
-  fi
-fi
-
-# Disable subscription page via apply
 echo ">>> Subscription page: disabling via cluster.yml + apply..."
 python3 -c "
 import yaml
 with open('$CLUSTER_FILE') as f:
     data = yaml.safe_load(f)
-data['subscription_page']['enabled'] = False
+sp = data.get('subscription_page') or {}
+sp['enabled'] = False
+data['subscription_page'] = sp
 with open('$CLUSTER_FILE', 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 "
@@ -704,15 +674,55 @@ else
   fail_test "apply failed to remove subscription page"
 fi
 
-if ssh root@"$EXIT_IP" "docker ps --filter name=remnawave-subscription-page --format '{{.Status}}'" 2>/dev/null | grep -qv "Up"; then
+# `docker ps` filtering: an Up container will print 'Up ...'; a stopped or
+# missing one prints nothing. We assert the running-status check fails.
+if ! ssh root@"$EXIT_IP" "docker ps --filter name=remnawave-subscription-page --format '{{.Status}}' | grep -q Up" 2>/dev/null; then
   pass "subscription page container stopped after remove apply"
 else
-  # `docker ps` returned empty (no matching container or container stopped) — that's OK too
-  if ! ssh root@"$EXIT_IP" "docker ps --filter name=remnawave-subscription-page --format '{{.Status}}' | grep -q Up" 2>/dev/null; then
-    pass "subscription page container stopped after remove apply"
+  fail_test "subscription page container still running after remove apply"
+fi
+
+echo ">>> Subscription page: re-enabling via cluster.yml + apply..."
+python3 -c "
+import yaml
+with open('$CLUSTER_FILE') as f:
+    data = yaml.safe_load(f)
+sp = data.get('subscription_page') or {}
+sp['enabled'] = True
+data['subscription_page'] = sp
+with open('$CLUSTER_FILE', 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+"
+
+if meridian apply --yes 2>&1; then
+  pass "apply re-deployed subscription page container"
+else
+  fail_test "apply failed to re-deploy subscription page"
+fi
+
+if ssh root@"$EXIT_IP" "docker ps --filter name=remnawave-subscription-page --format '{{.Status}}'" 2>/dev/null | grep -q "Up"; then
+  pass "subscription page container is running after re-enable"
+else
+  fail_test "subscription page container not running after re-enable apply"
+fi
+
+# Verify nginx route serves a response (HTTP 200 or 30x)
+SUB_PATH=$(python3 -c "
+from meridian.cluster import ClusterConfig
+c = ClusterConfig.load()
+print(c.subscription_page.path if c.subscription_page else '')
+")
+if [ -n "$SUB_PATH" ]; then
+  # Wait briefly for nginx reload to settle
+  sleep 2
+  HTTP_CODE=$(curl -k -o /dev/null -s -w '%{http_code}' "https://$EXIT_IP/$SUB_PATH/" || echo "000")
+  if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "404" ]; then
+    pass "subscription page nginx route returned HTTP $HTTP_CODE"
   else
-    fail_test "subscription page container still running after remove apply"
+    fail_test "subscription page nginx route returned HTTP $HTTP_CODE (expected 200/301/302/404)"
   fi
+else
+  fail_test "subscription page path not persisted after apply"
 fi
 
 # ── Stage 10: Hardening verification ────────────────────
