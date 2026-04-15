@@ -87,10 +87,7 @@ def get_flags_from_help(command: str) -> set[str]:
     runner = CliRunner()
     result = runner.invoke(app, command.split() + ["--help"], color=False)
     if result.exit_code != 0:
-        raise RuntimeError(
-            f"`meridian {command} --help` exited {result.exit_code}\n"
-            f"output: {result.output[:500]}"
-        )
+        raise RuntimeError(f"`meridian {command} --help` exited {result.exit_code}\noutput: {result.output[:500]}")
     flags = set(re.findall(r"--[a-z][\w-]*", result.output)) - SKIP_FLAGS
 
     floor = MIN_FLAGS_BY_COMMAND.get(command, 0)
