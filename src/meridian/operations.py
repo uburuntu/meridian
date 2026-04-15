@@ -13,10 +13,112 @@ import logging
 import secrets
 from typing import Any
 
-from meridian.cluster import ClusterConfig, NodeEntry, RelayEntry
+from meridian.cluster import ClusterConfig, DesiredNode, DesiredRelay, NodeEntry, RelayEntry
 from meridian.remnawave import MeridianPanel, RemnawaveError
 
 logger = logging.getLogger("meridian.operations")
+
+
+# ---------------------------------------------------------------------------
+# Hybrid declarative ↔ imperative sync
+# ---------------------------------------------------------------------------
+#
+# Discussion uburuntu/meridian#27 proposed three CLI entry points: pure
+# imperative, pure declarative, and a hybrid where imperative commands also
+# update the desired_* lists in cluster.yml so the next `meridian apply` does
+# not see the freshly-added resource as drift and remove it. The helpers
+# below implement the hybrid sync. The contract: only sync when the user has
+# already opted into declarative for the relevant resource type (the matching
+# desired_* attribute is not None). A None value means "this category is
+# unmanaged declaratively" — leaving it alone preserves backwards compatible
+# imperative behaviour for users who never wrote desired_* into cluster.yml.
+
+
+def _hybrid_sync_desired_clients_add(cluster: ClusterConfig, name: str) -> None:
+    if cluster.desired_clients is None:
+        return
+    if name in cluster.desired_clients:
+        return
+    cluster.desired_clients.append(name)
+    cluster.save()
+
+
+def _hybrid_sync_desired_clients_remove(cluster: ClusterConfig, name: str) -> None:
+    if cluster.desired_clients is None:
+        return
+    if name not in cluster.desired_clients:
+        return
+    cluster.desired_clients = [c for c in cluster.desired_clients if c != name]
+    cluster.save()
+
+
+def _hybrid_sync_desired_nodes_add(cluster: ClusterConfig, node: NodeEntry, ssh_user: str, ssh_port: int) -> None:
+    if cluster.desired_nodes is None:
+        return
+    if any(d.host == node.ip for d in cluster.desired_nodes):
+        return
+    cluster.desired_nodes.append(
+        DesiredNode(
+            host=node.ip,
+            name=node.name,
+            ssh_user=ssh_user,
+            ssh_port=ssh_port,
+            domain=node.domain,
+            sni=node.sni,
+            warp=node.warp,
+        )
+    )
+    cluster.save()
+
+
+def _hybrid_sync_desired_nodes_update(cluster: ClusterConfig, node: NodeEntry) -> None:
+    """Mirror an in-place node metadata change into desired_nodes (if managed)."""
+    if cluster.desired_nodes is None:
+        return
+    for d in cluster.desired_nodes:
+        if d.host == node.ip:
+            d.name = node.name
+            d.sni = node.sni
+            d.domain = node.domain
+            d.warp = node.warp
+            cluster.save()
+            return
+
+
+def _hybrid_sync_desired_nodes_remove(cluster: ClusterConfig, node_ip: str) -> None:
+    if cluster.desired_nodes is None:
+        return
+    if not any(d.host == node_ip for d in cluster.desired_nodes):
+        return
+    cluster.desired_nodes = [d for d in cluster.desired_nodes if d.host != node_ip]
+    cluster.save()
+
+
+def _hybrid_sync_desired_relays_add(cluster: ClusterConfig, relay: RelayEntry, exit_node_ref: str) -> None:
+    if cluster.desired_relays is None:
+        return
+    if any(d.host == relay.ip for d in cluster.desired_relays):
+        return
+    cluster.desired_relays.append(
+        DesiredRelay(
+            host=relay.ip,
+            name=relay.name,
+            exit_node=exit_node_ref,
+            sni=relay.sni,
+            ssh_user=relay.ssh_user,
+            ssh_port=relay.ssh_port,
+        )
+    )
+    cluster.save()
+
+
+def _hybrid_sync_desired_relays_remove(cluster: ClusterConfig, relay_ip: str) -> None:
+    if cluster.desired_relays is None:
+        return
+    if not any(d.host == relay_ip for d in cluster.desired_relays):
+        return
+    cluster.desired_relays = [d for d in cluster.desired_relays if d.host != relay_ip]
+    cluster.save()
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +221,10 @@ def add_node(
                 logger.warning("Could not set node name in panel: %s", e)
         cluster.save()
 
+    # Hybrid sync: if the user manages nodes declaratively, mirror this add
+    # into desired_nodes so the next `meridian apply` does not see drift.
+    _hybrid_sync_desired_nodes_add(cluster, node, ssh_user=ssh_user, ssh_port=ssh_port)
+
     return node
 
 
@@ -204,6 +310,10 @@ def update_node(
         except RemnawaveError as e:
             logger.warning("Could not update node name in panel: %s", e)
 
+    # Hybrid sync: mirror the in-place metadata change into desired_nodes
+    # (only if the user is managing nodes declaratively).
+    _hybrid_sync_desired_nodes_update(cluster, node)
+
 
 def remove_node(
     cluster: ClusterConfig,
@@ -252,6 +362,9 @@ def remove_node(
     # Remove from cluster.yml (no-op if panel-only node)
     cluster.nodes = [n for n in cluster.nodes if n.ip != node_ip]
     cluster.save()
+
+    # Hybrid sync: drop from desired_nodes too (only if managed declaratively).
+    _hybrid_sync_desired_nodes_remove(cluster, node_ip)
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +468,12 @@ def add_relay(
     cluster.relays.append(relay)
     cluster.save()
 
+    # Hybrid sync: mirror into desired_relays (only if managed declaratively).
+    # Use the exit node's name when available so the desired entry stays
+    # human-readable; fall back to the IP when the node has no name.
+    exit_node_ref = exit_node.name or exit_node.ip
+    _hybrid_sync_desired_relays_add(cluster, relay, exit_node_ref=exit_node_ref)
+
     return relay
 
 
@@ -407,6 +526,9 @@ def remove_relay(
     if relay_file.exists():
         relay_file.unlink()
 
+    # Hybrid sync: drop from desired_relays too (only if managed declaratively).
+    _hybrid_sync_desired_relays_remove(cluster, relay_ip)
+
 
 # ---------------------------------------------------------------------------
 # Client operations
@@ -419,9 +541,16 @@ def add_client(
     *,
     name: str,
 ) -> Any:
-    """Create a client in the panel."""
+    """Create a client in the panel.
+
+    Hybrid sync: when ``cluster.desired_clients`` is non-None, the new name
+    is also appended to that list and persisted, so a subsequent
+    ``meridian apply`` does not see the user as drift and remove them.
+    """
     squad_uuids = [cluster.squad_uuid] if cluster.squad_uuid else None
-    return panel.create_user(name, squad_uuids=squad_uuids)
+    user = panel.create_user(name, squad_uuids=squad_uuids)
+    _hybrid_sync_desired_clients_add(cluster, name)
+    return user
 
 
 def remove_client(
@@ -430,8 +559,19 @@ def remove_client(
     *,
     name: str,
 ) -> bool:
-    """Delete a client from the panel."""
+    """Delete a client from the panel.
+
+    Hybrid sync: when ``cluster.desired_clients`` is non-None, the name is
+    also dropped from that list so subsequent plans do not propose
+    re-creating the user.
+    """
     user = panel.get_user(name)
     if user and user.uuid:
-        return panel.delete_user(user.uuid)
+        deleted = panel.delete_user(user.uuid)
+        if deleted:
+            _hybrid_sync_desired_clients_remove(cluster, name)
+        return deleted
+    # Even if the user did not exist on the panel, drop the desired entry —
+    # otherwise the next plan would see drift and try to recreate them.
+    _hybrid_sync_desired_clients_remove(cluster, name)
     return False

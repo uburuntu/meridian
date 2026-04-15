@@ -257,3 +257,167 @@ class TestAddClientErrorPaths:
 
         with pytest.raises(RemnawaveError, match="already exists"):
             add_client(cluster, panel, name="alice")
+
+
+# ---------------------------------------------------------------------------
+# Hybrid imperative ↔ declarative sync (discussion uburuntu/meridian#27)
+# ---------------------------------------------------------------------------
+#
+# Imperative commands must mirror their effect into the matching desired_*
+# list when (and only when) the user has opted into declarative for that
+# resource type. desired_* == None means "unmanaged" — leaving it alone
+# preserves backwards-compatible behaviour. desired_* == [] or a populated
+# list means "managed" — failing to mirror would cause the next
+# `meridian apply` to interpret the freshly-added resource as drift and
+# remove it.
+
+
+class TestHybridDesiredClientsSync:
+    def test_add_client_unmanaged_leaves_desired_none(self) -> None:
+        cluster = _make_cluster(squad_uuid="sq-1", desired_clients=None)
+        panel = _mock_panel()
+        panel.create_user.return_value = SimpleNamespace(uuid="u-1", username="alice")
+
+        with patch.object(ClusterConfig, "save") as save:
+            add_client(cluster, panel, name="alice")
+
+        assert cluster.desired_clients is None
+        save.assert_not_called()
+
+    def test_add_client_managed_appends_and_saves(self) -> None:
+        cluster = _make_cluster(squad_uuid="sq-1", desired_clients=["existing"])
+        panel = _mock_panel()
+        panel.create_user.return_value = SimpleNamespace(uuid="u-1", username="alice")
+
+        with patch.object(ClusterConfig, "save") as save:
+            add_client(cluster, panel, name="alice")
+
+        assert cluster.desired_clients == ["existing", "alice"]
+        save.assert_called_once()
+
+    def test_add_client_managed_idempotent_no_double_append(self) -> None:
+        cluster = _make_cluster(desired_clients=["alice"])
+        panel = _mock_panel()
+        panel.create_user.return_value = SimpleNamespace(uuid="u-1", username="alice")
+
+        with patch.object(ClusterConfig, "save") as save:
+            add_client(cluster, panel, name="alice")
+
+        assert cluster.desired_clients == ["alice"]
+        save.assert_not_called()
+
+    def test_remove_client_managed_drops_and_saves(self) -> None:
+        cluster = _make_cluster(desired_clients=["alice", "bob"])
+        panel = _mock_panel()
+        panel.get_user.return_value = SimpleNamespace(uuid="u-1", username="alice")
+        panel.delete_user.return_value = True
+
+        with patch.object(ClusterConfig, "save") as save:
+            remove_client(cluster, panel, name="alice")
+
+        assert cluster.desired_clients == ["bob"]
+        save.assert_called_once()
+
+    def test_remove_client_unmanaged_leaves_desired_none(self) -> None:
+        cluster = _make_cluster(desired_clients=None)
+        panel = _mock_panel()
+        panel.get_user.return_value = SimpleNamespace(uuid="u-1", username="alice")
+        panel.delete_user.return_value = True
+
+        with patch.object(ClusterConfig, "save") as save:
+            remove_client(cluster, panel, name="alice")
+
+        assert cluster.desired_clients is None
+        save.assert_not_called()
+
+
+class TestHybridDesiredNodesSync:
+    def test_remove_node_managed_drops_and_saves(self) -> None:
+        from meridian.cluster import DesiredNode
+
+        node = NodeEntry(ip="198.51.100.5", uuid="u-5", name="extra")
+        cluster = _make_cluster(
+            nodes=[node],
+            desired_nodes=[DesiredNode(host="198.51.100.5", name="extra")],
+        )
+        panel = _mock_panel()
+
+        with patch.object(ClusterConfig, "save"):
+            remove_node(cluster, panel, node_ip="198.51.100.5")
+
+        assert cluster.nodes == []
+        assert cluster.desired_nodes == []
+
+    def test_remove_node_unmanaged_leaves_desired_none(self) -> None:
+        node = NodeEntry(ip="198.51.100.5", uuid="u-5", name="extra")
+        cluster = _make_cluster(nodes=[node], desired_nodes=None)
+        panel = _mock_panel()
+
+        with patch.object(ClusterConfig, "save"):
+            remove_node(cluster, panel, node_ip="198.51.100.5")
+
+        assert cluster.desired_nodes is None
+
+    def test_update_node_managed_mirrors_metadata(self) -> None:
+        from meridian.cluster import DesiredNode
+
+        node = NodeEntry(ip="198.51.100.6", uuid="u-6", name="old", sni="old.sni")
+        cluster = _make_cluster(
+            nodes=[node],
+            desired_nodes=[DesiredNode(host="198.51.100.6", name="old", sni="old.sni")],
+        )
+        panel = _mock_panel()
+
+        with (
+            patch("meridian.commands.setup._setup_redeploy"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.resolve.ResolvedServer"),
+            patch.object(ClusterConfig, "save"),
+        ):
+            update_node(cluster, panel, ip="198.51.100.6", name="new", sni="new.sni")
+
+        assert cluster.desired_nodes is not None
+        assert cluster.desired_nodes[0].name == "new"
+        assert cluster.desired_nodes[0].sni == "new.sni"
+
+
+class TestHybridDesiredRelaysSync:
+    def test_remove_relay_managed_drops_and_saves(self) -> None:
+        from meridian.cluster import DesiredRelay
+
+        relay = RelayEntry(ip="198.51.100.20", exit_node_ip="198.51.100.1", name="r1")
+        cluster = _make_cluster(
+            relays=[relay],
+            desired_relays=[DesiredRelay(host="198.51.100.20", name="r1", exit_node="exit-1")],
+        )
+        panel = _mock_panel()
+
+        with (
+            patch("meridian.commands.relay._delete_relay_hosts"),
+            patch("meridian.commands.relay._remove_relay_nginx"),
+            patch("meridian.ssh.ServerConnection"),
+            patch.object(ClusterConfig, "save"),
+        ):
+            from meridian.operations import remove_relay
+
+            remove_relay(cluster, panel, relay_ip="198.51.100.20")
+
+        assert cluster.relays == []
+        assert cluster.desired_relays == []
+
+    def test_remove_relay_unmanaged_leaves_desired_none(self) -> None:
+        relay = RelayEntry(ip="198.51.100.20", exit_node_ip="198.51.100.1", name="r1")
+        cluster = _make_cluster(relays=[relay], desired_relays=None)
+        panel = _mock_panel()
+
+        with (
+            patch("meridian.commands.relay._delete_relay_hosts"),
+            patch("meridian.commands.relay._remove_relay_nginx"),
+            patch("meridian.ssh.ServerConnection"),
+            patch.object(ClusterConfig, "save"),
+        ):
+            from meridian.operations import remove_relay
+
+            remove_relay(cluster, panel, relay_ip="198.51.100.20")
+
+        assert cluster.desired_relays is None
