@@ -108,6 +108,13 @@ def plan_cmd() -> None:
 @app.command("apply")
 def apply_cmd(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts"),
+    prune_extras: str = typer.Option(
+        "ask",
+        "--prune-extras",
+        help="How to handle extras (panel-side resources not in cluster.yml): "
+        "ask (interactive prompt), yes (auto-remove), no (skip removal). "
+        "Defaults to 'ask' interactively or 'no' under --yes for safety.",
+    ),
     parallel: int = typer.Option(
         1,
         "--parallel",
@@ -122,12 +129,18 @@ def apply_cmd(
     [dim]Examples:[/dim]
       [cyan]meridian apply[/cyan]              Show plan and confirm
       [cyan]meridian apply --yes[/cyan]        Apply without confirmation
+      [cyan]meridian apply --prune-extras=yes[/cyan]   Auto-remove panel resources missing from cluster.yml
     """
     from meridian.commands.apply import run
 
+    if prune_extras not in ("ask", "yes", "no"):
+        from meridian.console import fail
+
+        fail(f"Invalid --prune-extras value: {prune_extras!r}", hint="Use ask, yes, or no", hint_type="user")
+
     # Parallel node provisioning is temporarily disabled — see executor.py
     # for the reasoning. The flag is hidden but still accepted.
-    run(yes=yes, parallel=parallel)
+    run(yes=yes, parallel=parallel, prune_extras=prune_extras)
 
 
 # =============================================================================

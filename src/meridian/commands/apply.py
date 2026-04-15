@@ -400,8 +400,20 @@ def _handle_remove_subscription_page(action: PlanAction, panel: object, cluster:
 def run(
     yes: bool = False,
     parallel: int = 4,
+    prune_extras: str = "ask",
 ) -> None:
-    """Converge actual state to desired state declared in cluster.yml."""
+    """Converge actual state to desired state declared in cluster.yml.
+
+    ``prune_extras`` controls how panel-side resources missing from
+    cluster.yml (i.e. drift, marked ``from_extras=True`` on the plan
+    actions) are handled:
+
+    - ``"ask"``: interactive prompt per extras action. If combined with
+      ``yes=True``, downgraded to ``"no"`` for safety — auto-prune
+      requires explicit consent.
+    - ``"yes"``: auto-remove (current behaviour).
+    - ``"no"``: skip extras (filtered out of the plan before execute).
+    """
     cluster = ClusterConfig.load()
 
     has_desired = (
@@ -443,6 +455,38 @@ def run(
                 raise typer.Exit(0)
 
             print_plan(plan, console=err_console)
+
+            # --- Drift / extras handling (--prune-extras) ---
+            extras_actions = [a for a in plan.actions if a.from_extras]
+            effective_prune = prune_extras
+            if yes and effective_prune == "ask":
+                # Safety: never silently auto-remove drift under --yes unless
+                # the operator explicitly asked for `--prune-extras=yes`.
+                effective_prune = "no"
+
+            if extras_actions:
+                if effective_prune == "no":
+                    plan.actions = [a for a in plan.actions if not a.from_extras]
+                    info(
+                        f"Skipping {len(extras_actions)} extras action(s) — "
+                        f"resources present on the panel but not in cluster.yml. "
+                        f"Use --prune-extras=yes to remove them, or add them to cluster.yml."
+                    )
+                elif effective_prune == "ask":
+                    keep: list = []
+                    for action in plan.actions:
+                        if not action.from_extras:
+                            keep.append(action)
+                            continue
+                        if confirm(f"Remove {action.kind.value} {action.target}? (drift — not in cluster.yml)"):
+                            keep.append(action)
+                        else:
+                            info(f"Skipping {action.kind.value} {action.target}")
+                    plan.actions = keep
+                # effective_prune == "yes": leave plan untouched, extras run
+                if plan.is_empty:
+                    ok("No changes needed after extras filter.")
+                    raise typer.Exit(0)
 
             if plan.has_destructive and not yes:
                 if not confirm("Plan includes destructive actions. Apply?"):

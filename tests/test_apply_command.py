@@ -252,3 +252,122 @@ class TestApplyRunFailureSafety:
             with pytest.raises(typer.Exit) as exc_info:
                 apply_run(yes=True, parallel=1)
             assert exc_info.value.exit_code != 0
+
+
+class TestPruneExtras:
+    """`--prune-extras={ask,yes,no}` controls how REMOVE_* actions tagged
+    `from_extras=True` (drift — present on panel, missing from cluster.yml)
+    are handled."""
+
+    def _build_cluster(self) -> ClusterConfig:
+        return ClusterConfig(
+            version=2,
+            panel=PanelConfig(
+                url="https://198.51.100.1/panel",
+                api_token="tok",
+                server_ip="198.51.100.1",
+            ),
+            nodes=[NodeEntry(ip="198.51.100.1", uuid="u-1", name="exit-1", is_panel_host=True)],
+            desired_clients=["alice"],
+        )
+
+    def _exec_succeeds(self, plan: Plan) -> ExecutionResult:
+        return ExecutionResult(results=[ActionResult(action=a, success=True) for a in plan.actions])
+
+    def test_prune_no_filters_extras_before_executor(self) -> None:
+        """`--prune-extras=no` removes from_extras actions from the plan."""
+        cluster = self._build_cluster()
+        keep_action = PlanAction(kind=PlanActionKind.ADD_CLIENT, target="alice")
+        extra_remove = PlanAction(
+            kind=PlanActionKind.REMOVE_CLIENT,
+            target="ghost",
+            destructive=True,
+            from_extras=True,
+        )
+        plan = Plan(actions=[keep_action, extra_remove])
+
+        captured_plan = {}
+
+        def capture_execute(plan_arg, **_kwargs):
+            captured_plan["actions"] = list(plan_arg.actions)
+            return ExecutionResult(results=[ActionResult(action=keep_action, success=True)])
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.execute_plan", side_effect=capture_execute),
+            patch("meridian.commands.apply.print_plan"),
+            patch.object(ClusterConfig, "save"),
+        ):
+            apply_run(yes=True, parallel=1, prune_extras="no")
+
+        # Extras filtered out — only the ADD_CLIENT survives.
+        kinds = [a.kind for a in captured_plan["actions"]]
+        assert kinds == [PlanActionKind.ADD_CLIENT]
+
+    def test_prune_yes_keeps_extras(self) -> None:
+        """`--prune-extras=yes` runs extras as-is."""
+        cluster = self._build_cluster()
+        extra_remove = PlanAction(
+            kind=PlanActionKind.REMOVE_CLIENT,
+            target="ghost",
+            destructive=True,
+            from_extras=True,
+        )
+        plan = Plan(actions=[extra_remove])
+
+        captured_plan = {}
+
+        def capture_execute(plan_arg, **_kwargs):
+            captured_plan["actions"] = list(plan_arg.actions)
+            return ExecutionResult(results=[ActionResult(action=extra_remove, success=True)])
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.execute_plan", side_effect=capture_execute),
+            patch("meridian.commands.apply.print_plan"),
+            patch.object(ClusterConfig, "save"),
+        ):
+            apply_run(yes=True, parallel=1, prune_extras="yes")
+
+        # The extra REMOVE survived to the executor.
+        assert captured_plan["actions"] == [extra_remove]
+
+    def test_prune_ask_with_yes_downgrades_to_no(self) -> None:
+        """`--yes` + default `--prune-extras=ask` must NOT auto-remove extras.
+
+        Auto-removing drift without explicit operator consent is destructive
+        UX; safer to skip and require a deliberate `--prune-extras=yes`.
+        """
+        cluster = self._build_cluster()
+        extra_remove = PlanAction(
+            kind=PlanActionKind.REMOVE_CLIENT,
+            target="ghost",
+            destructive=True,
+            from_extras=True,
+        )
+        plan = Plan(actions=[extra_remove])
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.print_plan"),
+            patch.object(ClusterConfig, "save"),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                apply_run(yes=True, parallel=1, prune_extras="ask")
+            # Plan becomes empty after filtering → exit 0
+            assert exc_info.value.exit_code == 0
