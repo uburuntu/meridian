@@ -106,8 +106,17 @@ def execute_plan(
         PlanActionKind.REMOVE_NODE,
     ]
 
-    # Kinds that can be parallelized (independent per-server operations)
-    parallel_kinds = {PlanActionKind.ADD_NODE}
+    # Kinds that can be parallelized (independent per-server operations).
+    #
+    # ADD_NODE WAS parallelized but is currently disabled — see Bug #2 in
+    # the v4-declarative plan. The shared MeridianPanel wraps an
+    # httpx.AsyncClient driven by a thread-local event loop (see _run in
+    # remnawave.py); concurrent calls cross-thread misuse it. The shared
+    # ClusterConfig is also mutated in-place by add_node, and only the
+    # file write is serialized by the lock. Re-enabling parallelism
+    # requires per-worker MeridianPanel instances and merging worker
+    # results into cluster on the main thread before saving.
+    parallel_kinds: set[PlanActionKind] = set()
 
     # Destructive kinds — skip if a prior phase had failures (dependency safety)
     destructive_kinds = {
