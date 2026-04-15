@@ -20,7 +20,7 @@ ACME_SERVER = os.environ.get("MERIDIAN_ACME_SERVER", "letsencrypt").strip() or "
 
 # Remnawave panel + node
 REMNAWAVE_BACKEND_IMAGE = "remnawave/backend:2.7.4"
-REMNAWAVE_NODE_IMAGE = "remnawave/node:latest"
+REMNAWAVE_NODE_IMAGE = "remnawave/node:2.7.0"
 REMNAWAVE_SUBSCRIPTION_PAGE_IMAGE = "remnawave/subscription-page:7.1.8"
 REMNAWAVE_PANEL_PORT = 3000  # internal port, nginx reverse-proxied
 REMNAWAVE_NODE_API_PORT = 3010  # node API port (panel→node mTLS communication)
@@ -60,7 +60,7 @@ REALM_SHA256: dict[str, str] = {
 RELAY_CONFIG_PATH = "/etc/meridian/realm.toml"
 
 # Xray client binary (for connection verification)
-XRAY_VERSION = "26.2.6"  # matches xray bundled in 3x-ui 2.8.11
+XRAY_VERSION = "26.3.27"  # matches xray bundled in remnawave/node:2.7.0
 XRAY_GITHUB_URL = "https://github.com/XTLS/Xray-core/releases/download"
 XRAY_ASSET_MAP: dict[tuple[str, str], str] = {
     ("Darwin", "arm64"): "Xray-macos-arm64-v8a.zip",
