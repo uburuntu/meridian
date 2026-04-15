@@ -106,14 +106,17 @@ See [Declarative workflow](/docs/en/getting-started/#declarative-workflow) for h
 Converge the cluster to the desired state declared in `cluster.yml`. Runs `plan` internally, shows the diff, asks for confirmation, then executes the actions in dependency order (removals first, then adds, then removals of nodes last).
 
 ```
-meridian apply [--yes]
+meridian apply [--yes] [--prune-extras=ask|yes|no]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--yes`, `-y` | | Skip confirmation prompts |
+| `--prune-extras` | `ask` | How to handle drift — resources present on the panel but missing from `cluster.yml`. `ask` prompts per-resource (downgraded to `no` under `--yes` for safety); `yes` auto-removes; `no` skips and prints a one-line summary |
 
 Destructive actions (removals, UPDATE_RELAY re-provisioning) print a warning and require a separate confirmation. A failure early in the plan skips remaining destructive actions — `cluster.yml` stays truthful.
+
+**Drift handling example:** if `cluster.yml` lists `desired_clients: ['alice']` but the panel also has `bob` (e.g. created via the panel UI), `meridian plan` shows `- remove client: bob`. With default `--prune-extras=ask` you'll be asked whether to remove `bob` or keep him. `--yes --prune-extras=yes` runs the removal silently; `--yes` alone (no explicit `--prune-extras`) skips it.
 
 ### meridian preflight
 

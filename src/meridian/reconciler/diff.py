@@ -43,6 +43,12 @@ class PlanAction:
     target: str  # identifier (IP, username, name)
     detail: str = ""  # human-readable description
     destructive: bool = False  # requires --yes confirmation
+    # ``from_extras`` marks REMOVE_* actions caused by the resource existing in
+    # actual state but missing from the desired declaration (i.e. drift). The
+    # apply command's ``--prune-extras`` flag uses this tag to decide whether
+    # to keep, prompt, or auto-remove. Non-REMOVE actions and REMOVE actions
+    # that come from explicit `desired_*` removal stay False.
+    from_extras: bool = False
 
     @property
     def symbol(self) -> str:
@@ -199,6 +205,9 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
                         target=a_node.host,
                         detail=f"deregister node {a_node.name or a_node.host}",
                         destructive=True,
+                        # Drift: present on the panel but missing from desired_nodes.
+                        # `meridian apply --prune-extras=no` skips this; `=yes` runs it.
+                        from_extras=True,
                     )
                 )
 
@@ -237,6 +246,7 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
                         target=a_relay.host,
                         detail=f"remove relay {a_relay.name or a_relay.host}",
                         destructive=True,
+                        from_extras=True,
                     )
                 )
 
@@ -261,6 +271,7 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
                     target=client,
                     detail=f"delete client {client}",
                     destructive=True,
+                    from_extras=True,
                 )
             )
 
