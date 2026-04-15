@@ -706,44 +706,61 @@ else
   fail_test "subscription page container not running after re-enable apply"
 fi
 
-# Verify nginx route serves a response. The subscription-page container
-# needs a few seconds after re-deploy before it accepts upstream connections;
-# nginx returns 502 in that window. Poll up to ~30s, accept any non-5xx
-# response (200/30x/404 all mean nginx → app is wired up correctly).
+# Verify nginx route serves a response.
+#
+# The Remnawave subscription-page app (v7.1.8) routes by user short UUID
+# and does NOT serve the root path — hitting `/` on the upstream leaves
+# the app waiting for a client identifier and the connection eventually
+# hangs. An earlier iteration of this test probed `/` and saw 502s not
+# because the app was broken but because the request never got a status
+# back. Probe a real per-user path instead: `/<sub_path>/<short_uuid>`.
 SUB_PATH=$(python3 -c "
 from meridian.cluster import ClusterConfig
 c = ClusterConfig.load()
 print(c.subscription_page.path if c.subscription_page else '')
 ")
-if [ -n "$SUB_PATH" ]; then
+DEFAULT_SHORT_UUID=$(python3 << 'PYEOF'
+from meridian.cluster import ClusterConfig
+from meridian.remnawave import MeridianPanel
+
+cluster = ClusterConfig.load()
+with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
+    user = panel.get_user("default")
+    print(user.short_uuid if user else "")
+PYEOF
+)
+if [ -n "$SUB_PATH" ] && [ -n "$DEFAULT_SHORT_UUID" ]; then
+  PROBE_URL="https://$EXIT_IP/$SUB_PATH/$DEFAULT_SHORT_UUID"
   HTTP_CODE="000"
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-    HTTP_CODE=$(curl -k -o /dev/null -s -w '%{http_code}' "https://$EXIT_IP/$SUB_PATH/" 2>/dev/null || echo "000")
+    HTTP_CODE=$(curl -k -o /dev/null -s -w '%{http_code}' "$PROBE_URL" 2>/dev/null || echo "000")
     case "$HTTP_CODE" in
-      2*|3*|404) break ;;
+      2*|3*) break ;;
     esac
     sleep 2
   done
   case "$HTTP_CODE" in
-    2*|3*|404)
-      pass "subscription page nginx route returned HTTP $HTTP_CODE"
+    2*|3*)
+      pass "subscription page nginx route returned HTTP $HTTP_CODE for /$SUB_PATH/<short_uuid>"
       ;;
     *)
       # Diagnostics: inspect the container directly so any future debugging
       # has the raw evidence instead of just the 502.
+      echo "    DIAG: probed $PROBE_URL"
       echo "    DIAG: docker ps --filter name=remnawave-subscription-page:"
       ssh root@"$EXIT_IP" "docker ps --filter name=remnawave-subscription-page --format '{{.Status}} | {{.Ports}}'" 2>/dev/null | sed 's/^/      /'
       echo "    DIAG: last 30 lines of subscription-page logs:"
       ssh root@"$EXIT_IP" "docker logs --tail 30 remnawave-subscription-page 2>&1" | sed 's/^/      /' || true
       echo "    DIAG: host-side listen on 3020:"
       ssh root@"$EXIT_IP" "ss -ltnp 2>/dev/null | grep :3020 || echo '      (nothing listening on 3020)'" | sed 's/^/      /'
-      echo "    DIAG: curl directly to 127.0.0.1:3020 on exit-node:"
-      ssh root@"$EXIT_IP" "curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3020/ 2>&1" | sed 's/^/      /' || true
-      fail_test "subscription page nginx route returned HTTP $HTTP_CODE after polling (expected 2xx/3xx/404)"
+      echo "    DIAG: curl directly to 127.0.0.1:3020/$DEFAULT_SHORT_UUID on exit-node:"
+      ssh root@"$EXIT_IP" "curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3020/$DEFAULT_SHORT_UUID 2>&1" | sed 's/^/      /' || true
+      fail_test "subscription page nginx route returned HTTP $HTTP_CODE after polling (expected 2xx/3xx)"
       ;;
   esac
 else
-  fail_test "subscription page path not persisted after apply"
+  [ -z "$SUB_PATH" ] && fail_test "subscription page path not persisted after apply"
+  [ -z "$DEFAULT_SHORT_UUID" ] && fail_test "could not resolve default user short_uuid"
 fi
 
 # ── Stage 10: Hardening verification ────────────────────
