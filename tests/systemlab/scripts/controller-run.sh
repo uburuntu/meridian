@@ -500,7 +500,8 @@ echo "════════════════════════�
 echo "  Stage 9: Declarative plan/apply"
 echo "═══════════════════════════════════════"
 
-# Write a declarative cluster.yml v2 with desired state
+# Write a declarative cluster.yml v2 with desired state that matches
+# the current panel state from Stage 4 (only the bootstrap default client).
 echo ">>> Writing desired state to cluster.yml..."
 CLUSTER_FILE="$MERIDIAN_HOME/cluster.yml"
 # Read existing cluster.yml and append desired state
@@ -508,17 +509,17 @@ python3 -c "
 import yaml, sys
 with open('$CLUSTER_FILE') as f:
     data = yaml.safe_load(f)
-# Add desired_clients (should already exist from Stage 4)
-data['desired_clients'] = ['bob']  # bob was kept in Stage 4
+# Keep the bootstrap default client; alice and bob were removed in Stage 4.
+data['desired_clients'] = ['default']
 data['version'] = 2
 with open('$CLUSTER_FILE', 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-print('    desired_clients: [bob]')
+print('    desired_clients: [default]')
 "
 
 echo ">>> Running meridian plan..."
 if meridian plan 2>&1; then
-  pass "plan reports converged (bob exists, desired_clients matches)"
+  pass "plan reports converged (default exists, desired_clients matches)"
 else
   EXIT_CODE=$?
   if [ "$EXIT_CODE" -eq 2 ]; then
@@ -534,7 +535,7 @@ python3 -c "
 import yaml
 with open('$CLUSTER_FILE') as f:
     data = yaml.safe_load(f)
-data['desired_clients'] = ['bob', 'charlie']
+data['desired_clients'] = ['default', 'charlie']
 with open('$CLUSTER_FILE', 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 "
@@ -545,9 +546,15 @@ else
   fail_test "apply failed to add client charlie"
 fi
 
-# Verify charlie exists in panel
-if meridian client show charlie 2>&1 | grep -q "charlie"; then
-  pass "charlie visible in panel after apply"
+# Verify charlie exists via client list (JSON)
+if meridian --json client list 2>/dev/null | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+clients = data if isinstance(data, list) else data.get('clients', [])
+names = [c.get('username', '') for c in clients]
+assert 'charlie' in names, f'charlie not in {names}'
+" 2>/dev/null; then
+  pass "charlie visible in client list after apply"
 else
   fail_test "charlie not found after apply"
 fi
@@ -568,7 +575,7 @@ python3 -c "
 import yaml
 with open('$CLUSTER_FILE') as f:
     data = yaml.safe_load(f)
-data['desired_clients'] = ['bob']
+data['desired_clients'] = ['default']
 with open('$CLUSTER_FILE', 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 "

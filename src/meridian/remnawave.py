@@ -21,7 +21,6 @@ from uuid import UUID
 from remnawave import RemnawaveSDK
 from remnawave.exceptions import ApiError, ForbiddenError, NetworkError, NotFoundError, UnauthorizedError
 from remnawave.models.config_profiles import CreateConfigProfileRequestDto
-from remnawave.models.hosts import CreateHostInboundData, CreateHostRequestDto
 from remnawave.models.internal_squads import UpdateInternalSquadRequestDto
 from remnawave.models.nodes import CreateNodeRequestDto, NodeConfigProfileRequestDto
 from remnawave.models.users import CreateUserRequestDto
@@ -236,8 +235,20 @@ def _sdk_to_dict(obj: Any) -> Any:
 
 
 def _run(coro: Any) -> Any:
-    """Run an async coroutine synchronously."""
-    return asyncio.run(coro)
+    """Run an async coroutine synchronously.
+
+    Uses a persistent event loop stored on the current thread to avoid
+    closing SDK's httpx.AsyncClient between calls (which causes
+    "Event loop is closed" errors on subsequent SDK operations).
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            raise RuntimeError("loop is closed")
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(coro)
 
 
 # ---------------------------------------------------------------------------
@@ -295,8 +306,9 @@ class MeridianPanel:
         self._timeout = timeout
         self._max_retries = max_retries
 
-        # SDK client for supported endpoints
-        self._sdk = RemnawaveSDK(base_url=self._base, token=api_token)
+        # SDK client for supported endpoints — ssl_ignore for self-signed certs
+        # (panel is reverse-proxied by nginx with a self-signed cert in IP mode)
+        self._sdk = RemnawaveSDK(base_url=self._base, token=api_token, ssl_ignore=True)
 
         # Raw httpx client for endpoints the SDK doesn't cover
         self._client = httpx.Client(
@@ -451,9 +463,20 @@ class MeridianPanel:
 
     def list_users(self) -> list[User]:
         """List all users."""
-        resp = _sdk_call(self._sdk.users.get_all_users(start=0, size=10000))
-        users_list = getattr(resp, "users", []) or []
-        return [_user_from_sdk(u) for u in users_list]
+        # Panel limits max size per page; paginate if needed
+        all_users: list[User] = []
+        start = 0
+        page_size = 1000
+        while True:
+            resp = _sdk_call(self._sdk.users.get_all_users(start=start, size=page_size))
+            users_list = getattr(resp, "users", []) or []
+            if not users_list:
+                break
+            all_users.extend(_user_from_sdk(u) for u in users_list)
+            if len(users_list) < page_size:
+                break
+            start += page_size
+        return all_users
 
     def delete_user(self, uuid: str) -> bool:
         """Delete a user by UUID. Returns False only if not found."""
@@ -583,26 +606,35 @@ class MeridianPanel:
     ) -> Host:
         """Create a host entry (direct address or relay).
 
-        SDK v2 supports the nested inbound payload directly.
+        Uses raw httpx: SDK's CreateHostRequestDto enforces a strict enum
+        for security_layer (DEFAULT/TLS/NONE), but Meridian uses "REALITY"
+        for relay hosts which is accepted by the panel API directly.
         """
-        body = CreateHostRequestDto(
-            remark=remark,
-            address=address,
-            port=port,
-            inbound=CreateHostInboundData(
-                config_profile_uuid=config_profile_uuid,
-                config_profile_inbound_uuid=inbound_uuid,
-            ),
-            sni=sni or None,
-            host=host_header or None,
-            path=path or None,
-            alpn=alpn,
-            fingerprint=fingerprint,
-            security_layer=security_layer,
-            is_disabled=is_disabled,
-        )
-        resp = _sdk_call(self._sdk.hosts.create_host(body))
-        return _host_from_sdk(resp)
+        body: dict[str, Any] = {
+            "remark": remark,
+            "address": address,
+            "port": port,
+            "inbound": {
+                "configProfileUuid": config_profile_uuid,
+                "configProfileInboundUuid": inbound_uuid,
+            },
+        }
+        if sni:
+            body["sni"] = sni
+        if host_header:
+            body["host"] = host_header
+        if path:
+            body["path"] = path
+        if alpn is not None:
+            body["alpn"] = alpn
+        if fingerprint is not None:
+            body["fingerprint"] = fingerprint
+        if security_layer != "DEFAULT":
+            body["securityLayer"] = security_layer
+        if is_disabled:
+            body["isDisabled"] = True
+        data = self._post("/api/hosts", json=body)
+        return _parse_host(data)
 
     def list_hosts(self) -> list[Host]:
         """List all host entries."""
@@ -672,14 +704,23 @@ class MeridianPanel:
     def list_internal_squads(self) -> list[dict[str, Any]]:
         """List internal squads. Returns raw dicts with uuid, name, info."""
         resp = _sdk_call(self._sdk.internal_squads.get_internal_squads())
-        return [_sdk_to_dict(squad) for squad in getattr(resp, "internalSquads", []) or []]
+        # SDK uses snake_case: internal_squads (older panels returned internalSquads)
+        squads = getattr(resp, "internal_squads", None) or getattr(resp, "internalSquads", None) or []
+        return [_sdk_to_dict(squad) for squad in squads]
 
     def get_default_squad_uuid(self) -> str:
-        """Get the UUID of the Default-Squad. Returns empty string if not found."""
+        """Get the UUID of the Default-Squad, or the first squad if none named that.
+
+        Panel v2.7+ may not auto-create "Default-Squad" — fall back to any
+        existing squad so users get access to inbounds.
+        """
         squads = self.list_internal_squads()
         for s in squads:
             if isinstance(s, dict) and s.get("name") == "Default-Squad":
-                return s.get("uuid", "")
+                return str(s.get("uuid", ""))
+        # Fallback: first available squad
+        if squads and isinstance(squads[0], dict):
+            return str(squads[0].get("uuid", ""))
         return ""
 
     def assign_inbounds_to_squad(self, squad_uuid: str, inbound_uuids: list[str]) -> None:
