@@ -90,7 +90,9 @@ def main_callback(
 
 
 @app.command("plan")
-def plan_cmd() -> None:
+def plan_cmd(
+    json_output: bool = typer.Option(False, "--json", help="Emit the plan as JSON for CI consumption"),
+) -> None:
     """Show what would change — compare desired state with actual.
 
     Reads desired_nodes, desired_clients, and desired_relays from cluster.yml
@@ -102,7 +104,7 @@ def plan_cmd() -> None:
     """
     from meridian.commands.plan import run
 
-    run()
+    run(json_output=json_output)
 
 
 @app.command("apply")
