@@ -675,3 +675,47 @@ class TestWaitForPanelApi:
             timeout=10,
             verify=False,
         )
+
+
+# ---------------------------------------------------------------------------
+# Node compose rendering
+# ---------------------------------------------------------------------------
+
+
+class TestRenderNodeCompose:
+    """Regression tests for the generated node docker-compose.yml content.
+
+    The fields tested here are mandated by upstream Remnawave (panel 2.6.2+,
+    2.7.0+). Losing them would silently disable panel features without any
+    CLI-visible error.
+    """
+
+    def test_contains_net_admin_capability(self) -> None:
+        """cap_add: NET_ADMIN is MANDATORY per upstream Remnawave panel 2.6.2+
+        docs. It enables the node plugin system (Torrent Blocker, Ingress /
+        Egress Filter, Connection Drop) and the IP Control panel feature — all
+        of which push nftables rules into the host network namespace. Without
+        NET_ADMIN those syscalls fail with EPERM and the panel UI silently
+        reports nothing.
+        """
+        from meridian.provision.remnawave_node import _render_node_compose
+
+        content = _render_node_compose(image="remnawave/node:2.7.0", node_api_port=3010)
+
+        assert "cap_add:" in content, "cap_add key missing — node will not accept elevated capabilities"
+        assert "NET_ADMIN" in content, "NET_ADMIN capability missing — panel plugins + IP Control will silently fail"
+
+    def test_preserves_host_networking(self) -> None:
+        """`network_mode: host` is required so Xray can bind to arbitrary
+        ports on the server (Reality, XHTTP, WSS). Losing it regresses core
+        proxying."""
+        from meridian.provision.remnawave_node import _render_node_compose
+
+        content = _render_node_compose(image="remnawave/node:2.7.0", node_api_port=3010)
+        assert "network_mode: host" in content
+
+    def test_interpolates_image_tag(self) -> None:
+        from meridian.provision.remnawave_node import _render_node_compose
+
+        content = _render_node_compose(image="remnawave/node:2.7.0", node_api_port=3010)
+        assert "image: remnawave/node:2.7.0" in content
