@@ -22,6 +22,8 @@ CLI_REFERENCE = ROOT / "website" / "src" / "content" / "docs" / "en" / "cli-refe
 # Subcommands share a parent section (e.g. "client add" → "### meridian client").
 COMMANDS: dict[str, str] = {
     "deploy": "### meridian deploy",
+    "plan": "### meridian plan",
+    "apply": "### meridian apply",
     "preflight": "### meridian preflight",
     "scan": "### meridian scan",
     "test": "### meridian test",
