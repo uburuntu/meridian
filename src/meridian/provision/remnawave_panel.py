@@ -56,7 +56,7 @@ services:
   remnawave:
     image: {image}
     container_name: {_PANEL_CONTAINER}
-    restart: unless-stopped
+    restart: always
     depends_on:
       remnawave-db:
         condition: service_healthy
@@ -84,13 +84,13 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "100m"
+        max-file: "5"
 
   remnawave-db:
     image: postgres:17-alpine
     container_name: {_DB_CONTAINER}
-    restart: unless-stopped
+    restart: always
     networks:
       - remnawave-net
     volumes:
@@ -105,13 +105,13 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "100m"
+        max-file: "5"
 
   remnawave-redis:
     image: valkey/valkey:9-alpine
     container_name: {_REDIS_CONTAINER}
-    restart: unless-stopped
+    restart: always
     networks:
       - remnawave-net
     volumes:
@@ -133,13 +133,13 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "100m"
+        max-file: "5"
 
   remnawave-subscription-page:
     image: {subscription_page_image}
     container_name: {_SUBSCRIPTION_PAGE_CONTAINER}
-    restart: unless-stopped
+    restart: always
     depends_on:
       remnawave:
         condition: service_healthy
@@ -152,8 +152,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "100m"
+        max-file: "5"
 
 networks:
   remnawave-net:

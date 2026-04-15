@@ -31,7 +31,7 @@ services:
   remnawave-node:
     image: {image}
     container_name: {_NODE_CONTAINER}
-    restart: unless-stopped
+    restart: always
     # NET_ADMIN is MANDATORY per upstream docs (panel 2.6.2+, 2.7.0+). It
     # enables the node plugin system (Torrent Blocker, Ingress/Egress Filter,
     # Connection Drop) and the IP Control panel feature — all of which push
@@ -52,8 +52,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "100m"
+        max-file: "5"
 """
 
 
