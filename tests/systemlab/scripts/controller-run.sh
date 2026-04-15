@@ -603,7 +603,10 @@ with open('$CLUSTER_FILE', 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 "
 
-if meridian apply --yes 2>&1; then
+# Charlie is "extras" from the diff's perspective (present on the panel,
+# missing from desired_clients). `--yes` alone defaults to skip-extras for
+# safety; explicit `--prune-extras=yes` opts in to the removal.
+if meridian apply --yes --prune-extras=yes 2>&1; then
   pass "apply removed client charlie"
 else
   fail_test "apply failed to remove client charlie"
@@ -620,6 +623,49 @@ assert 'charlie' not in names, f'charlie still in panel: {names}'
   pass "charlie actually absent from panel after remove apply"
 else
   fail_test "charlie still present after apply removed it (cluster.yml says removed but panel disagrees)"
+fi
+
+# Drift safety: `meridian apply --yes` (no explicit --prune-extras) must NOT
+# silently remove extras. Add a panel-only client and verify --yes alone
+# leaves it alone, while --prune-extras=yes removes it.
+echo ">>> Drift safety: --yes without --prune-extras must skip extras..."
+python3 << 'PYEOF'
+from meridian.cluster import ClusterConfig
+from meridian.remnawave import MeridianPanel
+
+cluster = ClusterConfig.load()
+with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
+    squad_uuids = [cluster.squad_uuid] if cluster.squad_uuid else None
+    panel.create_user("ghost-extras", squad_uuids=squad_uuids)
+    print("    panel-side create of ghost-extras OK")
+PYEOF
+
+# `--yes` alone: safety default, should NOT remove ghost-extras.
+meridian apply --yes 2>&1 >/dev/null
+if meridian --json client list 2>/dev/null | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+clients = data if isinstance(data, list) else data.get('clients', [])
+names = [c.get('username', '') for c in clients]
+assert 'ghost-extras' in names, f'ghost-extras gone after --yes alone — safety default broken'
+" 2>/dev/null; then
+  pass "apply --yes alone preserved ghost-extras (safety default)"
+else
+  fail_test "apply --yes alone removed ghost-extras — safety default broken (--prune-extras must default to no under --yes)"
+fi
+
+# `--prune-extras=yes`: explicit opt-in, should remove ghost-extras.
+meridian apply --yes --prune-extras=yes 2>&1 >/dev/null
+if meridian --json client list 2>/dev/null | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+clients = data if isinstance(data, list) else data.get('clients', [])
+names = [c.get('username', '') for c in clients]
+assert 'ghost-extras' not in names, f'ghost-extras still in panel after --prune-extras=yes: {names}'
+" 2>/dev/null; then
+  pass "apply --yes --prune-extras=yes removed ghost-extras (explicit opt-in)"
+else
+  fail_test "apply --yes --prune-extras=yes did not remove ghost-extras"
 fi
 
 # Hybrid sync: imperative `client add` should also append to desired_clients
