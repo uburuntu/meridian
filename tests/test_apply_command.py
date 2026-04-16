@@ -258,9 +258,7 @@ class TestApplyRunFailureSafety:
         cluster = self._build_cluster_with_desired_clients()
         add_action = PlanAction(kind=PlanActionKind.ADD_CLIENT, target="alice")
         plan = Plan(actions=[add_action])
-        exec_result = ExecutionResult(
-            results=[ActionResult(action=add_action, success=True)]
-        )
+        exec_result = ExecutionResult(results=[ActionResult(action=add_action, success=True)])
 
         with (
             patch.object(ClusterConfig, "load", return_value=cluster),
