@@ -366,6 +366,48 @@ class TestClusterYAMLRoundTrip:
         loaded = ClusterConfig.load(p)
         assert loaded.desired_nodes[0].warp is True
 
+    def test_desired_clients_null_yaml_loads_as_none(self, tmp_path: Path) -> None:
+        """Explicit `desired_clients: null` in YAML must load as None (unmanaged),
+        not as [] (managed-empty). Documented in cluster.example.yml."""
+        p = tmp_path / "cluster.yml"
+        p.write_text("version: 2\ndesired_clients: null\n")
+        loaded = ClusterConfig.load(p)
+        assert loaded.desired_clients is None
+
+    def test_desired_nodes_null_yaml_loads_as_none(self, tmp_path: Path) -> None:
+        p = tmp_path / "cluster.yml"
+        p.write_text("version: 2\ndesired_nodes: null\n")
+        loaded = ClusterConfig.load(p)
+        assert loaded.desired_nodes is None
+
+    def test_desired_relays_null_yaml_loads_as_none(self, tmp_path: Path) -> None:
+        p = tmp_path / "cluster.yml"
+        p.write_text("version: 2\ndesired_relays: null\n")
+        loaded = ClusterConfig.load(p)
+        assert loaded.desired_relays is None
+
+    def test_subscription_page_null_yaml_loads_as_none(self, tmp_path: Path) -> None:
+        """`subscription_page: null` must mean "unmanaged" — NOT the default
+        enabled=True config. Otherwise apply would silently deploy the page."""
+        p = tmp_path / "cluster.yml"
+        p.write_text("version: 2\nsubscription_page: null\n")
+        loaded = ClusterConfig.load(p)
+        assert loaded.subscription_page is None
+
+    def test_desired_clients_wrong_type_rejected(self, tmp_path: Path) -> None:
+        """A string or dict in place of a list must raise, not silently
+        collapse into set('a','l','i','c','e') downstream."""
+        p = tmp_path / "cluster.yml"
+        p.write_text("version: 2\ndesired_clients: alice\n")
+        with pytest.raises(ValueError, match="desired_clients must be a list"):
+            ClusterConfig.load(p)
+
+    def test_desired_nodes_wrong_type_rejected(self, tmp_path: Path) -> None:
+        p = tmp_path / "cluster.yml"
+        p.write_text("version: 2\ndesired_nodes: {host: x}\n")
+        with pytest.raises(ValueError, match="desired_nodes must be a list"):
+            ClusterConfig.load(p)
+
     def test_save_uses_lock_for_concurrency(self, tmp_path: Path) -> None:
         """Concurrent saves from the executor must serialize so the file is
         never partially written. Verifies the lock attribute is wired up."""

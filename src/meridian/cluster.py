@@ -22,6 +22,15 @@ import yaml
 logger = logging.getLogger("meridian.cluster")
 
 
+class ClusterConfigExternallyModifiedError(RuntimeError):
+    """cluster.yml was modified on disk between load() and save().
+
+    Raised so callers don't silently clobber the user's (or another
+    process's) writes. Most callers should surface the error and ask
+    the user to retry after reloading.
+    """
+
+
 # StrEnum backport for Python 3.10 (stdlib StrEnum is 3.11+)
 class StrEnum(str, Enum):
     """String enum compatible with Python 3.10+."""
@@ -192,6 +201,9 @@ class ClusterConfig:
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
     _readonly: bool = field(default=False, repr=False)
     _lock: Any = field(default=None, repr=False)  # threading.RLock for parallel save safety
+    # mtime_ns of cluster.yml at load time — used to detect external edits
+    # during a long-running apply (save() refuses to clobber if file changed).
+    _loaded_mtime_ns: int | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         import threading
@@ -213,6 +225,7 @@ class ClusterConfig:
         logger.debug("Loading cluster config from %s", path)
         if not path.exists():
             return cls()
+        load_mtime_ns = path.stat().st_mtime_ns
         raw = path.read_text()
         if not raw.strip():
             return cls()
@@ -234,6 +247,7 @@ class ClusterConfig:
 
         data = migrate(data)
         cfg = _load_cluster(data)
+        cfg._loaded_mtime_ns = load_mtime_ns
 
         # Mark future-version configs as read-only to prevent data loss
         if isinstance(version, int) and version > 2:
@@ -278,6 +292,20 @@ class ClusterConfig:
                 f"Cluster config has {len(errors)} validation error(s):\n" + "\n".join(f"  - {e}" for e in errors[:5])
             )
 
+        # Guard against clobbering external edits made during a long apply.
+        # If the file on disk has a newer mtime than when we loaded it,
+        # someone (user, another CLI, config management) wrote to it. Bail
+        # instead of silently overwriting their changes. Callers can retry
+        # by reloading the config.
+        if self._loaded_mtime_ns is not None and path.exists():
+            current_mtime_ns = path.stat().st_mtime_ns
+            if current_mtime_ns > self._loaded_mtime_ns:
+                raise ClusterConfigExternallyModifiedError(
+                    f"Refusing to save {path}: file was modified externally since we "
+                    f"loaded it (loaded={self._loaded_mtime_ns}, now={current_mtime_ns}). "
+                    "Reload cluster.yml and retry."
+                )
+
         out = _serialize_cluster(self)
 
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -295,6 +323,12 @@ class ClusterConfig:
             fd = -1
             os.chmod(tmp, 0o600)
             os.rename(tmp, str(path))
+            # Track our own write so subsequent save() calls don't trip the
+            # external-edit guard on their own previous save.
+            try:
+                self._loaded_mtime_ns = path.stat().st_mtime_ns
+            except OSError:
+                pass
         except OSError as e:
             if fd >= 0:
                 os.close(fd)
@@ -331,6 +365,7 @@ class ClusterConfig:
 
         # Node validations
         node_ips: list[str] = []
+        node_names: list[str] = []
         for i, node in enumerate(self.nodes):
             label = f"nodes[{i}]"
             if node.ip:
@@ -339,6 +374,13 @@ class ClusterConfig:
                 if node.ip in node_ips:
                     errors.append(f"{label}.ip is a duplicate: {node.ip}")
                 node_ips.append(node.ip)
+            if node.name:
+                # Duplicate node names silently misroute relay exit_node lookups —
+                # compute_plan uses a last-wins name→IP map while cluster.find_node
+                # returns first match. Disallow at validation time.
+                if node.name in node_names:
+                    errors.append(f"{label}.name is a duplicate: {node.name}")
+                node_names.append(node.name)
             if node.uuid and not _is_valid_uuid(node.uuid):
                 errors.append(f"{label}.uuid is not a valid UUID: {node.uuid}")
             if not _is_valid_port(node.ssh_port):
@@ -381,14 +423,19 @@ class ClusterConfig:
             if hasattr(ref, "uuid") and ref.uuid and not _is_valid_uuid(ref.uuid):
                 errors.append(f"inbounds[{key}].uuid is not a valid UUID: {ref.uuid}")
 
-        # Desired state: duplicate host detection
+        # Desired state: duplicate host AND name detection
         if self.desired_nodes is not None:
             desired_node_hosts: list[str] = []
+            desired_node_names: list[str] = []
             for i, dn in enumerate(self.desired_nodes):
                 if dn.host:
                     if dn.host in desired_node_hosts:
                         errors.append(f"desired_nodes[{i}].host is a duplicate: {dn.host}")
                     desired_node_hosts.append(dn.host)
+                if dn.name:
+                    if dn.name in desired_node_names:
+                        errors.append(f"desired_nodes[{i}].name is a duplicate: {dn.name}")
+                    desired_node_names.append(dn.name)
 
         if self.desired_relays is not None:
             desired_relay_hosts: list[str] = []
@@ -799,23 +846,30 @@ def _load_cluster(data: dict[str, Any]) -> ClusterConfig:
     for key, ref_data in data.get("inbounds", {}).items():
         inbounds[key] = _load_dataclass(ref_data, InboundRef, _INBOUND_REF_FIELDS)
 
-    # Subscription page (v2 — None if absent, like desired_*)
+    # Subscription page (v2) — tri-state:
+    #   key absent OR explicit `null` → None (unmanaged, do nothing)
+    #   mapping (even `{}`) → load as managed config
     subscription_page: SubscriptionPageConfig | None = None
-    if "subscription_page" in data:
+    if data.get("subscription_page") is not None:
         subscription_page = _load_dataclass(
-            data.get("subscription_page") or {},
+            data.get("subscription_page"),
             SubscriptionPageConfig,
             _SUBSCRIPTION_PAGE_FIELDS,
             defaults={"enabled": True},
             transforms={"enabled": bool},
         )
 
-    # Desired state (v2)
-    # None = key absent (not managed). [] = key present but empty (manage, want zero).
+    # Desired state (v2) — tri-state semantics per cluster.example.yml:
+    #   key absent OR explicit `null` → None (unmanaged)
+    #   `[]` → managed, want zero
+    #   `[...]` → managed, want these
     desired_nodes: list[DesiredNode] | None = None
-    if "desired_nodes" in data:
+    _desired_nodes_raw = data.get("desired_nodes")
+    if _desired_nodes_raw is not None:
+        if not isinstance(_desired_nodes_raw, list):
+            raise ValueError(f"desired_nodes must be a list or null, got {type(_desired_nodes_raw).__name__}")
         desired_nodes = []
-        for dn in data.get("desired_nodes") or []:
+        for dn in _desired_nodes_raw:
             desired_nodes.append(
                 _load_dataclass(
                     dn,
@@ -826,13 +880,19 @@ def _load_cluster(data: dict[str, Any]) -> ClusterConfig:
             )
 
     desired_clients: list[str] | None = None
-    if "desired_clients" in data:
-        desired_clients = list(data.get("desired_clients") or [])
+    _desired_clients_raw = data.get("desired_clients")
+    if _desired_clients_raw is not None:
+        if not isinstance(_desired_clients_raw, list):
+            raise ValueError(f"desired_clients must be a list or null, got {type(_desired_clients_raw).__name__}")
+        desired_clients = [str(c) for c in _desired_clients_raw]
 
     desired_relays: list[DesiredRelay] | None = None
-    if "desired_relays" in data:
+    _desired_relays_raw = data.get("desired_relays")
+    if _desired_relays_raw is not None:
+        if not isinstance(_desired_relays_raw, list):
+            raise ValueError(f"desired_relays must be a list or null, got {type(_desired_relays_raw).__name__}")
         desired_relays = []
-        for dr in data.get("desired_relays") or []:
+        for dr in _desired_relays_raw:
             desired_relays.append(
                 _load_dataclass(
                     dr,
