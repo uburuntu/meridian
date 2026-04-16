@@ -543,10 +543,18 @@ def run(
 
             result = execute_plan(plan, panel=panel, cluster=cluster, callbacks=callbacks, max_parallel=parallel)
 
-            # Snapshot desired state for next plan's from_extras classification
-            cluster._extra["desired_clients_applied"] = list(cluster.desired_clients or [])
-            cluster._extra["desired_nodes_applied"] = [n.host for n in (cluster.desired_nodes or [])]
-            cluster._extra["desired_relays_applied"] = [r.host for r in (cluster.desired_relays or [])]
+            # Snapshot desired state for next plan's from_extras classification.
+            # Only snapshot when ALL actions succeeded — partial failures should
+            # leave the old snapshot so the next apply retries correctly. And
+            # only snapshot categories that are actively managed (not None) to
+            # avoid erasing history when a category is temporarily unmanaged.
+            if result.all_succeeded:
+                if cluster.desired_clients is not None:
+                    cluster._extra["desired_clients_applied"] = list(cluster.desired_clients)
+                if cluster.desired_nodes is not None:
+                    cluster._extra["desired_nodes_applied"] = [n.host for n in cluster.desired_nodes]
+                if cluster.desired_relays is not None:
+                    cluster._extra["desired_relays_applied"] = [r.host for r in cluster.desired_relays]
 
             cluster.save()
 
