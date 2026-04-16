@@ -470,7 +470,17 @@ def run(
         with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
             desired = build_desired_state(cluster)
             actual = build_actual_state(cluster, panel, panel_conn=panel_conn)
-            plan = compute_plan(desired, actual)
+
+            applied_clients = set(cluster._extra.get("desired_clients_applied", []))
+            applied_node_hosts = set(cluster._extra.get("desired_nodes_applied", []))
+            applied_relay_hosts = set(cluster._extra.get("desired_relays_applied", []))
+            plan = compute_plan(
+                desired,
+                actual,
+                applied_clients=applied_clients or None,
+                applied_node_hosts=applied_node_hosts or None,
+                applied_relay_hosts=applied_relay_hosts or None,
+            )
 
             if plan.is_empty:
                 ok("No changes needed — infrastructure is up to date.")
@@ -532,6 +542,11 @@ def run(
             }
 
             result = execute_plan(plan, panel=panel, cluster=cluster, callbacks=callbacks, max_parallel=parallel)
+
+            # Snapshot desired state for next plan's from_extras classification
+            cluster._extra["desired_clients_applied"] = list(cluster.desired_clients or [])
+            cluster._extra["desired_nodes_applied"] = [n.host for n in (cluster.desired_nodes or [])]
+            cluster._extra["desired_relays_applied"] = [r.host for r in (cluster.desired_relays or [])]
 
             cluster.save()
 

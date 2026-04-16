@@ -253,6 +253,32 @@ class TestApplyRunFailureSafety:
                 apply_run(yes=True, parallel=1)
             assert exc_info.value.exit_code != 0
 
+    def test_apply_snapshots_desired_state_to_extra(self) -> None:
+        """After successful apply, desired_clients is snapshotted into _extra."""
+        cluster = self._build_cluster_with_desired_clients()
+        add_action = PlanAction(kind=PlanActionKind.ADD_CLIENT, target="alice")
+        plan = Plan(actions=[add_action])
+        exec_result = ExecutionResult(
+            results=[ActionResult(action=add_action, success=True)]
+        )
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.execute_plan", return_value=exec_result),
+            patch("meridian.commands.apply.print_plan"),
+            patch.object(ClusterConfig, "save"),
+        ):
+            apply_run(yes=True, parallel=1, prune_extras="yes")
+
+        # Snapshot must be in _extra after apply
+        assert "desired_clients_applied" in cluster._extra
+        assert cluster._extra["desired_clients_applied"] == ["alice", "bob"]
+
 
 class TestPruneExtras:
     """`--prune-extras={ask,yes,no}` controls how REMOVE_* actions tagged
