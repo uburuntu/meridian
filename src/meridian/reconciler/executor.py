@@ -119,6 +119,13 @@ def execute_plan(
     # underlying httpx.AsyncClient and the per-thread event loop (see
     # threading.local in remnawave.py::_run) are isolated. ClusterConfig
     # mutations are serialized by its RLock (saves are atomic).
+    #
+    # Only ADD_NODE is listed today. UPDATE_NODE could in principle run in
+    # parallel across different hosts, but its handler mutates NodeEntry
+    # attributes in-place BEFORE `_setup_redeploy` runs (so the redeploy
+    # reads the new values) — a concurrent `cluster.save()` from another
+    # worker would see the mutated-but-not-yet-reconciled state. Until
+    # that's refactored to save-on-success-only, UPDATE_NODE stays serial.
     parallel_kinds = {PlanActionKind.ADD_NODE}
 
     # Destructive kinds — skip if a prior phase had failures (dependency safety)

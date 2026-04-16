@@ -338,7 +338,7 @@ class DeployRemnawavePanel:
                 break
 
         if core_running:
-            env_read = conn.run(f"cat {panel_dir}/.env 2>/dev/null", timeout=15)
+            env_read = conn.run(f"cat {shlex.quote(panel_dir)}/.env 2>/dev/null", timeout=15)
             if env_read.returncode == 0:
                 _load_env_into_ctx(env_read.stdout, ctx)
 
@@ -385,7 +385,8 @@ class DeployRemnawavePanel:
 
         # -- Create directory structure --
         for d in (panel_dir, f"{panel_dir}/data"):
-            result = conn.run(f"mkdir -p {d} && chmod 700 {d}", timeout=15)
+            qd = shlex.quote(d)
+            result = conn.run(f"mkdir -p {qd} && chmod 700 {qd}", timeout=15)
             if result.returncode != 0:
                 return StepResult(
                     name=self.name,

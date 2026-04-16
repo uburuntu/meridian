@@ -136,7 +136,8 @@ class DeployRemnawaveNode:
 
         # -- Create directory structure --
         for d in (node_dir, f"{node_dir}/logs"):
-            result = conn.run(f"mkdir -p {d} && chmod 700 {d}", timeout=15)
+            qd = shlex.quote(d)
+            result = conn.run(f"mkdir -p {qd} && chmod 700 {qd}", timeout=15)
             if result.returncode != 0:
                 return StepResult(
                     name=self.name,
