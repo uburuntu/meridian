@@ -14,17 +14,20 @@ FAIL=0
 pass()      { PASS=$((PASS+1)); echo "    ✓ $1"; }
 fail_test() { FAIL=$((FAIL+1)); echo "    ✗ FAIL: $1"; }
 
-# Smart wait: poll until xray is actually listening on port 443 (Reality).
-# Replaces blind `sleep N` — usually ready in 5-10s instead of 30-50s.
+# Smart wait: poll until the remnawave-node container has xray running and
+# the node API port (3010) is accepting connections. Port 443 is nginx
+# (always listening) — NOT the right signal. Port 3010 is the node→panel
+# mTLS API; it only binds after xray initializes Reality keys and inbounds.
 wait_for_xray() {
   local host="$1"
   local max_wait="${2:-45}"
   local elapsed=0
   echo -n "    waiting for xray on $host..."
   while [ "$elapsed" -lt "$max_wait" ]; do
-    # Check: node container running AND port 443 accepting connections.
-    # With network_mode: host the xray binary binds directly — ss sees it.
-    if ssh root@"$host" "ss -tlnp sport = :443 2>/dev/null | grep -q LISTEN" 2>/dev/null; then
+    # Two checks: (1) node container Up, (2) node API port 3010 listening.
+    # Both must pass — container can be Up before xray finishes init.
+    if ssh root@"$host" "docker ps --filter name=remnawave-node --format '{{.Status}}' | grep -q Up" 2>/dev/null && \
+       ssh root@"$host" "ss -tlnp sport = :3010 2>/dev/null | grep -q LISTEN" 2>/dev/null; then
       echo " ready (${elapsed}s)"
       return 0
     fi
