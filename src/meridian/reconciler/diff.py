@@ -147,7 +147,14 @@ def _relay_changes(
     return changes
 
 
-def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
+def compute_plan(
+    desired: DesiredState,
+    actual: ActualState,
+    *,
+    applied_clients: set[str] | None = None,
+    applied_node_hosts: set[str] | None = None,
+    applied_relay_hosts: set[str] | None = None,
+) -> Plan:
     """Compute the reconciliation plan.
 
     Compares desired state with actual state and returns typed actions
@@ -204,15 +211,14 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
                 # Never plan removal of the panel host — use teardown instead
                 if a_node.is_panel_host:
                     continue
+                was_in_applied = applied_node_hosts is not None and a_node.host in applied_node_hosts
                 actions.append(
                     PlanAction(
                         kind=PlanActionKind.REMOVE_NODE,
                         target=a_node.host,
                         detail=f"deregister node {a_node.name or a_node.host}",
                         destructive=True,
-                        # Drift: present on the panel but missing from desired_nodes.
-                        # `meridian apply --prune-extras=no` skips this; `=yes` runs it.
-                        from_extras=True,
+                        from_extras=not was_in_applied,
                     )
                 )
 
@@ -245,13 +251,14 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
 
         for a_relay in actual.relays:
             if a_relay.host not in desired_relay_hosts:
+                was_in_applied = applied_relay_hosts is not None and a_relay.host in applied_relay_hosts
                 actions.append(
                     PlanAction(
                         kind=PlanActionKind.REMOVE_RELAY,
                         target=a_relay.host,
                         detail=f"remove relay {a_relay.name or a_relay.host}",
                         destructive=True,
-                        from_extras=True,
+                        from_extras=not was_in_applied,
                     )
                 )
 
@@ -275,13 +282,14 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
             )
 
         for client in sorted(actual_clients - desired_clients_set):
+            was_in_applied = applied_clients is not None and client in applied_clients
             actions.append(
                 PlanAction(
                     kind=PlanActionKind.REMOVE_CLIENT,
                     target=client,
                     detail=f"delete client {client}",
                     destructive=True,
-                    from_extras=True,
+                    from_extras=not was_in_applied,
                 )
             )
 

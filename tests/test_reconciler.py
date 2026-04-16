@@ -10,7 +10,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from meridian.reconciler.diff import Plan, PlanAction, PlanActionKind, compute_plan
+from meridian.reconciler.diff import Plan, PlanAction, PlanActionKind, _node_changes, compute_plan
 from meridian.reconciler.display import print_plan
 from meridian.reconciler.executor import ActionResult, ExecutionResult, execute_plan
 from meridian.reconciler.state import (
@@ -105,6 +105,28 @@ class TestComputePlanNodes:
         plan = compute_plan(desired, actual)
         assert plan.is_empty
 
+    def test_warp_none_does_not_trigger_update(self) -> None:
+        """Regression: desired node omitting warp (None = 'keep current') must
+        NOT produce an UPDATE_NODE against a warp-enabled actual node. Before
+        the warp sentinel fix, the default was False which always diffed
+        against True and triggered a spurious full redeploy that silently
+        disabled WARP on every apply.
+        """
+        # _node_changes is the leaf that decides whether to emit UPDATE_NODE.
+        changes = _node_changes(
+            DesiredNodeState(host="198.51.100.1", sni="www.microsoft.com", warp=None),
+            ActualNodeState(host="198.51.100.1", sni="www.microsoft.com", warp=True),
+        )
+        assert changes == [], f"warp=None should not diff against warp=True; got {changes}"
+
+    def test_warp_false_does_trigger_update(self) -> None:
+        """Explicitly setting warp=False when actual is True IS a real change."""
+        changes = _node_changes(
+            DesiredNodeState(host="198.51.100.1", warp=False),
+            ActualNodeState(host="198.51.100.1", warp=True),
+        )
+        assert any("warp" in c for c in changes), f"warp=False → True should diff; got {changes}"
+
     def test_multiple_nodes_added(self) -> None:
         desired = DesiredState(
             nodes=[
@@ -143,6 +165,32 @@ class TestComputePlanClients:
         plan = compute_plan(desired, actual)
         targets = [a.target for a in plan.actions if a.kind == PlanActionKind.ADD_CLIENT]
         assert targets == ["alice", "charlie", "eve"]
+
+    def test_intentional_client_remove_not_tagged_extras(self) -> None:
+        """alice in applied_clients but NOT in current desired → intentional remove."""
+        desired = DesiredState(clients=["bob"], manage_clients=True)
+        actual = ActualState(clients=["alice", "bob"])
+        plan = compute_plan(desired, actual, applied_clients={"alice", "bob"})
+        remove = next(a for a in plan.actions if a.kind == PlanActionKind.REMOVE_CLIENT)
+        assert remove.target == "alice"
+        assert remove.from_extras is False
+
+    def test_drift_client_tagged_extras(self) -> None:
+        """ghost NOT in applied_clients and NOT in desired → drift."""
+        desired = DesiredState(clients=["bob"], manage_clients=True)
+        actual = ActualState(clients=["bob", "ghost"])
+        plan = compute_plan(desired, actual, applied_clients={"bob"})
+        remove = next(a for a in plan.actions if a.kind == PlanActionKind.REMOVE_CLIENT)
+        assert remove.target == "ghost"
+        assert remove.from_extras is True
+
+    def test_no_applied_state_all_removes_are_extras(self) -> None:
+        """First apply ever → all removes treated as extras for safety."""
+        desired = DesiredState(clients=["bob"], manage_clients=True)
+        actual = ActualState(clients=["bob", "ghost"])
+        plan = compute_plan(desired, actual)  # no applied_clients
+        remove = next(a for a in plan.actions if a.kind == PlanActionKind.REMOVE_CLIENT)
+        assert remove.from_extras is True
 
 
 class TestComputePlanRelays:
@@ -493,20 +541,24 @@ class TestExecutor:
             assert events[i].split(":")[1] == events[i + 1].split(":")[1]
 
     def test_parallel_add_node_actually_runs_concurrently(self) -> None:
-        """With max_parallel > 1, multiple ADD_NODE actions run concurrently.
+        """With max_parallel > 1, multiple ADD_NODE actions overlap.
 
-        The slow_handler sleeps 0.1s per action. Three actions running truly
-        in parallel finish in ~0.1s wall time, not ~0.3s. We assert total
-        wall time < 0.25s (generous margin for CI overhead).
+        Uses threading.Event to prove handlers run concurrently: each
+        handler sets its event and waits for ALL events — in serial
+        execution this deadlocks; in parallel all three proceed.
         """
-        import time
+        import threading
 
-        events: list[str] = []
+        events = {t: threading.Event() for t in ("a", "b", "c")}
+        order: list[str] = []
 
-        def slow_handler(action: PlanAction, panel: object, cluster: object) -> None:
-            events.append(f"start:{action.target}")
-            time.sleep(0.1)
-            events.append(f"end:{action.target}")
+        def concurrent_handler(action: PlanAction, panel: object, cluster: object) -> None:
+            events[action.target].set()
+            # Wait for all others to also start — proves concurrency.
+            # In serial mode this would hang forever (timeout=2s failsafe).
+            for ev in events.values():
+                ev.wait(timeout=2)
+            order.append(action.target)
 
         plan = Plan(
             actions=[
@@ -515,18 +567,15 @@ class TestExecutor:
                 PlanAction(kind=PlanActionKind.ADD_NODE, target="c"),
             ]
         )
-        t0 = time.monotonic()
-        execute_plan(
+        result = execute_plan(
             plan,
             panel=None,
             cluster=None,
-            callbacks={PlanActionKind.ADD_NODE: slow_handler},
+            callbacks={PlanActionKind.ADD_NODE: concurrent_handler},
             max_parallel=4,
         )
-        elapsed = time.monotonic() - t0
-        # 3 × 0.1s serial = 0.3s. Parallel = ~0.1s. Accept up to 0.25s.
-        assert elapsed < 0.25, f"Parallel execution took {elapsed:.2f}s — should be ~0.1s"
-        assert len(events) == 6  # 3 starts + 3 ends
+        assert result.all_succeeded
+        assert sorted(order) == ["a", "b", "c"]
 
     def test_remove_node_still_runs_last(self) -> None:
         """REMOVE_NODE must run after ADDs/UPDATEs to avoid orphaning relays
