@@ -14,6 +14,27 @@ FAIL=0
 pass()      { PASS=$((PASS+1)); echo "    ✓ $1"; }
 fail_test() { FAIL=$((FAIL+1)); echo "    ✗ FAIL: $1"; }
 
+# Smart wait: poll until xray is actually listening on port 443 (Reality).
+# Replaces blind `sleep N` — usually ready in 5-10s instead of 30-50s.
+wait_for_xray() {
+  local host="$1"
+  local max_wait="${2:-45}"
+  local elapsed=0
+  echo -n "    waiting for xray on $host..."
+  while [ "$elapsed" -lt "$max_wait" ]; do
+    # Check: node container running AND port 443 accepting connections.
+    # With network_mode: host the xray binary binds directly — ss sees it.
+    if ssh root@"$host" "ss -tlnp sport = :443 2>/dev/null | grep -q LISTEN" 2>/dev/null; then
+      echo " ready (${elapsed}s)"
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  echo " timeout (${max_wait}s)"
+  return 1
+}
+
 # ── Stage 1: SSH setup ───────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════"
@@ -126,9 +147,9 @@ else
   fail_test "cluster.yml not created after deploy"
 fi
 
-# Check fleet status (node connected — may need a moment to register)
+# Check fleet status (node connected — poll instead of blind sleep)
 echo ">>> Checking fleet status..."
-sleep 5  # Give node time to establish panel connection
+wait_for_xray "$EXIT_IP" 15 || true
 if meridian fleet status 2>&1 | grep -qi "connected"; then
   pass "node shows connected in fleet status"
 else
@@ -388,8 +409,7 @@ else
   export CLIENT_UUID
 
   echo ">>> Running Reality connection tests..."
-  # Give xray node a moment to fully initialize after deploy
-  sleep 5
+  wait_for_xray "$EXIT_IP" 30
   if python3 /workspace/tests/systemlab/scripts/test-connections.py; then
     pass "Reality connection tests passed"
   else
@@ -496,20 +516,9 @@ fi
 # Verify clients still work after redeploy
 if [ -n "$CLIENT_UUID" ]; then
   echo ">>> Re-testing connections after redeploy..."
-  # Xray node restarts during redeploy. The xray container needs time to
-  # initialize Reality keys, register inbounds, and start accepting TLS.
-  # 10s used to be enough but produced flaky 'connection reset' on direct
-  # Reality (relay-forwarded paths kept passing because they took longer
-  # before issuing the request, giving xray more head room). Wait long
-  # enough that the direct path has the same head room as the indirect.
-  sleep 30
-  # Wait for the xray service inside the node container to report active.
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if ssh root@"$EXIT_IP" "docker exec remnawave-node xray version >/dev/null 2>&1"; then
-      break
-    fi
-    sleep 2
-  done
+  # Xray node restarts during redeploy. Poll until it's actually listening
+  # on port 443 instead of blind-sleeping. Usually ready in ~10s.
+  wait_for_xray "$EXIT_IP" 45
   if python3 /workspace/tests/systemlab/scripts/test-connections.py; then
     pass "connections still work after redeploy"
   else
