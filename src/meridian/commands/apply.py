@@ -21,13 +21,15 @@ def _looks_like_ip(s: str) -> bool:
     """Cheap guard for the UPDATE_RELAY exit-node resolution path.
 
     Used only to distinguish "user wrote an IP literally" from "user wrote a
-    node name that doesn't exist in the cluster". Strict IP validation is not
-    required — we just need to know we should not refuse.
+    node name that doesn't exist in the cluster".
     """
-    parts = s.split(".")
-    if len(parts) != 4:
+    import ipaddress
+
+    try:
+        ipaddress.ip_address(s)
+        return True
+    except ValueError:
         return False
-    return all(part.isdigit() and 0 <= int(part) <= 255 for part in parts)
 
 
 def _handle_add_node(action: PlanAction, panel: object, cluster: object) -> None:
@@ -294,7 +296,12 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
         conn.run(write_env, timeout=15)
         conn.run(f"chmod 600 {shlex.quote(sub_env_path)}", timeout=15)
 
-        result = conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
+        # --no-recreate: the panel and backend are already running — we only
+        # want to bring up the newly-added subscription-page service. Without
+        # this flag, any unrelated config drift in compose (image tag bump,
+        # env churn) would recreate the panel container and cause a visible
+        # outage during what should be a surgical subpage rollout.
+        result = conn.run(f"cd {q_dir} && docker compose up -d --no-recreate", timeout=120)
         if result.returncode != 0:
             raise RuntimeError(f"Failed to start containers: {result.stderr.strip()[:200]}")
     else:
@@ -471,15 +478,14 @@ def run(
             desired = build_desired_state(cluster)
             actual = build_actual_state(cluster, panel, panel_conn=panel_conn)
 
-            applied_clients = set(cluster._extra.get("desired_clients_applied", []))
-            applied_node_hosts = set(cluster._extra.get("desired_nodes_applied", []))
-            applied_relay_hosts = set(cluster._extra.get("desired_relays_applied", []))
+            from meridian.operations import load_applied_snapshot
+
             plan = compute_plan(
                 desired,
                 actual,
-                applied_clients=applied_clients or None,
-                applied_node_hosts=applied_node_hosts or None,
-                applied_relay_hosts=applied_relay_hosts or None,
+                applied_clients=load_applied_snapshot(cluster, "desired_clients_applied"),
+                applied_node_hosts=load_applied_snapshot(cluster, "desired_nodes_applied"),
+                applied_relay_hosts=load_applied_snapshot(cluster, "desired_relays_applied"),
             )
 
             if plan.is_empty:

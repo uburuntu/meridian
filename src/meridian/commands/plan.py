@@ -87,15 +87,14 @@ def run(json_output: bool = False) -> None:
     except RemnawaveError as e:
         fail(f"Cannot reach panel: {e}", hint_type="system")
 
-    applied_clients = set(cluster._extra.get("desired_clients_applied", []))
-    applied_node_hosts = set(cluster._extra.get("desired_nodes_applied", []))
-    applied_relay_hosts = set(cluster._extra.get("desired_relays_applied", []))
+    from meridian.operations import load_applied_snapshot
+
     plan = compute_plan(
         desired,
         actual,
-        applied_clients=applied_clients or None,
-        applied_node_hosts=applied_node_hosts or None,
-        applied_relay_hosts=applied_relay_hosts or None,
+        applied_clients=load_applied_snapshot(cluster, "desired_clients_applied"),
+        applied_node_hosts=load_applied_snapshot(cluster, "desired_nodes_applied"),
+        applied_relay_hosts=load_applied_snapshot(cluster, "desired_relays_applied"),
     )
     exit_code = 0 if plan.is_empty else 2
 

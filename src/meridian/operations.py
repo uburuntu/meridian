@@ -34,12 +34,63 @@ logger = logging.getLogger("meridian.operations")
 # imperative behaviour for users who never wrote desired_* into cluster.yml.
 
 
+def load_applied_snapshot(cluster: ClusterConfig, key: str) -> set[str] | None:
+    """Read a ``desired_*_applied`` snapshot safely from ``cluster._extra``.
+
+    Returns a set of strings or None. Rejects malformed data (strings,
+    dicts, wrong element types) defensively by returning None — the
+    caller then treats this as "no history" which falls back to the
+    conservative drift classification (safest default).
+
+    None is also returned for an absent OR empty snapshot: compute_plan
+    uses None as a sentinel for "first apply / no history, so every
+    actual-not-desired resource is drift". An empty list means "this
+    category was managed and converged to zero" which is semantically
+    the same for drift classification.
+    """
+    snap = cluster._extra.get(key)
+    if not isinstance(snap, list):
+        return None
+    clean: set[str] = set()
+    for item in snap:
+        if isinstance(item, str):
+            clean.add(item)
+        # Silently skip malformed items; the snapshot will be rewritten
+        # with clean data on the next successful apply.
+    return clean or None
+
+
+def _applied_snapshot_mirror_add(cluster: ClusterConfig, key: str, entry: Any) -> None:
+    """Mirror a successful imperative add into the applied snapshot.
+
+    Without this, compute_plan classifies the imperative addition as drift
+    (``from_extras=True``) on the NEXT plan after the user deletes the resource
+    from desired_*, and ``apply --yes`` silently skips the deliberate removal.
+    The applied snapshot must reflect "panel state after the last reconciled
+    add/remove operation we executed" — and `meridian client add` IS such an op.
+    """
+    snap = cluster._extra.get(key)
+    if not isinstance(snap, list):
+        snap = []
+    if entry not in snap:
+        snap.append(entry)
+    cluster._extra[key] = snap
+
+
+def _applied_snapshot_mirror_remove(cluster: ClusterConfig, key: str, entry: Any) -> None:
+    snap = cluster._extra.get(key)
+    if not isinstance(snap, list):
+        return
+    cluster._extra[key] = [e for e in snap if e != entry]
+
+
 def hybrid_sync_desired_clients_add(cluster: ClusterConfig, name: str) -> None:
     if cluster.desired_clients is None:
         return
     if name in cluster.desired_clients:
         return
     cluster.desired_clients.append(name)
+    _applied_snapshot_mirror_add(cluster, "desired_clients_applied", name)
     cluster.save()
 
 
@@ -49,6 +100,7 @@ def hybrid_sync_desired_clients_remove(cluster: ClusterConfig, name: str) -> Non
     if name not in cluster.desired_clients:
         return
     cluster.desired_clients = [c for c in cluster.desired_clients if c != name]
+    _applied_snapshot_mirror_remove(cluster, "desired_clients_applied", name)
     cluster.save()
 
 
@@ -68,6 +120,7 @@ def hybrid_sync_desired_nodes_add(cluster: ClusterConfig, node: NodeEntry, ssh_u
             warp=node.warp,
         )
     )
+    _applied_snapshot_mirror_add(cluster, "desired_nodes_applied", node.ip)
     cluster.save()
 
 
@@ -107,6 +160,7 @@ def hybrid_sync_desired_nodes_remove(cluster: ClusterConfig, node_ip: str) -> No
     if not any(d.host == node_ip for d in cluster.desired_nodes):
         return
     cluster.desired_nodes = [d for d in cluster.desired_nodes if d.host != node_ip]
+    _applied_snapshot_mirror_remove(cluster, "desired_nodes_applied", node_ip)
     cluster.save()
 
 
@@ -125,6 +179,7 @@ def hybrid_sync_desired_relays_add(cluster: ClusterConfig, relay: RelayEntry, ex
             ssh_port=relay.ssh_port,
         )
     )
+    _applied_snapshot_mirror_add(cluster, "desired_relays_applied", relay.ip)
     cluster.save()
 
 
@@ -134,6 +189,7 @@ def hybrid_sync_desired_relays_remove(cluster: ClusterConfig, relay_ip: str) -> 
     if not any(d.host == relay_ip for d in cluster.desired_relays):
         return
     cluster.desired_relays = [d for d in cluster.desired_relays if d.host != relay_ip]
+    _applied_snapshot_mirror_remove(cluster, "desired_relays_applied", relay_ip)
     cluster.save()
 
 
