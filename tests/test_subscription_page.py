@@ -126,8 +126,8 @@ class TestHandleAddSubscriptionPage:
             _handle_add_subscription_page(action, _make_panel(), cluster)
 
         commands = [c.args[0] for c in conn.run.call_args_list]
-        # docker-compose.yml was written
-        assert any("docker-compose.yml" in c and "MERIDIAN_EOF" in c for c in commands)
+        # docker-compose.yml was written (delimiter is nonce-based MERIDIAN_<hex>_EOF)
+        assert any("docker-compose.yml" in c and "MERIDIAN_" in c and "_EOF" in c for c in commands)
         # .env.subscription was written and locked down
         assert any(".env.subscription" in c and "cat >" in c for c in commands)
         assert any("chmod 600" in c and ".env.subscription" in c for c in commands)
