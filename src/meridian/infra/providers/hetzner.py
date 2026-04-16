@@ -54,6 +54,14 @@ class HetznerProvider(CloudProvider):
     name = "hetzner"
 
     def __init__(self, token: str):
+        # Validate token BEFORE attempting SDK import — an empty token is
+        # always wrong regardless of whether hcloud is installed, and this
+        # ordering keeps the error message accurate for the actual problem.
+        if not token:
+            raise ProviderError(
+                "Hetzner token is empty. Export HCLOUD_TOKEN with a read-write project token.",
+                provider=self.name,
+            )
         try:
             from hcloud import Client  # type: ignore[import-not-found]
         except ImportError as e:
@@ -62,11 +70,6 @@ class HetznerProvider(CloudProvider):
                 provider=self.name,
                 cause=e,
             ) from e
-        if not token:
-            raise ProviderError(
-                "Hetzner token is empty. Export HCLOUD_TOKEN with a read-write project token.",
-                provider=self.name,
-            )
         self._client = Client(token=token)
 
     # -------- VM lifecycle --------
