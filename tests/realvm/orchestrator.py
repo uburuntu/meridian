@@ -152,6 +152,9 @@ def provision(provider: CloudProvider, topology: Topology, fleet_id: str) -> lis
         HARNESS_LABEL: "1",
         FLEET_ID_LABEL: fleet_id,
         "meridian-topology": topology.name,
+        # Stash ssh-key-id on the server label so destroy_fleet (which refetches
+        # from the cloud API) can find and clean it up without a separate lookup.
+        "meridian-ssh-key-id": ssh_key_id,
     }
 
     instances: list[VMInstance] = []
@@ -188,11 +191,6 @@ def provision(provider: CloudProvider, topology: Topology, fleet_id: str) -> lis
     # running). Simple port check with short timeout.
     for inst in instances:
         _wait_ssh(inst.public_ipv4 or "", port=22, timeout_sec=120)
-
-    # Store ssh key id on the label set we return via labels so destroy can
-    # find it. (Alternative: store in _extra; labels are simpler.)
-    for inst in instances:
-        inst.labels["meridian-ssh-key-id"] = ssh_key_id
 
     return instances
 
@@ -284,7 +282,19 @@ def run_verification(topology: Topology, instances: list[VMInstance]) -> int:
         print(f"  ✗ verify script not found: {verify_sh}")
         return 2
 
-    env = {**os.environ, "TARGET_IP": ip, "MERIDIAN_FLEET_ID": instances[0].labels.get(FLEET_ID_LABEL, "")}
+    # Isolate Meridian's config dir per fleet — otherwise `meridian deploy`
+    # refuses to run when the developer already has a cluster.yml configured
+    # from unrelated work. Cleans up on destroy via rmtree.
+    fleet_id = instances[0].labels.get(FLEET_ID_LABEL, "unknown")
+    meridian_home = Path(__file__).parent / ".local" / f"fleet-{fleet_id[:8]}"
+    meridian_home.mkdir(parents=True, exist_ok=True)
+
+    env = {
+        **os.environ,
+        "TARGET_IP": ip,
+        "MERIDIAN_FLEET_ID": fleet_id,
+        "MERIDIAN_HOME": str(meridian_home),
+    }
     result = subprocess.run(["bash", str(verify_sh)], env=env)
     return result.returncode
 

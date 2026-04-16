@@ -24,17 +24,29 @@ logger = logging.getLogger("meridian.infra.hetzner")
 # Hourly rates in EUR, used by estimate_cost(). Source: Hetzner Cloud pricing page.
 # Kept intentionally conservative (rounded up). Harness prints the figure so
 # the user sees what they're committing to — if reality differs, they'll know.
+#
+# Hetzner deprecated the CX2x generation in late 2025 in favor of CX2x3
+# (x86, cheaper) and kept CPX2x (AMD, faster). See
+# https://docs.hetzner.com/cloud/changelog for per-location deprecation.
 _HOURLY_EUR = {
-    "cx22": 0.006,
-    "cx32": 0.010,
-    "cx42": 0.020,
-    "cx52": 0.038,
-    "cpx11": 0.006,
-    "cpx21": 0.011,
-    "cpx31": 0.022,
-    "cpx41": 0.040,
-    "cax11": 0.006,  # ARM, very cheap
-    "cax21": 0.011,
+    # New-gen x86 (CX23 line, Sept 2025+) — cheapest, recommended for tests
+    "cx23": 0.007,
+    "cx33": 0.011,
+    "cx43": 0.020,
+    "cx53": 0.038,
+    # AMD EPYC (CPX line, current) — faster for CPU-bound workloads
+    "cpx11": 0.009,
+    "cpx21": 0.016,
+    "cpx22": 0.013,
+    "cpx31": 0.028,
+    "cpx41": 0.053,
+    # ARM (CAX line) — cheap, good perf/EUR, but not every image has ARM build
+    "cax11": 0.008,
+    "cax21": 0.013,
+    "cax31": 0.026,
+    # Dedicated vCPU (CCX) — enterprise tier, overkill for tests
+    "ccx13": 0.026,
+    "ccx23": 0.051,
 }
 
 
