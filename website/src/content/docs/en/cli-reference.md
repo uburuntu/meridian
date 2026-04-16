@@ -133,6 +133,7 @@ meridian apply [--yes] [--prune-extras=ask|yes|no]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--yes`, `-y` | | Skip confirmation prompts |
+| `--parallel N` | 4 | Max parallel node provisioning threads (each node gets its own SSH session and panel client) |
 | `--prune-extras` | `ask` | How to handle drift — resources present on the panel but missing from `cluster.yml`. `ask` prompts per-resource (downgraded to `no` under `--yes` for safety); `yes` auto-removes; `no` skips and prints a one-line summary |
 
 Destructive actions (removals, UPDATE_RELAY re-provisioning) print a warning and require a separate confirmation. A failure early in the plan skips remaining destructive actions — `cluster.yml` stays truthful.

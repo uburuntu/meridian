@@ -191,13 +191,15 @@ class ClusterConfig:
     desired_relays: list[DesiredRelay] | None = None
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
     _readonly: bool = field(default=False, repr=False)
-    _lock: Any = field(default=None, repr=False)  # threading.Lock for parallel save safety
+    _lock: Any = field(default=None, repr=False)  # threading.RLock for parallel save safety
 
     def __post_init__(self) -> None:
         import threading
 
         if self._lock is None:
-            self._lock = threading.Lock()
+            # RLock (reentrant) so handlers that mutate cluster + save() in
+            # one locked region don't deadlock against save()'s own lock.
+            self._lock = threading.RLock()
 
     # --- Persistence ---
 

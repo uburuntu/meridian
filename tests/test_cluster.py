@@ -354,7 +354,7 @@ class TestClusterYAMLRoundTrip:
         # And it should be a primitive lock, NOT an RLock — RLock would let
         # the same thread re-enter and bypass the contract we're documenting
         # (one writer at a time across threads).
-        assert isinstance(cfg._lock, type(threading.Lock()))
+        assert isinstance(cfg._lock, type(threading.RLock()))
 
         # Smoke: save runs without the lock blocking on itself.
         cfg.save(p)
