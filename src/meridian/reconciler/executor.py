@@ -115,16 +115,11 @@ def execute_plan(
     ]
 
     # Kinds that can be parallelized (independent per-server operations).
-    #
-    # ADD_NODE WAS parallelized but is currently disabled — see Bug #2 in
-    # the v4-declarative plan. The shared MeridianPanel wraps an
-    # httpx.AsyncClient driven by a thread-local event loop (see _run in
-    # remnawave.py); concurrent calls cross-thread misuse it. The shared
-    # ClusterConfig is also mutated in-place by add_node, and only the
-    # file write is serialized by the lock. Re-enabling parallelism
-    # requires per-worker MeridianPanel instances and merging worker
-    # results into cluster on the main thread before saving.
-    parallel_kinds: set[PlanActionKind] = set()
+    # Each parallel worker gets its own MeridianPanel instance so the
+    # underlying httpx.AsyncClient and the per-thread event loop (see
+    # threading.local in remnawave.py::_run) are isolated. ClusterConfig
+    # mutations are serialized by its RLock (saves are atomic).
+    parallel_kinds = {PlanActionKind.ADD_NODE}
 
     # Destructive kinds — skip if a prior phase had failures (dependency safety)
     destructive_kinds = {
@@ -166,15 +161,36 @@ def execute_plan(
             has_failures = True
             continue
 
-        # Parallelize independent actions (e.g., node provisioning)
+        # Parallelize independent actions (e.g., node provisioning).
+        # Each worker gets its own MeridianPanel so httpx.AsyncClient and
+        # the per-thread event loop are isolated. ClusterConfig is shared
+        # but its RLock serializes the save path.
         if kind in parallel_kinds and len(actions) > 1 and max_parallel > 1:
+            from meridian.remnawave import MeridianPanel
+
+            def _make_worker_panel(p: Any) -> Any:
+                """Clone a MeridianPanel for a worker thread."""
+                if isinstance(p, MeridianPanel):
+                    return MeridianPanel(p._base, p._token, timeout=p._timeout, max_retries=p._max_retries)
+                return p  # tests may pass a mock — pass through
+
             with ThreadPoolExecutor(max_workers=min(max_parallel, len(actions))) as pool:
-                futures = {pool.submit(_run_action, action, handler, panel, cluster): action for action in actions}
+                futures = {}
+                for action in actions:
+                    worker_panel = _make_worker_panel(panel)
+                    futures[pool.submit(_run_action, action, handler, worker_panel, cluster)] = (
+                        action,
+                        worker_panel,
+                    )
                 for future in as_completed(futures):
                     r = future.result()
                     results.append(r)
                     if not r.success:
                         has_failures = True
+                    # Close per-worker panel to release httpx client
+                    _, wp = futures[future]
+                    if isinstance(wp, MeridianPanel):
+                        wp.close()
         else:
             for action in actions:
                 r = _run_action(action, handler, panel, cluster)

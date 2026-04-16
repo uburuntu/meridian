@@ -160,7 +160,11 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
     """
     actions: list[PlanAction] = []
 
-    # Build node name → IP map for relay exit_node resolution
+    # Build node name → IP map for relay exit_node resolution.
+    # WARNING: duplicate names overwrite earlier entries. The cluster
+    # validator catches duplicate hosts but not duplicate names — a name
+    # collision here would silently resolve relay exit_node to the wrong
+    # node IP. Consider adding a duplicate-name check to ClusterConfig.validate().
     node_name_to_ip: dict[str, str] = {}
     for actual_node in actual.nodes:
         if actual_node.name:
@@ -252,6 +256,11 @@ def compute_plan(desired: DesiredState, actual: ActualState) -> Plan:
                 )
 
     # --- Clients ---
+    # Note: client comparison is set-based (username only). If a client's
+    # attributes change (traffic limit, squad membership, etc.), the plan
+    # will not detect the drift. This is a known design limitation — the
+    # desired_clients schema is a list of usernames, not full user objects.
+    # A future UPDATE_CLIENT action kind would require extending the schema.
     if desired.manage_clients:
         actual_clients = set(actual.clients)
         desired_clients_set = set(desired.clients)

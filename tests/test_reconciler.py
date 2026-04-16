@@ -461,9 +461,7 @@ class TestExecutor:
         assert "skipped" in skip.error.lower() or "prior phase" in skip.error.lower()
 
     def test_max_parallel_one_runs_serially(self) -> None:
-        """Bug #2 regression: parallel ADD_NODE was disabled. Verify max_parallel
-        is honored (no ThreadPoolExecutor spawned for parallel_kinds={}).
-        """
+        """max_parallel=1 forces serial execution even for parallel-eligible kinds."""
         events: list[str] = []
 
         def slow_handler(action: PlanAction, panel: object, cluster: object) -> None:
@@ -485,7 +483,7 @@ class TestExecutor:
             panel=None,
             cluster=None,
             callbacks={PlanActionKind.ADD_NODE: slow_handler},
-            max_parallel=4,  # would parallelize if executor allowed it
+            max_parallel=1,  # force serial even though ADD_NODE is in parallel_kinds
         )
         # Serial execution: each start must be immediately followed by its end
         # before the next start. Parallel would interleave starts.
@@ -493,6 +491,42 @@ class TestExecutor:
             assert events[i].startswith("start:"), f"Out-of-order at {events}"
             assert events[i + 1].startswith("end:"), f"Out-of-order at {events}"
             assert events[i].split(":")[1] == events[i + 1].split(":")[1]
+
+    def test_parallel_add_node_actually_runs_concurrently(self) -> None:
+        """With max_parallel > 1, multiple ADD_NODE actions run concurrently.
+
+        The slow_handler sleeps 0.1s per action. Three actions running truly
+        in parallel finish in ~0.1s wall time, not ~0.3s. We assert total
+        wall time < 0.25s (generous margin for CI overhead).
+        """
+        import time
+
+        events: list[str] = []
+
+        def slow_handler(action: PlanAction, panel: object, cluster: object) -> None:
+            events.append(f"start:{action.target}")
+            time.sleep(0.1)
+            events.append(f"end:{action.target}")
+
+        plan = Plan(
+            actions=[
+                PlanAction(kind=PlanActionKind.ADD_NODE, target="a"),
+                PlanAction(kind=PlanActionKind.ADD_NODE, target="b"),
+                PlanAction(kind=PlanActionKind.ADD_NODE, target="c"),
+            ]
+        )
+        t0 = time.monotonic()
+        execute_plan(
+            plan,
+            panel=None,
+            cluster=None,
+            callbacks={PlanActionKind.ADD_NODE: slow_handler},
+            max_parallel=4,
+        )
+        elapsed = time.monotonic() - t0
+        # 3 × 0.1s serial = 0.3s. Parallel = ~0.1s. Accept up to 0.25s.
+        assert elapsed < 0.25, f"Parallel execution took {elapsed:.2f}s — should be ~0.1s"
+        assert len(events) == 6  # 3 starts + 3 ends
 
     def test_remove_node_still_runs_last(self) -> None:
         """REMOVE_NODE must run after ADDs/UPDATEs to avoid orphaning relays

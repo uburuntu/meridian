@@ -243,19 +243,24 @@ def _sdk_to_dict(obj: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
+import threading  # noqa: E402 — must be here, after asyncio, before _run()
+
+_thread_loops = threading.local()
+
+
 def _run(coro: Any) -> Any:
     """Run an async coroutine synchronously.
 
-    Uses a persistent event loop stored on the current thread to avoid
-    closing SDK's httpx.AsyncClient between calls (which causes
-    "Event loop is closed" errors on subsequent SDK operations).
+    Uses a per-thread persistent event loop to avoid closing the SDK's
+    httpx.AsyncClient between calls (which causes "Event loop is closed"
+    errors on subsequent operations). ``threading.local()`` isolates the
+    loop per thread so parallel workers in ``execute_plan()`` each get
+    their own loop and never cross-pollinate.
     """
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError("loop is closed")
-    except RuntimeError:
+    loop = getattr(_thread_loops, "loop", None)
+    if loop is None or loop.is_closed():
         loop = asyncio.new_event_loop()
+        _thread_loops.loop = loop
         asyncio.set_event_loop(loop)
     return loop.run_until_complete(coro)
 

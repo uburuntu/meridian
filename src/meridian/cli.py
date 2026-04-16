@@ -118,10 +118,9 @@ def apply_cmd(
         "Defaults to 'ask' interactively or 'no' under --yes for safety.",
     ),
     parallel: int = typer.Option(
-        1,
+        4,
         "--parallel",
-        help="Max parallel node provisioning (currently capped to 1 — see TODO)",
-        hidden=True,
+        help="Max parallel node provisioning threads",
     ),
 ) -> None:
     """Apply desired state — converge infrastructure to cluster.yml.

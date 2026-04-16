@@ -153,7 +153,7 @@ def add_node(
     domain: str = "",
     sni: str = "",
     harden: bool = True,
-    warp: bool = False,
+    warp: bool | None = None,
 ) -> NodeEntry:
     """Provision a new node and register it with the panel.
 
@@ -296,8 +296,8 @@ def update_node(
         node.sni = sni
     if domain is not None:
         node.domain = domain
-    if warp is not None:
-        node.warp = warp
+    effective_warp = warp if warp is not None else node.warp
+    node.warp = effective_warp
 
     from meridian import __version__
 
@@ -311,7 +311,7 @@ def update_node(
             xhttp_port=xhttp_port,
             wss_port=wss_port,
             version=__version__,
-            warp=warp,
+            warp=effective_warp,
             xhttp_path=node.xhttp_path,
             ws_path=node.ws_path,
         )
