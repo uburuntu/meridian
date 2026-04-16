@@ -341,6 +341,31 @@ class TestClusterYAMLRoundTrip:
         # path is preserved even when disabled, so re-enable picks the same nginx route
         assert loaded.subscription_page.path == "xx"
 
+    def test_desired_node_warp_none_round_trip(self, tmp_path: Path) -> None:
+        desired = [DesiredNode(host="198.51.100.10", name="x", warp=None)]
+        cfg = _configured_cluster(desired_nodes=desired)
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        assert loaded.desired_nodes is not None
+        assert loaded.desired_nodes[0].warp is None
+
+    def test_desired_node_warp_false_round_trip(self, tmp_path: Path) -> None:
+        desired = [DesiredNode(host="198.51.100.10", name="x", warp=False)]
+        cfg = _configured_cluster(desired_nodes=desired)
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        assert loaded.desired_nodes[0].warp is False
+
+    def test_desired_node_warp_true_round_trip(self, tmp_path: Path) -> None:
+        desired = [DesiredNode(host="198.51.100.10", name="x", warp=True)]
+        cfg = _configured_cluster(desired_nodes=desired)
+        p = tmp_path / "cluster.yml"
+        cfg.save(p)
+        loaded = ClusterConfig.load(p)
+        assert loaded.desired_nodes[0].warp is True
+
     def test_save_uses_lock_for_concurrency(self, tmp_path: Path) -> None:
         """Concurrent saves from the executor must serialize so the file is
         never partially written. Verifies the lock attribute is wired up."""

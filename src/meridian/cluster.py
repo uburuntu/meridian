@@ -671,8 +671,9 @@ def _serialize_cluster(cfg: ClusterConfig) -> dict[str, Any]:
                 d.pop("ssh_user", None)
             if d.get("ssh_port") == 22:
                 d.pop("ssh_port", None)
-            if not d.get("warp"):
-                d.pop("warp", None)
+            # Preserve warp: None → YAML null, False, True are all meaningful.
+            # _serialize_dataclass strips None via _strip_none, so re-add it.
+            d["warp"] = dn.warp
             desired_nodes_out.append(d)
         out["desired_nodes"] = desired_nodes_out
 
@@ -820,8 +821,7 @@ def _load_cluster(data: dict[str, Any]) -> ClusterConfig:
                     dn,
                     DesiredNode,
                     _DESIRED_NODE_FIELDS,
-                    defaults={"ssh_user": "root", "ssh_port": 22, "warp": False},
-                    transforms={"warp": bool},
+                    defaults={"ssh_user": "root", "ssh_port": 22, "warp": None},
                 )
             )
 
