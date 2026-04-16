@@ -9,6 +9,15 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean; \
     echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' \
       > /etc/apt/apt.conf.d/keep-cache
 
+# Use Azure-colocated apt mirror. GitHub Actions runners are Azure VMs;
+# archive.ubuntu.com goes through Canonical's CDN which can be slow
+# from Azure (30-60s per package observed on some runners, causing
+# 45-min+ build timeouts). azure.archive.ubuntu.com is co-located.
+RUN sed -i 's|http://archive.ubuntu.com|http://azure.archive.ubuntu.com|g' \
+      /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || \
+    sed -i 's|http://archive.ubuntu.com|http://azure.archive.ubuntu.com|g' \
+      /etc/apt/sources.list 2>/dev/null || true
+
 # ---------- OS packages (everything Meridian expects on a VPS) ----------
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
