@@ -180,6 +180,10 @@ def _host_from_sdk(obj: Any) -> Host:
         address=getattr(obj, "address", "") or "",
         port=int(getattr(obj, "port", 0) or 0),
         sni=getattr(obj, "sni", "") or "",
+        # SDK field is `config_profile_inbound_uuid` (Pydantic snake_case for
+        # the JSON alias `configProfileInboundUuid`). Mapped to our simpler
+        # `inbound_uuid`. If a future SDK bump renames this field, the getattr
+        # silently returns "" — keep this comment as a breadcrumb.
         inbound_uuid=str(getattr(inbound, "config_profile_inbound_uuid", "") or ""),
         is_disabled=bool(getattr(obj, "is_disabled", False)),
     )
