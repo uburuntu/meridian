@@ -147,10 +147,11 @@ class TestHetznerProviderImportable:
         # Stub that doesn't need a real token — we only call estimate_cost.
         # Bypass __init__ by constructing through object.__new__.
         p = object.__new__(HetznerProvider)
-        spec = VMSpec(name="n", image="i", size="cx22", region="nbg1")
+        # cx23 = new-gen replacement for deprecated cx22, same 2 vCPU / 4 GB
+        spec = VMSpec(name="n", image="i", size="cx23", region="nbg1")
         cost = p.estimate_cost(spec, hours=1.0)
         assert cost is not None
-        assert 0 < cost < 0.1  # sanity — CX22 is cheap
+        assert 0 < cost < 0.1  # sanity — cheapest tier
 
     def test_estimate_cost_unknown_size(self) -> None:
         from meridian.infra.providers.hetzner import HetznerProvider
