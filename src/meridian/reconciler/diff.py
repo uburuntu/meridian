@@ -120,7 +120,8 @@ def _node_changes(desired: DesiredNodeState, actual: ActualNodeState) -> list[st
         changes.append(f"sni: {actual.sni or '(default)'} → {desired.sni}")
     if desired.domain and desired.domain != actual.domain:
         changes.append(f"domain: {actual.domain or '(none)'} → {desired.domain}")
-    if desired.warp != actual.warp:
+    # warp uses None as "not specified — keep current". Only diff when explicitly set.
+    if desired.warp is not None and desired.warp != actual.warp:
         changes.append(f"warp: {actual.warp} → {desired.warp}")
     return changes
 

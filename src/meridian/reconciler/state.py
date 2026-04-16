@@ -12,7 +12,12 @@ from dataclasses import dataclass, field
 
 @dataclass
 class DesiredNodeState:
-    """A node that should exist."""
+    """A node that should exist.
+
+    ``warp`` is None when the user did not declare it in cluster.yml —
+    meaning "keep whatever the server has". ``False`` means "explicitly
+    disable WARP".
+    """
 
     host: str = ""
     name: str = ""
@@ -20,7 +25,7 @@ class DesiredNodeState:
     ssh_port: int = 22
     domain: str = ""
     sni: str = ""
-    warp: bool = False
+    warp: bool | None = None
 
 
 @dataclass

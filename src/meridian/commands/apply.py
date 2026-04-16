@@ -50,7 +50,7 @@ def _handle_add_node(action: PlanAction, panel: object, cluster: object) -> None
         name=desired.name if desired else "",
         domain=desired.domain if desired else "",
         sni=desired.sni if desired else "",
-        warp=desired.warp if desired else False,
+        warp=desired.warp if desired else None,
     )
 
 
@@ -71,7 +71,7 @@ def _handle_update_node(action: PlanAction, panel: object, cluster: object) -> N
         name=desired.name if desired and desired.name else None,
         sni=desired.sni if desired else None,
         domain=desired.domain if desired else None,
-        warp=desired.warp if desired else False,
+        warp=desired.warp if desired else None,
     )
 
 
