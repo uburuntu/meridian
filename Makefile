@@ -58,13 +58,13 @@ real-lab: ## Provision Hetzner VM + verify + destroy (TOPO=single by default)
 		echo "  ✗ HCLOUD_TOKEN is not set. See tests/realvm/README.md"; exit 2; \
 	fi
 	@echo "  NOTE: this provisions a real VM and costs real money (~€0.01 for a full run)."
-	uv run python -m tests.realvm.orchestrator up $${TOPO:-single}
+	PYTHONUNBUFFERED=1 uv run python -m tests.realvm.orchestrator up $${TOPO:-single}
 
 real-lab-keep: ## Provision + verify, but DON'T auto-destroy (useful with TIER=interactive)
 	@if [ -z "$$HCLOUD_TOKEN" ]; then \
 		echo "  ✗ HCLOUD_TOKEN is not set. See tests/realvm/README.md"; exit 2; \
 	fi
-	uv run python -m tests.realvm.orchestrator up $${TOPO:-single} --keep
+	PYTHONUNBUFFERED=1 uv run python -m tests.realvm.orchestrator up $${TOPO:-single} --keep
 
 real-lab-orphans: ## List harness-tagged VMs left behind in the Hetzner project
 	@if [ -z "$$HCLOUD_TOKEN" ]; then \

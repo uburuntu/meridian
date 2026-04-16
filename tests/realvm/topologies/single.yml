@@ -13,7 +13,7 @@ description: "Single exit node — smoke test on real hardware"
 
 provider: hetzner
 region: nbg1           # Nuremberg DE — cheapest, closest EU datacenter
-size: cx22             # 2 vCPU, 4 GB — minimum for Remnawave panel + node
+size: cx23             # 2 vCPU, 4 GB — new-gen x86 (CX22 was deprecated late 2025)
 image: ubuntu-24.04
 
 nodes:
