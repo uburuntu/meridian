@@ -686,6 +686,58 @@ else
   fail_test "apply --yes --prune-extras=yes did not remove ghost-extras"
 fi
 
+# State tracking: deliberate removal must work under --yes
+# (from_extras=False because state-test-alice WAS in applied state)
+echo ">>> State tracking: deliberate remove must work under --yes..."
+# First: apply with desired_clients that includes state-test-alice
+python3 -c "
+import yaml
+with open('$CLUSTER_FILE') as f:
+    data = yaml.safe_load(f)
+data['desired_clients'] = ['default', 'state-test-alice']
+with open('$CLUSTER_FILE', 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+"
+meridian apply --yes --prune-extras=yes 2>&1 >/dev/null
+
+# Verify state-test-alice exists
+if meridian --json client list 2>/dev/null | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+clients = data if isinstance(data, list) else data.get('clients', [])
+names = [c.get('username', '') for c in clients]
+assert 'state-test-alice' in names, f'state-test-alice not created: {names}'
+" 2>/dev/null; then
+  pass "state-test-alice created via apply"
+else
+  fail_test "state-test-alice not created"
+fi
+
+# Now: deliberately remove state-test-alice from desired and apply with plain --yes
+python3 -c "
+import yaml
+with open('$CLUSTER_FILE') as f:
+    data = yaml.safe_load(f)
+data['desired_clients'] = ['default']
+with open('$CLUSTER_FILE', 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+"
+# --yes alone: drift would be skipped, but INTENTIONAL removal must run
+# (because state-test-alice was in the applied snapshot from previous apply)
+meridian apply --yes 2>&1 >/dev/null
+
+if meridian --json client list 2>/dev/null | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+clients = data if isinstance(data, list) else data.get('clients', [])
+names = [c.get('username', '') for c in clients]
+assert 'state-test-alice' not in names, f'still present: {names}'
+" 2>/dev/null; then
+  pass "state tracking: deliberate removal worked under --yes (from_extras=False)"
+else
+  fail_test "state tracking: deliberate removal SKIPPED under --yes — applied state not tracked"
+fi
+
 # Hybrid sync: imperative `client add` should also append to desired_clients
 # when the user is managing clients declaratively. Otherwise the next plan
 # would see the imperatively-added user as drift and remove them.
