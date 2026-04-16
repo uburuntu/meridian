@@ -130,7 +130,7 @@ subscription_page:
 
 ```
 meridian plan                      # shows a Terraform-style diff: + adds, - removes, ~ updates
-meridian apply --yes               # converge (destructive actions still prompt once)
+meridian apply --yes               # converge (skips confirmations; panel-only drift is preserved unless --prune-extras=yes)
 ```
 
 Each section is independent. Omitting `desired_clients` entirely leaves client management imperative (`meridian client add/remove` still works); listing it with `[]` tells Meridian to remove every client. Same pattern for `desired_nodes` and `desired_relays`.

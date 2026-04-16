@@ -577,6 +577,48 @@ class TestExecutor:
         assert result.all_succeeded
         assert sorted(order) == ["a", "b", "c"]
 
+    def test_parallel_workers_get_isolated_panel_instances(self) -> None:
+        """Each parallel worker must receive its OWN MeridianPanel instance,
+        not share the caller's panel. Sharing breaks thread-local event loops
+        (remnawave._run) and the underlying httpx.AsyncClient. This test proves
+        the executor actually invokes _make_worker_panel and hands each worker
+        a distinct panel id().
+
+        Uses a real MeridianPanel pointed at a bogus URL — the httpx.Client is
+        lazy (no connection until a request fires) and our handler never
+        makes requests, so no network I/O occurs.
+        """
+        from meridian.remnawave import MeridianPanel
+
+        shared = MeridianPanel("https://panel.invalid", "fake-token", timeout=1, max_retries=1)
+        seen_panels: list[int] = []
+
+        def handler(action: PlanAction, panel: object, cluster: object) -> None:
+            seen_panels.append(id(panel))
+
+        plan = Plan(
+            actions=[
+                PlanAction(kind=PlanActionKind.ADD_NODE, target="a"),
+                PlanAction(kind=PlanActionKind.ADD_NODE, target="b"),
+                PlanAction(kind=PlanActionKind.ADD_NODE, target="c"),
+            ]
+        )
+        try:
+            execute_plan(
+                plan,
+                panel=shared,
+                cluster=None,
+                callbacks={PlanActionKind.ADD_NODE: handler},
+                max_parallel=4,
+            )
+        finally:
+            shared.close()
+        # Three handlers, each must receive a DIFFERENT MeridianPanel id,
+        # and none of them may reuse the caller's shared instance.
+        assert len(seen_panels) == 3
+        assert id(shared) not in seen_panels
+        assert len(set(seen_panels)) == 3, f"workers shared panel instance: {seen_panels}"
+
     def test_remove_node_still_runs_last(self) -> None:
         """REMOVE_NODE must run after ADDs/UPDATEs to avoid orphaning relays
         whose host metadata still references the old node UUID. Only the

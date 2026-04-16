@@ -781,7 +781,8 @@ fi
 # `meridian plan` proposes recreating it (since desired_clients still says
 # 'default'). This is the core declarative property.
 echo ">>> Drift test: deleting 'default' user directly via panel API..."
-python3 << 'PYEOF'
+if ! python3 << 'PYEOF'
+import sys
 from meridian.cluster import ClusterConfig
 from meridian.remnawave import MeridianPanel
 
@@ -792,8 +793,15 @@ with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
         panel.delete_user(user.uuid)
         print('    panel-side delete of default user OK')
     else:
-        print('    WARN: default user not found, drift test will be partial')
+        # Hard fail: without the panel delete succeeding, the subsequent drift
+        # re-propose + apply assertions silently pass against a still-present
+        # user. Don't let coverage rot — demand the setup actually executed.
+        print('    FAIL: default user not found, cannot run drift test')
+        sys.exit(1)
 PYEOF
+then
+  fail_test "drift setup failed: default user not found on panel"
+fi
 
 # Plan should now show ADD_CLIENT default (or exit 2 = changes pending)
 PLAN_OUT=$(meridian plan 2>&1 || true)

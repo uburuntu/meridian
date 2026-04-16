@@ -1,8 +1,9 @@
 # cluster.example.yml — annotated reference for ~/.meridian/cluster.yml
 #
 # This file documents every field Meridian recognises. Drop a copy into
-# ~/.meridian/cluster.yml (or any path you pass to `meridian apply --cluster`)
-# and edit the values for your own fleet.
+# ~/.meridian/cluster.yml and edit the values for your own fleet. Meridian
+# always reads/writes ~/.meridian/cluster.yml; there is no flag to point it
+# elsewhere at the moment.
 #
 # Two parts:
 #   1. State (panel, nodes, relays, inbounds) — populated by `meridian deploy`,
@@ -131,13 +132,13 @@ desired_nodes:
     ssh_port: 22
     domain: ""
     sni: www.microsoft.com
-    warp: false
+    # warp: false                             # omit to keep current; false = explicitly disable
   - host: 198.51.100.2
     name: germany-1
     ssh_user: root
     ssh_port: 22
     sni: www.cloudflare.com
-    warp: false
+    # warp: true                              # uncomment to route outbound through Cloudflare WARP
 
 # Desired relays.
 desired_relays:
