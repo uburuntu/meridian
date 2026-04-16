@@ -134,7 +134,13 @@ class SubscriptionPageConfig:
 
 @dataclass
 class DesiredNode:
-    """A node that should exist in the fleet (desired state for plan/apply)."""
+    """A node that should exist in the fleet (desired state for plan/apply).
+
+    ``warp`` uses ``None`` as "not specified — keep whatever the server has".
+    ``False`` means "explicitly disable WARP". This matches the name/sni/domain
+    sentinel pattern and prevents a desired node that omits warp from
+    spuriously triggering an UPDATE_NODE that disables WARP on every apply.
+    """
 
     host: str = ""  # IP address
     name: str = ""  # friendly name (e.g., "de-fra-1")
@@ -142,7 +148,7 @@ class DesiredNode:
     ssh_port: int = 22
     domain: str = ""  # optional domain for WSS/XHTTP
     sni: str = ""  # Reality SNI target
-    warp: bool = False
+    warp: bool | None = None  # None = keep current; False = explicitly disable
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
 

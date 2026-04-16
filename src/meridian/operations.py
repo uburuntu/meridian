@@ -252,7 +252,7 @@ def update_node(
     name: str | None = None,
     sni: str | None = None,
     domain: str | None = None,
-    warp: bool = False,
+    warp: bool | None = None,
 ) -> None:
     """Redeploy an existing node with updated configuration.
 
@@ -296,7 +296,8 @@ def update_node(
         node.sni = sni
     if domain is not None:
         node.domain = domain
-    node.warp = warp
+    if warp is not None:
+        node.warp = warp
 
     from meridian import __version__
 
