@@ -1,4 +1,4 @@
-.PHONY: help install sync test lint format check typecheck ci system-lab \
+.PHONY: help install sync test lint format check typecheck ci system-lab system-lab-fast \
        templates ai-docs build publish clean hooks
 
 ## —— Setup ——————————————————————————————————————————————
@@ -41,10 +41,15 @@ templates: ## Validate Jinja2 template rendering
 
 ci: check templates ## Run full CI locally
 
-system-lab: ## Run multi-node system lab (Linux, privileged containers, ~20min)
+system-lab: ## Run multi-node system lab (clean state, ~10min)
 	bash tests/systemlab/scripts/setup-fixtures.sh
 	docker compose -f tests/systemlab/compose.yml up --build --abort-on-container-exit --exit-code-from controller
 	docker compose -f tests/systemlab/compose.yml down -v
+
+system-lab-fast: ## Re-run system lab preserving cached images (~3-4min after first run)
+	bash tests/systemlab/scripts/setup-fixtures.sh
+	docker compose -f tests/systemlab/compose.yml up --build --abort-on-container-exit --exit-code-from controller
+	docker compose -f tests/systemlab/compose.yml down
 
 ## —— Build & Publish ————————————————————————————————————
 
