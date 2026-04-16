@@ -51,6 +51,33 @@ system-lab-fast: ## Re-run system lab preserving cached images (~3-4min after fi
 	docker compose -f tests/systemlab/compose.yml up --build --abort-on-container-exit --exit-code-from controller
 	docker compose -f tests/systemlab/compose.yml down
 
+## —— Real-VM harness (LOCAL ONLY, costs real money) ————————————————
+
+real-lab: ## Provision Hetzner VM + verify + destroy (TOPO=single by default)
+	@if [ -z "$$HCLOUD_TOKEN" ]; then \
+		echo "  ✗ HCLOUD_TOKEN is not set. See tests/realvm/README.md"; exit 2; \
+	fi
+	@echo "  NOTE: this provisions a real VM and costs real money (~€0.01 for a full run)."
+	uv run python -m tests.realvm.orchestrator up $${TOPO:-single}
+
+real-lab-keep: ## Provision + verify, but DON'T auto-destroy (useful with TIER=interactive)
+	@if [ -z "$$HCLOUD_TOKEN" ]; then \
+		echo "  ✗ HCLOUD_TOKEN is not set. See tests/realvm/README.md"; exit 2; \
+	fi
+	uv run python -m tests.realvm.orchestrator up $${TOPO:-single} --keep
+
+real-lab-orphans: ## List harness-tagged VMs left behind in the Hetzner project
+	@if [ -z "$$HCLOUD_TOKEN" ]; then \
+		echo "  ✗ HCLOUD_TOKEN is not set."; exit 2; \
+	fi
+	uv run python -m tests.realvm.orchestrator orphans
+
+real-lab-down: ## Destroy ALL harness-tagged VMs in the project (orphan cleanup)
+	@if [ -z "$$HCLOUD_TOKEN" ]; then \
+		echo "  ✗ HCLOUD_TOKEN is not set."; exit 2; \
+	fi
+	uv run python -m tests.realvm.orchestrator down
+
 ## —— Build & Publish ————————————————————————————————————
 
 ai-docs: ## Generate AI reference from human docs (strip frontmatter)

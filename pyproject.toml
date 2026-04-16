@@ -41,6 +41,10 @@ Issues = "https://github.com/uburuntu/meridian/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "ruff>=0.4", "mypy>=1.0", "types-PyYAML>=6.0"]
+# Cloud providers for `meridian.infra` — used by tests/realvm/ harness and
+# (eventually) by `meridian deploy --create-vm <provider>`. Each provider is
+# optional: `pip install meridian-vpn[hetzner]` gets only Hetzner support.
+hetzner = ["hcloud>=2.0"]
 
 [tool.hatch.version]
 path = "VERSION"
@@ -78,6 +82,10 @@ select = ["E", "F", "I", "W"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# tests/realvm/ provisions real cloud VMs — opt-in, never auto-collected.
+# Invoke manually via `make real-lab` (see tests/realvm/README.md).
+# tests/systemlab/ uses Docker, orchestrated via `make system-lab`.
+norecursedirs = ["realvm", "systemlab"]
 
 [tool.mypy]
 python_version = "3.11"
