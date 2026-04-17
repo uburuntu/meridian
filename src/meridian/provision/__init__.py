@@ -38,11 +38,17 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     from meridian.provision.docker import InstallDocker
     from meridian.provision.remnawave_panel import DeployRemnawavePanel
 
+    # Python operator precedence on `+` vs `if-else` is a trap here:
+    # `A + B if cond else None` parses as `(A + B) if cond else None`,
+    # which silently yields `InstallPackages(None)` when not hardening —
+    # meaning REQUIRED_PACKAGES never get installed at all. Explicit form:
+    extra_pkgs = ["fail2ban"] if ctx.harden else []
+
     steps: list[Step] = [
         # -- Pre-flight --
         CheckDiskSpace(),
         # -- Common (OS-level setup) --
-        InstallPackages(REQUIRED_PACKAGES + ["fail2ban"] if ctx.harden else None),
+        InstallPackages(REQUIRED_PACKAGES + extra_pkgs),
         EnableAutoUpgrades(),
         SetTimezone(),
     ]
@@ -121,6 +127,7 @@ def build_node_steps(ctx: ProvisionContext) -> list[Step]:
         REQUIRED_PACKAGES,
         CheckDiskSpace,
         ConfigureBBR,
+        ConfigureFail2ban,
         ConfigureFirewall,
         EnableAutoUpgrades,
         EnsurePort443,
@@ -130,15 +137,21 @@ def build_node_steps(ctx: ProvisionContext) -> list[Step]:
     )
     from meridian.provision.docker import InstallDocker
 
+    extra_pkgs = ["fail2ban"] if ctx.harden else []
+
     steps: list[Step] = [
         CheckDiskSpace(),
-        InstallPackages(REQUIRED_PACKAGES),
+        InstallPackages(REQUIRED_PACKAGES + extra_pkgs),
         EnableAutoUpgrades(),
         SetTimezone(),
     ]
 
     if ctx.harden:
         steps.append(HardenSSH())
+        # Mirror `build_setup_steps` — without this, redeploys (which take
+        # the node-only path because `is_panel_host=is_first_deploy`) never
+        # configure fail2ban even when the operator asked for hardening.
+        steps.append(ConfigureFail2ban())
 
     steps.append(ConfigureBBR())
 
