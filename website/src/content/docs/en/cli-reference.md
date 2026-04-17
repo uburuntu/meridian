@@ -62,6 +62,52 @@ meridian server remove NAME
 |------|---------|-------------|
 | `--name NAME` | (auto) | Display name for the server |
 
+### meridian node
+
+Manage additional exit nodes in a multi-node fleet. The first server (panel host) is deployed with `meridian deploy`; subsequent exit nodes are added with `meridian node add`.
+
+```
+meridian node add IP [flags]
+meridian node list
+meridian node remove IP [--yes] [--force]
+meridian node check IP
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--user USER` | root | SSH user on the node |
+| `--ssh-port PORT` | 22 | SSH port on the node (if non-standard) |
+| `--name NAME` | (auto, from IP) | Friendly name shown in panel / subscription |
+| `--domain DOMAIN` | (none) | Per-node domain for WSS/CDN fallback |
+| `--sni HOST` | www.microsoft.com | Reality camouflage target for this node |
+| `--warp / --no-warp` | disabled | Route outgoing traffic through Cloudflare WARP on this node |
+| `--harden / --no-harden` | enabled | OS + SSH + firewall hardening for the node |
+| `--yes` | | Skip confirmation prompts (applies to `node remove`) |
+| `--force` | | On `node remove`, proceed even if relays reference this node as their exit |
+
+**How it works**: `meridian node add` provisions the node host (OS packages, Docker, nginx, TLS, Remnawave node container), registers the node against the panel's REST API, and creates `reality` and `xhttp` host entries so clients automatically receive the new exit in their next subscription refresh. The new entry is added to `nodes[]` in `cluster.yml`; `desired_nodes[]` is also updated if that list is non-null (hybrid sync).
+
+**Removal guard**: `meridian node remove` refuses to delete a node that is still the `exit_node` of one or more relays; pass `--force` to override (and accept the consequence of orphaning relay configs until you either redeploy them or remove them).
+
+### meridian fleet
+
+Inspect and repair the fleet from the live panel API.
+
+```
+meridian fleet status [--json]
+meridian fleet recover IP [flags]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--json` | | Emit fleet state as JSON (for scripting / CI) |
+| `--user USER` | root | SSH user on the panel host (for `fleet recover`) |
+| `--ssh-port PORT` | 22 | SSH port on the panel host |
+
+**`fleet status`** — shows panel health, every node's connection + Xray version + traffic, every relay's upstream, and user counts. With `--json`, stable field access: `panel.url`, `panel.healthy`, `nodes[].status` (`"connected"`, `"disconnected"`, `"disabled"`, `"unknown"`), `relays[].status`, `users.active/disabled/other`.
+
+**`fleet recover`** — rebuilds `~/.meridian/cluster.yml` from the live panel. Use it when the local file is lost, or when picking up someone else's deployment. Connects via SSH to read stable server-side metadata, then queries the panel API for nodes, relays, inbounds, hosts, and users.
+
 ### meridian relay
 
 Manage relay nodes — lightweight TCP forwarders that route traffic through a domestic server to an exit server abroad.

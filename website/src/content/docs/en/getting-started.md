@@ -45,7 +45,7 @@ meridian deploy local
 
 ## What happens
 
-1. **Installs Docker** and deploys Xray via the 3x-ui management panel
+1. **Installs Docker** and deploys Xray managed by the Remnawave panel
 2. **Generates x25519 keypair** — unique keys for Reality authentication
 3. **Hardens the server** — UFW firewall, SSH key-only auth, BBR congestion control
 4. **Configures VLESS+Reality** on port 443 — impersonates a real TLS server
