@@ -27,18 +27,32 @@ without the rest is not supported — move the whole set together.
 - **Relay = Remnawave Host entry** — enable/disable host toggles subscription inclusion automatically
 
 ### Added
-- **`meridian node add/list/remove`** — multi-node fleet management
-- **`meridian fleet status`** — panel health, node connectivity, relay status, user count
-- **`meridian fleet recover`** — reconstruct cluster.yml from panel API when local state is lost
+- **`meridian node add/list/remove/check`** — multi-node fleet management
+- **`meridian fleet status/recover`** — panel health, node connectivity, relay status, user count, and reconstruct-from-panel when local state is lost
 - **`meridian migrate`** — guided migration from 3.x (reads old proxy.yml, prints step-by-step plan)
-- **`MeridianPanel` REST client** — direct httpx calls to Remnawave API (JWT auth, retries)
-- **Config reliability** — corrupt YAML handling, version check, backup before mutations, disk-full error messages
+- **`MeridianPanel` REST client** — wraps the official `remnawave` Python SDK (v2.7.1) with retries, credential redaction, and thread-local event loops for parallel workers
+- **Config reliability** — corrupt YAML handling, version check, backup before mutations, disk-full error messages, external-edit guard (`cluster.save()` refuses to clobber if the file mtime advanced during a long-running apply), snapshot type validation
 - **Reality keys persisted** — public_key and short_id saved in cluster.yml for connection testing
+- **Declarative plan/apply workflow** — `cluster.yml` becomes desired state (`desired_nodes`, `desired_relays`, `desired_clients`, `subscription_page`); `meridian plan` prints a Terraform-style diff; `meridian apply` converges. Imperative commands (`deploy`, `node add`, `client add`) mirror their effect into `desired_*` when the list is non-null — hybrid sync, mixing the two modes is safe
+- **Applied-state tracking** — every successful `apply` snapshots desired state into `cluster._extra["desired_*_applied"]`. The next plan distinguishes intentional removals (in applied → executes under `--yes`) from drift (not in applied → requires `--prune-extras=yes`). Closes the subtle bug where `--yes` silently skipped deliberate removals
+- **`meridian plan --json`** — structured output for CI consumption; exit 0 = converged, 2 = changes pending, 1 = error. Stable JSON shape with typed `actions[].kind` values
+- **`--prune-extras=ask|yes|no`** — explicit control over drift handling. Under `--yes`, `ask` downgrades to `no` (safety default); destructive actions still require one confirmation unless `--yes`
+- **Parallel node provisioning** — `ThreadPoolExecutor` with `--parallel N` (default 4); per-worker `MeridianPanel` SDK instance, `threading.local()` event loops, `threading.RLock` on `cluster.save()` for safe concurrent writes
+- **SSH multiplexing (`ControlMaster`)** — connection reuse across all SSH operations
+- **Warp tri-state** — `DesiredNode.warp: None | False | True` (keep-current / disable / enable) with correct YAML round-trip (explicit `null`, not dropped; loader defaults missing key to `None`)
+- **YAML null semantics** for `desired_*` and `subscription_page` — `null` means "unmanaged" (as documented); previously `desired_clients: null` collapsed to `[]` with `manage=True` and `subscription_page: null` loaded as `enabled=True`
+- **Duplicate node-name validator** — `compute_plan`'s name→IP map and `find_node()` disagreed on duplicates, which could misroute relay `exit_node` references. Caught at load time now
+- **Real-VM test harness** — optional `tests/realvm/` provisions real cloud VMs (Hetzner via `hcloud-python` SDK), runs full deploy + tier-α verification, tears down. Local-only (never in CI), opt-in via `make real-lab`. Foundation for a future `meridian deploy --create-vm <provider>` feature. Per-cloud `CloudProvider` abstract class under `src/meridian/infra/providers/`
+- **NET_ADMIN capability** on remnawave-node container — required by panel 2.6.2+ for Torrent Blocker, IP Control, and related plugins. Without it, those features silently no-op
+- **Subscription-page lifecycle via cluster.yml** — enable/disable the Remnawave subscription container declaratively; `docker compose up -d --no-recreate` on subpage-only apply to avoid incidental panel restart
+- **`ConfigureFail2ban` + fail2ban package wired in both pipelines** — fail2ban is now actually installed and started on every hardened deploy. Previously `build_setup_steps` had an operator-precedence trap (`InstallPackages(REQUIRED_PACKAGES + ["fail2ban"] if harden else None)` parsed as `(REQUIRED + fail2ban) if harden else None`, skipping all packages on `--no-harden`) and `build_node_steps` (used for redeploy) lacked the step entirely
+- **Smart xray readiness polling** in system-lab — polls node API port 3010 + 5s grace for Reality inbound init, replacing a blind `sleep 30`
 
 ### Removed
 - **3x-ui panel** — PanelClient, ConfigurePanel, CreateInbound, all SSH-tunneled curl API calls
 - **Per-server proxy.yml** — replaced by cluster.yml (kept only for `meridian migrate` compatibility)
 - **Local client state** — no more UUID storage, credential sync, SCP rollback
+- **Legacy HAProxy + Caddy code paths** — replaced entirely by nginx (stream SNI routing + http TLS + reverse proxy)
 
 ## [3.17.0] - 2026-04-11
 
