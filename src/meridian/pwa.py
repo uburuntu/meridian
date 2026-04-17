@@ -5,8 +5,8 @@ Centralizes the creation and upload of per-client PWA files
 shared static assets (app.js, styles.css, sw.js, icon.svg).
 
 Called from:
-- DeployConnectionPage / DeployPWAAssets provisioner steps
-- ``commands/client.py`` (_deploy_client_page)
+- ``DeployPWAAssets`` provisioner step (shared static assets)
+- ``commands/client.py`` (_deploy_client_page — per-client pages)
 - ``commands/relay.py`` (relay page regeneration)
 """
 

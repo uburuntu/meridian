@@ -117,7 +117,7 @@ reads the archive and wonders.
 
 - Shell completion — typer's built-in `add_completion=True` is wired (see `cli.py`)
 - Dark mode toggle — `website/src/components/ThemeToggle.astro`
-- `client list` traffic / last-seen — `commands/client.py:192-209`
+- `client list` traffic / last-seen — `commands/client.py` (list includes `traffic_used`, `traffic_limit`, `last_seen` per user)
 - Happ + ShadowRocket — already in `website/src/data/apps.json`
 - `meridian server status` — superseded by `meridian fleet status`
-- `qrencode → segno` — mostly done; one server-side helper remains in `provision/services.py`
+- `qrencode → segno` — done (the legacy `_render_stats_script` helper that still referenced `qrencode` was removed as dead code in the pre-PR polish pass)

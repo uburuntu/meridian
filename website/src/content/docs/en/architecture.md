@@ -86,10 +86,10 @@ Remnawave's own state (users, hosts, config profile, internal squads) lives in i
 ## Docker container layout
 
 **On the panel host** (the first `meridian deploy` target):
-- `remnawave` (backend) — NestJS API on `127.0.0.1:3000`, reverse-proxied at `/<secret_path>/`
+- `remnawave` (backend) — NestJS API on `127.0.0.1:3000`, reverse-proxied at `/<panel.secret_path>/`
 - `remnawave-db` — PostgreSQL storing users, hosts, inbounds
-- `remnawave-valkey` — Valkey cache (Redis-compatible fork)
-- `remnawave-subscription-page` — subscription frontend on `127.0.0.1:3020`, reverse-proxied at `/<sub_path>/`
+- `remnawave-redis` — Valkey cache (Redis-compatible fork; container keeps the legacy `redis` name for client-library compatibility)
+- `remnawave-subscription-page` — subscription frontend, container-internal port 3010, remapped to `127.0.0.1:3020` on the host to avoid colliding with the node API on the same machine; reverse-proxied at `/<subscription_page.path>/`
 - `remnawave-node` — Xray runner in `network_mode: host` with `cap_add: NET_ADMIN` (required by panel 2.6.2+ for plugins and IP Control)
 
 **On non-panel nodes** (every `meridian node add` target):
@@ -99,17 +99,18 @@ All panel + subscription images are pinned in `src/meridian/config.py` and kept 
 
 ## Panel API surface used by Meridian
 
-Meridian talks to Remnawave entirely through the SDK — no direct HTTP construction. Surfaces used:
+Meridian talks to Remnawave mostly through the official SDK (`remnawave` v2.7.1). A few bootstrap and fallback paths — initial admin registration, API-token creation, and endpoints not yet covered by the SDK — use raw `httpx` against the panel URL. Surfaces used:
 
-- **Users** — `create_user`, `get_user`, `delete_user`, `list_users` (client CRUD)
+- **Users** — `create_user`, `get_user`, `delete_user`, `list_users`, `enable_user`, `disable_user` (client CRUD)
 - **Hosts** — `create_host`, `list_hosts`, `enable_host`, `disable_host`, `delete_host` (per-inbound endpoints shown in subscription URLs)
-- **Nodes** — `create_node`, `list_nodes`, `disable_node`, `delete_node`, `update_node_name`
+- **Nodes** — `create_node`, `list_nodes`, `disable_node`, `delete_node`, `update_node_name`, plus the node secret / mTLS keygen bundle
 - **Inbounds** — `list_inbounds`, `assign_inbounds_to_squad` (inbound ↔ squad wiring)
 - **Config profiles** — `create_config_profile`, `get_config_profile`, `update_xray_config` (available; used by future split-routing feature)
 - **Internal squads** — `list_internal_squads` (users grouped for host visibility)
-- **Keygen** — Reality x25519 key generation (panel returns the keypair)
 
-Admin UI is reverse-proxied by nginx at `/<secret_path>/` on port 443 in all modes — no SSH tunnel needed.
+Reality x25519 keypairs are NOT fetched from the panel — Meridian generates them server-side on the node using the xray binary (`xray x25519`) and persists them in `cluster.yml` so they survive redeploy.
+
+Admin UI is reverse-proxied by nginx at `/<panel.secret_path>/` on port 443 in all modes — no SSH tunnel needed.
 
 ## Drift and plan / apply
 
@@ -124,8 +125,8 @@ Meridian writes to `/etc/nginx/conf.d/meridian-stream.conf` and `/etc/nginx/conf
 nginx handles:
 - SNI routing on port 443 (stream module, no TLS termination)
 - TLS termination on port 8443 (http module, certificates managed by acme.sh)
-- Reverse proxy for the Remnawave admin UI (`/<secret_path>/` → `127.0.0.1:3000`)
-- Reverse proxy for the Remnawave subscription page (`/<sub_path>/` → `127.0.0.1:3020`)
+- Reverse proxy for the Remnawave admin UI (`/<panel.secret_path>/` → `127.0.0.1:3000`)
+- Reverse proxy for the Remnawave subscription page (`/<subscription_page.path>/` → `127.0.0.1:3020`)
 - Connection info page serving (hosted pages with shareable URLs)
 - Reverse proxy for XHTTP traffic to Xray (path-based routing, all modes when XHTTP enabled)
 - Reverse proxy for WSS traffic to Xray (domain mode only)

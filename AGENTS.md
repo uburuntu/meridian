@@ -29,7 +29,8 @@ tests/CLAUDE.md                         — testing philosophy
   realvm/CLAUDE.md                      — real-VM harness (local-only)
 
 website/CLAUDE.md                       — Astro rationale, i18n
-  src/components/ src/content/docs/ src/i18n/ src/layouts/ src/pages/ src/styles/CLAUDE.md
+  src/components/ src/content/docs/ src/i18n/ src/layouts/ src/styles/CLAUDE.md
+  src/pages/CLAUDE.md + src/pages/blog/CLAUDE.md
 
 .github/workflows/CLAUDE.md             — CI / release pipeline
 ```
