@@ -136,6 +136,14 @@ is still running. Rare, but can happen on first-ever image pull. Try again.
 up. CX22 is the minimum viable size; if testing on smaller (not recommended),
 bump to CX32.
 
+**"cert chain does not mention Let's Encrypt"** after several rapid runs —
+you've likely tripped LE's IP-cert rate limit (~5 shortlived issuances per
+/32 IPv4 per 7 days) because Hetzner re-assigned the same Primary IPv4 from
+its pool. `acme.sh` falls back to self-signed, the assertion fails. Fix:
+destroy the fleet and re-run — a fresh VM usually gets a different IP. For
+sustained iteration, run with `MERIDIAN_TEST_DOMAIN=vpn.example.com` (tier β):
+LE's domain profile allows 50 certs/week per registered domain.
+
 **Stuck with orphan VMs after a crash** — `make real-lab-orphans` to list,
 `make real-lab-down` to destroy.
 
