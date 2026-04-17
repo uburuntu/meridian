@@ -197,7 +197,7 @@ After the provisioner pipeline, `_configure_panel_and_node` in `setup.py` uses t
 - `/etc/ssl/meridian/` — TLS certificates (managed by acme.sh)
 
 ### On each node
-- `/opt/remnawave-node/` — node compose file + `.env`
+- `/opt/remnanode/` — node compose file + `.env`
 
 ### On the local (deployer) machine
 - `~/.meridian/cluster.yml` — fleet state (panel creds, nodes, relays, desired state)

@@ -419,3 +419,85 @@ class TestRunBranding:
             run(ip=_IP_A, yes=True)
         # Branding should not be replaced with new values
         assert cluster.branding is original_branding
+
+
+class TestSubscriptionPagePathPersistence:
+    """Regression: `_run_provisioner` must create and persist
+    `cluster.subscription_page` with a generated nginx route on the very
+    first deploy. If it doesn't, the next `meridian apply` disable-cycle
+    skips nginx cleanup (empty path) and a subsequent re-enable adds a
+    duplicate route — found by Round 2 dual review on v4-declarative."""
+
+    def test_first_deploy_creates_subscription_page_with_path(self) -> None:
+        """After _run_provisioner completes on a cluster with no existing
+        subscription_page section, cluster.subscription_page must be a
+        non-None SubscriptionPageConfig with a non-empty path."""
+        from meridian.cluster import ClusterConfig
+        from meridian.commands.setup import _run_provisioner
+
+        cluster = ClusterConfig()
+        assert cluster.subscription_page is None
+        resolved = _make_resolved()
+
+        with (
+            patch("meridian.provision.Provisioner.run", return_value=[]),
+            patch("meridian.commands.setup.ok"),
+            patch("meridian.commands.setup.info"),
+            patch("meridian.commands.setup.fail"),
+        ):
+            _run_provisioner(
+                resolved=resolved,  # type: ignore[arg-type]
+                cluster=cluster,
+                domain="",
+                sni="www.microsoft.com",
+                harden=False,
+                is_panel_host=True,
+                secret_path="secret",
+                xhttp_port=30000,
+                reality_port=10000,
+                wss_port=20000,
+            )
+
+        assert cluster.subscription_page is not None, (
+            "subscription_page must be created during first deploy — "
+            "otherwise a later REMOVE_SUBSCRIPTION_PAGE would skip nginx "
+            "cleanup and re-enable would create duplicate routes"
+        )
+        assert cluster.subscription_page.path, (
+            "subscription_page.path must be non-empty after first deploy "
+            "so nginx cleanup can find and remove the route on disable"
+        )
+        # Path is secrets.token_hex(8) — 16 hex chars
+        assert len(cluster.subscription_page.path) == 16
+
+    def test_redeploy_reuses_existing_subscription_page_path(self) -> None:
+        """When cluster.yml already has a subscription_page.path, re-running
+        _run_provisioner must NOT rotate it — otherwise nginx would end up
+        with both the old and new paths until the old one is cleaned up."""
+        from meridian.cluster import ClusterConfig, SubscriptionPageConfig
+        from meridian.commands.setup import _run_provisioner
+
+        cluster = ClusterConfig(subscription_page=SubscriptionPageConfig(path="stable_path_abc"))
+        resolved = _make_resolved()
+
+        with (
+            patch("meridian.provision.Provisioner.run", return_value=[]),
+            patch("meridian.commands.setup.ok"),
+            patch("meridian.commands.setup.info"),
+            patch("meridian.commands.setup.fail"),
+        ):
+            _run_provisioner(
+                resolved=resolved,  # type: ignore[arg-type]
+                cluster=cluster,
+                domain="",
+                sni="www.microsoft.com",
+                harden=False,
+                is_panel_host=True,
+                secret_path="secret",
+                xhttp_port=30000,
+                reality_port=10000,
+                wss_port=20000,
+            )
+
+        assert cluster.subscription_page is not None
+        assert cluster.subscription_page.path == "stable_path_abc"
