@@ -24,6 +24,6 @@
 
 - **Shell injection**: ALL `conn.run()` interpolated values MUST use `shlex.quote()`.
 - **ProtocolKey is StrEnum** — works as dict key but YAML serialization needs `_stringify_keys()` to avoid Python-tagged output.
-- **Panel accessible via HTTPS** — unlike 3x-ui (SSH curl), Remnawave panel is reverse-proxied by nginx on a secret path. Direct REST calls from deployer machine.
+- **Panel accessible via HTTPS** — Remnawave backend is reverse-proxied by nginx at a secret path on public 443; all REST goes from the deployer's machine directly, no SSH tunnel.
 - **Local mode**: detection is file-based only — `/etc/meridian/node.yml` or dir existence.
 - **Camouflage target**: never recommend apple.com (ASN mismatch with VPS providers).
