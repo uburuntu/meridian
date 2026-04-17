@@ -319,7 +319,7 @@ class TestNginxXHTTPBlock:
 
 
 # ---------------------------------------------------------------------------
-# nginx config: panel proxy (WebSocket support for 3x-ui)
+# nginx config: panel proxy (WebSocket support for Remnawave admin UI)
 # ---------------------------------------------------------------------------
 
 
@@ -345,7 +345,7 @@ class TestNginxPanelProxy:
         )
 
     def test_ip_panel_has_websocket_upgrade(self):
-        """3x-ui panel uses WebSocket — proxy must pass upgrade headers."""
+        """Remnawave admin UI uses WebSocket — proxy must pass upgrade headers."""
         cfg = self._ip_config()
         panel_block = cfg[cfg.index("secretpanel") :]
         assert "proxy_set_header Upgrade" in panel_block
