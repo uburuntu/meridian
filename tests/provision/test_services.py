@@ -1091,5 +1091,3 @@ class TestDeployPWAAssets:
         step = DeployPWAAssets()
         result = step.run(conn, ctx)
         assert result.status == "failed"
-
-
