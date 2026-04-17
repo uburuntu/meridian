@@ -93,16 +93,31 @@ hood; no terminal required.
 
 Rotate Reality keys, JWT secrets, and subscription paths in place.
 
-## Good first issues
+## Tracked follow-ups (v4 aftermath)
 
-Contributor-friendly entry points (stable surfaces, clear scope, small
-diffs). Some are already open as issues; the rest will be promoted as
-contributors pick them up.
+Security / supply chain:
+- [#38](https://github.com/uburuntu/meridian/issues/38) — `install.sh` verify `SHA256SUMS` before exec
+- [#39](https://github.com/uburuntu/meridian/issues/39) — pin + verify `RealiTLScanner` binary
 
-- Add Happ and ShadowRocket to the connection page's app list
-- `meridian client disable/enable` CLI (panel API already supports it)
-- Shell completion (typer built-in)
-- Windows WSL setup guide (docs page)
-- WebRTC leak warning on the connection page
-- Replace `qrencode` binary with Python `segno` package
-- iOS `apple-touch-icon` uses SVG — switch to PNG
+Product:
+- [#40](https://github.com/uburuntu/meridian/issues/40) — `meridian client disable / enable` CLI (good-first-issue)
+- [#41](https://github.com/uburuntu/meridian/issues/41) — batch `meridian client add a b c` (good-first-issue)
+- [#42](https://github.com/uburuntu/meridian/issues/42) — `meridian deploy NEW_IP --from OLD_IP` fleet migration
+- [#43](https://github.com/uburuntu/meridian/issues/43) — auto SSH key setup for password-only VPS
+
+UX / docs:
+- [#44](https://github.com/uburuntu/meridian/issues/44) — WebRTC leak warning on connection page
+- [#45](https://github.com/uburuntu/meridian/issues/45) — Windows / WSL setup guide (good-first-issue)
+
+## Audit notes (done but worth tracking)
+
+These were open items in the old BACKLOG that are already done in v4 or
+are addressed by the architecture. Kept here as a pointer in case someone
+reads the archive and wonders.
+
+- Shell completion — typer's built-in `add_completion=True` is wired (see `cli.py`)
+- Dark mode toggle — `website/src/components/ThemeToggle.astro`
+- `client list` traffic / last-seen — `commands/client.py:192-209`
+- Happ + ShadowRocket — already in `website/src/data/apps.json`
+- `meridian server status` — superseded by `meridian fleet status`
+- `qrencode → segno` — mostly done; one server-side helper remains in `provision/services.py`
