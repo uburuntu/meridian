@@ -42,6 +42,8 @@ CERT_INFO=$(ssh -o StrictHostKeyChecking=no root@"$TARGET_IP" \
   "openssl s_client -connect 127.0.0.1:443 -servername $TARGET_IP </dev/null 2>/dev/null | openssl x509 -noout -issuer -dates" 2>/dev/null || true)
 if echo "$CERT_INFO" | grep -qiE "Let's Encrypt|R10|R11|ISRG Root"; then
   pass "cert chain issued by Let's Encrypt"
+elif echo "$CERT_INFO" | grep -qiE "self.?signed|localhost|CN ?= ?$TARGET_IP"; then
+  fail_test "self-signed fallback — likely LE IP-cert rate limit (5/7d per /32). Destroy fleet, wait or re-run (fresh Primary IPv4); or switch to domain mode via MERIDIAN_TEST_DOMAIN."
 else
   fail_test "cert chain does not mention Let's Encrypt: $CERT_INFO"
 fi
