@@ -82,13 +82,13 @@ else
   fail_test "sshd did not refuse password auth: $PWD_RESULT"
 fi
 
-echo ">>> Checking fail2ban is active (soft — known Meridian bug: ConfigureFail2ban step silent)..."
+echo ">>> Checking fail2ban is active (hard assertion — regression guard for build_node_steps/setup_steps fix)..."
 F2B_STATE=$(ssh -o StrictHostKeyChecking=no root@"$TARGET_IP" "systemctl is-active fail2ban 2>/dev/null || echo missing" 2>/dev/null)
 echo "    systemctl is-active fail2ban: $F2B_STATE"
 if [ "$F2B_STATE" = "active" ]; then
   pass "fail2ban is active"
 else
-  echo "    ~ fail2ban not active — upstream bug: ConfigureFail2ban step doesn't run or fails silently. Tracked separately."
+  fail_test "fail2ban is not active — did ConfigureFail2ban run during hardened redeploy?"
 fi
 
 # ── 6. Fleet status (via JSON to avoid Rich color-code capture issues) ─────────────────

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from meridian.provision import build_setup_steps
+from meridian.provision import build_node_steps, build_setup_steps
 from meridian.provision.steps import ProvisionContext
 
 # ---------------------------------------------------------------------------
@@ -86,6 +86,62 @@ class TestHardenSteps:
         assert "Ensure port 443" not in names_with
         assert "Ensure port 443" in names_without
         assert len(names_with) == len(names_without) + 2
+
+
+class TestNodePipelineHardens:
+    """Redeploy of an existing node takes `build_node_steps` because
+    `is_panel_host=is_first_deploy` in setup.py. Until now, that path
+    silently skipped fail2ban even when the operator asked for hardening
+    — the package wasn't in REQUIRED_PACKAGES, and ConfigureFail2ban
+    wasn't appended. This regression test pins both."""
+
+    def test_node_pipeline_no_harden_has_required_packages_only(self, base_ctx: ProvisionContext) -> None:
+        steps = build_node_steps(base_ctx)
+        install_step = next(s for s in steps if s.name == "Install system packages")
+        assert install_step._packages is not None  # not None (not collapsed by precedence bug)
+        assert "fail2ban" not in install_step._packages
+
+    def test_node_pipeline_harden_installs_fail2ban(self, base_ctx: ProvisionContext) -> None:
+        base_ctx.harden = True
+        steps = build_node_steps(base_ctx)
+        install_step = next(s for s in steps if s.name == "Install system packages")
+        assert install_step._packages is not None
+        assert "fail2ban" in install_step._packages
+
+    def test_node_pipeline_harden_configures_fail2ban(self, base_ctx: ProvisionContext) -> None:
+        base_ctx.harden = True
+        step_names_list = [s.name for s in build_node_steps(base_ctx)]
+        assert "Configure fail2ban" in step_names_list
+        # Order: HardenSSH → ConfigureFail2ban → ConfigureBBR
+        assert step_names_list.index("Harden SSH configuration") < step_names_list.index("Configure fail2ban")
+        assert step_names_list.index("Configure fail2ban") < step_names_list.index("Enable BBR congestion control")
+
+    def test_node_pipeline_no_harden_skips_fail2ban_step(self, base_ctx: ProvisionContext) -> None:
+        step_names_list = [s.name for s in build_node_steps(base_ctx)]
+        assert "Configure fail2ban" not in step_names_list
+
+
+class TestSetupPipelinePackages:
+    """Guards against the operator-precedence trap in `build_setup_steps`
+    where `REQUIRED_PACKAGES + ["fail2ban"] if ctx.harden else None` parses
+    as `(REQUIRED + fail2ban) if ctx.harden else None`, yielding
+    InstallPackages(None) for the non-hardening path."""
+
+    def test_setup_pipeline_no_harden_still_installs_required(self, base_ctx: ProvisionContext) -> None:
+        steps = build_setup_steps(base_ctx)
+        install_step = next(s for s in steps if s.name == "Install system packages")
+        assert install_step._packages is not None, (
+            "REQUIRED_PACKAGES must be installed even without --harden; "
+            "operator-precedence bug would collapse this to None"
+        )
+        assert "fail2ban" not in install_step._packages
+
+    def test_setup_pipeline_harden_installs_fail2ban(self, base_ctx: ProvisionContext) -> None:
+        base_ctx.harden = True
+        steps = build_setup_steps(base_ctx)
+        install_step = next(s for s in steps if s.name == "Install system packages")
+        assert install_step._packages is not None
+        assert "fail2ban" in install_step._packages
 
 
 class TestHostedPage:
