@@ -7,17 +7,15 @@ from pathlib import Path
 
 from meridian.provision.services import (
     ConfigureNginx,
-    DeployConnectionPage,
     DeployPWAAssets,
     InstallNginx,
     IssueTLSCert,
     _render_nginx_http_config,
     _render_nginx_ip_config,
     _render_nginx_stream_config,
-    _render_stats_script,
 )
 from meridian.provision.steps import ProvisionContext
-from tests.provision.conftest import MockConnection, make_credentials
+from tests.provision.conftest import MockConnection
 
 # ---------------------------------------------------------------------------
 # Config rendering: nginx stream (SNI routing)
@@ -1066,26 +1064,6 @@ class TestIssueTLSCert:
 
 
 # ---------------------------------------------------------------------------
-# DeployConnectionPage step
-# ---------------------------------------------------------------------------
-
-
-class TestDeployConnectionPage:
-    def test_no_credentials_fails(self, tmp_path: Path):
-        conn = MockConnection()
-        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
-        # Provide credentials with empty reality UUID to trigger failure
-        creds = make_credentials()
-        creds.protocols["reality"].uuid = ""
-        ctx["credentials"] = creds
-
-        step = DeployConnectionPage(server_ip="198.51.100.1")
-        result = step.run(conn, ctx)
-        assert result.status == "failed"
-        assert "UUID" in result.detail
-
-
-# ---------------------------------------------------------------------------
 # DeployPWAAssets step
 # ---------------------------------------------------------------------------
 
@@ -1115,47 +1093,3 @@ class TestDeployPWAAssets:
         assert result.status == "failed"
 
 
-# ---------------------------------------------------------------------------
-# _render_stats_script() basic test
-# ---------------------------------------------------------------------------
-
-
-class TestRenderStatsScript:
-    """Verify the stats update script is valid Python with correct parameters."""
-
-    def test_output_is_valid_python(self):
-        script = _render_stats_script(panel_internal_port=2053)
-        # compile() will raise SyntaxError if the script is not valid Python
-        compile(script, "<stats-script>", "exec")
-
-    def test_contains_panel_url_with_port(self):
-        script = _render_stats_script(panel_internal_port=9999)
-        assert "127.0.0.1:9999" in script
-
-    def test_contains_credential_file_path(self):
-        script = _render_stats_script(panel_internal_port=2053)
-        assert "/etc/meridian/proxy.yml" in script
-
-    def test_handles_url_encoded_password(self):
-        """Script should use urllib.parse.quote for password in login data."""
-        script = _render_stats_script(panel_internal_port=2053)
-        assert "urllib.parse.quote" in script
-
-    def test_uses_different_ports(self):
-        """Port parameter should be correctly interpolated."""
-        script_a = _render_stats_script(panel_internal_port=2053)
-        script_b = _render_stats_script(panel_internal_port=5555)
-        assert "127.0.0.1:2053" in script_a
-        assert "127.0.0.1:5555" in script_b
-        assert "127.0.0.1:5555" not in script_a
-
-    def test_writes_stats_to_uuid_json(self):
-        """Script should write per-client stats files keyed by UUID."""
-        script = _render_stats_script(panel_internal_port=2053)
-        assert "/var/www/private/stats" in script
-        assert ".json" in script
-
-    def test_has_main_guard(self):
-        script = _render_stats_script(panel_internal_port=2053)
-        assert "__name__" in script
-        assert "__main__" in script

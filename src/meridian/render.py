@@ -88,8 +88,8 @@ def render_hosted_html(
 ) -> str:
     """Render connection info HTML for server hosting (is_server_hosted=True).
 
-    Returns the rendered HTML string. Used by the provisioner's
-    DeployConnectionPage step and by ``client add`` for server-hosted pages.
+    Returns the rendered HTML string. Used by ``client add`` /
+    ``client show`` for server-hosted pages.
 
     Each ``ProtocolURL`` should have its ``qr_b64`` field populated
     before calling this function.
