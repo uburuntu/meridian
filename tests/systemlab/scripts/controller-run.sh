@@ -29,12 +29,11 @@ wait_for_xray() {
     if ssh root@"$host" "docker ps --filter name=remnawave-node --format '{{.Status}}' | grep -q Up" 2>/dev/null && \
        ssh root@"$host" "ss -tlnp sport = :3010 2>/dev/null | grep -q LISTEN" 2>/dev/null; then
       # Grace period: port 3010 (node API) binds first, but Reality
-      # inbounds (port ~10xxx, routed via nginx on 443) initialize a few
-      # seconds later after the node receives its config from the panel.
-      # 5s is empirically enough; without it, connection tests hit
-      # 'connection reset' on the direct Reality path.
-      sleep 5
-      echo " ready ($((elapsed + 5))s)"
+      # inbounds (port ~10xxx, routed via nginx on 443) initialize later
+      # after the node receives its config from the panel. On redeploy
+      # the panel re-pushes config with retry/backoff, needing ~10-15s.
+      sleep 15
+      echo " ready ($((elapsed + 15))s)"
       return 0
     fi
     sleep 1
