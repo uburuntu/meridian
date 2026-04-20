@@ -255,7 +255,11 @@ class HardenSSH:
             conn.run(
                 "for f in /etc/ssh/sshd_config.d/*.conf; do "
                 f'[ "$f" = "{_SSH_HARDENING_DROPIN_PATH}" ] && continue; '
-                r"sed -i -E 's/^[[:space:]]*(PasswordAuthentication|KbdInteractiveAuthentication|ChallengeResponseAuthentication)[[:space:]]/#\1 /' "
+                "sed -i -E "
+                r"'s/^[[:space:]]*(PasswordAuthentication"
+                r"|KbdInteractiveAuthentication"
+                r"|ChallengeResponseAuthentication)"
+                r"[[:space:]]/#\1 /' "
                 '"$f" 2>/dev/null; done',
                 timeout=15,
             )
