@@ -4,6 +4,11 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.17.2] - 2026-04-20
+
+### Fixed
+- **SSH hardening failure on cloud-init VPS** — deploy failed with `effective sshd setting mismatch: expected 'passwordauthentication no'` on Ubuntu instances with cloud-init. Root cause: sshd uses first-match-wins, and Meridian's `99-meridian.conf` loaded after cloud-init's `50-cloud-init.conf`. Now uses `00-meridian.conf` to load first, and neutralizes conflicting settings in other drop-ins (#31)
+
 ## [3.17.1] - 2026-04-14
 
 ### Fixed
