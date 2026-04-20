@@ -6,15 +6,30 @@ import os
 from pathlib import Path
 
 MERIDIAN_HOME = Path(os.environ.get("MERIDIAN_HOME", Path.home() / ".meridian"))
-CREDS_BASE = MERIDIAN_HOME / "credentials"
+CLUSTER_CONFIG = MERIDIAN_HOME / "cluster.yml"
+CLUSTER_BACKUP = MERIDIAN_HOME / "cluster.yml.bak"
+CREDS_BASE = MERIDIAN_HOME / "credentials"  # legacy (3.x migration only)
 CACHE_DIR = MERIDIAN_HOME / "cache"
-SERVERS_FILE = MERIDIAN_HOME / "servers"
+SERVERS_FILE = MERIDIAN_HOME / "servers"  # legacy (3.x migration only)
 SERVER_CREDS_DIR = Path("/etc/meridian")
+SERVER_NODE_CONFIG = SERVER_CREDS_DIR / "node.yml"  # server-side identity
 
 DEFAULT_SNI = "www.microsoft.com"
 DEFAULT_FINGERPRINT = "chrome"
-DEFAULT_PANEL_PORT = 2053
 ACME_SERVER = os.environ.get("MERIDIAN_ACME_SERVER", "letsencrypt").strip() or "letsencrypt"
+
+# Remnawave panel + node
+REMNAWAVE_BACKEND_IMAGE = "remnawave/backend:2.7.4"
+REMNAWAVE_NODE_IMAGE = "remnawave/node:2.7.0"
+REMNAWAVE_SUBSCRIPTION_PAGE_IMAGE = "remnawave/subscription-page:7.1.8"
+REMNAWAVE_PANEL_PORT = 3000  # internal port, nginx reverse-proxied
+REMNAWAVE_NODE_API_PORT = 3010  # node API port (panel→node mTLS communication)
+REMNAWAVE_SUBSCRIPTION_PAGE_PORT = 3020  # host port (internal 3010 remapped to avoid node API conflict)
+REMNAWAVE_PANEL_DIR = "/opt/remnawave"
+REMNAWAVE_NODE_DIR = "/opt/remnanode"
+
+# Legacy 3x-ui (kept for migration)
+DEFAULT_PANEL_PORT = 2053
 CONNECT_TEST_URL = os.environ.get("MERIDIAN_CONNECT_TEST_URL", "https://ifconfig.me").strip() or "https://ifconfig.me"
 DISABLE_UPDATE_CHECK = os.environ.get("MERIDIAN_DISABLE_UPDATE_CHECK", "").strip().lower() in {
     "1",
@@ -45,7 +60,7 @@ REALM_SHA256: dict[str, str] = {
 RELAY_CONFIG_PATH = "/etc/meridian/realm.toml"
 
 # Xray client binary (for connection verification)
-XRAY_VERSION = "26.2.6"  # matches xray bundled in 3x-ui 2.8.11
+XRAY_VERSION = "26.3.27"  # matches xray bundled in remnawave/node:2.7.0
 XRAY_GITHUB_URL = "https://github.com/XTLS/Xray-core/releases/download"
 XRAY_ASSET_MAP: dict[tuple[str, str], str] = {
     ("Darwin", "arm64"): "Xray-macos-arm64-v8a.zip",

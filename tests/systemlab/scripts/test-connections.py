@@ -2,8 +2,8 @@
 """Test Reality connections (direct + via relay) through the deployed exit node.
 
 Uses the default CONNECT_TEST_URL (ifconfig.me) since xray blocks private IPs
-(geoip:private routing rule — x-ui regenerates this from its DB, can't patch).
-IP match is disabled because the Docker bridge IP won't match the public egress IP.
+(geoip:private routing rule). IP match is disabled because the Docker bridge
+IP won't match the public egress IP.
 
 XHTTP/WSS skipped until domain mode + Pebble ACME is wired (phase 2).
 Exit code 0 = all passed, 1 = at least one failure.
@@ -13,31 +13,33 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
 
-from meridian.credentials import ServerCredentials
+from meridian.cluster import ClusterConfig
 from meridian.xray_client import (
-    build_test_configs,
+    build_test_configs_from_cluster,
     ensure_xray_binary,
     test_connection,
 )
 
 EXIT_IP = os.environ.get("EXIT_IP", "172.30.0.10")
-MERIDIAN_HOME = Path(os.environ.get("MERIDIAN_HOME", str(Path.home() / ".meridian")))
+CLIENT_UUID = os.environ.get("CLIENT_UUID", "")
 
-proxy_yml = MERIDIAN_HOME / "credentials" / EXIT_IP / "proxy.yml"
-if not proxy_yml.exists():
-    print(f"FAIL: credentials not found at {proxy_yml}")
+if not CLIENT_UUID:
+    print("FAIL: CLIENT_UUID env var not set — need a real user UUID for auth")
     sys.exit(1)
 
-creds = ServerCredentials.load(proxy_yml)
-configs = build_test_configs(creds)
+cluster = ClusterConfig.load()
+if not cluster.is_configured:
+    print("FAIL: cluster not configured — deploy first")
+    sys.exit(1)
+
+configs = build_test_configs_from_cluster(cluster, EXIT_IP, uuid=CLIENT_UUID)
 
 # Reality only; IP match disabled (Docker NAT → public IP ≠ bridge IP)
 selected = [(label, cfg, False) for label, cfg, _ in configs if "Reality" in label]
 
 if not selected:
-    print("FAIL: no Reality configs generated — check credentials")
+    print("FAIL: no Reality configs generated — check cluster config and node keys")
     sys.exit(1)
 
 xray_bin = ensure_xray_binary()

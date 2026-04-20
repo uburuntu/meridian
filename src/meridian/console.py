@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import NoReturn
+import json as _json
+from typing import Any, NoReturn
 
 import typer
 from rich.console import Console
@@ -22,21 +23,57 @@ _theme = Theme(
 console = Console(theme=_theme, highlight=False)
 err_console = Console(theme=_theme, stderr=True, highlight=False)
 
+_output_json = False
+_quiet_mode = False
+
+
+def set_json_mode(enabled: bool) -> None:
+    """Set JSON output mode."""
+    global _output_json
+    _output_json = enabled
+
+
+def is_json_mode() -> bool:
+    """Check if JSON output mode is active."""
+    return _output_json
+
+
+def set_quiet_mode(enabled: bool) -> None:
+    """Set quiet mode — suppresses info/ok/warn/banner output."""
+    global _quiet_mode
+    _quiet_mode = enabled
+
+
+def is_quiet_mode() -> bool:
+    """Check if quiet mode is active."""
+    return _quiet_mode
+
+
+def json_output(data: Any) -> None:
+    """Write JSON to stdout (for --json mode). Separate from Rich stderr output."""
+    print(_json.dumps(data, indent=2, default=str))
+
 
 def info(msg: str) -> None:
-    err_console.print(f"  [info]\u2192[/info] {msg}")
+    if not _quiet_mode:
+        err_console.print(f"  [info]\u2192[/info] {msg}")
 
 
 def ok(msg: str) -> None:
-    err_console.print(f"  [ok]\u2713[/ok] {msg}")
+    if not _quiet_mode:
+        err_console.print(f"  [ok]\u2713[/ok] {msg}")
 
 
 def warn(msg: str) -> None:
-    err_console.print(f"  [warn]![/warn] {msg}")
+    if not _quiet_mode:
+        err_console.print(f"  [warn]![/warn] {msg}")
 
 
-def fail(msg: str, *, hint: str = "", hint_type: str = "bug") -> NoReturn:
-    """Print an error message and exit with code 1.
+_EXIT_CODES = {"user": 2, "system": 3, "bug": 1}
+
+
+def fail(msg: str, *, hint: str = "", hint_type: str = "bug", exit_code: int | None = None) -> NoReturn:
+    """Print an error message and exit.
 
     Args:
         msg: The error message to display.
@@ -45,6 +82,8 @@ def fail(msg: str, *, hint: str = "", hint_type: str = "bug") -> NoReturn:
             "user"   -- input validation errors; no GitHub link shown.
             "system" -- infrastructure errors; suggests 'meridian doctor'.
             "bug"    -- unexpected errors (default); shows GitHub issues link.
+        exit_code: Explicit exit code. If None, derived from hint_type
+            (user=2, system=3, bug=1).
     """
     err_console.print(f"\n  [error]\u2717 {msg}[/error]")
     if hint:
@@ -55,7 +94,8 @@ def fail(msg: str, *, hint: str = "", hint_type: str = "bug") -> NoReturn:
         err_console.print("  [dim]Run: meridian doctor  (to collect server info)[/dim]\n")
     else:  # "bug"
         err_console.print("  [dim]Report: https://github.com/uburuntu/meridian/issues[/dim]\n")
-    raise typer.Exit(code=1)
+    code = exit_code if exit_code is not None else _EXIT_CODES.get(hint_type, 1)
+    raise typer.Exit(code=code)
 
 
 def line() -> None:
@@ -64,7 +104,8 @@ def line() -> None:
 
 
 def banner(version: str) -> None:
-    err_console.print(f"\n  [bold]Meridian[/bold] [dim]v{version}[/dim]\n")
+    if not _quiet_mode:
+        err_console.print(f"\n  [bold]Meridian[/bold] [dim]v{version}[/dim]\n")
 
 
 def prompt(message: str, default: str = "") -> str:
@@ -83,21 +124,14 @@ def prompt(message: str, default: str = "") -> str:
 
 
 def confirm(message: str = "Continue?") -> bool:
-    """Y/n confirmation prompt. Returns True on accept, raises typer.Exit(1) on reject.
-
-    Accepts: y, Y, Enter (default yes).
-    Rejects: n, N (raises typer.Exit(1)).
-    """
+    """Y/n confirmation prompt. Returns True on accept, False on reject."""
     try:
         with open("/dev/tty") as tty:
             err_console.print(f"\n  [info]\u2192[/info] {message} [dim][Y/n][/dim] ", end="")
             answer = tty.readline().strip().lower()
     except OSError:
-        # No TTY available — default to reject (don't auto-confirm destructive ops)
-        raise typer.Exit(code=1)
-    if answer in ("", "y", "yes"):
-        return True
-    raise typer.Exit(code=1)
+        return False
+    return answer in ("", "y", "yes")
 
 
 def choose(message: str, options: list[str], *, default: int = 1) -> int:

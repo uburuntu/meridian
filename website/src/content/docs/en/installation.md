@@ -42,9 +42,10 @@ Meridian checks for updates automatically:
 
 ## Requirements
 
-- **Python 3.10+** (installed automatically by uv/pipx)
+- **Python 3.11+** (installed automatically by uv/pipx; 3.11 is the minimum because the official Remnawave SDK requires it)
 - **SSH key access** to your target server
-- **qrencode** (optional, for terminal QR codes): `brew install qrencode` or `apt install qrencode`
+
+Terminal QR codes are rendered by the bundled `segno` Python package — no system dependency required.
 
 ## Verify installation
 

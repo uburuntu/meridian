@@ -4,7 +4,7 @@
 
 **Two-stage pipeline** — CI validates on every push/PR. Release triggers only on CI success on main via `workflow_run`. Prevents accidental releases from failed builds.
 
-**CI jobs**: Python Tests (3.10 + 3.12 matrix), Lint, Type Check, Validate (templates + app links + VERSION + CHANGELOG + deploy CLI flags + PWA demo), Shell (shellcheck), Integration (3x-ui Docker), E2E Provisioner, Website Build.
+**CI jobs**: Python Tests (3.10 + 3.12 matrix), Lint, Type Check, Validate (templates + app links + VERSION + CHANGELOG + deploy CLI flags + PWA demo), Shell (shellcheck), System Lab (multi-node Docker deploy), Website Build.
 
 **VERSION-driven releases** — read VERSION file, check if git tag exists. If missing: detect semver change, extract CHANGELOG section, push tag, create Release. Idempotent — safe to re-run.
 
@@ -13,11 +13,11 @@
 ## What's done well
 
 - **Validate job** — single job checks templates render, app links match across surfaces, VERSION is valid semver, CHANGELOG has an entry, deploy CLI flags are documented in cli-reference.md. Catches drift between docs and code.
-- **E2E depends on lint+test** — syntax must be clean before spinning up Docker. Saves CI minutes on obvious failures.
+- **System lab depends on lint+test** — syntax must be clean before spinning up Docker. Saves CI minutes on obvious failures.
 - **PWA demo validation** — CI generates a demo PWA page and verifies all required files exist, SW is disabled for static hosting, and client HTML renders correctly.
 
 ## Pitfalls
 
 - **Release notes depend on CHANGELOG discipline** — if human forgets to update CHANGELOG before bumping VERSION, release notes fall back to git log (less useful).
 - **AI docs generated in 3 places** — CI website build, deploy-pages, publish-pypi all regenerate. Single source would reduce duplication.
-- **E2E timeout 15min** — provisioning is slow. Hung Docker step stalls the entire CI run.
+- **System lab timeout 30min** — Remnawave image pulls inside nested Docker are slow. Timeout is generous to accommodate cold caches.

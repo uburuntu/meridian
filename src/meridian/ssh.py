@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+import logging
+import re
 import shlex
 import shutil
 import subprocess
 from pathlib import Path
 
 from meridian.console import err_console, info, ok, warn
+
+logger = logging.getLogger("meridian.ssh")
+
+# Patterns to redact from debug log output (env var assignments with secrets)
+_SECRET_PATTERNS = re.compile(
+    r"((?:SECRET_KEY|PASSWORD|JWT_AUTH_SECRET|JWT_API_TOKENS_SECRET|POSTGRES_PASSWORD|METRICS_PASS)"
+    r"\s*=\s*)\S+",
+    re.IGNORECASE,
+)
+
+
+def _redact_command(cmd: str) -> str:
+    """Mask secret values in SSH commands for safe debug logging."""
+    return _SECRET_PATTERNS.sub(r"\1***", cmd[:200])
 
 
 class SSHError(Exception):
@@ -32,6 +48,25 @@ SSH_OPTS: list[str] = [
     "-o",
     "StrictHostKeyChecking=yes",
 ]
+
+# SSH multiplexing: reuse a single TCP connection for multiple commands
+# to the same host. ControlPersist=300 keeps the master alive for 5min
+# after the last command, so sequential provisioner steps don't pay
+# the TCP+auth handshake each time.
+SSH_MULTIPLEX_OPTS: list[str] = [
+    "-o",
+    "ControlMaster=auto",
+    "-o",
+    "ControlPath=~/.meridian/ssh/%r@%h:%p",
+    "-o",
+    "ControlPersist=300",
+]
+
+
+def ensure_multiplex_dir() -> None:
+    """Create the SSH control socket directory if it doesn't exist."""
+    sock_dir = Path.home() / ".meridian" / "ssh"
+    sock_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
 
 def scp_host(ip: str) -> str:
@@ -166,16 +201,41 @@ class ServerConnection:
     Passwordless sudo is required (standard on AWS/GCP/Azure/DO).
     """
 
-    def __init__(self, ip: str, user: str = "root", local_mode: bool = False, port: int = 22) -> None:
+    def __init__(
+        self,
+        ip: str,
+        user: str = "root",
+        local_mode: bool = False,
+        port: int = 22,
+        multiplex: bool = True,
+    ) -> None:
         self.ip = ip
         self.user = user
         self.port = port
         self.local_mode = local_mode
         self.needs_sudo = False  # on-server non-root — run commands via sudo
+        self.multiplex = multiplex
+        if multiplex and not local_mode:
+            ensure_multiplex_dir()
+
+    def __enter__(self) -> ServerConnection:
+        # Several call sites use ``with ServerConnection(...) as conn:``. The
+        # SSH ControlMaster (multiplex) layer manages its own connection
+        # lifetime, so __enter__/__exit__ are no-ops; defining them prevents
+        # AttributeError that was silently swallowed by surrounding try/except
+        # in commands/client.py and commands/recover.py.
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        # Multiplexed connections persist for SSH_MULTIPLEX_OPTS' lifetime;
+        # nothing to release here.
+        return None
 
     @property
     def _ssh_opts(self) -> list[str]:
         opts = list(SSH_OPTS)
+        if self.multiplex and not self.local_mode:
+            opts.extend(SSH_MULTIPLEX_OPTS)
         if self.port != 22:
             opts.extend(["-p", str(self.port)])
         return opts
@@ -184,6 +244,8 @@ class ServerConnection:
     def _scp_opts(self) -> list[str]:
         """SSH options for SCP commands (uses -P for port, not -p)."""
         opts = list(SSH_OPTS)
+        if self.multiplex and not self.local_mode:
+            opts.extend(SSH_MULTIPLEX_OPTS)
         if self.port != 22:
             opts.extend(["-P", str(self.port)])
         return opts
@@ -208,6 +270,7 @@ class ServerConnection:
         of letting ``subprocess.TimeoutExpired`` crash the caller.
         """
         use_sudo = sudo if sudo is not None else (self.user != "root")
+        logger.debug("SSH %s@%s: %s", self.user, self.ip, _redact_command(command))
 
         if self.local_mode:
             if self.needs_sudo or use_sudo:
@@ -215,13 +278,15 @@ class ServerConnection:
             else:
                 cmd = ["bash", "-c", command]
             try:
-                return subprocess.run(
+                result = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
                     timeout=timeout,
                     stdin=subprocess.DEVNULL,
                 )
+                logger.debug("SSH rc=%d", result.returncode)
+                return result
             except subprocess.TimeoutExpired:
                 return subprocess.CompletedProcess(
                     args=cmd,
@@ -237,13 +302,15 @@ class ServerConnection:
             command = f"sudo -n sh -c {shlex.quote(command)}"
         cmd = ["ssh", *self._ssh_opts, f"{self.user}@{self.ip}", command]
         try:
-            return subprocess.run(
+            result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
                 stdin=subprocess.DEVNULL,
             )
+            logger.debug("SSH rc=%d", result.returncode)
+            return result
         except subprocess.TimeoutExpired:
             return subprocess.CompletedProcess(
                 args=cmd,
@@ -303,23 +370,37 @@ class ServerConnection:
     def detect_local_mode(self) -> bool:
         """Check if we're running on the target server itself.
 
-        Detection is file-based only: /etc/meridian/proxy.yml readable (root)
-        or /etc/meridian/ directory exists (non-root on deployed server).
+        Detection is file-based only: /etc/meridian/node.yml (v4) or
+        /etc/meridian/proxy.yml (v3 compat) readable (root), or
+        /etc/meridian/ directory exists but files not readable (non-root).
 
         Does NOT use public IP matching — that produces false positives when
         the user is connected to the server via TUN mode (VPN), since their
         outbound IP matches the server IP.
         """
-        from meridian.config import SERVER_CREDS_DIR
+        from meridian.config import SERVER_CREDS_DIR, SERVER_NODE_CONFIG
 
+        file_check_failed = False
+
+        # v4: node.yml
+        try:
+            if SERVER_NODE_CONFIG.is_file() and SERVER_NODE_CONFIG.stat().st_size > 0:
+                self.local_mode = True
+                return True
+        except (PermissionError, OSError):
+            file_check_failed = True
+
+        # v3 compat: proxy.yml
         proxy = SERVER_CREDS_DIR / "proxy.yml"
         try:
             if proxy.is_file() and proxy.stat().st_size > 0:
                 self.local_mode = True
                 return True
         except (PermissionError, OSError):
-            # Can't stat the file — check if /etc/meridian/ dir exists
-            # (non-root on a deployed server)
+            file_check_failed = True
+
+        # Dir exists but files not readable → non-root on deployed server
+        if file_check_failed:
             try:
                 if SERVER_CREDS_DIR.is_dir():
                     warn("Running as non-root on the server. Using sudo for commands.")
@@ -328,7 +409,6 @@ class ServerConnection:
                     return True
             except (PermissionError, OSError):
                 pass
-            return False
 
         return False
 

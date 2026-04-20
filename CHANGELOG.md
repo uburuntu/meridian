@@ -4,15 +4,55 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [3.17.2] - 2026-04-20
+## [4.0.0] - 2026-04-12
 
-### Fixed
-- **SSH hardening failure on cloud-init VPS** — deploy failed with `effective sshd setting mismatch: expected 'passwordauthentication no'` on Ubuntu instances with cloud-init. Root cause: sshd uses first-match-wins, and Meridian's `99-meridian.conf` loaded after cloud-init's `50-cloud-init.conf`. Now uses `00-meridian.conf` to load first, and neutralizes conflicting settings in other drop-ins (#31)
+### Remnawave compatibility matrix
+This release pins a single tested version tuple. Upgrading any one component
+without the rest is not supported — move the whole set together.
 
-## [3.17.1] - 2026-04-14
+| Component | Pinned version |
+|---|---|
+| `remnawave/backend` | `2.7.4` |
+| `remnawave/node` | `2.7.0` |
+| `remnawave/subscription-page` | `7.1.8` |
+| `remnawave` Python SDK | `2.7.1` |
+| Xray-core client (test binary) | `26.3.27` |
+| Realm (relay forwarder) | `2.9.3` |
+| Pebble (system-lab ACME CA) | `2.10.0` |
 
-### Fixed
-- **Credential sync and fetch for non-root deploy users** — deploying with `--user` (non-root) silently failed to sync `proxy.yml` to the server because SCP can't write to root-owned `/etc/meridian/`. This caused `relay deploy` and other commands that force-refresh credentials to fail. Now uses SSH + sudo for non-root users instead of SCP
+### Changed
+- **Remnawave replaces 3x-ui** — modern panel with panel/node separation (NestJS + PostgreSQL + Valkey), proper REST API, built-in subscriptions, native multi-node support
+- **Single `cluster.yml` replaces per-server `proxy.yml`** — fleet-wide manifest with panel URL, API token, nodes, relays. Client state lives in Remnawave's database, not locally
+- **`client add` is one API call** — was ~400 LOC of SSH-tunneled curl, credential sync, and per-inbound client insertion
+- **Relay = Remnawave Host entry** — enable/disable host toggles subscription inclusion automatically
+
+### Added
+- **`meridian node add/list/remove/check`** — multi-node fleet management
+- **`meridian fleet status/recover`** — panel health, node connectivity, relay status, user count, and reconstruct-from-panel when local state is lost
+- **`meridian migrate`** — guided migration from 3.x (reads old proxy.yml, prints step-by-step plan)
+- **`MeridianPanel` REST client** — wraps the official `remnawave` Python SDK (v2.7.1) with retries, credential redaction, and thread-local event loops for parallel workers
+- **Config reliability** — corrupt YAML handling, version check, backup before mutations, disk-full error messages, external-edit guard (`cluster.save()` refuses to clobber if the file mtime advanced during a long-running apply), snapshot type validation
+- **Reality keys persisted** — public_key and short_id saved in cluster.yml for connection testing
+- **Declarative plan/apply workflow** — `cluster.yml` becomes desired state (`desired_nodes`, `desired_relays`, `desired_clients`, `subscription_page`); `meridian plan` prints a Terraform-style diff; `meridian apply` converges. Imperative commands (`deploy`, `node add`, `client add`) mirror their effect into `desired_*` when the list is non-null — hybrid sync, mixing the two modes is safe
+- **Applied-state tracking** — every successful `apply` snapshots desired state into `cluster._extra["desired_*_applied"]`. The next plan distinguishes intentional removals (in applied → executes under `--yes`) from drift (not in applied → requires `--prune-extras=yes`). Closes the subtle bug where `--yes` silently skipped deliberate removals
+- **`meridian plan --json`** — structured output for CI consumption; exit 0 = converged, 2 = changes pending, 1 = error. Stable JSON shape with typed `actions[].kind` values
+- **`--prune-extras=ask|yes|no`** — explicit control over drift handling. Under `--yes`, `ask` downgrades to `no` (safety default); destructive actions still require one confirmation unless `--yes`
+- **Parallel node provisioning** — `ThreadPoolExecutor` with `--parallel N` (default 4); per-worker `MeridianPanel` SDK instance, `threading.local()` event loops, `threading.RLock` on `cluster.save()` for safe concurrent writes
+- **SSH multiplexing (`ControlMaster`)** — connection reuse across all SSH operations
+- **Warp tri-state** — `DesiredNode.warp: None | False | True` (keep-current / disable / enable) with correct YAML round-trip (explicit `null`, not dropped; loader defaults missing key to `None`)
+- **YAML null semantics** for `desired_*` and `subscription_page` — `null` means "unmanaged" (as documented); previously `desired_clients: null` collapsed to `[]` with `manage=True` and `subscription_page: null` loaded as `enabled=True`
+- **Duplicate node-name validator** — `compute_plan`'s name→IP map and `find_node()` disagreed on duplicates, which could misroute relay `exit_node` references. Caught at load time now
+- **Real-VM test harness** — optional `tests/realvm/` provisions real cloud VMs (Hetzner via `hcloud-python` SDK), runs full deploy + tier-α verification, tears down. Local-only (never in CI), opt-in via `make real-lab`. Foundation for a future `meridian deploy --create-vm <provider>` feature. Per-cloud `CloudProvider` abstract class under `src/meridian/infra/providers/`
+- **NET_ADMIN capability** on remnawave-node container — required by panel 2.6.2+ for Torrent Blocker, IP Control, and related plugins. Without it, those features silently no-op
+- **Subscription-page lifecycle via cluster.yml** — enable/disable the Remnawave subscription container declaratively; `docker compose up -d --no-recreate` on subpage-only apply to avoid incidental panel restart
+- **`ConfigureFail2ban` + fail2ban package wired in both pipelines** — fail2ban is now actually installed and started on every hardened deploy. Previously `build_setup_steps` had an operator-precedence trap (`InstallPackages(REQUIRED_PACKAGES + ["fail2ban"] if harden else None)` parsed as `(REQUIRED + fail2ban) if harden else None`, skipping all packages on `--no-harden`) and `build_node_steps` (used for redeploy) lacked the step entirely
+- **Smart xray readiness polling** in system-lab — polls node API port 3010 + 5s grace for Reality inbound init, replacing a blind `sleep 30`
+
+### Removed
+- **3x-ui panel** — PanelClient, ConfigurePanel, CreateInbound, all SSH-tunneled curl API calls
+- **Per-server proxy.yml** — replaced by cluster.yml (kept only for `meridian migrate` compatibility)
+- **Local client state** — no more UUID storage, credential sync, SCP rollback
+- **Legacy HAProxy + Caddy code paths** — replaced entirely by nginx (stream SNI routing + http TLS + reverse proxy)
 
 ## [3.17.0] - 2026-04-11
 
@@ -30,7 +70,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - **Manual 3x-ui inbounds no longer crash client commands** — `list_inbounds()` handles empty or malformed JSON from manually-created panel inbounds (#16)
 - **DebianBanner no longer blocks deploy on some OpenSSH builds** — verification is skipped when `sshd -T` doesn't recognize the directive (#20)
 - **BBR no longer blocks deploy on containers** — `sysctl` failures due to missing kernel tunables (containers, old kernels) return a warning instead of failing the entire deploy. Other sysctl errors still fail
-- **SSH drop-in priority** — `99-meridian.conf` ensures Meridian's sshd hardening takes precedence over cloud-init overrides (loads last, wins)
+- **SSH drop-in priority** — `00-meridian.conf` ensures Meridian's sshd hardening takes precedence over cloud-init overrides
 - **SCP directory copy** — fixed `-r` flag compatibility with OpenSSH ≥ 9.0 (SFTP protocol default)
 
 ## [3.16.1] - 2026-04-10

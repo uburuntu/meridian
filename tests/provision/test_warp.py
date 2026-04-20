@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 
 from meridian.provision.steps import ProvisionContext
-from meridian.provision.warp import WARP_PROXY_PORT, ConfigureWarpOutbound, InstallWarp
+from meridian.provision.warp import WARP_PROXY_PORT, InstallWarp
 from tests.provision.conftest import MockConnection
 
 
@@ -104,128 +103,6 @@ class TestInstallWarp:
 
 
 # ---------------------------------------------------------------------------
-# ConfigureWarpOutbound
-# ---------------------------------------------------------------------------
-
-
-class _MockPanel:
-    """Minimal panel mock for Xray config fetch/update."""
-
-    def __init__(self, xray_config: dict | None = None):
-        self._config = xray_config or {
-            "outbounds": [{"protocol": "freedom", "tag": "direct"}],
-            "routing": {"rules": []},
-        }
-        self._updated: str | None = None
-        self._restarted = False
-
-    def api_post_empty(self, path: str) -> dict:
-        if path == "/panel/xray/":
-            wrapper = {"xraySetting": json.dumps(self._config)}
-            return {"success": True, "obj": json.dumps(wrapper)}
-        if path == "/panel/api/server/restartXrayService":
-            self._restarted = True
-            return {"success": True}
-        return {"success": True}
-
-    def api_post_form(self, path: str, form_data: str) -> dict:
-        self._updated = form_data
-        return {"success": True}
-
-    @property
-    def updated_config(self) -> dict | None:
-        if self._updated is None:
-            return None
-        from urllib.parse import unquote
-
-        raw = self._updated.replace("xraySetting=", "")
-        return json.loads(unquote(raw))
-
-
-class TestConfigureWarpOutbound:
-    def test_already_configured_returns_ok(self, tmp_path: Path):
-        panel = _MockPanel(
-            {
-                "outbounds": [
-                    {"protocol": "socks", "tag": "warp", "settings": {}},
-                    {"protocol": "freedom", "tag": "direct"},
-                ],
-            }
-        )
-        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path), warp=True)
-        ctx["panel"] = panel
-
-        result = ConfigureWarpOutbound().run(MockConnection(), ctx)
-        assert result.status == "ok"
-        assert "already configured" in result.detail
-
-    def test_adds_warp_as_first_outbound(self, tmp_path: Path):
-        panel = _MockPanel(
-            {
-                "outbounds": [{"protocol": "freedom", "tag": "direct"}],
-                "routing": {"rules": []},
-            }
-        )
-        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path), warp=True)
-        ctx["panel"] = panel
-
-        result = ConfigureWarpOutbound().run(MockConnection(), ctx)
-        assert result.status == "changed"
-
-        updated = panel.updated_config
-        assert updated is not None
-        outbounds = updated["outbounds"]
-        # WARP must be FIRST (Xray uses first outbound as default)
-        assert outbounds[0]["tag"] == "warp"
-        assert outbounds[0]["protocol"] == "socks"
-        # Direct still present as fallback
-        assert any(o["tag"] == "direct" for o in outbounds)
-
-    def test_warp_points_to_correct_port(self, tmp_path: Path):
-        panel = _MockPanel()
-        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path), warp=True)
-        ctx["panel"] = panel
-
-        ConfigureWarpOutbound().run(MockConnection(), ctx)
-
-        updated = panel.updated_config
-        assert updated is not None
-        warp_outbound = updated["outbounds"][0]
-        server = warp_outbound["settings"]["servers"][0]
-        assert server["address"] == "127.0.0.1"
-        assert server["port"] == WARP_PROXY_PORT
-
-    def test_preserves_existing_outbounds(self, tmp_path: Path):
-        """WARP should be inserted before existing outbounds, not replace them."""
-        panel = _MockPanel(
-            {
-                "outbounds": [
-                    {"protocol": "freedom", "tag": "direct"},
-                    {"protocol": "blackhole", "tag": "blocked"},
-                ],
-                "routing": {"rules": []},
-            }
-        )
-        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path), warp=True)
-        ctx["panel"] = panel
-
-        ConfigureWarpOutbound().run(MockConnection(), ctx)
-
-        updated = panel.updated_config
-        assert updated is not None
-        tags = [o["tag"] for o in updated["outbounds"]]
-        assert tags == ["warp", "direct", "blocked"]
-
-    def test_restarts_xray(self, tmp_path: Path):
-        panel = _MockPanel()
-        ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path), warp=True)
-        ctx["panel"] = panel
-
-        ConfigureWarpOutbound().run(MockConnection(), ctx)
-        assert panel._restarted
-
-
-# ---------------------------------------------------------------------------
 # Pipeline integration
 # ---------------------------------------------------------------------------
 
@@ -238,35 +115,33 @@ class TestWarpPipelineIntegration:
         steps = build_setup_steps(ctx)
         step_names = [s.name for s in steps]
         assert "Install Cloudflare WARP" not in step_names
-        assert "Configure WARP outbound" not in step_names
 
-    def test_warp_enabled_adds_steps(self):
+    def test_warp_enabled_adds_install_step(self):
         from meridian.provision import build_setup_steps
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp/test", warp=True)
         steps = build_setup_steps(ctx)
         step_names = [s.name for s in steps]
         assert "Install Cloudflare WARP" in step_names
-        assert "Configure WARP outbound" in step_names
 
     def test_warp_steps_before_verify(self):
-        """WARP steps must come before VerifyXray."""
+        """WARP steps must come after Docker."""
         from meridian.provision import build_setup_steps
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp/test", warp=True)
         steps = build_setup_steps(ctx)
         step_names = [s.name for s in steps]
         warp_idx = step_names.index("Install Cloudflare WARP")
-        verify_idx = step_names.index("Verify Xray configuration")
-        assert warp_idx < verify_idx
+        docker_idx = step_names.index("Install Docker")
+        assert warp_idx > docker_idx
 
-    def test_warp_steps_after_geo_blocking(self):
-        """WARP steps must come after ConfigureGeoBlocking."""
+    def test_warp_steps_after_node_deploy(self):
+        """WARP steps must come after Docker install."""
         from meridian.provision import build_setup_steps
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir="/tmp/test", warp=True)
         steps = build_setup_steps(ctx)
         step_names = [s.name for s in steps]
-        geo_idx = step_names.index("Configure geo-blocking")
+        docker_idx = step_names.index("Install Docker")
         warp_idx = step_names.index("Install Cloudflare WARP")
-        assert warp_idx > geo_idx
+        assert warp_idx > docker_idx

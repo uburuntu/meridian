@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Allow manually triggering CI on any branch from the Actions UI or via
+  # `gh workflow run ci.yml --ref <branch>`. Useful for validating feature
+  # branches on the fork before opening an upstream PR.
+  workflow_dispatch:
 
 jobs:
   python-test:
@@ -12,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v5
 
@@ -20,11 +24,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install package with dev dependencies
-        run: pip install ".[dev]"
+      - uses: astral-sh/setup-uv@v7
 
-      - name: Run tests (skip integration — no Docker)
-        run: pytest tests/ -v --tb=short --ignore=tests/test_integration_3xui.py
+      - name: Install package with dev dependencies
+        run: uv sync --extra dev
+
+      - name: Run tests
+        run: uv run pytest tests/ -v --tb=short
 
   python-lint:
     name: Python Lint
@@ -36,20 +42,26 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ruff
-        run: pip install 'ruff>=0.4,<1.0'
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install dev dependencies
+        run: uv sync --extra dev
 
       - name: Ruff check
-        run: ruff check src/ tests/
+        run: uv run ruff check src/ tests/
 
       - name: Ruff format check
-        run: ruff format --check src/ tests/
+        run: uv run ruff format --check src/ tests/
 
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
 
       - uses: astral-sh/setup-uv@v7
 
@@ -142,76 +154,11 @@ jobs:
           shellcheck -e SC2086,SC2029,SC2087,SC2155 -S warning install.sh
           shellcheck -e SC2086,SC2029,SC2087,SC2155 -S warning setup.sh
 
-  integration:
-    name: Integration
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Install package with dev dependencies
-        run: pip install ".[dev]"
-
-      - name: Start 3x-ui container
-        run: docker compose -f docker-compose.test.yml up -d
-
-      - name: Wait for panel
-        run: |
-          for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:2053/ 2>/dev/null || echo "000")
-            if [ "$code" != "000" ]; then
-              echo "Panel ready (HTTP $code)"
-              break
-            fi
-            echo "Waiting... attempt $i"
-            sleep 2
-          done
-
-      - name: Run integration tests
-        run: pytest tests/test_integration_3xui.py -v --tb=short
-
-      - name: Dump container logs on failure
-        if: failure()
-        run: docker compose -f docker-compose.test.yml logs
-
-      - name: Stop container
-        if: always()
-        run: docker compose -f docker-compose.test.yml down -v
-
-  e2e:
-    name: E2E Provisioner
-    runs-on: ubuntu-latest
-    needs: [python-test, python-lint]
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Pre-pull 3x-ui image
-        run: docker pull ghcr.io/mhsanaei/3x-ui:2.8.11
-
-      - name: Run E2E tests
-        run: docker compose -f tests/e2e/docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e
-
-      - name: Dump E2E container logs on failure
-        if: failure()
-        run: |
-          docker compose -f tests/e2e/docker-compose.e2e.yml logs
-          docker logs 3x-ui 2>&1 || true
-
-      - name: Cleanup
-        if: always()
-        run: |
-          docker rm -f 3x-ui 2>/dev/null || true
-          docker compose -f tests/e2e/docker-compose.e2e.yml down -v
-
   system-lab:
     name: System Lab
     runs-on: ubuntu-latest
     needs: [python-test, python-lint]
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -248,7 +195,7 @@ jobs:
         run: cd website && npx astro check --minimumSeverity warning
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
 
       - name: Validate PWA demo generation
         run: |

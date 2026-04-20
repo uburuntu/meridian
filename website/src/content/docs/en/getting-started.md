@@ -45,7 +45,7 @@ meridian deploy local
 
 ## What happens
 
-1. **Installs Docker** and deploys Xray via the 3x-ui management panel
+1. **Installs Docker** and deploys Xray managed by the Remnawave panel
 2. **Generates x25519 keypair** — unique keys for Reality authentication
 3. **Hardens the server** — UFW firewall, SSH key-only auth, BBR congestion control
 4. **Configures VLESS+Reality** on port 443 — impersonates a real TLS server
@@ -99,6 +99,45 @@ meridian server remove finland     # remove from registry
 ```
 
 The `--server` flag lets you target a specific server for any command: `meridian client add alice --server finland`.
+
+## Declarative workflow
+
+Once you have more than one server, you can manage the whole fleet declaratively. Describe the desired state in `~/.meridian/cluster.yml`, run `meridian plan` to preview the diff, and `meridian apply` to converge.
+
+A minimal desired-state block:
+
+```yaml
+desired_nodes:
+  - host: 198.51.100.1
+    name: germany-1
+    sni: www.microsoft.com
+  - host: 198.51.100.2
+    name: finland-1
+    sni: www.microsoft.com
+
+desired_relays:
+  - host: 198.51.100.10
+    name: moscow-relay
+    exit_node: germany-1          # name or IP
+
+desired_clients:
+  - alice
+  - bob
+
+subscription_page:
+  enabled: true                    # self-hosted Remnawave subscription page
+```
+
+```
+meridian plan                      # shows a Terraform-style diff: + adds, - removes, ~ updates
+meridian apply --yes               # converge (skips confirmations; panel-only drift is preserved unless --prune-extras=yes)
+```
+
+Each section is independent. Omitting `desired_clients` entirely leaves client management imperative (`meridian client add/remove` still works); listing it with `[]` tells Meridian to remove every client. Same pattern for `desired_nodes` and `desired_relays`.
+
+`meridian plan` exits `0` when the cluster is converged, `2` when changes are pending — so you can gate CI workflows on it. Use `meridian plan --json` to get structured output for piping to `jq` or any other tool. See [CLI reference](/docs/en/cli-reference/#meridian-plan) for full options.
+
+For an annotated reference of every field cluster.yml accepts (state, desired-state, branding, inbound cache), see the [`cluster.example.yml`](https://github.com/uburuntu/meridian/blob/v4/cluster.example.yml) at the repo root. Imperative commands (`meridian client add`, `meridian node add`, etc.) automatically mirror their effect into the matching `desired_*` list when that list is non-null — so mixing imperative and declarative is safe.
 
 ## Next steps
 

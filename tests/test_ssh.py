@@ -420,3 +420,41 @@ class TestDetectLocalMode:
         monkeypatch.setattr("meridian.config.SERVER_CREDS_DIR", creds_dir)
         conn = ServerConnection(ip="198.51.100.1")
         assert conn.detect_local_mode() is False
+
+
+# ---------------------------------------------------------------------------
+# Secret redaction
+# ---------------------------------------------------------------------------
+
+
+class TestRedactCommand:
+    def test_redacts_secret_key(self) -> None:
+        from meridian.ssh import _redact_command
+
+        cmd = "printf 'SECRET_KEY=eyJhbGciOiJIUzI1NiJ9.abc123' > /opt/remnanode/.env"
+        result = _redact_command(cmd)
+        assert "eyJhbGciOiJIUzI1NiJ9" not in result
+        assert "SECRET_KEY=***" in result
+
+    def test_redacts_postgres_password(self) -> None:
+        from meridian.ssh import _redact_command
+
+        cmd = "POSTGRES_PASSWORD=supersecret123 docker compose up"
+        result = _redact_command(cmd)
+        assert "supersecret123" not in result
+        assert "POSTGRES_PASSWORD=***" in result
+
+    def test_redacts_jwt_secrets(self) -> None:
+        from meridian.ssh import _redact_command
+
+        cmd = "JWT_AUTH_SECRET=abc123 JWT_API_TOKENS_SECRET=def456"
+        result = _redact_command(cmd)
+        assert "abc123" not in result
+        assert "def456" not in result
+
+    def test_preserves_non_secret_commands(self) -> None:
+        from meridian.ssh import _redact_command
+
+        cmd = "docker ps --format '{{.Names}}'"
+        result = _redact_command(cmd)
+        assert result == cmd

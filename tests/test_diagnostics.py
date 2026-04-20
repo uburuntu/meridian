@@ -1,10 +1,9 @@
-"""Tests for diagnostics module — redaction, formatting, cert parsing, geo-blocking."""
+"""Tests for diagnostics module — redaction, formatting, cert parsing."""
 
 from __future__ import annotations
 
 from meridian.commands.diagnostics import (
     _check_cert_expiry,
-    _check_geo_blocking,
     _format_sections,
     _redact_secrets,
 )
@@ -84,52 +83,3 @@ class TestCheckCertExpiry:
 
         result = _check_cert_expiry(FakeConn())
         assert "could not check" in result
-
-
-class TestCheckGeoBlocking:
-    """Verify geo-blocking status detection."""
-
-    def test_active_geo_blocking(self) -> None:
-        import json
-
-        config = {
-            "outbounds": [{"protocol": "blackhole", "tag": "blocked"}],
-            "routing": {
-                "rules": [
-                    {"type": "field", "outboundTag": "blocked", "domain": ["geosite:category-ru"]},
-                    {"type": "field", "outboundTag": "blocked", "ip": ["geoip:ru"]},
-                ]
-            },
-        }
-
-        class FakeConn:
-            def run(self, cmd: str, timeout: int = 10) -> object:
-                from types import SimpleNamespace
-
-                return SimpleNamespace(stdout=json.dumps(config), returncode=0)
-
-        result = _check_geo_blocking(FakeConn())
-        assert "active" in result
-        assert "2 rules" in result
-
-    def test_not_configured(self) -> None:
-        import json
-
-        class FakeConn:
-            def run(self, cmd: str, timeout: int = 10) -> object:
-                from types import SimpleNamespace
-
-                return SimpleNamespace(stdout=json.dumps({"outbounds": []}), returncode=0)
-
-        result = _check_geo_blocking(FakeConn())
-        assert "not configured" in result
-
-    def test_empty_config(self) -> None:
-        class FakeConn:
-            def run(self, cmd: str, timeout: int = 10) -> object:
-                from types import SimpleNamespace
-
-                return SimpleNamespace(stdout="", returncode=1)
-
-        result = _check_geo_blocking(FakeConn())
-        assert "could not read" in result

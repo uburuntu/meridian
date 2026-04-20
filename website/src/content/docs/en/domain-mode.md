@@ -33,7 +33,7 @@ meridian deploy 1.2.3.4 --domain proxy.example.com
 
 > **Important:** acme.sh obtains certificates via HTTP-01 challenge on port 80. If Cloudflare's "Always Use HTTPS" is active, it breaks the challenge. Disable it or add a page rule for `/.well-known/acme-challenge/*`.
 
-> **Also important:** in domain mode, the hosted connection page and the hidden 3x-ui panel path are served on this same hostname. Once you switch the record to orange-cloud, those pages go through Cloudflare too. Disable Cloudflare features that inject scripts or modify HTML on this hostname (for example Website Analytics / RUM), because Meridian's connection page intentionally uses a strict self-hosted CSP. If the page starts failing while proxied, temporarily switch the record back to DNS only to confirm it is a Cloudflare-side issue.
+> **Also important:** in domain mode, the hosted connection page and the hidden Remnawave admin UI + subscription-page paths are served on this same hostname. Once you switch the record to orange-cloud, those pages go through Cloudflare too. Disable Cloudflare features that inject scripts or modify HTML on this hostname (for example Website Analytics / RUM), because Meridian's connection page intentionally uses a strict self-hosted CSP. If the page starts failing while proxied, temporarily switch the record back to DNS only to confirm it is a Cloudflare-side issue.
 
 ## Connection links
 

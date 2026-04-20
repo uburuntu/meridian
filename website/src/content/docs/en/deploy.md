@@ -171,26 +171,28 @@ meridian relay deploy RELAY_IP --exit YOUR_EXIT_IP
 
 ## Management panel
 
-Meridian deploys [3x-ui](https://github.com/MHSanaei/3x-ui) as the web management panel for Xray. You can access it directly in your browser to monitor traffic, view inbound configs, and check server status.
+Meridian deploys [Remnawave](https://remna.st/) as the management stack — a modern panel (backend) plus independent node service, both reverse-proxied by nginx at a random secret path. The panel UI lets you monitor traffic, view inbound configs, manage users and hosts, and check server status directly in a browser.
 
-The panel URL and credentials are stored in your local credentials file:
+The panel URL and credentials are stored in your local `cluster.yml`:
 
 ```
-cat ~/.meridian/credentials/<IP>/proxy.yml
+cat ~/.meridian/cluster.yml
 ```
 
 The `panel` section contains everything you need:
 
 ```yaml
 panel:
-  username: a1b2c3d4e5f6
-  password: Xk9mP2qR7vW4nL8jF3hT6yBs
-  web_base_path: n7kx2m9qp4wj8vh3rf6tby5e
   url: https://198.51.100.1/n7kx2m9qp4wj8vh3rf6tby5e/
+  api_token: <JWT token>
+  admin_user: admin
+  admin_pass: <generated>
+  secret_path: n7kx2m9qp4wj8vh3rf6tby5e
+  sub_path: <subscription page path>
 ```
 
-Open the `url` in your browser and log in with the username and password.
+Open the `url` in your browser and log in with the admin credentials.
 
-The panel path is randomized for security — treat it like a password. All `meridian` CLI commands use this same panel API under the hood, so anything you can do in the CLI is also visible in the panel.
+The panel path is randomized for security — treat it like a password. All `meridian` CLI commands use this same panel API under the hood, so anything you do via the CLI is also visible in the panel, and vice versa (drift is surfaced by `meridian plan`).
 
 > **Note:** If you modify settings directly in the panel, they may be overwritten on the next `meridian deploy`.

@@ -19,7 +19,7 @@ AFTER INSTALL, CAN'T CONNECT → meridian test IP
 
 AFTER INSTALL, SOMETHING BROKE → meridian doctor IP
   "Collect everything for debugging."
-  Collects: server OS, Docker, 3x-ui logs, ports, firewall, SNI, DNS.
+  Collects: server OS, Docker, Remnawave panel + node logs, ports, firewall, SNI, DNS.
 ```
 
 Add `--ai` to preflight or doctor for an AI-ready diagnostic prompt.
@@ -37,7 +37,7 @@ Add `--ai` to preflight or doctor for an AI-ready diagnostic prompt.
 **Fixes:**
 1. Check cloud provider console — ensure port 443/TCP is allowed inbound
 2. Try from a different network (mobile data, another Wi-Fi)
-3. SSH in and check: `docker ps` (is 3x-ui running?), `ss -tlnp sport = :443`
+3. SSH in and check: `docker ps` (are `remnawave`, `remnawave-node`, `nginx` running?), `ss -tlnp sport = :443`
 4. Check UFW: `ufw status` — should show 443/tcp ALLOW
 
 ### TLS handshake fails
@@ -48,7 +48,7 @@ Add `--ai` to preflight or doctor for an AI-ready diagnostic prompt.
 3. Reality SNI target is unreachable from the server
 
 **Fixes:**
-1. Check Xray: `docker logs 3x-ui --tail 20`
+1. Check Xray: `docker logs remnawave-node --tail 20`
 2. Check port: `ss -tlnp sport = :443` — should be nginx
 3. Test SNI: `meridian preflight IP`
 
@@ -90,17 +90,15 @@ Conflicting Docker packages from distro repos. Meridian auto-removes them, but i
 
 Test SSH manually: `ssh root@SERVER_IP`. Ensure you have key-based access. Use `--user` flag if not root.
 
-### Xray fails to start (invalid JSON / MarshalJSON error)
+### Xray fails to start in the node container
 
-The 3x-ui inbound `settings` or `streamSettings` fields contain corrupted JSON. This happens when `settings` is sent as a nested object instead of a JSON string — the 3x-ui Go struct expects a `string` type. The API returns `success: true` but stores only the first key name instead of the full JSON.
+Check the container: `docker logs remnawave-node --tail 50`. Common causes are a port collision on the host (node runs in `network_mode: host`, so ports from `cluster.yml` must be free), an unreachable panel (node registration needs the panel's `node_secret_key` at boot), or a missing `NET_ADMIN` capability.
 
-**Fix:** Uninstall and reinstall: `meridian teardown IP && meridian deploy IP`. To verify the database: `sqlite3 /opt/3x-ui/db/x-ui.db "SELECT settings FROM inbounds;"` — each field should be valid JSON.
+**Fix:** `meridian teardown IP && meridian deploy IP` rebuilds the node cleanly. To verify Remnawave panel state, log into the admin UI at `https://<IP>/<secret_path>/` and check **Nodes** → the node should be `connected`; `meridian fleet status` surfaces the same information from the CLI.
 
 ### XHTTP inbound creation fails (port conflict)
 
-In older versions (pre-v3.6.0), both Reality and XHTTP tried to use port 443. 3x-ui rejects duplicate ports.
-
-**Fix:** Update to v3.6.0+. XHTTP now runs on a localhost-only port, routed through nginx.
+Older Meridian versions (pre-v3.6.0) tried to put both Reality and XHTTP on port 443. v4 allocates deterministic per-node XHTTP/Reality/WSS ports (see [Architecture → Port assignments](/docs/en/architecture/#port-assignments)) and reverse-proxies through nginx, so the conflict cannot recur.
 
 ### Disk space insufficient
 
@@ -117,7 +115,7 @@ Domain doesn't resolve to server IP yet. Update the DNS A record. Propagation is
 See the [IP Blocked Recovery guide](/docs/en/recovery/) for step-by-step recovery options (new server, relay swap, CDN fallback).
 
 Other causes:
-- Server rebooted and Docker didn't auto-start → `docker start 3x-ui`
+- Server rebooted and Docker didn't auto-start → `docker start remnawave remnawave-node nginx` (or `cd /opt/remnawave && docker compose up -d`)
 - Disk full → `df -h /`, `docker system prune -af`
 
 ## Slow speeds
@@ -165,8 +163,8 @@ See the [Relay guide — Troubleshooting](/docs/en/relay/#troubleshooting) secti
 |---------|-----------------|
 | Local Machine | OS compatibility |
 | Server | OS version, uptime (recent reboot?), disk/memory usage |
-| Docker | Is 3x-ui container running? Status should be "Up" |
-| 3x-ui Logs | Error messages, "failed to start" entries, certificate issues |
+| Docker | Are `remnawave`, `remnawave-node`, `nginx` containers running? Status should be "Up" |
+| Remnawave Logs | Error messages from panel backend or node, "failed to start" entries, certificate issues |
 | Listening Ports | Port 443 should show nginx. If missing, proxy isn't running |
 | Firewall (UFW) | Port 443/tcp should be ALLOW. If not listed, it's blocked |
 | SNI Target | Should show CONNECTED with a certificate chain |

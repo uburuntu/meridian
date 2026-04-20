@@ -31,11 +31,11 @@ See [SECURITY.md](SECURITY.md) for the threat model and what Meridian protects a
 
 Meridian ships the strongest available protocol — today that's VLESS+Reality — and configures it so your server is indistinguishable from any other website. Nothing left open, nothing to give it away.
 
-| | Meridian | Raw 3x-ui | Marzban | Hiddify Manager |
+| | Meridian | Raw Remnawave | Marzban | Hiddify Manager |
 |---|---|---|---|---|
-| Install | One command | Manual Docker + config | Docker + CLI | Script + web UI |
+| Install | One command | Manual Docker + panel config | Docker + CLI | Script + web UI |
 | Client handoff | QR + hosted page | Manual URL sharing | Panel-only | Panel-only |
-| Architecture | nginx+Xray (hardened) | Xray only | Xray+Nginx | Xray+Nginx |
+| Architecture | nginx+Xray+Remnawave (hardened) | Remnawave panel+node | Xray+Nginx | Xray+Nginx |
 | Relay support | Built-in L4 relay | Manual | No | Manual |
 | Rebuild workflow | `deploy NEW_IP` | Start over | Reconfigure | Reconfigure |
 
@@ -136,6 +136,8 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 | Command | Description |
 |---------|-------------|
 | `meridian deploy [IP\|local]` | Deploy proxy server (interactive wizard if no IP) |
+| `meridian plan` | Show the reconciliation plan — diff between `cluster.yml` and actual panel state |
+| `meridian apply [--yes]` | Converge the cluster to the desired state in `cluster.yml` |
 | `meridian client add NAME` | Add a named client key |
 | `meridian client show NAME` | Show connection info (QR code, URLs, shareable link) |
 | `meridian client list` | List all clients |

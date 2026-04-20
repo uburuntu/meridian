@@ -29,6 +29,8 @@ meridian deploy [IP] [flags]
 | `--warp / --no-warp` | disabled | Route outgoing traffic through Cloudflare WARP |
 | `--server NAME` | | Target server (name or IP) |
 | `--decoy MODE` | none | Decoy response for unknown paths (`none` / `403`) |
+| `--geo-block` / `--no-geo-block` | enabled | Block Russian domains and IPs (geosite:category-ru + geoip:ru) |
+| `--ssh-port PORT` | 22 | SSH port (if non-standard) |
 | `--yes` | | Skip confirmation prompts |
 
 ### meridian client
@@ -39,8 +41,12 @@ Manage client access keys and connection details.
 meridian client add NAME [--server NAME]
 meridian client show NAME [--server NAME]
 meridian client list [--server NAME]
-meridian client remove NAME [--server NAME]
+meridian client remove NAME [--server NAME] [--yes]
 ```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--yes`, `-y` | | Skip removal confirmation (applies to `client remove`) |
 
 ### meridian server
 
@@ -55,6 +61,52 @@ meridian server remove NAME
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--name NAME` | (auto) | Display name for the server |
+
+### meridian node
+
+Manage additional exit nodes in a multi-node fleet. The first server (panel host) is deployed with `meridian deploy`; subsequent exit nodes are added with `meridian node add`.
+
+```
+meridian node add IP [flags]
+meridian node list
+meridian node remove IP [--yes] [--force]
+meridian node check IP
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--user USER` | root | SSH user on the node |
+| `--ssh-port PORT` | 22 | SSH port on the node (if non-standard) |
+| `--name NAME` | (auto, from IP) | Friendly name shown in panel / subscription |
+| `--domain DOMAIN` | (none) | Per-node domain for WSS/CDN fallback |
+| `--sni HOST` | www.microsoft.com | Reality camouflage target for this node |
+| `--warp / --no-warp` | disabled | Route outgoing traffic through Cloudflare WARP on this node |
+| `--harden / --no-harden` | enabled | OS + SSH + firewall hardening for the node |
+| `--yes` | | Skip confirmation prompts (applies to `node remove`) |
+| `--force` | | On `node remove`, proceed even if relays reference this node as their exit |
+
+**How it works**: `meridian node add` provisions the node host (OS packages, Docker, nginx, TLS, Remnawave node container), registers the node against the panel's REST API, and creates `reality` and `xhttp` host entries so clients automatically receive the new exit in their next subscription refresh. The new entry is added to `nodes[]` in `cluster.yml`; `desired_nodes[]` is also updated if that list is non-null (hybrid sync).
+
+**Removal guard**: `meridian node remove` refuses to delete a node that is still the `exit_node` of one or more relays; pass `--force` to override (and accept the consequence of orphaning relay configs until you either redeploy them or remove them).
+
+### meridian fleet
+
+Inspect and repair the fleet from the live panel API.
+
+```
+meridian fleet status [--json]
+meridian fleet recover IP [flags]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--json` | | Emit fleet state as JSON (for scripting / CI) |
+| `--user USER` | root | SSH user on the panel host (for `fleet recover`) |
+| `--ssh-port PORT` | 22 | SSH port on the panel host |
+
+**`fleet status`** — shows panel health, every node's connection + Xray version + traffic, every relay's upstream, and user counts. With `--json`, stable field access: `panel.url`, `panel.healthy`, `nodes[].status` (`"connected"`, `"disconnected"`, `"disabled"`, `"unknown"`), `relays[].status`, `users.active/disabled/other`.
+
+**`fleet recover`** — rebuilds `~/.meridian/cluster.yml` from the live panel. Use it when the local file is lost, or when picking up someone else's deployment. Connects via SSH to read stable server-side metadata, then queries the panel API for nodes, relays, inbounds, hosts, and users.
 
 ### meridian relay
 
@@ -73,9 +125,66 @@ meridian relay check RELAY_IP [--exit EXIT]
 | `--name NAME` | (auto) | Friendly name for the relay (e.g., "ru-moscow") |
 | `--port/-p PORT` | 443 | Listen port on relay server |
 | `--user/-u USER` | root | SSH user on relay |
+| `--ssh-port PORT` | 22 | SSH port on the relay server (if non-standard) |
 | `--yes/-y` | | Skip confirmation prompts |
 
 **How relays work**: Client connects to the relay's domestic IP. Relay forwards raw TCP to the exit server abroad. All encryption is end-to-end between client and exit — the relay never sees plaintext. All protocols (Reality, XHTTP, WSS) work through the relay.
+
+### meridian plan
+
+Show the reconciliation plan — what `meridian apply` would do to converge the cluster to the desired state declared in `cluster.yml`.
+
+Reads `desired_nodes`, `desired_relays`, `desired_clients`, and `subscription_page` from `cluster.yml`, fetches actual state from the panel, and prints a Terraform-style diff with `+` for adds, `-` for removes, `~` for updates.
+
+```
+meridian plan [--json]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--json` | | Emit the plan as JSON for CI/CD consumption. Same exit codes; the rendered terraform-style output is suppressed |
+
+**Exit codes**:
+- `0` — converged (no changes needed)
+- `2` — changes pending (run `meridian apply` to converge)
+- non-zero (1, 3) — error
+
+**JSON shape** (`--json` mode):
+```json
+{
+  "converged": false,
+  "summary": "Plan: 1 to add, 1 to remove",
+  "exit_code": 2,
+  "actions": [
+    {"kind": "add_client", "target": "alice", "detail": "create client alice",
+     "destructive": false, "from_extras": false, "symbol": "+"},
+    {"kind": "remove_client", "target": "ghost", "detail": "delete client ghost",
+     "destructive": true, "from_extras": true, "symbol": "-"}
+  ]
+}
+```
+
+`from_extras: true` flags resources that exist on the panel but are missing from `cluster.yml` — the inputs `meridian apply --prune-extras` operates on.
+
+See [Declarative workflow](/docs/en/getting-started/#declarative-workflow) for how to compose `cluster.yml`.
+
+### meridian apply
+
+Converge the cluster to the desired state declared in `cluster.yml`. Runs `plan` internally, shows the diff, asks for confirmation, then executes the actions in dependency order (removals first, then adds, then removals of nodes last).
+
+```
+meridian apply [--yes] [--prune-extras=ask|yes|no]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--yes`, `-y` | | Skip confirmation prompts |
+| `--parallel N` | 4 | Max parallel node provisioning threads (each node gets its own SSH session and panel client) |
+| `--prune-extras` | `ask` | How to handle drift — resources present on the panel but missing from `cluster.yml`. `ask` prompts per-resource (downgraded to `no` under `--yes` for safety); `yes` auto-removes; `no` skips and prints a one-line summary |
+
+Destructive actions (removals, UPDATE_RELAY re-provisioning) print a warning and require a separate confirmation. A failure early in the plan skips remaining destructive actions — `cluster.yml` stays truthful.
+
+**Drift handling example:** if `cluster.yml` lists `desired_clients: ['alice']` but the panel also has `bob` (e.g. created via the panel UI), `meridian plan` shows `- remove client: bob`. With default `--prune-extras=ask` you'll be asked whether to remove `bob` or keep him. `--yes --prune-extras=yes` runs the removal silently; `--yes` alone (no explicit `--prune-extras`) skips it.
 
 ### meridian preflight
 

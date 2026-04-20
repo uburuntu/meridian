@@ -85,19 +85,43 @@ If credentials get out of sync (e.g. you added a client from a different machine
 
 ## Web panel
 
-Meridian deploys a 3x-ui management panel for traffic monitoring. Access it at the secret HTTPS path shown in your credentials:
+Meridian deploys the [Remnawave](https://remna.st/) admin panel for traffic monitoring, user management, and advanced configuration. It is reverse-proxied by nginx at a randomized HTTPS path — no SSH tunnel needed. Find the URL and admin credentials in `~/.meridian/cluster.yml`:
 
 ```
-cat ~/.meridian/credentials/<IP>/proxy.yml | grep -A5 panel
+grep -A6 "^panel:" ~/.meridian/cluster.yml
 ```
 
-The panel URL, username, and password are listed there. No SSH tunnel needed — nginx reverse-proxies the panel at a randomized HTTPS path.
+Relevant fields:
+
+```yaml
+panel:
+  url: https://<your-server-ip>/<secret_path>/
+  admin_user: admin
+  admin_pass: <generated>
+  api_token: <JWT used by Meridian CLI>
+  secret_path: <random>
+  sub_path: <random>   # subscription page path
+```
+
+Open `url` in a browser and log in with `admin_user` / `admin_pass`.
+
+Panel-side edits (e.g. renaming a user, disabling a host) surface in Meridian as drift — the next `meridian plan` shows the diff between the panel's actual state and your `cluster.yml` desired state. Use `meridian apply` to converge either way.
 
 ## How it works
 
-Client names map to 3x-ui `email` fields with protocol prefixes:
-- `reality-alice` — Reality inbound
-- `xhttp-alice` — XHTTP inbound
-- `wss-alice` — WSS inbound (domain mode)
+Each Meridian client is a single Remnawave user (one UUID in the `users` table). The user is assigned to Meridian's default Internal Squad, which grants visibility over every inbound the panel knows about (`vless-reality`, `vless-xhttp`, and `vless-xhttp-ws` in domain mode). The subscription URL — `https://<ip>/<sub_path>/<short_uuid>` — is served by the Remnawave subscription-page container and contains all inbound endpoints the client can use.
 
-Each client gets a unique UUID across all inbounds on the server.
+Client apps (v2rayNG, Streisand, Hiddify, sing-box) treat the subscription URL as a single source of truth: refreshing it pulls in new inbounds when you deploy a new exit, add a relay, or rotate Reality keys.
+
+## Declarative client list
+
+For fleet-wide setups you can manage clients declaratively instead of imperatively. Add a `desired_clients` list to `~/.meridian/cluster.yml`:
+
+```yaml
+desired_clients:
+  - alice
+  - bob
+  - charlie
+```
+
+Then `meridian plan` shows the diff against the panel's actual user list, and `meridian apply` converges — adds any missing clients, removes any extra ones. `meridian client add/remove` still works alongside this; the two approaches coexist. See the [declarative workflow](/docs/en/getting-started/#declarative-workflow) for the full story.

@@ -17,6 +17,21 @@ class TestFail:
             fail("broken")
         assert exc_info.value.exit_code == 1
 
+    def test_fail_user_exit_code_2(self) -> None:
+        with pytest.raises(typer.Exit) as exc_info:
+            fail("bad input", hint_type="user")
+        assert exc_info.value.exit_code == 2
+
+    def test_fail_system_exit_code_3(self) -> None:
+        with pytest.raises(typer.Exit) as exc_info:
+            fail("infra issue", hint_type="system")
+        assert exc_info.value.exit_code == 3
+
+    def test_fail_explicit_exit_code_overrides(self) -> None:
+        with pytest.raises(typer.Exit) as exc_info:
+            fail("custom", hint_type="user", exit_code=42)
+        assert exc_info.value.exit_code == 42
+
     def test_fail_with_hint(self, capsys: pytest.CaptureFixture[str]) -> None:
         """fail() with hint should include both message and hint in stderr."""
         with pytest.raises(typer.Exit):
@@ -91,22 +106,18 @@ class TestConfirm:
         with patch("builtins.open", return_value=_make_tty_mock("")):
             assert confirm("Deploy?") is True
 
-    def test_confirm_n_raises_exit(self) -> None:
+    def test_confirm_n_returns_false(self) -> None:
         with patch("builtins.open", return_value=_make_tty_mock("n")):
-            with pytest.raises(typer.Exit) as exc_info:
-                confirm("Deploy?")
-            assert exc_info.value.exit_code == 1
+            assert confirm("Deploy?") is False
 
-    def test_confirm_N_raises_exit(self) -> None:
+    def test_confirm_N_returns_false(self) -> None:
         with patch("builtins.open", return_value=_make_tty_mock("N")):
-            with pytest.raises(typer.Exit):
-                confirm("Deploy?")
+            assert confirm("Deploy?") is False
 
-    def test_confirm_no_tty_defaults_to_reject(self) -> None:
+    def test_confirm_no_tty_returns_false(self) -> None:
         """When /dev/tty is not available (CI), default to reject."""
         with patch("builtins.open", side_effect=OSError("No TTY")):
-            with pytest.raises(typer.Exit):
-                confirm("Deploy?")
+            assert confirm("Deploy?") is False
 
 
 class TestPrompt:
