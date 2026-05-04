@@ -11,6 +11,9 @@ def test_schema_catalog_lists_public_contracts() -> None:
     names = schema_names()
 
     assert "output-envelope" in names
+    assert "plan-envelope" in names
+    assert "fleet-status-envelope" in names
+    assert "fleet-inventory-envelope" in names
     assert "event" in names
     assert "plan-result" in names
     assert "fleet-status" in names
@@ -25,12 +28,22 @@ def test_schema_for_output_envelope_uses_wire_aliases() -> None:
     assert schema["properties"]["status"]["enum"] == ["ok", "changed", "no_changes", "failed", "cancelled"]
 
 
+def test_command_envelope_schema_binds_command_to_typed_data() -> None:
+    schema = schema_for("fleet-status-envelope")
+
+    assert schema["properties"]["command"]["const"] == "fleet.status"
+    data_ref = schema["properties"]["data"]["$ref"]
+    assert data_ref.endswith("/FleetStatus")
+
+
 def test_schema_catalog_can_include_full_schemas() -> None:
     catalog = schema_catalog(include_schemas=True)
     output = next(item for item in catalog if item["name"] == "output-envelope")
+    plan = next(item for item in catalog if item["name"] == "plan-envelope")
 
     assert output["title"] == "OutputEnvelope"
     assert output["schema"]["properties"]["command"]["type"] == "string"
+    assert plan["commands"] == ["plan"]
 
 
 def test_unknown_schema_name_is_actionable() -> None:

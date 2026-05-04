@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 
 from typer.testing import CliRunner
@@ -118,3 +119,35 @@ class TestSubcommandHelp:
     def test_update_help(self) -> None:
         result = runner.invoke(app, ["update", "--help"])
         assert result.exit_code == 0
+
+
+class TestApiContractCLI:
+    def test_api_schemas_json_is_parseable_machine_output(self, monkeypatch) -> None:
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+
+        result = runner.invoke(app, ["api", "schemas", "--json"])
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["command"] == "api.schemas"
+        assert payload["data"]["schemas"]
+        assert "Meridian v" not in result.output
+
+    def test_api_schema_envelope_error_is_command_scoped_json(self, monkeypatch) -> None:
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+
+        result = runner.invoke(app, ["api", "schema", "missing", "--envelope"])
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        assert result.exit_code == 2
+        payload = json.loads(result.output)
+        assert payload["command"] == "api.schema"
+        assert payload["status"] == "failed"
+        assert payload["errors"][0]["category"] == "user"

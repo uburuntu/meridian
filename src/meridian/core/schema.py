@@ -2,14 +2,39 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from meridian.core.fleet import FleetInventory, FleetStatus
 from meridian.core.models import CoreModel, Event, MeridianError, OutputEnvelope, Summary
 from meridian.core.plan import PlanActionResult, PlanCounts, PlanResult
 
+
+class PlanOutputEnvelope(OutputEnvelope):
+    """Envelope schema for `meridian plan --json`."""
+
+    command: Literal["plan"] = "plan"
+    data: PlanResult  # type: ignore[assignment]
+
+
+class FleetStatusOutputEnvelope(OutputEnvelope):
+    """Envelope schema for `meridian fleet status --json`."""
+
+    command: Literal["fleet.status"] = "fleet.status"
+    data: FleetStatus  # type: ignore[assignment]
+
+
+class FleetInventoryOutputEnvelope(OutputEnvelope):
+    """Envelope schema for `meridian fleet inventory --json`."""
+
+    command: Literal["fleet.inventory"] = "fleet.inventory"
+    data: FleetInventory  # type: ignore[assignment]
+
+
 _SCHEMAS: dict[str, type[CoreModel]] = {
     "output-envelope": OutputEnvelope,
+    "plan-envelope": PlanOutputEnvelope,
+    "fleet-status-envelope": FleetStatusOutputEnvelope,
+    "fleet-inventory-envelope": FleetInventoryOutputEnvelope,
     "event": Event,
     "error": MeridianError,
     "summary": Summary,
@@ -18,6 +43,12 @@ _SCHEMAS: dict[str, type[CoreModel]] = {
     "plan-counts": PlanCounts,
     "fleet-status": FleetStatus,
     "fleet-inventory": FleetInventory,
+}
+
+_COMMAND_SCHEMAS: dict[str, str] = {
+    "plan": "plan-envelope",
+    "fleet.status": "fleet-status-envelope",
+    "fleet.inventory": "fleet-inventory-envelope",
 }
 
 
@@ -50,6 +81,9 @@ def schema_catalog(*, include_schemas: bool = False) -> list[dict[str, Any]]:
             "title": model.__name__,
             "description": (model.__doc__ or "").strip(),
         }
+        commands = [command for command, schema_name in _COMMAND_SCHEMAS.items() if schema_name == name]
+        if commands:
+            item["commands"] = commands
         if include_schemas:
             item["schema"] = schema_for(name)
         catalog.append(item)

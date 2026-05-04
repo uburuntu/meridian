@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-import json as _json
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, NoReturn, cast
 
 import typer
@@ -25,6 +27,8 @@ err_console = Console(theme=_theme, stderr=True, highlight=False)
 
 _output_json = False
 _quiet_mode = False
+_error_command: ContextVar[str] = ContextVar("meridian_error_command", default="cli.error")
+_error_timer: ContextVar[Any | None] = ContextVar("meridian_error_timer", default=None)
 
 
 def set_json_mode(enabled: bool) -> None:
@@ -49,9 +53,23 @@ def is_quiet_mode() -> bool:
     return _quiet_mode
 
 
+@contextmanager
+def error_context(command: str, *, timer: Any | None = None) -> Iterator[None]:
+    """Attach command metadata to JSON errors emitted by fail()."""
+    command_token = _error_command.set(command)
+    timer_token = _error_timer.set(timer)
+    try:
+        yield
+    finally:
+        _error_command.reset(command_token)
+        _error_timer.reset(timer_token)
+
+
 def json_output(data: Any) -> None:
     """Write JSON to stdout (for --json mode). Separate from Rich stderr output."""
-    print(_json.dumps(data, indent=2, default=str))
+    from meridian.renderers import json_output as render_json
+
+    render_json(data)
 
 
 def info(msg: str) -> None:
@@ -88,12 +106,13 @@ def fail(msg: str, *, hint: str = "", hint_type: str = "bug", exit_code: int | N
     code = exit_code if exit_code is not None else _EXIT_CODES.get(hint_type, 1)
     if _output_json:
         from meridian.core.models import ErrorCategory, MeridianError
-        from meridian.core.output import emit_json, envelope
+        from meridian.core.output import envelope
+        from meridian.renderers import emit_json
 
         category = cast(ErrorCategory, hint_type if hint_type in ("user", "system", "bug", "cancelled") else "bug")
         emit_json(
             envelope(
-                command="cli.error",
+                command=_error_command.get(),
                 summary=msg,
                 status="failed",
                 exit_code=code,
@@ -107,6 +126,7 @@ def fail(msg: str, *, hint: str = "", hint_type: str = "bug", exit_code: int | N
                         exit_code=code,
                     )
                 ],
+                timer=_error_timer.get(),
             )
         )
         raise typer.Exit(code=code)

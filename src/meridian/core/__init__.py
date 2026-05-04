@@ -16,13 +16,14 @@ from meridian.core.models import (
     ResourceRef,
     Summary,
 )
-from meridian.core.output import EventStream, emit_json, emit_jsonl, envelope, plan_payload
+from meridian.core.output import EventStream, OperationContext, envelope, json_dumps, jsonl_dumps, plan_payload
 from meridian.core.plan import PlanActionResult, PlanCounts, PlanResult, build_plan_result
 from meridian.core.redaction import REDACTED, redact
 from meridian.core.schema import schema_catalog, schema_for, schema_names
 
 __all__ = [
     "EventStream",
+    "OperationContext",
     "CoreModel",
     "ErrorCategory",
     "Event",
@@ -36,9 +37,9 @@ __all__ = [
     "REDACTED",
     "ResourceRef",
     "Summary",
-    "emit_json",
-    "emit_jsonl",
     "envelope",
+    "json_dumps",
+    "jsonl_dumps",
     "plan_payload",
     "redact",
     "build_plan_result",

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-from io import StringIO
 
 import pytest
 from pydantic import ValidationError
 
 from meridian.core.models import MeridianError, OutputEnvelope, ResourceRef, Summary
-from meridian.core.output import EventStream, OperationTimer, emit_json, emit_jsonl, envelope
+from meridian.core.output import EventStream, OperationTimer, envelope, json_dumps, jsonl_dumps
 from meridian.core.redaction import REDACTED, redact
 
 
@@ -22,9 +21,7 @@ def test_output_envelope_has_stable_top_level_contract() -> None:
         timer=timer,
     )
 
-    stream = StringIO()
-    emit_json(payload, stream=stream)
-    data = json.loads(stream.getvalue())
+    data = json.loads(json_dumps(payload))
 
     assert data["schema"] == "meridian.output/v1"
     assert data["command"] == "fleet.inventory"
@@ -55,9 +52,7 @@ def test_output_envelope_serializes_errors() -> None:
         timer=OperationTimer(started_at="2026-05-04T21:00:00Z", operation_id="op-test"),
     )
 
-    stream = StringIO()
-    emit_json(payload, stream=stream)
-    data = json.loads(stream.getvalue())
+    data = json.loads(json_dumps(payload))
 
     assert data["status"] == "failed"
     assert data["errors"][0]["code"] == "MERIDIAN_INPUT_REQUIRED"
@@ -81,21 +76,29 @@ def test_output_envelope_is_validated_and_schema_exportable() -> None:
 
 
 def test_emit_json_redacts_sensitive_keys_and_text() -> None:
-    stream = StringIO()
-    emit_json(
-        {
-            "api_token": "secret-token",
-            "message": "password=hunter2 jwt=eyJaaaaaaaa.eyJbbbbbbbb.eyJcccccccc",
-            "nested": {"database_url": "postgres://user:pass@example/db"},
-        },
-        stream=stream,
+    data = json.loads(
+        json_dumps(
+            {
+                "api_token": "secret-token",
+                "secretKey": "camel-secret",
+                "message": (
+                    "password=hunter2 jwt=eyJaaaaaaaa.eyJbbbbbbbb.eyJcccccccc "
+                    "Authorization: Bearer opaque-token X-API-Key: opaque-key secretKey=abc123"
+                ),
+                "nested": {"database_url": "postgres://user:pass@example/db", "apiKey": "opaque"},
+            }
+        )
     )
-    data = json.loads(stream.getvalue())
 
     assert data["api_token"] == REDACTED
+    assert data["secretKey"] == REDACTED
     assert "hunter2" not in data["message"]
     assert "eyJaaaaaaaa" not in data["message"]
+    assert "opaque-token" not in data["message"]
+    assert "opaque-key" not in data["message"]
+    assert "abc123" not in data["message"]
     assert data["nested"]["database_url"] == REDACTED
+    assert data["nested"]["apiKey"] == REDACTED
 
 
 def test_redact_string_handles_url_userinfo() -> None:
@@ -103,16 +106,15 @@ def test_redact_string_handles_url_userinfo() -> None:
 
 
 def test_jsonl_events_are_monotonic_and_redacted() -> None:
-    stream = StringIO()
-    events = EventStream(operation_id="op-test", stream=stream)
+    events = EventStream(operation_id="op-test")
 
-    first = events.emit(
+    first = events.event(
         "provision.step.started",
         phase="provision",
         resource=ResourceRef(kind="node", id="198.51.100.1", name="exit-a"),
         message="Install Docker",
     )
-    second = events.emit(
+    second = events.event(
         "ssh.command.completed",
         phase="ssh",
         data={"command": "curl -H 'Authorization: Bearer eyJaaaaaaaa.eyJbbbbbbbb.eyJcccccccc'"},
@@ -120,7 +122,7 @@ def test_jsonl_events_are_monotonic_and_redacted() -> None:
 
     assert first.seq == 1
     assert second.seq == 2
-    lines = [json.loads(line) for line in stream.getvalue().splitlines()]
+    lines = [json.loads(jsonl_dumps(first)), json.loads(jsonl_dumps(second))]
     assert lines[0]["schema"] == "meridian.event/v1"
     assert lines[0]["operation_id"] == "op-test"
     assert lines[0]["seq"] == 1
@@ -128,7 +130,5 @@ def test_jsonl_events_are_monotonic_and_redacted() -> None:
     assert "eyJaaaaaaaa" not in lines[1]["data"]["command"]
 
 
-def test_emit_jsonl_writes_one_compact_record() -> None:
-    stream = StringIO()
-    emit_jsonl({"b": 2, "a": 1}, stream=stream)
-    assert stream.getvalue() == '{"a":1,"b":2}\n'
+def test_jsonl_dumps_writes_one_compact_record() -> None:
+    assert jsonl_dumps({"b": 2, "a": 1}) == '{"a":1,"b":2}'

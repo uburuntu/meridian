@@ -168,7 +168,7 @@ class TestFleetStatus:
             run_status()
 
         # Relay health checked once for the single relay
-        mock_health.assert_called_once_with("198.51.100.3", 443)
+        mock_health.assert_called_once_with("198.51.100.3", 443, 3.0)
 
     def test_status_relay_unreachable(self) -> None:
         """Relay health check returns False -- still completes."""
@@ -185,7 +185,7 @@ class TestFleetStatus:
         ):
             run_status()
 
-        mock_health.assert_called_once_with("198.51.100.3", 443)
+        mock_health.assert_called_once_with("198.51.100.3", 443, 3.0)
 
     def test_status_json_output_structure(self) -> None:
         """JSON mode outputs dict with panel/nodes/relays/users keys."""
@@ -215,8 +215,17 @@ class TestFleetStatus:
         assert "nodes" in data
         assert "relays" in data
         assert "users" in data
+        assert "servers" in data
+        assert data["sources"] == {
+            "nodes": "available",
+            "panel": "available",
+            "relays": "available",
+            "users": "available",
+        }
         assert data["panel"]["healthy"] is True
         assert data["panel"]["url"] == "https://198.51.100.1/panel/"
+        assert data["summary"]["health"] == "degraded"
+        assert data["summary"]["needs_attention"] is True
         assert len(data["nodes"]) == 2
         assert len(data["relays"]) == 1
         assert len(data["users"]) == 2
@@ -309,6 +318,28 @@ class TestFleetStatus:
         with p_load, p_panel, p_relay, p_json:
             run_status()  # should not raise
 
+    def test_status_json_preserves_partial_panel_failures(self) -> None:
+        """JSON mode reports source availability and warnings for partial API failures."""
+        cluster = _fleet_cluster()
+        panel = _make_panel_mock(ping_ok=True)
+        panel.list_nodes.side_effect = RemnawaveError("API error")
+        panel.list_users.return_value = [_api_user("alice")]
+
+        with (
+            patch("meridian.commands.fleet.load_cluster", return_value=cluster),
+            patch("meridian.commands.fleet.make_panel", return_value=panel),
+            patch("meridian.commands.fleet._check_relay_health", return_value=True),
+            patch("meridian.commands.fleet.is_json_mode", return_value=True),
+            patch("meridian.commands.fleet.emit_json") as mock_json,
+        ):
+            run_status()
+
+        payload = mock_json.call_args[0][0]
+        assert payload.warnings[0].code == "MERIDIAN_PANEL_NODES_UNAVAILABLE"
+        assert payload.data["sources"]["nodes"] == "unavailable"
+        assert payload.data["sources"]["users"] == "available"
+        assert payload.data["nodes"][0]["status"] == "unknown"
+
     def test_status_json_relay_health(self) -> None:
         """JSON output includes relay health status."""
         cluster = _fleet_cluster()
@@ -328,6 +359,7 @@ class TestFleetStatus:
         data = mock_json.call_args[0][0].data
         assert len(data["relays"]) == 1
         assert data["relays"][0]["healthy"] is False
+        assert data["relays"][0]["health"] == "unhealthy"
         assert data["relays"][0]["ip"] == "198.51.100.3"
 
 
@@ -360,6 +392,13 @@ class TestFleetInventory:
         assert payload.command == "fleet.inventory"
         assert "api_token" not in data["panel"]
         assert data["panel"]["url"] == "https://198.51.100.1/panel/"
+        assert data["sources"] == {
+            "nodes": "available",
+            "panel": "available",
+            "relays": "not_requested",
+            "users": "not_requested",
+        }
+        assert data["servers"][0]["roles"] == ["panel", "exit"]
         assert data["nodes"][0]["panel_status"] == "connected"
         assert data["nodes"][0]["desired"] is True
         assert data["nodes"][0]["protocols"] == ["reality", "xhttp"]

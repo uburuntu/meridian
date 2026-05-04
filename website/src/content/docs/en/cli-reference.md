@@ -105,9 +105,9 @@ meridian fleet recover IP [flags]
 | `--user USER` | root | SSH user on the panel host (for `fleet recover`) |
 | `--ssh-port PORT` | 22 | SSH port on the panel host |
 
-**`fleet status`** — shows panel health, every node's connection + Xray version + traffic, every relay's upstream, and user counts. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data`: `data.panel.url`, `data.panel.healthy`, `data.nodes[].status` (`"connected"`, `"disconnected"`, `"disabled"`, `"unknown"`), `data.relays[].healthy`, and `data.summary.active_users/disabled_users/unknown_nodes/unhealthy_relays`.
+**`fleet status`** — shows panel health, every node's connection + Xray version + traffic, every relay's upstream, and user counts. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data`: `data.panel.url`, `data.panel.healthy`, `data.sources.*`, `data.servers[].roles`, `data.nodes[].status` (`"connected"`, `"disconnected"`, `"disabled"`, `"unknown"`), `data.relays[].health` (`"healthy"`, `"unhealthy"`, `"unknown"`), and `data.summary.health/needs_attention/active_users/disabled_users/unknown_nodes/unhealthy_relays`. Top-level `status` reports command execution, not fleet health.
 
-**`fleet inventory`** — shows the configured panel, nodes, relays, desired topology, and live panel node status when reachable. It never prints the panel API token. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data` includes `data.summary.*`, `data.nodes[].desired`, `data.nodes[].protocols`, `data.relays[].exit_node_*`, and `data.desired_nodes[].present`.
+**`fleet inventory`** — shows the configured panel, nodes, relays, desired topology, and live panel node status when reachable. It never prints the panel API token. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data` includes `data.sources.*`, `data.servers[].roles`, `data.summary.*`, `data.nodes[].desired`, `data.nodes[].protocols`, `data.relays[].exit_node_*`, and `data.desired_nodes[].present`.
 
 **`fleet recover`** — rebuilds `~/.meridian/cluster.yml` from the live panel. Use it when the local file is lost, or when picking up someone else's deployment. Connects via SSH to read stable server-side metadata, then queries the panel API for nodes, relays, inbounds, hosts, and users.
 
@@ -126,7 +126,7 @@ meridian api schema NAME [--envelope]
 | `--include-schemas` | | Include full JSON Schemas in `api schemas --json` output |
 | `--envelope` | | Wrap `api schema NAME` in a `meridian.output/v1` envelope instead of printing raw JSON Schema |
 
-**`api schemas`** — lists stable schema names such as `output-envelope`, `event`, `plan-result`, `fleet-status`, and `fleet-inventory`.
+**`api schemas`** — lists stable schema names such as `output-envelope`, `plan-envelope`, `fleet-status-envelope`, `fleet-inventory-envelope`, `event`, `plan-result`, `fleet-status`, and `fleet-inventory`. Command envelope schemas include a `commands` entry in the catalog.
 
 **`api schema NAME`** — prints one JSON Schema. Example: `meridian api schema output-envelope`.
 
@@ -195,10 +195,16 @@ meridian plan [--json]
     "counts": {"actions": 2, "adds": 1, "updates": 0, "removes": 1,
                "destructive": 1, "from_extras": 1},
     "actions": [
-      {"kind": "add_client", "target": "alice", "detail": "create client alice",
-       "destructive": false, "from_extras": false, "symbol": "+"},
-      {"kind": "remove_client", "target": "ghost", "detail": "delete client ghost",
-       "destructive": true, "from_extras": true, "symbol": "-"}
+      {"kind": "add_client", "operation": "add", "resource_type": "client",
+       "resource_id": "alice", "target": "alice", "detail": "create client alice",
+       "phase": "provision", "requires_confirmation": false,
+       "destructive": false, "destructive_reason": "", "from_extras": false,
+       "change_set": [], "symbol": "+"},
+      {"kind": "remove_client", "operation": "remove", "resource_type": "client",
+       "resource_id": "ghost", "target": "ghost", "detail": "delete client ghost",
+       "phase": "deprovision", "requires_confirmation": true,
+       "destructive": true, "destructive_reason": "delete client ghost",
+       "from_extras": true, "change_set": [], "symbol": "-"}
     ]
   },
   "warnings": [],

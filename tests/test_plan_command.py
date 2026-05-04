@@ -96,13 +96,26 @@ class TestPlanJsonOutput:
         # ADD_CLIENT entry
         add = next(a for a in payload["data"]["actions"] if a["kind"] == "add_client")
         assert add["target"] == "alice"
+        assert add["operation"] == "add"
+        assert add["resource_type"] == "client"
+        assert add["resource_id"] == "alice"
+        assert add["phase"] == "provision"
+        assert add["requires_confirmation"] is False
         assert add["destructive"] is False
         assert add["from_extras"] is False
+        assert add["destructive_reason"] == ""
+        assert add["change_set"] == []
         assert add["symbol"] == "+"
         # REMOVE_CLIENT entry — extras flag preserved for downstream tooling
         rm = next(a for a in payload["data"]["actions"] if a["kind"] == "remove_client")
         assert rm["target"] == "ghost"
+        assert rm["operation"] == "remove"
+        assert rm["resource_type"] == "client"
+        assert rm["resource_id"] == "ghost"
+        assert rm["phase"] == "deprovision"
+        assert rm["requires_confirmation"] is True
         assert rm["destructive"] is True
+        assert rm["destructive_reason"] == "delete client ghost"
         assert rm["from_extras"] is True
         assert rm["symbol"] == "-"
 

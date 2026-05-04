@@ -11,17 +11,25 @@ from __future__ import annotations
 import typer
 
 from meridian.cluster import ClusterConfig
-from meridian.console import err_console, fail, info
+from meridian.console import err_console, error_context, fail, info
 from meridian.core.models import Summary
-from meridian.core.output import emit_json, envelope
+from meridian.core.output import OperationContext, envelope
 from meridian.core.plan import build_plan_result
 from meridian.reconciler import compute_plan
 from meridian.reconciler.display import print_plan
 from meridian.reconciler.state import build_actual_state, build_desired_state
+from meridian.renderers import emit_json
 
 
 def run(json_output: bool = False) -> None:
     """Show what meridian apply would do, without changing anything."""
+    operation = OperationContext()
+    with error_context("plan", timer=operation.timer):
+        _run(json_output=json_output, operation=operation)
+
+
+def _run(*, json_output: bool, operation: OperationContext) -> None:
+    """Implementation for plan with command metadata already attached."""
     cluster = ClusterConfig.load()
 
     has_desired = (
@@ -83,6 +91,7 @@ def run(json_output: bool = False) -> None:
                 ),
                 status="no_changes" if result.converged else "changed",
                 exit_code=exit_code,
+                timer=operation.timer,
             )
         )
     else:

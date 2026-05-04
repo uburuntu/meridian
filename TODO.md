@@ -93,6 +93,9 @@ The guiding rule: command modules parse CLI arguments and choose renderers; they
 - [x] Make `summary` structured enough for dashboards, not only prose.
 - [x] Use one shared warning/error object shape in both `warnings` and `errors`.
 - [x] Add serializer unit tests for envelope success, failure, JSONL, and redaction cases.
+- [x] Keep stdout/stderr rendering outside `meridian.core`; core owns models and serialization primitives only.
+- [x] Add command-specific envelope schemas for the first migrated commands.
+- [x] Add source availability fields so partial fleet failures do not disappear in JSON.
 - [ ] Add golden JSON fixtures for the first migrated commands.
 
 Example:
@@ -259,6 +262,7 @@ Example:
 
 - [x] Convert `plan --json` to the shared envelope everywhere; v4 does not need a legacy JSON mode.
 - [x] Expose plan actions as typed API result objects.
+- [x] Add semantic plan action fields (`operation`, `resource_type`, `resource_id`, `phase`, `requires_confirmation`) so clients do not infer behavior from display symbols.
 - [ ] Add `execute_plan()` reporter hooks for action start/completion/failure.
 - [ ] Add `apply --json` final envelope.
 - [ ] Add `apply --jsonl` event stream.

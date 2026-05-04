@@ -57,11 +57,15 @@ def main_callback(
             handlers=[logging.StreamHandler(sys.stderr)],
         )
 
+    if json_mode or ctx.invoked_subcommand == "api" or _argv_requests_machine_output(list(ctx.args)):
+        from meridian.console import set_quiet_mode
+
+        set_quiet_mode(True)
+
     if json_mode:
-        from meridian.console import set_json_mode, set_quiet_mode
+        from meridian.console import set_json_mode
 
         set_json_mode(True)
-        set_quiet_mode(True)  # JSON implies quiet
 
     if quiet:
         from meridian.console import set_quiet_mode
@@ -92,6 +96,17 @@ def _enable_json_output() -> None:
 
     set_json_mode(True)
     set_quiet_mode(True)
+
+
+def _argv_requests_machine_output(args: list[str] | None = None) -> bool:
+    """Detect command-local machine-output flags before Typer enters subcommands."""
+    args = args or sys.argv[1:]
+    if "--json" in args or "--envelope" in args:
+        return True
+
+    # `meridian api schema NAME` writes raw JSON Schema even without a flag.
+    positionals = [arg for arg in args if not arg.startswith("-")]
+    return len(positionals) >= 2 and positionals[:2] == ["api", "schema"]
 
 
 # =============================================================================
@@ -644,29 +659,11 @@ def api_schemas_cmd(
     include_schemas: bool = typer.Option(False, "--include-schemas", help="Include full JSON Schemas in JSON output"),
 ) -> None:
     """List meridian-core JSON schemas."""
-    from meridian.console import err_console, is_json_mode
-    from meridian.core.models import Summary
-    from meridian.core.output import emit_json, envelope
-    from meridian.core.schema import schema_catalog
+    from meridian.commands.api import run_schemas
 
     if json_mode:
         _enable_json_output()
-    catalog = schema_catalog(include_schemas=include_schemas and (json_mode or is_json_mode()))
-    if json_mode or is_json_mode():
-        emit_json(
-            envelope(
-                command="api.schemas",
-                data={"schemas": catalog},
-                summary=Summary(text=f"{len(catalog)} schema(s)", changed=False, counts={"schemas": len(catalog)}),
-            )
-        )
-        return
-
-    err_console.print()
-    err_console.print("  [bold]Meridian API schemas[/bold]")
-    for item in catalog:
-        err_console.print(f"    {item['name']}  [dim]{item['title']}[/dim]")
-    err_console.print()
+    run_schemas(json_output=json_mode, include_schemas=include_schemas)
 
 
 @api_app.command("schema")
@@ -675,27 +672,11 @@ def api_schema_cmd(
     envelope_output: bool = typer.Option(False, "--envelope", help="Wrap schema in meridian.output/v1"),
 ) -> None:
     """Print one meridian-core JSON Schema."""
-    from meridian.console import fail, is_json_mode
-    from meridian.core.models import Summary
-    from meridian.core.output import emit_json, envelope
-    from meridian.core.schema import schema_for
+    from meridian.commands.api import run_schema
 
-    try:
-        schema = schema_for(name)
-    except ValueError as exc:
-        fail(str(exc), hint="Run: meridian api schemas", hint_type="user")
-
-    if envelope_output or is_json_mode():
-        emit_json(
-            envelope(
-                command="api.schema",
-                data={"name": name, "schema": schema},
-                summary=Summary(text=f"Schema: {name}", changed=False, counts={"schemas": 1}),
-            )
-        )
-        return
-
-    emit_json(schema)
+    if envelope_output:
+        _enable_json_output()
+    run_schema(name, envelope_output=envelope_output)
 
 
 # =============================================================================

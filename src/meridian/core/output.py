@@ -1,22 +1,31 @@
-"""Output envelope builders and JSON emitters."""
+"""Output envelope builders and JSON serialization helpers."""
 
 from __future__ import annotations
 
 import json
-import sys
 import time
 import uuid
 from datetime import UTC, datetime
-from typing import IO, Any
+from typing import Any
 
 from meridian import __version__
-from meridian.core.models import Event, EventLevel, MeridianError, OutputEnvelope, OutputStatus, ResourceRef, Summary
+from meridian.core.models import (
+    Event,
+    EventLevel,
+    EventSchema,
+    MeridianError,
+    OutputEnvelope,
+    OutputSchema,
+    OutputStatus,
+    ResourceRef,
+    Summary,
+)
 from meridian.core.plan import build_plan_result
 from meridian.core.redaction import redact
 from meridian.core.serde import to_plain
 
-OUTPUT_SCHEMA = "meridian.output/v1"
-EVENT_SCHEMA = "meridian.event/v1"
+OUTPUT_SCHEMA: OutputSchema = "meridian.output/v1"
+EVENT_SCHEMA: EventSchema = "meridian.event/v1"
 
 
 def now_iso() -> str:
@@ -39,6 +48,18 @@ class OperationTimer:
 
     def duration_ms(self) -> int:
         return int((time.monotonic() - self._started) * 1000)
+
+
+class OperationContext:
+    """Shared operation metadata for final envelopes and event streams."""
+
+    def __init__(self, *, operation_id: str | None = None, started_at: str | None = None) -> None:
+        self.timer = OperationTimer(started_at=started_at, operation_id=operation_id)
+        self.events = EventStream(operation_id=self.timer.operation_id)
+
+    @property
+    def operation_id(self) -> str:
+        return self.timer.operation_id
 
 
 def envelope(
@@ -71,18 +92,14 @@ def envelope(
     )
 
 
-def emit_json(value: Any, *, stream: IO[str] | None = None) -> None:
-    """Write a core model or plain value as JSON."""
-    target = stream or sys.stdout
-    target.write(json.dumps(redact(to_plain(value)), indent=2, sort_keys=True, default=str) + "\n")
-    target.flush()
+def json_dumps(value: Any) -> str:
+    """Return a redacted, formatted JSON string for a core model or plain value."""
+    return json.dumps(redact(to_plain(value)), indent=2, sort_keys=True, default=str)
 
 
-def emit_jsonl(value: Any, *, stream: IO[str] | None = None) -> None:
-    """Write a core model or plain value as one JSONL record."""
-    target = stream or sys.stdout
-    target.write(json.dumps(redact(to_plain(value)), sort_keys=True, separators=(",", ":"), default=str) + "\n")
-    target.flush()
+def jsonl_dumps(value: Any) -> str:
+    """Return a redacted, compact JSON string for one JSONL record."""
+    return json.dumps(redact(to_plain(value)), sort_keys=True, separators=(",", ":"), default=str)
 
 
 def plan_payload(plan: Any, *, exit_code: int) -> dict[str, Any]:
@@ -93,10 +110,9 @@ def plan_payload(plan: Any, *, exit_code: int) -> dict[str, Any]:
 class EventStream:
     """Monotonic JSONL event builder for long-running operations."""
 
-    def __init__(self, *, operation_id: str | None = None, stream: IO[str] | None = None) -> None:
+    def __init__(self, *, operation_id: str | None = None) -> None:
         self.operation_id = operation_id or new_operation_id()
         self._seq = 0
-        self._stream = stream
 
     def event(
         self,
@@ -123,7 +139,7 @@ class EventStream:
             data=data or {},
         )
 
-    def emit(
+    def record(
         self,
         event_type: str,
         *,
@@ -132,15 +148,15 @@ class EventStream:
         resource: ResourceRef | None = None,
         message: str = "",
         data: dict[str, Any] | None = None,
-    ) -> Event:
-        """Build and write the next JSONL event."""
-        event = self.event(
-            event_type,
-            level=level,
-            phase=phase,
-            resource=resource,
-            message=message,
-            data=data,
+    ) -> str:
+        """Build the next event and return it serialized as one JSONL record."""
+        return jsonl_dumps(
+            self.event(
+                event_type,
+                level=level,
+                phase=phase,
+                resource=resource,
+                message=message,
+                data=data,
+            )
         )
-        emit_jsonl(event, stream=self._stream)
-        return event

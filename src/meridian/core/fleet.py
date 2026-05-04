@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Literal, Mapping, Protocol, Sequence
 
 from pydantic import Field
 
-from meridian.cluster import ClusterConfig, DesiredNode, DesiredRelay, NodeEntry, RelayEntry
 from meridian.core.models import CoreModel
+
+ServerRole = Literal["panel", "exit", "relay"]
+InventoryRole = Literal["panel+node", "node", "relay"]
+NodeStatus = Literal["connected", "disconnected", "disabled", "unknown"]
+RelayHealth = Literal["healthy", "unhealthy", "unknown"]
+SourceAvailability = Literal["available", "unavailable", "not_requested", "unknown"]
+FleetHealth = Literal["healthy", "degraded", "unknown"]
 
 
 class ApiNodeLike(Protocol):
@@ -19,6 +25,100 @@ class ApiUserLike(Protocol):
     status: str
 
 
+class TopologyPanel(CoreModel):
+    url: str
+    display_url: str
+    server_ip: str
+    ssh_user: str
+    ssh_port: int
+    deployed_with: str
+
+
+class TopologySubscriptionPage(CoreModel):
+    enabled: bool
+    path: str
+
+
+class TopologyNode(CoreModel):
+    ip: str
+    name: str
+    uuid: str
+    is_panel_host: bool
+    ssh_user: str
+    ssh_port: int
+    domain: str
+    sni: str
+    xhttp_path: str
+    ws_path: str
+
+
+class TopologyRelay(CoreModel):
+    ip: str
+    name: str
+    port: int
+    ssh_user: str
+    ssh_port: int
+    exit_node_ip: str
+    sni: str
+    host_uuids: list[str] = Field(default_factory=list)
+
+
+class DesiredNodeSpec(CoreModel):
+    host: str
+    name: str
+    ssh_user: str
+    ssh_port: int
+    domain: str
+    sni: str
+    warp: bool | None
+
+
+class DesiredRelaySpec(CoreModel):
+    host: str
+    name: str
+    ssh_user: str
+    ssh_port: int
+    exit_node: str
+    sni: str
+
+
+class FleetTopology(CoreModel):
+    panel: TopologyPanel
+    subscription_page: TopologySubscriptionPage | None = None
+    nodes: list[TopologyNode] = Field(default_factory=list)
+    relays: list[TopologyRelay] = Field(default_factory=list)
+    desired_nodes: list[DesiredNodeSpec] | None = None
+    desired_relays: list[DesiredRelaySpec] | None = None
+
+    @property
+    def panel_url(self) -> str:
+        return self.panel.display_url or self.panel.url
+
+    def find_node(self, ip: str) -> TopologyNode | None:
+        return next((node for node in self.nodes if node.ip == ip), None)
+
+
+class FleetSources(CoreModel):
+    panel: SourceAvailability = "unknown"
+    nodes: SourceAvailability = "unknown"
+    users: SourceAvailability = "unknown"
+    relays: SourceAvailability = "unknown"
+
+
+class SubscriptionPageInventory(CoreModel):
+    enabled: bool
+    path: str
+
+
+class ServerInventory(CoreModel):
+    id: str
+    ip: str
+    name: str
+    roles: list[ServerRole]
+    ssh_user: str
+    ssh_port: int
+
+
 class PanelInventory(CoreModel):
     url: str
     server_ip: str
@@ -26,28 +126,28 @@ class PanelInventory(CoreModel):
     ssh_port: int
     healthy: bool
     deployed_with: str
-    subscription_page: dict[str, Any]
+    subscription_page: SubscriptionPageInventory
 
 
 class NodeInventory(CoreModel):
     ip: str
     name: str
     uuid: str
-    role: str
+    role: InventoryRole
     ssh_user: str
     ssh_port: int
     domain: str
     sni: str
     protocols: list[str]
     desired: bool | None
-    panel_status: str
+    panel_status: NodeStatus
     xray_version: str
 
 
 class RelayInventory(CoreModel):
     ip: str
     name: str
-    role: str
+    role: InventoryRole
     port: int
     ssh_user: str
     ssh_port: int
@@ -99,6 +199,8 @@ class FleetInventorySummary(CoreModel):
 class FleetInventory(CoreModel):
     panel: PanelInventory
     summary: FleetInventorySummary
+    sources: FleetSources = Field(default_factory=FleetSources)
+    servers: list[ServerInventory] = Field(default_factory=list)
     nodes: list[NodeInventory] = Field(default_factory=list)
     relays: list[RelayInventory] = Field(default_factory=list)
     desired_nodes: list[DesiredNodeInventory] = Field(default_factory=list)
@@ -120,7 +222,7 @@ class FleetStatusNode(CoreModel):
     name: str
     uuid: str
     is_panel_host: bool
-    status: str
+    status: NodeStatus
     xray_version: str
     traffic_bytes: int
 
@@ -131,7 +233,8 @@ class FleetStatusRelay(CoreModel):
     port: int
     exit_node_ip: str
     exit_node_name: str
-    healthy: bool
+    health: RelayHealth
+    healthy: bool | None
 
 
 class FleetStatusUser(CoreModel):
@@ -140,6 +243,8 @@ class FleetStatusUser(CoreModel):
 
 
 class FleetStatusSummary(CoreModel):
+    health: FleetHealth
+    needs_attention: bool
     nodes: int
     relays: int
     users: int
@@ -163,6 +268,8 @@ class FleetStatusSummary(CoreModel):
 class FleetStatus(CoreModel):
     panel: PanelStatus
     summary: FleetStatusSummary
+    sources: FleetSources = Field(default_factory=FleetSources)
+    servers: list[ServerInventory] = Field(default_factory=list)
     nodes: list[FleetStatusNode] = Field(default_factory=list)
     relays: list[FleetStatusRelay] = Field(default_factory=list)
     users: list[FleetStatusUser] = Field(default_factory=list)
@@ -173,7 +280,7 @@ class FleetStatus(CoreModel):
         return to_plain(self)
 
 
-def node_api_status(api_node: ApiNodeLike | None) -> str:
+def node_api_status(api_node: ApiNodeLike | None) -> NodeStatus:
     if not api_node:
         return "unknown"
     if getattr(api_node, "is_connected", False):
@@ -183,7 +290,7 @@ def node_api_status(api_node: ApiNodeLike | None) -> str:
     return "disconnected"
 
 
-def node_protocols(node: NodeEntry) -> list[str]:
+def node_protocols(node: TopologyNode) -> list[str]:
     protocols = ["reality"]
     if node.xhttp_path:
         protocols.append("xhttp")
@@ -192,32 +299,56 @@ def node_protocols(node: NodeEntry) -> list[str]:
     return protocols
 
 
-def node_desired(node: NodeEntry, desired_nodes: list[DesiredNode] | None) -> bool | None:
+def node_desired(node: TopologyNode, desired_nodes: list[DesiredNodeSpec] | None) -> bool | None:
     if desired_nodes is None:
         return None
     return any(node.ip == desired.host for desired in desired_nodes)
 
 
-def relay_desired(relay: RelayEntry, desired_relays: list[DesiredRelay] | None) -> bool | None:
+def relay_desired(relay: TopologyRelay, desired_relays: list[DesiredRelaySpec] | None) -> bool | None:
     if desired_relays is None:
         return None
     return any(relay.ip == desired.host for desired in desired_relays)
 
 
+def build_server_inventory(topology: FleetTopology) -> list[ServerInventory]:
+    """Build a role-oriented server list for graph/UI clients."""
+    by_ip: dict[str, ServerInventory] = {}
+
+    def upsert(ip: str, name: str, roles: list[ServerRole], ssh_user: str, ssh_port: int) -> None:
+        existing = by_ip.get(ip)
+        if existing:
+            merged_roles = list(dict.fromkeys([*existing.roles, *roles]))
+            by_ip[ip] = existing.model_copy(update={"roles": merged_roles})
+            return
+        by_ip[ip] = ServerInventory(id=ip, ip=ip, name=name, roles=roles, ssh_user=ssh_user, ssh_port=ssh_port)
+
+    for node in topology.nodes:
+        roles: list[ServerRole] = ["exit"]
+        if node.is_panel_host:
+            roles.insert(0, "panel")
+        upsert(node.ip, node.name, roles, node.ssh_user, node.ssh_port)
+    for relay in topology.relays:
+        upsert(relay.ip, relay.name, ["relay"], relay.ssh_user, relay.ssh_port)
+    return list(by_ip.values())
+
+
 def build_fleet_status(
-    cluster: ClusterConfig,
+    topology: FleetTopology,
     *,
     panel_healthy: bool,
     api_nodes: Sequence[ApiNodeLike] | None = None,
     api_users: Sequence[ApiUserLike] | None = None,
     relay_health: Mapping[tuple[str, int], bool] | None = None,
+    sources: FleetSources | None = None,
 ) -> FleetStatus:
     """Build fleet health status from local state plus live observations."""
     api_by_uuid = {node.uuid: node for node in api_nodes or []}
     relay_health = relay_health or {}
+    sources = sources or FleetSources()
 
     nodes = []
-    for node in cluster.nodes:
+    for node in topology.nodes:
         api_node = api_by_uuid.get(node.uuid)
         status = node_api_status(api_node)
         nodes.append(
@@ -233,8 +364,10 @@ def build_fleet_status(
         )
 
     relays = []
-    for relay in cluster.relays:
-        exit_node = cluster.find_node(relay.exit_node_ip)
+    for relay in topology.relays:
+        exit_node = topology.find_node(relay.exit_node_ip)
+        observed = relay_health.get((relay.ip, relay.port))
+        health: RelayHealth = "unknown" if observed is None else "healthy" if observed else "unhealthy"
         relays.append(
             FleetStatusRelay(
                 ip=relay.ip,
@@ -242,7 +375,8 @@ def build_fleet_status(
                 port=relay.port,
                 exit_node_ip=relay.exit_node_ip,
                 exit_node_name=exit_node.name if exit_node else "",
-                healthy=relay_health.get((relay.ip, relay.port), False),
+                health=health,
+                healthy=observed,
             )
         )
 
@@ -250,7 +384,12 @@ def build_fleet_status(
     active_users = sum(1 for user in users if user.status.upper() == "ACTIVE")
     disabled_users = sum(1 for user in users if user.status.upper() == "DISABLED")
     other_users = len(users) - active_users - disabled_users
+    disconnected_nodes = sum(1 for node in nodes if node.status == "disconnected")
+    unhealthy_relays = sum(1 for relay in relays if relay.health == "unhealthy")
+    needs_attention = not panel_healthy or disconnected_nodes > 0 or unhealthy_relays > 0
     summary = FleetStatusSummary(
+        health="degraded" if needs_attention else "healthy",
+        needs_attention=needs_attention,
         nodes=len(nodes),
         relays=len(relays),
         users=len(users),
@@ -258,14 +397,16 @@ def build_fleet_status(
         disabled_users=disabled_users,
         other_users=other_users,
         connected_nodes=sum(1 for node in nodes if node.status == "connected"),
-        disconnected_nodes=sum(1 for node in nodes if node.status == "disconnected"),
+        disconnected_nodes=disconnected_nodes,
         disabled_nodes=sum(1 for node in nodes if node.status == "disabled"),
         unknown_nodes=sum(1 for node in nodes if node.status == "unknown"),
-        unhealthy_relays=sum(1 for relay in relays if not relay.healthy),
+        unhealthy_relays=unhealthy_relays,
     )
     return FleetStatus(
-        panel=PanelStatus(url=cluster.panel.display_url or cluster.panel.url, healthy=panel_healthy),
+        panel=PanelStatus(url=topology.panel_url, healthy=panel_healthy),
         summary=summary,
+        sources=sources,
+        servers=build_server_inventory(topology),
         nodes=nodes,
         relays=relays,
         users=users,
@@ -273,33 +414,35 @@ def build_fleet_status(
 
 
 def build_fleet_inventory(
-    cluster: ClusterConfig,
+    topology: FleetTopology,
     *,
     panel_healthy: bool,
     api_nodes: Sequence[ApiNodeLike] | None = None,
+    sources: FleetSources | None = None,
 ) -> FleetInventory:
     """Build a redacted fleet inventory from local state plus panel status."""
     api_by_uuid = {node.uuid: node for node in api_nodes or []}
-    desired_node_hosts = {d.host for d in cluster.desired_nodes or [] if d.host}
-    desired_relay_hosts = {d.host for d in cluster.desired_relays or [] if d.host}
-    actual_node_hosts = {node.ip for node in cluster.nodes if node.ip}
-    actual_relay_hosts = {relay.ip for relay in cluster.relays if relay.ip}
+    sources = sources or FleetSources()
+    desired_node_hosts = {desired.host for desired in topology.desired_nodes or [] if desired.host}
+    desired_relay_hosts = {desired.host for desired in topology.desired_relays or [] if desired.host}
+    actual_node_hosts = {node.ip for node in topology.nodes if node.ip}
+    actual_relay_hosts = {relay.ip for relay in topology.relays if relay.ip}
 
     panel = PanelInventory(
-        url=cluster.panel.display_url or cluster.panel.url,
-        server_ip=cluster.panel.server_ip,
-        ssh_user=cluster.panel.ssh_user,
-        ssh_port=cluster.panel.ssh_port,
+        url=topology.panel_url,
+        server_ip=topology.panel.server_ip,
+        ssh_user=topology.panel.ssh_user,
+        ssh_port=topology.panel.ssh_port,
         healthy=panel_healthy,
-        deployed_with=cluster.panel.deployed_with,
-        subscription_page={
-            "enabled": bool(cluster.subscription_page and cluster.subscription_page.enabled),
-            "path": cluster.subscription_page.path if cluster.subscription_page else "",
-        },
+        deployed_with=topology.panel.deployed_with,
+        subscription_page=SubscriptionPageInventory(
+            enabled=bool(topology.subscription_page and topology.subscription_page.enabled),
+            path=topology.subscription_page.path if topology.subscription_page else "",
+        ),
     )
 
     nodes = []
-    for node in cluster.nodes:
+    for node in topology.nodes:
         api_node = api_by_uuid.get(node.uuid)
         nodes.append(
             NodeInventory(
@@ -312,15 +455,15 @@ def build_fleet_inventory(
                 domain=node.domain,
                 sni=node.sni,
                 protocols=node_protocols(node),
-                desired=node_desired(node, cluster.desired_nodes),
+                desired=node_desired(node, topology.desired_nodes),
                 panel_status=node_api_status(api_node),
                 xray_version=getattr(api_node, "xray_version", "") if api_node else "",
             )
         )
 
     relays = []
-    for relay in cluster.relays:
-        exit_node = cluster.find_node(relay.exit_node_ip)
+    for relay in topology.relays:
+        exit_node = topology.find_node(relay.exit_node_ip)
         relays.append(
             RelayInventory(
                 ip=relay.ip,
@@ -333,7 +476,7 @@ def build_fleet_inventory(
                 exit_node_name=exit_node.name if exit_node else "",
                 sni=relay.sni,
                 host_count=len(relay.host_uuids),
-                desired=relay_desired(relay, cluster.desired_relays),
+                desired=relay_desired(relay, topology.desired_relays),
             )
         )
 
@@ -348,7 +491,7 @@ def build_fleet_inventory(
             warp=desired.warp,
             present=bool(desired.host and desired.host in actual_node_hosts),
         )
-        for desired in cluster.desired_nodes or []
+        for desired in topology.desired_nodes or []
     ]
     desired_relays = [
         DesiredRelayInventory(
@@ -360,20 +503,22 @@ def build_fleet_inventory(
             sni=desired.sni,
             present=bool(desired.host and desired.host in actual_relay_hosts),
         )
-        for desired in cluster.desired_relays or []
+        for desired in topology.desired_relays or []
     ]
 
     summary = FleetInventorySummary(
-        nodes=len(cluster.nodes),
-        relays=len(cluster.relays),
-        desired_nodes=len(cluster.desired_nodes or []),
-        desired_relays=len(cluster.desired_relays or []),
+        nodes=len(topology.nodes),
+        relays=len(topology.relays),
+        desired_nodes=len(topology.desired_nodes or []),
+        desired_relays=len(topology.desired_relays or []),
         unapplied_desired_nodes=len(desired_node_hosts - actual_node_hosts),
         unapplied_desired_relays=len(desired_relay_hosts - actual_relay_hosts),
     )
     return FleetInventory(
         panel=panel,
         summary=summary,
+        sources=sources,
+        servers=build_server_inventory(topology),
         nodes=nodes,
         relays=relays,
         desired_nodes=desired_nodes,

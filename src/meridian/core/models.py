@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 OutputStatus = Literal["ok", "changed", "no_changes", "failed", "cancelled"]
 ErrorCategory = Literal["user", "system", "bug", "cancelled"]
 EventLevel = Literal["debug", "info", "warning", "error"]
+OutputSchema = Literal["meridian.output/v1"]
+EventSchema = Literal["meridian.event/v1"]
 
 
 class CoreModel(BaseModel):
@@ -41,7 +43,7 @@ class MeridianError(CoreModel):
 class OutputEnvelope(CoreModel):
     """One-shot JSON result envelope for command/process APIs."""
 
-    schema_version: str = Field(alias="schema")
+    schema_version: OutputSchema = Field(default="meridian.output/v1", alias="schema")
     meridian_version: str
     command: str
     operation_id: str
@@ -66,7 +68,7 @@ class ResourceRef(CoreModel):
 class Event(CoreModel):
     """JSONL event model for long-running operations."""
 
-    schema_version: str = Field(alias="schema")
+    schema_version: EventSchema = Field(default="meridian.event/v1", alias="schema")
     operation_id: str
     seq: int
     time: str
