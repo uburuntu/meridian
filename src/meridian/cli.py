@@ -57,7 +57,8 @@ def main_callback(
             handlers=[logging.StreamHandler(sys.stderr)],
         )
 
-    if json_mode or ctx.invoked_subcommand == "api" or _argv_requests_machine_output(list(ctx.args)):
+    machine_output = json_mode or ctx.invoked_subcommand == "api" or _argv_requests_machine_output(list(ctx.args))
+    if machine_output:
         from meridian.console import set_quiet_mode
 
         set_quiet_mode(True)
@@ -84,7 +85,7 @@ def main_callback(
         banner(__version__)
 
     # Auto-update check (skip for meta commands)
-    if not DISABLE_UPDATE_CHECK and ctx.invoked_subcommand not in ("update",):
+    if not DISABLE_UPDATE_CHECK and not machine_output and ctx.invoked_subcommand not in ("update",):
         from meridian.update import check_for_update
 
         check_for_update(__version__)
@@ -664,6 +665,19 @@ def api_schemas_cmd(
     if json_mode:
         _enable_json_output()
     run_schemas(json_output=json_mode, include_schemas=include_schemas)
+
+
+@api_app.command("commands")
+def api_commands_cmd(
+    json_mode: bool = typer.Option(False, "--json", help="Output command catalog as JSON envelope"),
+    include_schemas: bool = typer.Option(False, "--include-schemas", help="Include envelope and data schemas"),
+) -> None:
+    """List migrated meridian-core command contracts."""
+    from meridian.commands.api import run_commands
+
+    if json_mode:
+        _enable_json_output()
+    run_commands(json_output=json_mode, include_schemas=include_schemas)
 
 
 @api_app.command("schema")

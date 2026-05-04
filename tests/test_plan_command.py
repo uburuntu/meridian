@@ -17,7 +17,7 @@ import typer
 
 from meridian.cluster import ClusterConfig, NodeEntry, PanelConfig
 from meridian.commands.plan import run as plan_run
-from meridian.reconciler.diff import Plan, PlanAction, PlanActionKind
+from meridian.reconciler.diff import ActionChange, Plan, PlanAction, PlanActionKind
 
 
 def _configured_cluster_with_desired() -> ClusterConfig:
@@ -144,3 +144,23 @@ class TestPlanJsonOutput:
         assert "\n" in raw
         # Parses as JSON
         json.loads(raw)
+
+    def test_update_plan_action_includes_structured_change_set(self) -> None:
+        plan = Plan(
+            actions=[
+                PlanAction(
+                    kind=PlanActionKind.UPDATE_NODE,
+                    target="198.51.100.2",
+                    detail="redeploy node exit-b: sni: old.example → new.example",
+                    changes=[ActionChange("sni", "old.example", "new.example")],
+                )
+            ]
+        )
+
+        payload, exit_code = _capture_plan_json(plan)
+
+        action = payload["data"]["actions"][0]
+        assert exit_code == 2
+        assert action["kind"] == "update_node"
+        assert action["operation"] == "update"
+        assert action["change_set"] == [{"field": "sni", "before": "old.example", "after": "new.example"}]

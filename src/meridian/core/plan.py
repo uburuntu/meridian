@@ -123,6 +123,10 @@ def build_plan_result(plan: Any, *, exit_code: int) -> PlanResult:
                 phase=_phase(operation),
                 requires_confirmation=action.destructive,
                 destructive_reason=action.detail if action.destructive else "",
+                change_set=[
+                    PlanChange(field=change.field, before=change.before, after=change.after)
+                    for change in getattr(action, "changes", [])
+                ],
                 symbol=_symbol(operation),
             )
         )

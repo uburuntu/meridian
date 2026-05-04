@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import typer
+
 from meridian.console import err_console, error_context, fail, is_json_mode
-from meridian.core.models import Summary
+from meridian.core.models import MeridianError, Summary
 from meridian.core.output import OperationContext, envelope
-from meridian.core.schema import schema_catalog, schema_for
+from meridian.core.schema import command_catalog, schema_catalog, schema_for
 from meridian.renderers import emit_json
 
 
@@ -14,22 +16,49 @@ def run_schemas(*, json_output: bool = False, include_schemas: bool = False) -> 
     operation = OperationContext()
     with error_context("api.schemas", timer=operation.timer):
         catalog = schema_catalog(include_schemas=include_schemas and (json_output or is_json_mode()))
-    if json_output or is_json_mode():
-        emit_json(
-            envelope(
-                command="api.schemas",
-                data={"schemas": catalog},
-                summary=Summary(text=f"{len(catalog)} schema(s)", changed=False, counts={"schemas": len(catalog)}),
-                timer=operation.timer,
+        if json_output or is_json_mode():
+            emit_json(
+                envelope(
+                    command="api.schemas",
+                    data={"schemas": catalog},
+                    summary=Summary(text=f"{len(catalog)} schema(s)", changed=False, counts={"schemas": len(catalog)}),
+                    timer=operation.timer,
+                )
             )
-        )
-        return
+            return
 
-    err_console.print()
-    err_console.print("  [bold]Meridian API schemas[/bold]")
-    for item in catalog:
-        err_console.print(f"    {item['name']}  [dim]{item['title']}[/dim]")
-    err_console.print()
+        err_console.print()
+        err_console.print("  [bold]Meridian API schemas[/bold]")
+        for item in catalog:
+            err_console.print(f"    {item['name']}  [dim]{item['title']}[/dim]")
+        err_console.print()
+
+
+def run_commands(*, json_output: bool = False, include_schemas: bool = False) -> None:
+    """List migrated meridian-core command contracts."""
+    operation = OperationContext()
+    with error_context("api.commands", timer=operation.timer):
+        catalog = command_catalog(include_schemas=include_schemas and (json_output or is_json_mode()))
+        if json_output or is_json_mode():
+            emit_json(
+                envelope(
+                    command="api.commands",
+                    data={"commands": catalog},
+                    summary=Summary(
+                        text=f"{len(catalog)} command contract(s)",
+                        changed=False,
+                        counts={"commands": len(catalog)},
+                    ),
+                    timer=operation.timer,
+                )
+            )
+            return
+
+        err_console.print()
+        err_console.print("  [bold]Meridian API commands[/bold]")
+        for item in catalog:
+            err_console.print(f"    {item['command']}  [dim]{item['envelope_schema']}[/dim]")
+        err_console.print()
 
 
 def run_schema(name: str, *, envelope_output: bool = False) -> None:
@@ -39,6 +68,27 @@ def run_schema(name: str, *, envelope_output: bool = False) -> None:
         try:
             schema = schema_for(name)
         except ValueError as exc:
+            if not envelope_output and not is_json_mode():
+                emit_json(
+                    envelope(
+                        command="api.schema",
+                        summary=str(exc),
+                        status="failed",
+                        exit_code=2,
+                        errors=[
+                            MeridianError(
+                                code="MERIDIAN_USER_ERROR",
+                                category="user",
+                                message=str(exc),
+                                hint="Run: meridian api schemas",
+                                retryable=False,
+                                exit_code=2,
+                            )
+                        ],
+                        timer=operation.timer,
+                    )
+                )
+                raise typer.Exit(code=2) from exc
             fail(str(exc), hint="Run: meridian api schemas", hint_type="user")
 
         if envelope_output or is_json_mode():

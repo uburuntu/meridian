@@ -57,7 +57,7 @@ def topology_from_cluster(cluster: ClusterConfig) -> FleetTopology:
                 ssh_port=relay.ssh_port,
                 exit_node_ip=relay.exit_node_ip,
                 sni=relay.sni,
-                host_uuids=list(relay.host_uuids),
+                host_uuids=list(relay.host_uuids.values()),
             )
             for relay in cluster.relays
         ],

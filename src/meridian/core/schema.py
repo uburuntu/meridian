@@ -4,30 +4,51 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from pydantic import Field
+
 from meridian.core.fleet import FleetInventory, FleetStatus
-from meridian.core.models import CoreModel, Event, MeridianError, OutputEnvelope, Summary
+from meridian.core.models import CoreModel, Event, MeridianError, OutputEnvelope, OutputStatus, Summary
 from meridian.core.plan import PlanActionResult, PlanCounts, PlanResult
+
+
+class EmptyData(CoreModel):
+    """Empty data object used by failed or cancelled envelopes."""
 
 
 class PlanOutputEnvelope(OutputEnvelope):
     """Envelope schema for `meridian plan --json`."""
 
     command: Literal["plan"] = "plan"
-    data: PlanResult  # type: ignore[assignment]
+    data: PlanResult | EmptyData = Field(default_factory=EmptyData)  # type: ignore[assignment]
 
 
 class FleetStatusOutputEnvelope(OutputEnvelope):
     """Envelope schema for `meridian fleet status --json`."""
 
     command: Literal["fleet.status"] = "fleet.status"
-    data: FleetStatus  # type: ignore[assignment]
+    data: FleetStatus | EmptyData = Field(default_factory=EmptyData)  # type: ignore[assignment]
 
 
 class FleetInventoryOutputEnvelope(OutputEnvelope):
     """Envelope schema for `meridian fleet inventory --json`."""
 
     command: Literal["fleet.inventory"] = "fleet.inventory"
-    data: FleetInventory  # type: ignore[assignment]
+    data: FleetInventory | EmptyData = Field(default_factory=EmptyData)  # type: ignore[assignment]
+
+
+class CommandContract(CoreModel):
+    """Discoverable command-to-schema contract for process API clients."""
+
+    command: str
+    envelope_schema: str
+    data_schema: str
+    failure_data_schema: str
+    error_schema: str
+    statuses: list[OutputStatus]
+    exit_codes: dict[str, str]
+    machine_flags: list[str]
+    stability: Literal["stable", "preview"]
+    description: str
 
 
 _SCHEMAS: dict[str, type[CoreModel]] = {
@@ -38,17 +59,68 @@ _SCHEMAS: dict[str, type[CoreModel]] = {
     "event": Event,
     "error": MeridianError,
     "summary": Summary,
+    "empty-data": EmptyData,
     "plan-result": PlanResult,
     "plan-action": PlanActionResult,
     "plan-counts": PlanCounts,
     "fleet-status": FleetStatus,
     "fleet-inventory": FleetInventory,
+    "command-contract": CommandContract,
+}
+
+_COMMAND_CONTRACTS: dict[str, CommandContract] = {
+    "plan": CommandContract(
+        command="plan",
+        envelope_schema="plan-envelope",
+        data_schema="plan-result",
+        failure_data_schema="empty-data",
+        error_schema="error",
+        statuses=["no_changes", "changed", "failed"],
+        exit_codes={
+            "0": "desired state already matches actual state",
+            "2": "changes pending; user/config errors also use category=user in the error envelope",
+            "3": "system or infrastructure failure",
+        },
+        machine_flags=["--json"],
+        stability="stable",
+        description="Compute the desired-state reconciliation plan without applying it.",
+    ),
+    "fleet.status": CommandContract(
+        command="fleet.status",
+        envelope_schema="fleet-status-envelope",
+        data_schema="fleet-status",
+        failure_data_schema="empty-data",
+        error_schema="error",
+        statuses=["ok", "failed"],
+        exit_codes={
+            "0": "fleet status was collected; inspect data.summary.health and warnings for degraded state",
+            "2": "user/config error",
+            "3": "system or infrastructure failure",
+        },
+        machine_flags=["--json"],
+        stability="stable",
+        description="Collect panel, node, relay, and user health observations for the configured fleet.",
+    ),
+    "fleet.inventory": CommandContract(
+        command="fleet.inventory",
+        envelope_schema="fleet-inventory-envelope",
+        data_schema="fleet-inventory",
+        failure_data_schema="empty-data",
+        error_schema="error",
+        statuses=["ok", "failed"],
+        exit_codes={
+            "0": "inventory was collected; inspect summary.changed and data.summary.pending for desired drift",
+            "2": "user/config error",
+            "3": "system or infrastructure failure",
+        },
+        machine_flags=["--json"],
+        stability="stable",
+        description="Return the configured fleet topology plus live panel observations when available.",
+    ),
 }
 
 _COMMAND_SCHEMAS: dict[str, str] = {
-    "plan": "plan-envelope",
-    "fleet.status": "fleet-status-envelope",
-    "fleet.inventory": "fleet-inventory-envelope",
+    command: contract.envelope_schema for command, contract in _COMMAND_CONTRACTS.items()
 }
 
 
@@ -86,5 +158,22 @@ def schema_catalog(*, include_schemas: bool = False) -> list[dict[str, Any]]:
             item["commands"] = commands
         if include_schemas:
             item["schema"] = schema_for(name)
+        catalog.append(item)
+    return catalog
+
+
+def command_contracts() -> list[CommandContract]:
+    """Return stable command contracts for migrated process API commands."""
+    return [_COMMAND_CONTRACTS[name] for name in sorted(_COMMAND_CONTRACTS)]
+
+
+def command_catalog(*, include_schemas: bool = False) -> list[dict[str, Any]]:
+    """Return command contract metadata, optionally including JSON Schemas."""
+    catalog: list[dict[str, Any]] = []
+    for contract in command_contracts():
+        item: dict[str, Any] = contract.model_dump(mode="json")
+        if include_schemas:
+            item["envelope"] = schema_for(contract.envelope_schema)
+            item["data"] = schema_for(contract.data_schema)
         catalog.append(item)
     return catalog

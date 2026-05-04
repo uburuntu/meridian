@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from meridian.core.schema import schema_catalog, schema_for, schema_names
+from meridian.core.output import OperationTimer, envelope
+from meridian.core.schema import PlanOutputEnvelope, command_catalog, schema_catalog, schema_for, schema_names
 
 
 def test_schema_catalog_lists_public_contracts() -> None:
@@ -15,6 +16,8 @@ def test_schema_catalog_lists_public_contracts() -> None:
     assert "fleet-status-envelope" in names
     assert "fleet-inventory-envelope" in names
     assert "event" in names
+    assert "command-contract" in names
+    assert "empty-data" in names
     assert "plan-result" in names
     assert "fleet-status" in names
     assert "fleet-inventory" in names
@@ -32,8 +35,10 @@ def test_command_envelope_schema_binds_command_to_typed_data() -> None:
     schema = schema_for("fleet-status-envelope")
 
     assert schema["properties"]["command"]["const"] == "fleet.status"
-    data_ref = schema["properties"]["data"]["$ref"]
-    assert data_ref.endswith("/FleetStatus")
+    data_schema = schema["properties"]["data"]
+    refs = [option["$ref"] for option in data_schema["anyOf"]]
+    assert any(ref.endswith("/FleetStatus") for ref in refs)
+    assert any(ref.endswith("/EmptyData") for ref in refs)
 
 
 def test_schema_catalog_can_include_full_schemas() -> None:
@@ -44,6 +49,44 @@ def test_schema_catalog_can_include_full_schemas() -> None:
     assert output["title"] == "OutputEnvelope"
     assert output["schema"]["properties"]["command"]["type"] == "string"
     assert plan["commands"] == ["plan"]
+
+
+def test_command_catalog_maps_commands_to_envelope_and_data_schemas() -> None:
+    catalog = command_catalog()
+    by_command = {item["command"]: item for item in catalog}
+
+    assert by_command["plan"]["envelope_schema"] == "plan-envelope"
+    assert by_command["plan"]["data_schema"] == "plan-result"
+    assert by_command["plan"]["failure_data_schema"] == "empty-data"
+    assert by_command["plan"]["error_schema"] == "error"
+    assert by_command["plan"]["machine_flags"] == ["--json"]
+    assert "changed" in by_command["plan"]["statuses"]
+    assert by_command["fleet.status"]["data_schema"] == "fleet-status"
+    assert by_command["fleet.inventory"]["statuses"] == ["ok", "failed"]
+
+
+def test_command_catalog_can_embed_command_schemas() -> None:
+    catalog = command_catalog(include_schemas=True)
+    plan = next(item for item in catalog if item["command"] == "plan")
+
+    assert plan["envelope"]["properties"]["command"]["const"] == "plan"
+    assert plan["data"]["title"] == "PlanResult"
+
+
+def test_command_envelope_schema_validates_failed_output_shape() -> None:
+    payload = envelope(
+        command="plan",
+        summary="No desired state defined in cluster.yml",
+        status="failed",
+        exit_code=2,
+        timer=OperationTimer(started_at="2026-05-04T21:00:00Z", operation_id="op-test"),
+    )
+
+    parsed = PlanOutputEnvelope.model_validate(payload.model_dump(mode="json", by_alias=True))
+
+    assert parsed.command == "plan"
+    assert parsed.status == "failed"
+    assert parsed.data.model_dump() == {}
 
 
 def test_unknown_schema_name_is_actionable() -> None:

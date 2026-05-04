@@ -433,6 +433,8 @@ class MeridianPanel:
         try:
             _sdk_call(self._sdk.users.get_all_users(start=0, size=1))
             return True
+        except RemnawaveAuthError:
+            raise
         except Exception:
             return False
 

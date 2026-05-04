@@ -125,7 +125,7 @@ class TestComputePlanNodes:
             DesiredNodeState(host="198.51.100.1", warp=False),
             ActualNodeState(host="198.51.100.1", warp=True),
         )
-        assert any("warp" in c for c in changes), f"warp=False → True should diff; got {changes}"
+        assert any(c.field == "warp" for c in changes), f"warp=False → True should diff; got {changes}"
 
     def test_multiple_nodes_added(self) -> None:
         desired = DesiredState(

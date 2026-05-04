@@ -19,7 +19,15 @@ from meridian.core.models import (
 from meridian.core.output import EventStream, OperationContext, envelope, json_dumps, jsonl_dumps, plan_payload
 from meridian.core.plan import PlanActionResult, PlanCounts, PlanResult, build_plan_result
 from meridian.core.redaction import REDACTED, redact
-from meridian.core.schema import schema_catalog, schema_for, schema_names
+from meridian.core.schema import (
+    CommandContract,
+    EmptyData,
+    command_catalog,
+    command_contracts,
+    schema_catalog,
+    schema_for,
+    schema_names,
+)
 
 __all__ = [
     "EventStream",
@@ -37,6 +45,10 @@ __all__ = [
     "REDACTED",
     "ResourceRef",
     "Summary",
+    "CommandContract",
+    "EmptyData",
+    "command_catalog",
+    "command_contracts",
     "envelope",
     "json_dumps",
     "jsonl_dumps",

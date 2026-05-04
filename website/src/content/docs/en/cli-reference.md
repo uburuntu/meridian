@@ -96,16 +96,16 @@ Inspect and repair the fleet from the live panel API.
 ```
 meridian fleet status [--json]
 meridian fleet inventory [--json]
-meridian fleet recover IP [flags]
+meridian fleet recover --panel-url URL --api-token TOKEN
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--json` | | Emit fleet state as JSON (for scripting / CI) |
-| `--user USER` | root | SSH user on the panel host (for `fleet recover`) |
-| `--ssh-port PORT` | 22 | SSH port on the panel host |
+| `--panel-url URL` | required | Panel HTTPS URL (for `fleet recover`) |
+| `--api-token TOKEN` | required | Remnawave API token (for `fleet recover`) |
 
-**`fleet status`** — shows panel health, every node's connection + Xray version + traffic, every relay's upstream, and user counts. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data`: `data.panel.url`, `data.panel.healthy`, `data.sources.*`, `data.servers[].roles`, `data.nodes[].status` (`"connected"`, `"disconnected"`, `"disabled"`, `"unknown"`), `data.relays[].health` (`"healthy"`, `"unhealthy"`, `"unknown"`), and `data.summary.health/needs_attention/active_users/disabled_users/unknown_nodes/unhealthy_relays`. Top-level `status` reports command execution, not fleet health.
+**`fleet status`** — shows panel health, every node's connection + Xray version + traffic, every relay's upstream, and user counts. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data`: `data.panel.url`, `data.panel.healthy`, `data.sources.*`, `data.servers[].roles`, `data.nodes[].status` (`"connected"`, `"disconnected"`, `"disabled"`, `"unknown"`), `data.relays[].health` (`"healthy"`, `"unhealthy"`, `"unknown"`), and `data.summary.health/needs_attention/active_users/disabled_users/unknown_nodes/unhealthy_relays`. `data.summary.health` is `"unknown"` when required live data could not be collected. Top-level `status` reports command execution, not fleet health.
 
 **`fleet inventory`** — shows the configured panel, nodes, relays, desired topology, and live panel node status when reachable. It never prints the panel API token. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data` includes `data.sources.*`, `data.servers[].roles`, `data.summary.*`, `data.nodes[].desired`, `data.nodes[].protocols`, `data.relays[].exit_node_*`, and `data.desired_nodes[].present`.
 
@@ -117,16 +117,19 @@ Inspect the machine-readable meridian-core contract used by JSON output and futu
 
 ```
 meridian api schemas [--json] [--include-schemas]
+meridian api commands [--json] [--include-schemas]
 meridian api schema NAME [--envelope]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--json` | | Emit the schema catalog as a `meridian.output/v1` envelope |
-| `--include-schemas` | | Include full JSON Schemas in `api schemas --json` output |
+| `--include-schemas` | | Include full JSON Schemas in `api schemas --json` or `api commands --json` output |
 | `--envelope` | | Wrap `api schema NAME` in a `meridian.output/v1` envelope instead of printing raw JSON Schema |
 
 **`api schemas`** — lists stable schema names such as `output-envelope`, `plan-envelope`, `fleet-status-envelope`, `fleet-inventory-envelope`, `event`, `plan-result`, `fleet-status`, and `fleet-inventory`. Command envelope schemas include a `commands` entry in the catalog.
+
+**`api commands`** — lists migrated command contracts with `command`, `envelope_schema`, `data_schema`, possible `statuses`, exit-code meanings, machine flags, and stability. Use this before wiring a UI to decide which command payload schema validates a given envelope.
 
 **`api schema NAME`** — prints one JSON Schema. Example: `meridian api schema output-envelope`.
 

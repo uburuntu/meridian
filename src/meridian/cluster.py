@@ -22,6 +22,22 @@ import yaml
 logger = logging.getLogger("meridian.cluster")
 
 
+def _load_warning(message: str, *, details: list[str] | None = None) -> None:
+    """Surface cluster load warnings unless machine-output mode is quiet."""
+    try:
+        from meridian.console import err_console, is_quiet_mode
+
+        if is_quiet_mode():
+            return
+        err_console.print(f"  [warn]![/warn] {message}")
+        for detail in details or []:
+            err_console.print(f"  [dim]{detail}[/dim]")
+    except Exception:
+        print(message, file=sys.stderr)
+        for detail in details or []:
+            print(detail, file=sys.stderr)
+
+
 class ClusterConfigExternallyModifiedError(RuntimeError):
     """cluster.yml was modified on disk between load() and save().
 
@@ -232,16 +248,15 @@ class ClusterConfig:
         try:
             data = yaml.safe_load(raw)
         except yaml.YAMLError as e:
-            print(f"Warning: cluster.yml is corrupted and could not be parsed: {e}", file=sys.stderr)
+            _load_warning(f"cluster.yml is corrupted and could not be parsed: {e}")
             return cls()
         if not isinstance(data, dict):
             return cls()
         version = data.get("version", 1)
         if isinstance(version, int) and version > 2:
-            print(
-                f"Warning: cluster.yml has version {version}, but this CLI only understands version 2. "
-                "Some fields may be ignored. Upgrade Meridian: pip install --upgrade meridian-vpn",
-                file=sys.stderr,
+            _load_warning(
+                f"cluster.yml has version {version}, but this CLI only understands version 2. "
+                "Some fields may be ignored. Upgrade Meridian: pip install --upgrade meridian-vpn"
             )
         from meridian.migrations import migrate
 
@@ -256,11 +271,10 @@ class ClusterConfig:
         # Warn about validation errors on load (don't hard-fail — recover/doctor need corrupt configs)
         errors = cfg.validate()
         if errors:
-            print(f"Warning: cluster.yml has {len(errors)} validation issue(s):", file=sys.stderr)
-            for err in errors[:3]:
-                print(f"  - {err}", file=sys.stderr)
+            details = [f"- {err}" for err in errors[:3]]
             if len(errors) > 3:
-                print(f"  ... and {len(errors) - 3} more", file=sys.stderr)
+                details.append(f"... and {len(errors) - 3} more")
+            _load_warning(f"cluster.yml has {len(errors)} validation issue(s):", details=details)
 
         return cfg
 

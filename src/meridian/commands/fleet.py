@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from meridian.adapters.cluster import topology_from_cluster
 from meridian.commands._helpers import format_traffic, load_cluster, make_panel
-from meridian.console import err_console, error_context, is_json_mode, warn
+from meridian.console import err_console, error_context, fail, is_json_mode, warn
 from meridian.core.fleet import (
     ApiNodeLike,
     ApiUserLike,
@@ -26,7 +26,7 @@ from meridian.core.fleet import (
 )
 from meridian.core.models import MeridianError, Summary
 from meridian.core.output import OperationContext, envelope
-from meridian.remnawave import RemnawaveError
+from meridian.remnawave import RemnawaveAuthError, RemnawaveError
 from meridian.renderers import emit_json
 
 
@@ -112,6 +112,8 @@ def _run_inventory(*, operation: OperationContext) -> None:
                 try:
                     api_nodes = panel.list_nodes()
                     sources = sources.model_copy(update={"nodes": "available"})
+                except RemnawaveAuthError as exc:
+                    fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
                 except RemnawaveError as exc:
                     sources = sources.model_copy(update={"nodes": "unavailable"})
                     _add_warning(
@@ -125,6 +127,8 @@ def _run_inventory(*, operation: OperationContext) -> None:
                     )
             else:
                 sources = sources.model_copy(update={"nodes": "unavailable"})
+    except RemnawaveAuthError as exc:
+        fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
     except RemnawaveError as exc:
         panel_ok = False
         sources = sources.model_copy(update={"panel": "unavailable", "nodes": "unavailable"})
@@ -155,7 +159,7 @@ def _run_inventory(*, operation: OperationContext) -> None:
                         "pending": inventory.summary.pending,
                     },
                 ),
-                status="changed" if inventory.summary.pending else "ok",
+                status="ok",
                 warnings=warnings,
                 timer=operation.timer,
             )
@@ -313,6 +317,8 @@ def _run_status(*, operation: OperationContext) -> None:
             try:
                 api_nodes = panel.list_nodes()
                 sources = sources.model_copy(update={"nodes": "available"})
+            except RemnawaveAuthError as exc:
+                fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
             except RemnawaveError as exc:
                 sources = sources.model_copy(update={"nodes": "unavailable"})
                 _add_warning(
@@ -327,6 +333,8 @@ def _run_status(*, operation: OperationContext) -> None:
             try:
                 api_users = panel.list_users()
                 sources = sources.model_copy(update={"users": "available"})
+            except RemnawaveAuthError as exc:
+                fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
             except RemnawaveError as exc:
                 sources = sources.model_copy(update={"users": "unavailable"})
                 _add_warning(
@@ -338,6 +346,8 @@ def _run_status(*, operation: OperationContext) -> None:
                         details={"cause": type(exc).__name__},
                     ),
                 )
+    except RemnawaveAuthError as exc:
+        fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
     except RemnawaveError as exc:
         panel_ok = False
         sources = sources.model_copy(update={"panel": "unavailable", "nodes": "unavailable", "users": "unavailable"})

@@ -5,8 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from meridian.adapters.cluster import topology_from_cluster
-from meridian.cluster import ClusterConfig, DesiredNode, DesiredRelay, NodeEntry, PanelConfig, RelayEntry
-from meridian.core.fleet import build_fleet_inventory, build_fleet_status
+from meridian.cluster import (
+    ClusterConfig,
+    DesiredNode,
+    DesiredRelay,
+    NodeEntry,
+    PanelConfig,
+    RelayEntry,
+    SubscriptionPageConfig,
+)
+from meridian.core.fleet import FleetSources, build_fleet_inventory, build_fleet_status
 
 
 @dataclass
@@ -26,7 +34,11 @@ class ApiUser:
 
 def test_inventory_is_redacted_and_role_protocol_aware() -> None:
     cluster = ClusterConfig(
-        panel=PanelConfig(url="https://198.51.100.1/panel", api_token="secret-token", server_ip="198.51.100.1"),
+        panel=PanelConfig(
+            url="https://198.51.100.1/secret-panel",
+            api_token="secret-token",
+            server_ip="198.51.100.1",
+        ),
         nodes=[
             NodeEntry(
                 ip="198.51.100.1",
@@ -37,6 +49,7 @@ def test_inventory_is_redacted_and_role_protocol_aware() -> None:
             )
         ],
         relays=[RelayEntry(ip="198.51.100.2", name="relay-a", exit_node_ip="198.51.100.1")],
+        subscription_page=SubscriptionPageConfig(enabled=True, path="secret-subscription-path"),
         desired_nodes=[DesiredNode(host="198.51.100.1", name="exit-a")],
         desired_relays=[DesiredRelay(host="198.51.100.2", name="relay-a", exit_node="exit-a")],
     )
@@ -47,6 +60,8 @@ def test_inventory_is_redacted_and_role_protocol_aware() -> None:
     data = inventory.to_data()
 
     assert "api_token" not in data["panel"]
+    assert data["panel"]["url"] == "https://198.51.100.1/"
+    assert data["panel"]["subscription_page"] == {"enabled": True, "path": ""}
     assert data["panel"]["healthy"] is True
     assert data["sources"] == {"nodes": "unknown", "panel": "unknown", "relays": "unknown", "users": "unknown"}
     assert data["servers"][0]["roles"] == ["panel", "exit"]
@@ -55,6 +70,23 @@ def test_inventory_is_redacted_and_role_protocol_aware() -> None:
     assert data["relays"][0]["exit_node_name"] == "exit-a"
     assert data["summary"]["unapplied_desired_nodes"] == 0
     assert data["summary"]["unapplied_desired_relays"] == 0
+
+
+def test_cluster_adapter_preserves_relay_host_uuid_values() -> None:
+    cluster = ClusterConfig(
+        panel=PanelConfig(url="https://198.51.100.1/panel", api_token="secret-token"),
+        relays=[
+            RelayEntry(
+                ip="198.51.100.2",
+                name="relay-a",
+                host_uuids={"reality": "host-reality", "wss": "host-wss"},
+            )
+        ],
+    )
+
+    topology = topology_from_cluster(cluster)
+
+    assert topology.relays[0].host_uuids == ["host-reality", "host-wss"]
 
 
 def test_inventory_desired_matching_uses_host_identity() -> None:
@@ -96,16 +128,37 @@ def test_status_summarizes_nodes_relays_and_users() -> None:
     )
     data = status.to_data()
 
-    assert data["panel"] == {"healthy": True, "url": "https://198.51.100.1/panel/"}
+    assert data["panel"] == {"healthy": True, "url": "https://198.51.100.1/"}
     assert data["nodes"][0]["status"] == "connected"
     assert data["nodes"][0]["traffic_bytes"] == 1024
     assert data["nodes"][1]["status"] == "unknown"
     assert data["relays"][0]["exit_node_name"] == "exit-a"
     assert data["relays"][0]["health"] == "unhealthy"
     assert data["relays"][0]["healthy"] is False
-    assert data["summary"]["health"] == "degraded"
+    assert data["summary"]["health"] == "unknown"
     assert data["summary"]["needs_attention"] is True
     assert data["summary"]["active_users"] == 1
     assert data["summary"]["disabled_users"] == 1
     assert data["summary"]["unhealthy_relays"] == 1
+    assert data["summary"]["unknown_nodes"] == 1
+
+
+def test_status_marks_health_unknown_when_required_node_source_unavailable() -> None:
+    cluster = ClusterConfig(
+        panel=PanelConfig(url="https://198.51.100.1/panel", api_token="secret-token"),
+        nodes=[NodeEntry(ip="198.51.100.1", uuid="node-a", name="exit-a", is_panel_host=True)],
+    )
+
+    status = build_fleet_status(
+        topology_from_cluster(cluster),
+        panel_healthy=True,
+        api_nodes=[],
+        api_users=[],
+        relay_health={},
+        sources=FleetSources(panel="available", nodes="unavailable", users="available", relays="not_requested"),
+    )
+    data = status.to_data()
+
+    assert data["summary"]["health"] == "unknown"
+    assert data["summary"]["needs_attention"] is True
     assert data["summary"]["unknown_nodes"] == 1

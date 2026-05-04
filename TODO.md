@@ -95,7 +95,10 @@ The guiding rule: command modules parse CLI arguments and choose renderers; they
 - [x] Add serializer unit tests for envelope success, failure, JSONL, and redaction cases.
 - [x] Keep stdout/stderr rendering outside `meridian.core`; core owns models and serialization primitives only.
 - [x] Add command-specific envelope schemas for the first migrated commands.
+- [x] Add a command contract catalog that maps migrated commands to envelope/data schemas, statuses, flags, and exit-code meanings.
 - [x] Add source availability fields so partial fleet failures do not disappear in JSON.
+- [x] Make command envelope schemas accept both typed success data and empty failed/cancelled data.
+- [x] Strip secret URL paths from fleet API output; expose origins and booleans, not bearer-style routes.
 - [ ] Add golden JSON fixtures for the first migrated commands.
 
 Example:
@@ -263,6 +266,7 @@ Example:
 - [x] Convert `plan --json` to the shared envelope everywhere; v4 does not need a legacy JSON mode.
 - [x] Expose plan actions as typed API result objects.
 - [x] Add semantic plan action fields (`operation`, `resource_type`, `resource_id`, `phase`, `requires_confirmation`) so clients do not infer behavior from display symbols.
+- [x] Populate `change_set` for node and relay update plans.
 - [ ] Add `execute_plan()` reporter hooks for action start/completion/failure.
 - [ ] Add `apply --json` final envelope.
 - [ ] Add `apply --jsonl` event stream.
@@ -292,6 +296,7 @@ Example:
 - [ ] Add website docs page: API / Automation Contract.
 - [ ] Document JSON envelope, JSONL event stream, errors, exit codes, non-interactive behavior, redaction guarantees, and compatibility policy.
 - [x] Add CLI schema discovery/export for meridian-core contracts.
+- [x] Add CLI command contract discovery/export for migrated meridian-core commands.
 - [ ] Add examples with `jq` for `plan`, `apply`, `deploy`, and `fleet status`.
 - [ ] Document which fields are stable and which are diagnostic/best-effort.
 - [ ] Add CHANGELOG notes whenever API schemas add fields or change behavior.

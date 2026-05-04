@@ -22,7 +22,7 @@ from meridian.cluster import (
 )
 from meridian.commands.fleet import run_inventory, run_status
 from meridian.commands.recover import run_recover
-from meridian.remnawave import ConfigProfile, Inbound, Node, RemnawaveError, User
+from meridian.remnawave import ConfigProfile, Inbound, Node, RemnawaveAuthError, RemnawaveError, User
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -133,6 +133,26 @@ class TestFleetStatus:
         # When panel is unreachable, list_nodes should NOT be called
         panel.list_nodes.assert_not_called()
 
+    def test_status_auth_error_exits_user_failure(self) -> None:
+        """Authentication failures are not reported as partial healthy status."""
+        cluster = _fleet_cluster()
+        panel = _make_panel_mock(ping_ok=False)
+        panel.ping.side_effect = RemnawaveAuthError(
+            "Panel authentication failed",
+            hint="Check your API token.",
+            hint_type="user",
+        )
+
+        with (
+            patch("meridian.commands.fleet.load_cluster", return_value=cluster),
+            patch("meridian.commands.fleet.make_panel", return_value=panel),
+            patch("meridian.commands.fleet.is_json_mode", return_value=False),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                run_status()
+
+        assert exc_info.value.exit_code == 2
+
     def test_status_mixed_node_states(self) -> None:
         """Nodes in connected, disconnected, and disabled states."""
         cluster = _fleet_cluster()
@@ -223,7 +243,7 @@ class TestFleetStatus:
             "users": "available",
         }
         assert data["panel"]["healthy"] is True
-        assert data["panel"]["url"] == "https://198.51.100.1/panel/"
+        assert data["panel"]["url"] == "https://198.51.100.1/"
         assert data["summary"]["health"] == "degraded"
         assert data["summary"]["needs_attention"] is True
         assert len(data["nodes"]) == 2
@@ -339,6 +359,8 @@ class TestFleetStatus:
         assert payload.data["sources"]["nodes"] == "unavailable"
         assert payload.data["sources"]["users"] == "available"
         assert payload.data["nodes"][0]["status"] == "unknown"
+        assert payload.data["summary"]["health"] == "unknown"
+        assert payload.data["summary"]["needs_attention"] is True
 
     def test_status_json_relay_health(self) -> None:
         """JSON output includes relay health status."""
@@ -390,8 +412,10 @@ class TestFleetInventory:
         data = payload.data
         assert payload.schema_version == "meridian.output/v1"
         assert payload.command == "fleet.inventory"
+        assert payload.status == "ok"
         assert "api_token" not in data["panel"]
-        assert data["panel"]["url"] == "https://198.51.100.1/panel/"
+        assert data["panel"]["url"] == "https://198.51.100.1/"
+        assert data["panel"]["subscription_page"]["path"] == ""
         assert data["sources"] == {
             "nodes": "available",
             "panel": "available",
@@ -459,6 +483,9 @@ class TestFleetInventory:
             run_inventory()
 
         data = mock_json.call_args[0][0].data
+        payload = mock_json.call_args[0][0]
+        assert payload.status == "ok"
+        assert payload.summary.changed is True
         assert data["panel"]["healthy"] is False
         assert data["summary"]["unapplied_desired_nodes"] == 1
         assert data["summary"]["unapplied_desired_relays"] == 1

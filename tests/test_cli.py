@@ -75,6 +75,7 @@ class TestSubcommandHelp:
         result = runner.invoke(app, ["api", "--help"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
+        assert "commands" in output
         assert "schemas" in output
         assert "schema" in output
 
@@ -137,12 +138,43 @@ class TestApiContractCLI:
         assert payload["data"]["schemas"]
         assert "Meridian v" not in result.output
 
+    def test_api_commands_json_lists_command_contracts(self, monkeypatch) -> None:
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+
+        result = runner.invoke(app, ["api", "commands", "--json"])
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["command"] == "api.commands"
+        commands = {item["command"]: item for item in payload["data"]["commands"]}
+        assert commands["plan"]["envelope_schema"] == "plan-envelope"
+        assert commands["fleet.status"]["data_schema"] == "fleet-status"
+
     def test_api_schema_envelope_error_is_command_scoped_json(self, monkeypatch) -> None:
         set_json_mode(False)
         set_quiet_mode(False)
         monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
 
         result = runner.invoke(app, ["api", "schema", "missing", "--envelope"])
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        assert result.exit_code == 2
+        payload = json.loads(result.output)
+        assert payload["command"] == "api.schema"
+        assert payload["status"] == "failed"
+        assert payload["errors"][0]["category"] == "user"
+
+    def test_api_schema_raw_error_is_machine_readable(self, monkeypatch) -> None:
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+
+        result = runner.invoke(app, ["api", "schema", "missing"])
 
         set_json_mode(False)
         set_quiet_mode(False)

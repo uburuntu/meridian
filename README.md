@@ -147,6 +147,7 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 | `meridian relay remove RELAY_IP` | Remove a relay node |
 | `meridian relay check RELAY_IP` | Check relay health |
 | `meridian api schemas` | List meridian-core JSON schemas for automation/UI clients |
+| `meridian api commands` | List migrated command contracts and schema bindings |
 | `meridian api schema NAME` | Print one JSON Schema |
 | `meridian server add [IP]` | Add a server to local registry |
 | `meridian server list` | List known servers |
@@ -163,7 +164,7 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 
 Meridian is moving toward **meridian-core**: typed install/control APIs with the CLI as one client. Read-only machine output is now standardized around a Pydantic-backed `meridian.output/v1` envelope (`schema`, `command`, `operation_id`, `status`, `summary`, `data`, `warnings`, `errors`). For example, `meridian plan --json`, `meridian fleet status --json`, and `meridian fleet inventory --json` return the same top-level shape, with command-specific fields under `data`.
 
-Use top-level `status` for command execution, `summary.changed` for plan/apply changes, and command-specific health fields such as `data.summary.health` / `data.summary.needs_attention` for fleet state. Keep using process exit codes for shell control flow. Secrets are redacted before JSON leaves the process. Run `meridian api schemas` and `meridian api schema plan-envelope` to inspect command-specific contracts.
+Use top-level `status` for command execution, `summary.changed` for plan/apply changes or inventory drift, and command-specific health fields such as `data.summary.health` / `data.summary.needs_attention` for fleet state. Keep using process exit codes for shell control flow. Secrets are redacted before JSON leaves the process. Run `meridian api commands --json` to discover command contracts, and `meridian api schema plan-envelope` to inspect command-specific schemas.
 
 See the [full CLI reference](https://getmeridian.org/docs/en/cli-reference/) for all commands and flags.
 

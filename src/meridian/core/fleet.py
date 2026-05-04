@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Literal, Mapping, Protocol, Sequence
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import Field
 
@@ -92,7 +93,7 @@ class FleetTopology(CoreModel):
 
     @property
     def panel_url(self) -> str:
-        return self.panel.display_url or self.panel.url
+        return public_url(self.panel.display_url or self.panel.url)
 
     def find_node(self, ip: str) -> TopologyNode | None:
         return next((node for node in self.nodes if node.ip == ip), None)
@@ -280,6 +281,16 @@ class FleetStatus(CoreModel):
         return to_plain(self)
 
 
+def public_url(url: str) -> str:
+    """Return a URL origin without secret paths, query strings, or fragments."""
+    if not url:
+        return ""
+    parts = urlsplit(url)
+    if not parts.scheme or not parts.netloc:
+        return ""
+    return urlunsplit((parts.scheme, parts.netloc, "/", "", ""))
+
+
 def node_api_status(api_node: ApiNodeLike | None) -> NodeStatus:
     if not api_node:
         return "unknown"
@@ -367,7 +378,7 @@ def build_fleet_status(
     for relay in topology.relays:
         exit_node = topology.find_node(relay.exit_node_ip)
         observed = relay_health.get((relay.ip, relay.port))
-        health: RelayHealth = "unknown" if observed is None else "healthy" if observed else "unhealthy"
+        relay_status: RelayHealth = "unknown" if observed is None else "healthy" if observed else "unhealthy"
         relays.append(
             FleetStatusRelay(
                 ip=relay.ip,
@@ -375,7 +386,7 @@ def build_fleet_status(
                 port=relay.port,
                 exit_node_ip=relay.exit_node_ip,
                 exit_node_name=exit_node.name if exit_node else "",
-                health=health,
+                health=relay_status,
                 healthy=observed,
             )
         )
@@ -385,10 +396,20 @@ def build_fleet_status(
     disabled_users = sum(1 for user in users if user.status.upper() == "DISABLED")
     other_users = len(users) - active_users - disabled_users
     disconnected_nodes = sum(1 for node in nodes if node.status == "disconnected")
+    unknown_nodes = sum(1 for node in nodes if node.status == "unknown")
     unhealthy_relays = sum(1 for relay in relays if relay.health == "unhealthy")
-    needs_attention = not panel_healthy or disconnected_nodes > 0 or unhealthy_relays > 0
+    unknown_relays = sum(1 for relay in relays if relay.health == "unknown")
+    missing_required_sources = sources.panel == "unavailable" or sources.nodes == "unavailable"
+    health: FleetHealth
+    if not panel_healthy or missing_required_sources or unknown_nodes > 0 or unknown_relays > 0:
+        health = "unknown"
+    elif disconnected_nodes > 0 or unhealthy_relays > 0:
+        health = "degraded"
+    else:
+        health = "healthy"
+    needs_attention = health != "healthy"
     summary = FleetStatusSummary(
-        health="degraded" if needs_attention else "healthy",
+        health=health,
         needs_attention=needs_attention,
         nodes=len(nodes),
         relays=len(relays),
@@ -399,7 +420,7 @@ def build_fleet_status(
         connected_nodes=sum(1 for node in nodes if node.status == "connected"),
         disconnected_nodes=disconnected_nodes,
         disabled_nodes=sum(1 for node in nodes if node.status == "disabled"),
-        unknown_nodes=sum(1 for node in nodes if node.status == "unknown"),
+        unknown_nodes=unknown_nodes,
         unhealthy_relays=unhealthy_relays,
     )
     return FleetStatus(
@@ -437,7 +458,7 @@ def build_fleet_inventory(
         deployed_with=topology.panel.deployed_with,
         subscription_page=SubscriptionPageInventory(
             enabled=bool(topology.subscription_page and topology.subscription_page.enabled),
-            path=topology.subscription_page.path if topology.subscription_page else "",
+            path="",
         ),
     )
 

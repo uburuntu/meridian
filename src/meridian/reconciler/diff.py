@@ -35,6 +35,19 @@ class PlanActionKind(str, Enum):
     REMOVE_SUBSCRIPTION_PAGE = "remove_subscription_page"
 
 
+@dataclass(frozen=True)
+class ActionChange:
+    """A structured before/after field change for update actions."""
+
+    field: str
+    before: str
+    after: str
+
+    def detail(self) -> str:
+        """Human-readable change description for text plan output."""
+        return f"{self.field}: {self.before} → {self.after}"
+
+
 @dataclass
 class PlanAction:
     """A single reconciliation action."""
@@ -49,6 +62,7 @@ class PlanAction:
     # to keep, prompt, or auto-remove. Non-REMOVE actions and REMOVE actions
     # that come from explicit `desired_*` removal stay False.
     from_extras: bool = False
+    changes: list[ActionChange] = field(default_factory=list)
 
     @property
     def symbol(self) -> str:
@@ -107,22 +121,22 @@ class Plan:
         return f"Plan: {', '.join(parts)}."
 
 
-def _node_changes(desired: DesiredNodeState, actual: ActualNodeState) -> list[str]:
+def _node_changes(desired: DesiredNodeState, actual: ActualNodeState) -> list[ActionChange]:
     """Compare attributes of a matching node and return list of change descriptions.
 
     Empty desired values mean "not specified, keep current" — not "clear".
     Only non-empty desired values trigger drift detection.
     """
-    changes: list[str] = []
+    changes: list[ActionChange] = []
     if desired.name and desired.name != actual.name:
-        changes.append(f"name: {actual.name or '(none)'} → {desired.name}")
+        changes.append(ActionChange("name", actual.name or "(none)", desired.name))
     if desired.sni and desired.sni != actual.sni:
-        changes.append(f"sni: {actual.sni or '(default)'} → {desired.sni}")
+        changes.append(ActionChange("sni", actual.sni or "(default)", desired.sni))
     if desired.domain and desired.domain != actual.domain:
-        changes.append(f"domain: {actual.domain or '(none)'} → {desired.domain}")
+        changes.append(ActionChange("domain", actual.domain or "(none)", desired.domain))
     # warp uses None as "not specified — keep current". Only diff when explicitly set.
     if desired.warp is not None and desired.warp != actual.warp:
-        changes.append(f"warp: {actual.warp} → {desired.warp}")
+        changes.append(ActionChange("warp", str(actual.warp), str(desired.warp)))
     return changes
 
 
@@ -130,20 +144,20 @@ def _relay_changes(
     desired: DesiredRelayState,
     actual: ActualRelayState,
     node_name_to_ip: dict[str, str] | None = None,
-) -> list[str]:
+) -> list[ActionChange]:
     """Compare attributes of a matching relay."""
-    changes: list[str] = []
+    changes: list[ActionChange] = []
     if desired.name and desired.name != actual.name:
-        changes.append(f"name: {actual.name or '(none)'} → {desired.name}")
+        changes.append(ActionChange("name", actual.name or "(none)", desired.name))
     if desired.sni and desired.sni != actual.sni:
-        changes.append(f"sni: {actual.sni or '(default)'} → {desired.sni}")
+        changes.append(ActionChange("sni", actual.sni or "(default)", desired.sni))
     if desired.exit_node:
         # Resolve node name to IP if needed
         resolved_exit = desired.exit_node
         if node_name_to_ip and resolved_exit in node_name_to_ip:
             resolved_exit = node_name_to_ip[resolved_exit]
         if resolved_exit != actual.exit_node_ip:
-            changes.append(f"exit_node: {actual.exit_node_ip or '(none)'} → {desired.exit_node}")
+            changes.append(ActionChange("exit_node", actual.exit_node_ip or "(none)", desired.exit_node))
     return changes
 
 
@@ -202,7 +216,9 @@ def compute_plan(
                         PlanAction(
                             kind=PlanActionKind.UPDATE_NODE,
                             target=d_node.host,
-                            detail=f"redeploy node {d_node.name or d_node.host}: {', '.join(changes)}",
+                            detail=f"redeploy node {d_node.name or d_node.host}: "
+                            f"{', '.join(change.detail() for change in changes)}",
+                            changes=changes,
                         )
                     )
 
@@ -244,8 +260,10 @@ def compute_plan(
                         PlanAction(
                             kind=PlanActionKind.UPDATE_RELAY,
                             target=d_relay.host,
-                            detail=f"update relay {d_relay.name or d_relay.host}: {', '.join(changes)}",
+                            detail=f"update relay {d_relay.name or d_relay.host}: "
+                            f"{', '.join(change.detail() for change in changes)}",
                             destructive=True,  # implemented as delete + recreate
+                            changes=changes,
                         )
                     )
 
