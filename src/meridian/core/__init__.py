@@ -5,6 +5,7 @@ UI clients, and automation adapters. They must not depend on Typer command
 parsing or Rich console state.
 """
 
+from meridian.core.fleet import FleetInventory, FleetSources, FleetStatus, FleetTopology, RelayHostRef
 from meridian.core.models import (
     CoreModel,
     ErrorCategory,
@@ -28,6 +29,12 @@ from meridian.core.schema import (
     schema_for,
     schema_names,
 )
+from meridian.core.services import (
+    FleetInventoryServiceResult,
+    FleetStatusServiceResult,
+    collect_fleet_inventory,
+    collect_fleet_status,
+)
 
 __all__ = [
     "EventStream",
@@ -36,6 +43,12 @@ __all__ = [
     "ErrorCategory",
     "Event",
     "EventLevel",
+    "FleetInventory",
+    "FleetInventoryServiceResult",
+    "FleetSources",
+    "FleetStatus",
+    "FleetStatusServiceResult",
+    "FleetTopology",
     "MeridianError",
     "OutputEnvelope",
     "OutputStatus",
@@ -44,11 +57,14 @@ __all__ = [
     "PlanResult",
     "REDACTED",
     "ResourceRef",
+    "RelayHostRef",
     "Summary",
     "CommandContract",
     "EmptyData",
     "command_catalog",
     "command_contracts",
+    "collect_fleet_inventory",
+    "collect_fleet_status",
     "envelope",
     "json_dumps",
     "jsonl_dumps",

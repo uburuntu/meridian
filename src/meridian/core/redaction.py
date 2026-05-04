@@ -34,6 +34,16 @@ _SENSITIVE_KEY_PARTS = (
     "db_url",
     "dburl",
     "subscription_secret",
+    "subscription_url",
+    "subscriptionurl",
+    "sub_url",
+    "suburl",
+    "share_url",
+    "shareurl",
+    "access_link",
+    "accesslink",
+    "connection_url",
+    "connectionurl",
 )
 
 _JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")
@@ -44,6 +54,10 @@ _PEM_RE = re.compile(
 _AUTH_HEADER_RE = re.compile(r"\b(?P<key>Authorization\s*:\s*(?:Bearer\s+)?)(?P<value>[^\s,;'\"`]+)", re.I)
 _API_KEY_HEADER_RE = re.compile(r"\b(?P<key>(?:X-API-Key|API-Key)\s*:\s*)(?P<value>[^\s,;'\"`]+)", re.I)
 _URL_USERINFO_RE = re.compile(r"(?P<scheme>[a-z][a-z0-9+.-]*://)(?P<userinfo>[^/@\s]+)@(?P<host>[^/\s]+)", re.I)
+_HTTP_URL_PATH_RE = re.compile(
+    r"(?P<scheme>https?://)(?P<host>[^/\s?#]+)/(?P<secret>[^/\s?#,;'\"`][^\s?#,;'\"`]*)(?P<suffix>[?#][^\s,;'\"`]*)?",
+    re.I,
+)
 _ASSIGNMENT_RE = re.compile(
     r"(?P<key>\b(?:api[_-]?key|api[_-]?token|access[_-]?token|refresh[_-]?token|"
     r"auth[_-]?token|jwt|password|passwd|secret(?:[_-]?key)?|private[_-]?key|"
@@ -68,6 +82,7 @@ def redact_string(value: str) -> str:
     redacted = _API_KEY_HEADER_RE.sub(lambda m: f"{m.group('key')}{REDACTED}", redacted)
     redacted = _JWT_RE.sub(REDACTED, redacted)
     redacted = _URL_USERINFO_RE.sub(lambda m: f"{m.group('scheme')}{REDACTED}@{m.group('host')}", redacted)
+    redacted = _HTTP_URL_PATH_RE.sub(lambda m: f"{m.group('scheme')}{m.group('host')}/{REDACTED}", redacted)
     return _ASSIGNMENT_RE.sub(lambda m: f"{m.group('key')}{m.group('sep')}{REDACTED}", redacted)
 
 

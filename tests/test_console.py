@@ -28,6 +28,11 @@ class TestFail:
             fail("infra issue", hint_type="system")
         assert exc_info.value.exit_code == 3
 
+    def test_fail_cancelled_exit_code_130(self) -> None:
+        with pytest.raises(typer.Exit) as exc_info:
+            fail("cancelled", hint_type="cancelled")
+        assert exc_info.value.exit_code == 130
+
     def test_fail_explicit_exit_code_overrides(self) -> None:
         with pytest.raises(typer.Exit) as exc_info:
             fail("custom", hint_type="user", exit_code=42)
@@ -105,6 +110,21 @@ class TestFail:
         assert data["errors"][0]["category"] == "user"
         assert "secret-token" not in captured.out
         assert "hunter2" not in captured.out
+
+    def test_fail_json_mode_emits_cancelled_status(self, capsys: pytest.CaptureFixture[str]) -> None:
+        set_json_mode(True)
+        set_quiet_mode(True)
+        try:
+            with pytest.raises(typer.Exit) as exc_info:
+                fail("Cancelled by user", hint_type="cancelled")
+        finally:
+            set_json_mode(False)
+            set_quiet_mode(False)
+
+        assert exc_info.value.exit_code == 130
+        data = json.loads(capsys.readouterr().out)
+        assert data["status"] == "cancelled"
+        assert data["errors"][0]["category"] == "cancelled"
 
 
 def _make_tty_mock(input_text: str) -> MagicMock:

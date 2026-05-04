@@ -52,7 +52,7 @@ def _run(*, json_output: bool, operation: OperationContext) -> None:
         )
 
     info("Fetching actual state from panel...")
-    from meridian.remnawave import MeridianPanel, RemnawaveError
+    from meridian.remnawave import MeridianPanel, RemnawaveAuthError, RemnawaveError
     from meridian.ssh import ServerConnection
 
     try:
@@ -64,6 +64,8 @@ def _run(*, json_output: bool, operation: OperationContext) -> None:
         with MeridianPanel(cluster.panel.url, cluster.panel.api_token) as panel:
             desired = build_desired_state(cluster)
             actual = build_actual_state(cluster, panel, panel_conn=panel_conn)
+    except RemnawaveAuthError as e:
+        fail(f"Cannot authenticate to panel: {e}", hint=e.hint, hint_type=e.hint_type)
     except RemnawaveError as e:
         fail(f"Cannot reach panel: {e}", hint_type="system")
 

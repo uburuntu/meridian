@@ -107,7 +107,7 @@ meridian fleet recover --panel-url URL --api-token TOKEN
 
 **`fleet status`** — shows panel health, every node's connection + Xray version + traffic, every relay's upstream, and user counts. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data`: `data.panel.url`, `data.panel.healthy`, `data.sources.*`, `data.servers[].roles`, `data.nodes[].status` (`"connected"`, `"disconnected"`, `"disabled"`, `"unknown"`), `data.relays[].health` (`"healthy"`, `"unhealthy"`, `"unknown"`), and `data.summary.health/needs_attention/active_users/disabled_users/unknown_nodes/unhealthy_relays`. `data.summary.health` is `"unknown"` when required live data could not be collected. Top-level `status` reports command execution, not fleet health.
 
-**`fleet inventory`** — shows the configured panel, nodes, relays, desired topology, and live panel node status when reachable. It never prints the panel API token. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data` includes `data.sources.*`, `data.servers[].roles`, `data.summary.*`, `data.nodes[].desired`, `data.nodes[].protocols`, `data.relays[].exit_node_*`, and `data.desired_nodes[].present`.
+**`fleet inventory`** — shows the configured panel, nodes, relays, desired topology, and live panel node status when reachable. It never prints the panel API token or secret URL paths. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data` includes `data.sources.*`, `data.servers[].roles`, `data.summary.*`, `data.nodes[].desired`, `data.nodes[].protocols`, `data.relays[].exit_node_*`, and `data.desired_nodes[].present`. Inventory presence fields are not reconciliation truth; use `plan --json` for drift/apply decisions.
 
 **`fleet recover`** — rebuilds `~/.meridian/cluster.yml` from the live panel. Use it when the local file is lost, or when picking up someone else's deployment. Connects via SSH to read stable server-side metadata, then queries the panel API for nodes, relays, inbounds, hosts, and users.
 
@@ -172,7 +172,7 @@ meridian plan [--json]
 **Exit codes**:
 - `0` — converged (no changes needed)
 - `2` — changes pending (run `meridian apply` to converge)
-- non-zero (1, 3) — error
+- non-zero (`1`, `3`, `130`) — error or cancellation
 
 **JSON shape** (`--json` mode):
 ```json

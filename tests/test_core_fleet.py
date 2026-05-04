@@ -72,7 +72,7 @@ def test_inventory_is_redacted_and_role_protocol_aware() -> None:
     assert data["summary"]["unapplied_desired_relays"] == 0
 
 
-def test_cluster_adapter_preserves_relay_host_uuid_values() -> None:
+def test_cluster_adapter_preserves_relay_host_protocol_refs() -> None:
     cluster = ClusterConfig(
         panel=PanelConfig(url="https://198.51.100.1/panel", api_token="secret-token"),
         relays=[
@@ -86,7 +86,29 @@ def test_cluster_adapter_preserves_relay_host_uuid_values() -> None:
 
     topology = topology_from_cluster(cluster)
 
-    assert topology.relays[0].host_uuids == ["host-reality", "host-wss"]
+    assert [ref.model_dump() for ref in topology.relays[0].host_refs] == [
+        {"protocol": "reality", "uuid": "host-reality"},
+        {"protocol": "wss", "uuid": "host-wss"},
+    ]
+
+
+def test_server_inventory_includes_panel_only_host() -> None:
+    cluster = ClusterConfig(
+        panel=PanelConfig(
+            url="https://198.51.100.1/panel",
+            api_token="secret-token",
+            server_ip="198.51.100.1",
+        ),
+        nodes=[],
+        relays=[],
+    )
+
+    inventory = build_fleet_inventory(topology_from_cluster(cluster), panel_healthy=True)
+    data = inventory.to_data()
+
+    assert data["servers"] == [
+        {"id": "198.51.100.1", "ip": "198.51.100.1", "name": "", "roles": ["panel"], "ssh_port": 22, "ssh_user": "root"}
+    ]
 
 
 def test_inventory_desired_matching_uses_host_identity() -> None:
@@ -107,6 +129,7 @@ def test_inventory_desired_matching_uses_host_identity() -> None:
     assert data["desired_relays"][0]["present"] is False
     assert data["summary"]["unapplied_desired_nodes"] == 1
     assert data["summary"]["unapplied_desired_relays"] == 1
+    assert data["summary"]["pending_desired_resources"] == 2
 
 
 def test_status_summarizes_nodes_relays_and_users() -> None:

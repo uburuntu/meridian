@@ -7,6 +7,7 @@ from meridian.core.fleet import (
     DesiredNodeSpec,
     DesiredRelaySpec,
     FleetTopology,
+    RelayHostRef,
     TopologyNode,
     TopologyPanel,
     TopologyRelay,
@@ -57,7 +58,10 @@ def topology_from_cluster(cluster: ClusterConfig) -> FleetTopology:
                 ssh_port=relay.ssh_port,
                 exit_node_ip=relay.exit_node_ip,
                 sni=relay.sni,
-                host_uuids=list(relay.host_uuids.values()),
+                host_refs=[
+                    RelayHostRef(protocol=str(protocol), uuid=uuid)
+                    for protocol, uuid in sorted(relay.host_uuids.items())
+                ],
             )
             for relay in cluster.relays
         ],

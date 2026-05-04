@@ -6,6 +6,7 @@ Commands call the Remnawave REST API via MeridianPanel.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +15,8 @@ import typer
 
 from meridian.cluster import ClusterConfig, PanelConfig
 from meridian.commands.client import run_add, run_list, run_remove, run_show
+from meridian.console import set_json_mode
+from meridian.core.redaction import REDACTED
 from meridian.remnawave import RemnawaveError, User
 
 # ---------------------------------------------------------------------------
@@ -139,6 +142,24 @@ class TestRunShow:
         ):
             mock_load.return_value = _make_cluster(tmp_home)
             run_show(name="nonexistent")
+
+    def test_show_json_redacts_subscription_url(self, tmp_home: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """Legacy JSON renderer must still apply central redaction."""
+        panel = _make_panel_mock()
+        set_json_mode(True)
+        try:
+            with (
+                patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+                patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
+            ):
+                mock_load.return_value = _make_cluster(tmp_home)
+                run_show(name="alice")
+        finally:
+            set_json_mode(False)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["client"]["subscription_url"] == REDACTED
+        assert "abc123" not in json.dumps(payload)
 
 
 class TestRunList:

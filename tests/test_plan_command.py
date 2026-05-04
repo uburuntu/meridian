@@ -17,7 +17,9 @@ import typer
 
 from meridian.cluster import ClusterConfig, NodeEntry, PanelConfig
 from meridian.commands.plan import run as plan_run
+from meridian.console import set_json_mode, set_quiet_mode
 from meridian.reconciler.diff import ActionChange, Plan, PlanAction, PlanActionKind
+from meridian.remnawave import RemnawaveAuthError
 
 
 def _configured_cluster_with_desired() -> ClusterConfig:
@@ -164,3 +166,34 @@ class TestPlanJsonOutput:
         assert action["kind"] == "update_node"
         assert action["operation"] == "update"
         assert action["change_set"] == [{"field": "sni", "before": "old.example", "after": "new.example"}]
+
+    def test_panel_auth_failure_is_user_error_json(self) -> None:
+        cluster = _configured_cluster_with_desired()
+        cluster.panel.url = "https://198.51.100.1/secret-panel"
+        buf = io.StringIO()
+        set_json_mode(True)
+        set_quiet_mode(True)
+        try:
+            with (
+                patch.object(ClusterConfig, "load", return_value=cluster),
+                patch("meridian.ssh.ServerConnection"),
+                patch("meridian.remnawave.MeridianPanel") as panel_cls,
+                redirect_stdout(buf),
+            ):
+                panel_cls.return_value.__enter__.side_effect = RemnawaveAuthError(
+                    "Panel authentication failed",
+                    hint="Check your API token.",
+                    hint_type="user",
+                )
+                with pytest.raises(typer.Exit) as exc_info:
+                    plan_run(json_output=True)
+        finally:
+            set_json_mode(False)
+            set_quiet_mode(False)
+
+        payload = json.loads(buf.getvalue())
+        assert exc_info.value.exit_code == 2
+        assert payload["command"] == "plan"
+        assert payload["status"] == "failed"
+        assert payload["errors"][0]["category"] == "user"
+        assert "secret-panel" not in json.dumps(payload)

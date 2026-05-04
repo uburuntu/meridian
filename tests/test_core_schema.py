@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
+from meridian.core.models import MeridianError
 from meridian.core.output import OperationTimer, envelope
 from meridian.core.schema import PlanOutputEnvelope, command_catalog, schema_catalog, schema_for, schema_names
 
@@ -62,7 +64,8 @@ def test_command_catalog_maps_commands_to_envelope_and_data_schemas() -> None:
     assert by_command["plan"]["machine_flags"] == ["--json"]
     assert "changed" in by_command["plan"]["statuses"]
     assert by_command["fleet.status"]["data_schema"] == "fleet-status"
-    assert by_command["fleet.inventory"]["statuses"] == ["ok", "failed"]
+    assert by_command["fleet.inventory"]["statuses"] == ["ok", "failed", "cancelled"]
+    assert by_command["fleet.inventory"]["exit_codes"]["130"] == "cancelled by the user"
 
 
 def test_command_catalog_can_embed_command_schemas() -> None:
@@ -74,11 +77,18 @@ def test_command_catalog_can_embed_command_schemas() -> None:
 
 
 def test_command_envelope_schema_validates_failed_output_shape() -> None:
+    error = MeridianError(
+        code="MERIDIAN_USER_ERROR",
+        category="user",
+        message="No desired state defined in cluster.yml",
+        exit_code=2,
+    )
     payload = envelope(
         command="plan",
         summary="No desired state defined in cluster.yml",
         status="failed",
         exit_code=2,
+        errors=[error],
         timer=OperationTimer(started_at="2026-05-04T21:00:00Z", operation_id="op-test"),
     )
 
@@ -87,6 +97,32 @@ def test_command_envelope_schema_validates_failed_output_shape() -> None:
     assert parsed.command == "plan"
     assert parsed.status == "failed"
     assert parsed.data.model_dump() == {}
+
+
+def test_command_envelope_schema_rejects_failed_output_without_error() -> None:
+    payload = envelope(
+        command="plan",
+        summary="No desired state defined in cluster.yml",
+        status="failed",
+        exit_code=2,
+        timer=OperationTimer(started_at="2026-05-04T21:00:00Z", operation_id="op-test"),
+    )
+
+    with pytest.raises(ValidationError, match="requires at least one error"):
+        PlanOutputEnvelope.model_validate(payload.model_dump(mode="json", by_alias=True))
+
+
+def test_command_envelope_schema_rejects_success_without_typed_data() -> None:
+    payload = envelope(
+        command="plan",
+        summary="Plan has changes",
+        status="changed",
+        exit_code=2,
+        timer=OperationTimer(started_at="2026-05-04T21:00:00Z", operation_id="op-test"),
+    )
+
+    with pytest.raises(ValidationError, match="requires typed data"):
+        PlanOutputEnvelope.model_validate(payload.model_dump(mode="json", by_alias=True))
 
 
 def test_unknown_schema_name_is_actionable() -> None:

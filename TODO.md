@@ -98,6 +98,7 @@ The guiding rule: command modules parse CLI arguments and choose renderers; they
 - [x] Add a command contract catalog that maps migrated commands to envelope/data schemas, statuses, flags, and exit-code meanings.
 - [x] Add source availability fields so partial fleet failures do not disappear in JSON.
 - [x] Make command envelope schemas accept both typed success data and empty failed/cancelled data.
+- [x] Validate command envelope status/data/error consistency in Pydantic models.
 - [x] Strip secret URL paths from fleet API output; expose origins and booleans, not bearer-style routes.
 - [ ] Add golden JSON fixtures for the first migrated commands.
 

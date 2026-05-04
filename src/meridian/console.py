@@ -87,7 +87,7 @@ def warn(msg: str) -> None:
         err_console.print(f"  [warn]![/warn] {msg}")
 
 
-_EXIT_CODES = {"user": 2, "system": 3, "bug": 1}
+_EXIT_CODES = {"user": 2, "system": 3, "bug": 1, "cancelled": 130}
 
 
 def fail(msg: str, *, hint: str = "", hint_type: str = "bug", exit_code: int | None = None) -> NoReturn:
@@ -114,7 +114,7 @@ def fail(msg: str, *, hint: str = "", hint_type: str = "bug", exit_code: int | N
             envelope(
                 command=_error_command.get(),
                 summary=msg,
-                status="failed",
+                status="cancelled" if category == "cancelled" else "failed",
                 exit_code=code,
                 errors=[
                     MeridianError(
@@ -134,7 +134,7 @@ def fail(msg: str, *, hint: str = "", hint_type: str = "bug", exit_code: int | N
     err_console.print(f"\n  [error]\u2717 {msg}[/error]")
     if hint:
         err_console.print(f"  [dim]{hint}[/dim]")
-    if hint_type == "user":
+    if hint_type in ("user", "cancelled"):
         err_console.print()
     elif hint_type == "system":
         err_console.print("  [dim]Run: meridian doctor  (to collect server info)[/dim]\n")

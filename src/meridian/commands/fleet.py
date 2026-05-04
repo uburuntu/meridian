@@ -7,26 +7,17 @@ at a glance: panel connectivity, node status, relay reachability, user count.
 from __future__ import annotations
 
 import socket
-from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Literal
 
 from meridian.adapters.cluster import topology_from_cluster
 from meridian.commands._helpers import format_traffic, load_cluster, make_panel
 from meridian.console import err_console, error_context, fail, is_json_mode, warn
-from meridian.core.fleet import (
-    ApiNodeLike,
-    ApiUserLike,
-    FleetSources,
-    FleetStatus,
-    FleetTopology,
-    SourceAvailability,
-    TopologyRelay,
-    build_fleet_inventory,
-    build_fleet_status,
-)
+from meridian.core.fleet import FleetStatus, TopologyRelay
 from meridian.core.models import MeridianError, Summary
 from meridian.core.output import OperationContext, envelope
-from meridian.remnawave import RemnawaveAuthError, RemnawaveError
+from meridian.core.services.fleet import collect_fleet_inventory, collect_fleet_status
+from meridian.remnawave import RemnawaveAuthError
 from meridian.renderers import emit_json
 
 
@@ -56,22 +47,16 @@ def _check_relays_health(
     return results
 
 
-def _warning(code: str, message: str, *, hint: str = "", details: dict[str, object] | None = None) -> MeridianError:
-    """Build a retryable system warning for partial fleet data."""
-    return MeridianError(
-        code=code,
-        category="system",
-        message=message,
-        hint=hint,
-        retryable=True,
-        exit_code=3,
-        details=details or {},
-    )
+def _classify_panel_error(exc: Exception) -> Literal["auth", "system"]:
+    """Tell core services which panel errors must abort instead of warn."""
+    return "auth" if isinstance(exc, RemnawaveAuthError) else "system"
 
 
-def _add_warning(warnings: list[MeridianError], warning: MeridianError) -> None:
-    warnings.append(warning)
-    if not is_json_mode():
+def _render_warnings(warnings: list[MeridianError]) -> None:
+    """Render non-fatal service warnings in human mode."""
+    if is_json_mode():
+        return
+    for warning in warnings:
         warn(warning.message)
 
 
@@ -89,60 +74,18 @@ def _run_inventory(*, operation: OperationContext) -> None:
     """Implementation for inventory with command metadata already attached."""
     cluster = load_cluster()
     topology = topology_from_cluster(cluster)
-    panel_ok = False
-    api_nodes: Sequence[ApiNodeLike] = []
-    warnings: list[MeridianError] = []
-    sources = FleetSources(panel="unknown", nodes="not_requested", users="not_requested", relays="not_requested")
-
     try:
-        panel = make_panel(cluster)
-        with panel:
-            panel_ok = panel.ping()
-            sources = sources.model_copy(update={"panel": "available" if panel_ok else "unavailable"})
-            if not panel_ok:
-                _add_warning(
-                    warnings,
-                    _warning(
-                        "MERIDIAN_PANEL_UNREACHABLE",
-                        "Cannot reach panel API; live inventory status is unavailable",
-                        hint="Check panel connectivity and run meridian doctor.",
-                    ),
-                )
-            if panel_ok:
-                try:
-                    api_nodes = panel.list_nodes()
-                    sources = sources.model_copy(update={"nodes": "available"})
-                except RemnawaveAuthError as exc:
-                    fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
-                except RemnawaveError as exc:
-                    sources = sources.model_copy(update={"nodes": "unavailable"})
-                    _add_warning(
-                        warnings,
-                        _warning(
-                            "MERIDIAN_PANEL_NODES_UNAVAILABLE",
-                            "Could not fetch node status from panel",
-                            hint="Panel is reachable, but the node list API failed.",
-                            details={"cause": type(exc).__name__},
-                        ),
-                    )
-            else:
-                sources = sources.model_copy(update={"nodes": "unavailable"})
+        result = collect_fleet_inventory(
+            topology,
+            make_panel(cluster),
+            classify_error=_classify_panel_error,
+        )
     except RemnawaveAuthError as exc:
         fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
-    except RemnawaveError as exc:
-        panel_ok = False
-        sources = sources.model_copy(update={"panel": "unavailable", "nodes": "unavailable"})
-        _add_warning(
-            warnings,
-            _warning(
-                "MERIDIAN_PANEL_UNREACHABLE",
-                "Cannot reach panel API; live inventory status is unavailable",
-                hint="Check panel connectivity and run meridian doctor.",
-                details={"cause": type(exc).__name__},
-            ),
-        )
 
-    inventory = build_fleet_inventory(topology, panel_healthy=panel_ok, api_nodes=api_nodes, sources=sources)
+    inventory = result.inventory
+    warnings = result.warnings
+    _render_warnings(warnings)
     data = inventory.to_data()
 
     if is_json_mode():
@@ -152,11 +95,11 @@ def _run_inventory(*, operation: OperationContext) -> None:
                 data=data,
                 summary=Summary(
                     text=inventory.summary.text,
-                    changed=inventory.summary.pending > 0,
+                    changed=False,
                     counts={
                         "nodes": inventory.summary.nodes,
                         "relays": inventory.summary.relays,
-                        "pending": inventory.summary.pending,
+                        "pending_desired_resources": inventory.summary.pending,
                     },
                 ),
                 status="ok",
@@ -167,7 +110,7 @@ def _run_inventory(*, operation: OperationContext) -> None:
         return
 
     err_console.print()
-    status = "[green]healthy[/green]" if panel_ok else "[red]UNREACHABLE[/red]"
+    status = "[green]healthy[/green]" if inventory.panel.healthy else "[red]UNREACHABLE[/red]"
     err_console.print(f"  [bold]Panel[/bold]   {inventory.panel.url}  {status}")
     if cluster.panel.server_ip:
         err_console.print(
@@ -259,7 +202,7 @@ def _render_status(status: FleetStatus) -> None:
 
             err_console.print(f"    {relay.ip}  {label} -> {target_label}  relay: {relay_state}")
 
-    if status.users:
+    if status.summary.users:
         err_console.print()
         parts = [f"{status.summary.active_users} active"]
         if status.summary.disabled_users:
@@ -282,117 +225,19 @@ def _run_status(*, operation: OperationContext) -> None:
     """Implementation for status with command metadata already attached."""
     cluster = load_cluster()
     topology = topology_from_cluster(cluster)
-    panel = make_panel(cluster)
-    panel_ok = False
-    api_nodes: Sequence[ApiNodeLike] = []
-    api_users: Sequence[ApiUserLike] = []
-    warnings: list[MeridianError] = []
-    relay_source: SourceAvailability = "available" if topology.relays else "not_requested"
-    sources = FleetSources(panel="unknown", nodes="not_requested", users="not_requested", relays=relay_source)
-
     try:
-        with panel:
-            panel_ok = panel.ping()
-            sources = sources.model_copy(update={"panel": "available" if panel_ok else "unavailable"})
-            if not panel_ok:
-                _add_warning(
-                    warnings,
-                    _warning(
-                        "MERIDIAN_PANEL_UNREACHABLE",
-                        "Cannot reach panel API -- node and user data may be stale",
-                        hint="Check panel connectivity and run meridian doctor.",
-                    ),
-                )
-                sources = sources.model_copy(update={"nodes": "unavailable", "users": "unavailable"})
-                return _finish_status(
-                    operation=operation,
-                    topology=topology,
-                    panel_ok=panel_ok,
-                    api_nodes=api_nodes,
-                    api_users=api_users,
-                    warnings=warnings,
-                    sources=sources,
-                )
-
-            try:
-                api_nodes = panel.list_nodes()
-                sources = sources.model_copy(update={"nodes": "available"})
-            except RemnawaveAuthError as exc:
-                fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
-            except RemnawaveError as exc:
-                sources = sources.model_copy(update={"nodes": "unavailable"})
-                _add_warning(
-                    warnings,
-                    _warning(
-                        "MERIDIAN_PANEL_NODES_UNAVAILABLE",
-                        "Could not fetch node status from panel",
-                        hint="Panel is reachable, but the node list API failed.",
-                        details={"cause": type(exc).__name__},
-                    ),
-                )
-            try:
-                api_users = panel.list_users()
-                sources = sources.model_copy(update={"users": "available"})
-            except RemnawaveAuthError as exc:
-                fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
-            except RemnawaveError as exc:
-                sources = sources.model_copy(update={"users": "unavailable"})
-                _add_warning(
-                    warnings,
-                    _warning(
-                        "MERIDIAN_PANEL_USERS_UNAVAILABLE",
-                        "Could not fetch user status from panel",
-                        hint="Panel is reachable, but the user list API failed.",
-                        details={"cause": type(exc).__name__},
-                    ),
-                )
+        result = collect_fleet_status(
+            topology,
+            make_panel(cluster),
+            check_relays=_check_relays_health,
+            classify_error=_classify_panel_error,
+        )
     except RemnawaveAuthError as exc:
         fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
-    except RemnawaveError as exc:
-        panel_ok = False
-        sources = sources.model_copy(update={"panel": "unavailable", "nodes": "unavailable", "users": "unavailable"})
-        _add_warning(
-            warnings,
-            _warning(
-                "MERIDIAN_PANEL_UNREACHABLE",
-                "Cannot reach panel API -- node and user data may be stale",
-                hint="Check panel connectivity and run meridian doctor.",
-                details={"cause": type(exc).__name__},
-            ),
-        )
 
-    _finish_status(
-        operation=operation,
-        topology=topology,
-        panel_ok=panel_ok,
-        api_nodes=api_nodes,
-        api_users=api_users,
-        warnings=warnings,
-        sources=sources,
-    )
-
-
-def _finish_status(
-    *,
-    operation: OperationContext,
-    topology: FleetTopology,
-    panel_ok: bool,
-    api_nodes: Sequence[ApiNodeLike],
-    api_users: Sequence[ApiUserLike],
-    warnings: list[MeridianError],
-    sources: FleetSources,
-) -> None:
-    """Build and render the final status result."""
-
-    relay_health = _check_relays_health(topology.relays)
-    status = build_fleet_status(
-        topology,
-        panel_healthy=panel_ok,
-        api_nodes=api_nodes,
-        api_users=api_users,
-        relay_health=relay_health,
-        sources=sources,
-    )
+    status = result.status
+    warnings = result.warnings
+    _render_warnings(warnings)
 
     if is_json_mode():
         emit_json(

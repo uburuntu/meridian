@@ -83,9 +83,14 @@ def test_emit_json_redacts_sensitive_keys_and_text() -> None:
                 "secretKey": "camel-secret",
                 "message": (
                     "password=hunter2 jwt=eyJaaaaaaaa.eyJbbbbbbbb.eyJcccccccc "
-                    "Authorization: Bearer opaque-token X-API-Key: opaque-key secretKey=abc123"
+                    "Authorization: Bearer opaque-token X-API-Key: opaque-key secretKey=abc123 "
+                    "panel=https://198.51.100.1/secret-panel/api"
                 ),
-                "nested": {"database_url": "postgres://user:pass@example/db", "apiKey": "opaque"},
+                "nested": {
+                    "database_url": "postgres://user:pass@example/db",
+                    "apiKey": "opaque",
+                    "subscription_url": "https://198.51.100.1/sub/abc123",
+                },
             }
         )
     )
@@ -97,8 +102,10 @@ def test_emit_json_redacts_sensitive_keys_and_text() -> None:
     assert "opaque-token" not in data["message"]
     assert "opaque-key" not in data["message"]
     assert "abc123" not in data["message"]
+    assert "secret-panel" not in data["message"]
     assert data["nested"]["database_url"] == REDACTED
     assert data["nested"]["apiKey"] == REDACTED
+    assert data["nested"]["subscription_url"] == REDACTED
 
 
 def test_redact_string_handles_url_userinfo() -> None:

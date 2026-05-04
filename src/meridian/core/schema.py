@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from meridian.core.fleet import FleetInventory, FleetStatus
 from meridian.core.models import CoreModel, Event, MeridianError, OutputEnvelope, OutputStatus, Summary
@@ -21,6 +21,11 @@ class PlanOutputEnvelope(OutputEnvelope):
     command: Literal["plan"] = "plan"
     data: PlanResult | EmptyData = Field(default_factory=EmptyData)  # type: ignore[assignment]
 
+    @model_validator(mode="after")
+    def validate_command_shape(self) -> Self:
+        _validate_envelope_shape(self, success_statuses={"changed", "no_changes"})
+        return self
+
 
 class FleetStatusOutputEnvelope(OutputEnvelope):
     """Envelope schema for `meridian fleet status --json`."""
@@ -28,12 +33,43 @@ class FleetStatusOutputEnvelope(OutputEnvelope):
     command: Literal["fleet.status"] = "fleet.status"
     data: FleetStatus | EmptyData = Field(default_factory=EmptyData)  # type: ignore[assignment]
 
+    @model_validator(mode="after")
+    def validate_command_shape(self) -> Self:
+        _validate_envelope_shape(self, success_statuses={"ok"})
+        return self
+
 
 class FleetInventoryOutputEnvelope(OutputEnvelope):
     """Envelope schema for `meridian fleet inventory --json`."""
 
     command: Literal["fleet.inventory"] = "fleet.inventory"
     data: FleetInventory | EmptyData = Field(default_factory=EmptyData)  # type: ignore[assignment]
+
+    @model_validator(mode="after")
+    def validate_command_shape(self) -> Self:
+        _validate_envelope_shape(self, success_statuses={"ok"})
+        return self
+
+
+def _validate_envelope_shape(envelope: OutputEnvelope, *, success_statuses: set[OutputStatus]) -> None:
+    """Keep command-specific envelopes internally consistent."""
+    terminal_statuses: set[OutputStatus] = {*success_statuses, "failed", "cancelled"}
+    if envelope.status not in terminal_statuses:
+        raise ValueError(f"{envelope.command} does not support status {envelope.status!r}")
+
+    is_success = envelope.status in success_statuses
+    has_empty_data = isinstance(envelope.data, EmptyData)
+    if is_success:
+        if has_empty_data:
+            raise ValueError(f"{envelope.command} status {envelope.status!r} requires typed data")
+        if envelope.errors:
+            raise ValueError(f"{envelope.command} status {envelope.status!r} cannot include errors")
+        return
+
+    if not has_empty_data:
+        raise ValueError(f"{envelope.command} status {envelope.status!r} requires empty data")
+    if not envelope.errors:
+        raise ValueError(f"{envelope.command} status {envelope.status!r} requires at least one error")
 
 
 class CommandContract(CoreModel):
@@ -75,11 +111,12 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         data_schema="plan-result",
         failure_data_schema="empty-data",
         error_schema="error",
-        statuses=["no_changes", "changed", "failed"],
+        statuses=["no_changes", "changed", "failed", "cancelled"],
         exit_codes={
             "0": "desired state already matches actual state",
             "2": "changes pending; user/config errors also use category=user in the error envelope",
             "3": "system or infrastructure failure",
+            "130": "cancelled by the user",
         },
         machine_flags=["--json"],
         stability="stable",
@@ -91,11 +128,12 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         data_schema="fleet-status",
         failure_data_schema="empty-data",
         error_schema="error",
-        statuses=["ok", "failed"],
+        statuses=["ok", "failed", "cancelled"],
         exit_codes={
             "0": "fleet status was collected; inspect data.summary.health and warnings for degraded state",
             "2": "user/config error",
             "3": "system or infrastructure failure",
+            "130": "cancelled by the user",
         },
         machine_flags=["--json"],
         stability="stable",
@@ -107,11 +145,12 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         data_schema="fleet-inventory",
         failure_data_schema="empty-data",
         error_schema="error",
-        statuses=["ok", "failed"],
+        statuses=["ok", "failed", "cancelled"],
         exit_codes={
-            "0": "inventory was collected; inspect summary.changed and data.summary.pending for desired drift",
+            "0": "inventory was collected; plan --json is the drift/apply authority",
             "2": "user/config error",
             "3": "system or infrastructure failure",
+            "130": "cancelled by the user",
         },
         machine_flags=["--json"],
         stability="stable",

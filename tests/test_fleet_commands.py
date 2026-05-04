@@ -234,7 +234,7 @@ class TestFleetStatus:
         assert "panel" in data
         assert "nodes" in data
         assert "relays" in data
-        assert "users" in data
+        assert "users" not in data
         assert "servers" in data
         assert data["sources"] == {
             "nodes": "available",
@@ -248,7 +248,7 @@ class TestFleetStatus:
         assert data["summary"]["needs_attention"] is True
         assert len(data["nodes"]) == 2
         assert len(data["relays"]) == 1
-        assert len(data["users"]) == 2
+        assert data["summary"]["users"] == 2
 
     def test_status_json_node_statuses(self) -> None:
         """JSON mode reports correct status strings for each node."""
@@ -485,10 +485,11 @@ class TestFleetInventory:
         data = mock_json.call_args[0][0].data
         payload = mock_json.call_args[0][0]
         assert payload.status == "ok"
-        assert payload.summary.changed is True
+        assert payload.summary.changed is False
         assert data["panel"]["healthy"] is False
         assert data["summary"]["unapplied_desired_nodes"] == 1
         assert data["summary"]["unapplied_desired_relays"] == 1
+        assert data["summary"]["pending_desired_resources"] == 2
 
     def test_inventory_text_handles_panel_api_error(self) -> None:
         cluster = _fleet_cluster()

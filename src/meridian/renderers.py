@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from typing import IO, Any
 
@@ -25,4 +24,4 @@ def emit_jsonl(value: Any, *, stream: IO[str] | None = None) -> None:
 
 def json_output(data: Any) -> None:
     """Legacy JSON renderer shape used by commands not yet on meridian-core envelopes."""
-    print(json.dumps(data, indent=2, default=str))
+    emit_json(data)
