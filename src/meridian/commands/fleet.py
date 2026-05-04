@@ -35,29 +35,31 @@ def _node_api_status(api_node: object | None) -> str:
 
 def _node_protocols(node: NodeEntry) -> list[str]:
     protocols = ["reality"]
-    if node.domain:
-        protocols.extend(["xhttp", "wss"])
+    if node.xhttp_path:
+        protocols.append("xhttp")
+    if node.domain and node.ws_path:
+        protocols.append("wss")
     return protocols
 
 
 def _desired_node_key(desired: DesiredNode) -> str:
-    return desired.host or desired.name
+    return desired.host
 
 
 def _desired_relay_key(desired: DesiredRelay) -> str:
-    return desired.host or desired.name
+    return desired.host
 
 
 def _node_desired(node: NodeEntry, desired_nodes: list[DesiredNode] | None) -> bool | None:
     if desired_nodes is None:
         return None
-    return any(node.ip == d.host or (node.name and node.name == d.name) for d in desired_nodes)
+    return any(node.ip == d.host for d in desired_nodes)
 
 
 def _relay_desired(relay: RelayEntry, desired_relays: list[DesiredRelay] | None) -> bool | None:
     if desired_relays is None:
         return None
-    return any(relay.ip == d.host or (relay.name and relay.name == d.name) for d in desired_relays)
+    return any(relay.ip == d.host for d in desired_relays)
 
 
 # -- Fleet Inventory --
@@ -83,10 +85,10 @@ def run_inventory() -> None:
         panel_ok = False
 
     api_by_uuid = {n.uuid: n for n in api_nodes}
-    desired_node_keys = {_desired_node_key(d) for d in cluster.desired_nodes or []}
-    desired_relay_keys = {_desired_relay_key(d) for d in cluster.desired_relays or []}
-    actual_node_keys = {n.ip for n in cluster.nodes} | {n.name for n in cluster.nodes if n.name}
-    actual_relay_keys = {r.ip for r in cluster.relays} | {r.name for r in cluster.relays if r.name}
+    desired_node_keys = {_desired_node_key(d) for d in cluster.desired_nodes or [] if _desired_node_key(d)}
+    desired_relay_keys = {_desired_relay_key(d) for d in cluster.desired_relays or [] if _desired_relay_key(d)}
+    actual_node_keys = {n.ip for n in cluster.nodes if n.ip}
+    actual_relay_keys = {r.ip for r in cluster.relays if r.ip}
 
     nodes_json = []
     for node in cluster.nodes:
@@ -136,7 +138,7 @@ def run_inventory() -> None:
             "domain": d.domain,
             "sni": d.sni,
             "warp": d.warp,
-            "present": bool(({d.host, d.name} - {""}) & actual_node_keys),
+            "present": bool(d.host and d.host in actual_node_keys),
         }
         for d in cluster.desired_nodes or []
     ]
@@ -148,7 +150,7 @@ def run_inventory() -> None:
             "ssh_port": d.ssh_port,
             "exit_node": d.exit_node,
             "sni": d.sni,
-            "present": bool(({d.host, d.name} - {""}) & actual_relay_keys),
+            "present": bool(d.host and d.host in actual_relay_keys),
         }
         for d in cluster.desired_relays or []
     ]

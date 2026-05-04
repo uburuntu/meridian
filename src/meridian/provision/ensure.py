@@ -99,13 +99,23 @@ def ensure_service_running(
     """Ensure a systemd service is enabled and running."""
     q_service = shlex.quote(service)
     active = conn.run(f"systemctl is-active {q_service}", timeout=15, operation_name=f"check {service}")
-    if active.returncode == 0 and active.stdout.strip() == "active" and not restart:
-        return EnsureResult(changed=False, detail="already running", result=active)
+    running = active.returncode == 0 and active.stdout.strip() == "active"
+    changed = False
 
     if enable:
-        enabled = conn.run(f"systemctl enable {q_service}", timeout=15, operation_name=f"enable {service}")
-        if enabled.returncode != 0:
-            return EnsureResult(ok=False, detail=enabled.stderr.strip()[:200], result=enabled)
+        enabled = conn.run(f"systemctl is-enabled {q_service}", timeout=15, operation_name=f"check enabled {service}")
+        if enabled.returncode != 0 or enabled.stdout.strip() not in {"enabled", "enabled-runtime"}:
+            enable_result = conn.run(f"systemctl enable {q_service}", timeout=15, operation_name=f"enable {service}")
+            if enable_result.returncode != 0:
+                return EnsureResult(ok=False, detail=enable_result.stderr.strip()[:200], result=enable_result)
+            changed = True
+
+    if running and not restart:
+        return EnsureResult(
+            changed=changed,
+            detail="enabled" if changed else "already running",
+            result=active,
+        )
 
     action = "restart" if restart else "start"
     started = conn.run(f"systemctl {action} {q_service}", timeout=timeout, operation_name=f"{action} {service}")

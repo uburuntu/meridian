@@ -119,7 +119,20 @@ class TestServerConnectionRun:
             conn.run("printenv FOO", cwd="/opt/app", env={"FOO": "bar baz"})
 
         cmd = mock_run.call_args[0][0]
-        assert cmd == ["bash", "-c", "cd /opt/app && FOO='bar baz' printenv FOO"]
+        assert cmd == ["bash", "-c", "cd /opt/app && export FOO='bar baz' && printenv FOO"]
+
+    def test_env_applies_to_compound_commands(self) -> None:
+        conn = ServerConnection(ip="1.2.3.4", local_mode=True)
+        with patch("meridian.ssh.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+            conn.run("apt-get update && apt-get install -y docker", env={"DEBIAN_FRONTEND": "noninteractive"})
+
+        cmd = mock_run.call_args[0][0]
+        assert cmd == [
+            "bash",
+            "-c",
+            "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y docker",
+        ]
 
     def test_invalid_env_name_raises(self) -> None:
         conn = ServerConnection(ip="1.2.3.4")
@@ -147,11 +160,29 @@ class TestServerConnectionRun:
             )
 
         assert result.returncode == 0
-        first_call = mock_run.call_args_list[0]
-        cmd = first_call[0][0]
-        kwargs = first_call[1]
+        write_call = next(call for call in mock_run.call_args_list if call[1].get("input") == b"TOKEN=super-secret\n")
+        cmd = write_call[0][0]
+        kwargs = write_call[1]
         assert "TOKEN=super-secret" not in " ".join(cmd)
         assert kwargs["input"] == b"TOKEN=super-secret\n"
+
+    def test_sensitive_atomic_write_precreates_temp_with_private_mode(self) -> None:
+        conn = ServerConnection(ip="1.2.3.4", user="root")
+        with patch("meridian.ssh.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+            result = conn.put_text(
+                "/etc/meridian/secret.env",
+                "TOKEN=super-secret\n",
+                mode="600",
+                sensitive=True,
+            )
+
+        assert result.returncode == 0
+        commands = [" ".join(call[0][0]) for call in mock_run.call_args_list]
+        assert any("install -m 600 /dev/null /etc/meridian/secret.env.tmp." in command for command in commands)
+        write_index = next(i for i, call in enumerate(mock_run.call_args_list) if call[1].get("input"))
+        create_index = next(i for i, command in enumerate(commands) if "install -m 600 /dev/null" in command)
+        assert create_index < write_index
 
 
 class TestTcpConnect:

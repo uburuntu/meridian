@@ -84,6 +84,14 @@ def main_callback(
         check_for_update(__version__)
 
 
+def _enable_json_output() -> None:
+    """Enable JSON output from command-local --json flags."""
+    from meridian.console import set_json_mode, set_quiet_mode
+
+    set_json_mode(True)
+    set_quiet_mode(True)
+
+
 # =============================================================================
 # Plan / Apply (declarative workflow)
 # =============================================================================
@@ -580,18 +588,26 @@ def node_remove_cmd(
 
 
 @fleet_app.command("status")
-def fleet_status_cmd() -> None:
+def fleet_status_cmd(
+    json_mode: bool = typer.Option(False, "--json", help="Output JSON to stdout"),
+) -> None:
     """Show fleet health overview — nodes, relays, users."""
     from meridian.commands.fleet import run_status
 
+    if json_mode:
+        _enable_json_output()
     run_status()
 
 
 @fleet_app.command("inventory")
-def fleet_inventory_cmd() -> None:
+def fleet_inventory_cmd(
+    json_mode: bool = typer.Option(False, "--json", help="Output JSON to stdout"),
+) -> None:
     """Show configured fleet inventory and live panel status."""
     from meridian.commands.fleet import run_inventory
 
+    if json_mode:
+        _enable_json_output()
     run_inventory()
 
 

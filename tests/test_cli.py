@@ -6,7 +6,9 @@ import re
 
 from typer.testing import CliRunner
 
+import meridian.cli as cli
 from meridian.cli import app
+from meridian.console import is_json_mode, set_json_mode, set_quiet_mode
 
 runner = CliRunner()
 
@@ -67,6 +69,29 @@ class TestSubcommandHelp:
         assert "status" in output
         assert "inventory" in output
         assert "recover" in output
+
+    def test_fleet_status_help_documents_command_json(self) -> None:
+        result = runner.invoke(app, ["fleet", "status", "--help"])
+        assert result.exit_code == 0
+        assert "--json" in _strip_ansi(result.output)
+
+    def test_fleet_inventory_accepts_command_json(self, monkeypatch) -> None:
+        called: dict[str, bool] = {}
+
+        def fake_run_inventory() -> None:
+            called["json"] = is_json_mode()
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+        monkeypatch.setattr("meridian.commands.fleet.run_inventory", fake_run_inventory)
+
+        result = runner.invoke(app, ["fleet", "inventory", "--json"])
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        assert result.exit_code == 0
+        assert called["json"] is True
 
     def test_preflight_help(self) -> None:
         result = runner.invoke(app, ["preflight", "--help"])

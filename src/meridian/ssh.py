@@ -312,15 +312,14 @@ class ServerConnection:
         parts: list[str] = []
         if cwd:
             parts.append(f"cd {shlex.quote(cwd)}")
-        env_prefix = ""
         if env:
             assignments = []
             for key, value in env.items():
                 if not _ENV_KEY_RE.match(key):
                     raise ValueError(f"Invalid environment variable name: {key!r}")
                 assignments.append(f"{key}={shlex.quote(str(value))}")
-            env_prefix = " ".join(assignments) + " "
-        parts.append(env_prefix + command)
+            parts.append("export " + " ".join(assignments))
+        parts.append(command)
         return " && ".join(parts)
 
     def _completed_to_result(
@@ -780,6 +779,20 @@ class ServerConnection:
         if atomic:
             write_path = f"{remote_path}.tmp.{int(time.time() * 1000)}"
 
+        mode_s = f"{mode:o}" if isinstance(mode, int) else str(mode) if mode is not None else ""
+        precreate_mode = "600" if sensitive else mode_s
+        if precreate_mode:
+            q_write = shlex.quote(write_path)
+            create = self.run(
+                f"install -m {shlex.quote(precreate_mode)} /dev/null {q_write}",
+                timeout=timeout,
+                sudo=use_sudo,
+                sensitive=sensitive,
+                operation_name=f"{operation_name}: create target",
+            )
+            if create.returncode != 0:
+                return create
+
         result = self._write_bytes_direct(
             write_path,
             data,
@@ -793,7 +806,6 @@ class ServerConnection:
 
         q_write = shlex.quote(write_path)
         if mode is not None:
-            mode_s = f"{mode:o}" if isinstance(mode, int) else str(mode)
             chmod = self.run(
                 f"chmod {shlex.quote(mode_s)} {q_write}",
                 timeout=timeout,

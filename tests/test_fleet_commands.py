@@ -336,6 +336,8 @@ class TestFleetStatus:
 class TestFleetInventory:
     def test_inventory_json_redacts_panel_token(self) -> None:
         cluster = _fleet_cluster()
+        cluster.nodes[0].xhttp_path = "xhttp-a"
+        cluster.nodes[0].ws_path = "ws-a"
         cluster.desired_nodes = [DesiredNode(host="198.51.100.1", name="node-1")]
         cluster.desired_relays = [DesiredRelay(host="198.51.100.3", name="relay-1", exit_node="node-1")]
         panel = _make_panel_mock(ping_ok=True)
@@ -354,7 +356,48 @@ class TestFleetInventory:
         assert data["panel"]["url"] == "https://198.51.100.1/panel/"
         assert data["nodes"][0]["panel_status"] == "connected"
         assert data["nodes"][0]["desired"] is True
+        assert data["nodes"][0]["protocols"] == ["reality", "xhttp"]
         assert data["relays"][0]["desired"] is True
+
+    def test_inventory_json_reports_ip_mode_xhttp_protocol(self) -> None:
+        cluster = _fleet_cluster()
+        cluster.nodes[1].domain = ""
+        cluster.nodes[1].xhttp_path = "xhttp-b"
+        panel = _make_panel_mock(ping_ok=False)
+
+        with (
+            patch("meridian.commands.fleet.load_cluster", return_value=cluster),
+            patch("meridian.commands.fleet.make_panel", return_value=panel),
+            patch("meridian.commands.fleet.is_json_mode", return_value=True),
+            patch("meridian.commands.fleet.json_output") as mock_json,
+        ):
+            run_inventory()
+
+        data = mock_json.call_args[0][0]
+        node = next(n for n in data["nodes"] if n["ip"] == "198.51.100.2")
+        assert node["protocols"] == ["reality", "xhttp"]
+
+    def test_inventory_json_desired_matching_uses_host_not_name(self) -> None:
+        cluster = _fleet_cluster()
+        cluster.desired_nodes = [DesiredNode(host="198.51.100.9", name="node-1")]
+        cluster.desired_relays = [DesiredRelay(host="198.51.100.8", name="relay-1", exit_node="node-1")]
+        panel = _make_panel_mock(ping_ok=False)
+
+        with (
+            patch("meridian.commands.fleet.load_cluster", return_value=cluster),
+            patch("meridian.commands.fleet.make_panel", return_value=panel),
+            patch("meridian.commands.fleet.is_json_mode", return_value=True),
+            patch("meridian.commands.fleet.json_output") as mock_json,
+        ):
+            run_inventory()
+
+        data = mock_json.call_args[0][0]
+        assert data["nodes"][0]["desired"] is False
+        assert data["relays"][0]["desired"] is False
+        assert data["desired_nodes"][0]["present"] is False
+        assert data["desired_relays"][0]["present"] is False
+        assert data["summary"]["unapplied_desired_nodes"] == 1
+        assert data["summary"]["unapplied_desired_relays"] == 1
 
     def test_inventory_json_counts_pending_desired_entries(self) -> None:
         cluster = _fleet_cluster()
