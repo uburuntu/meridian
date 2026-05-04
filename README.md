@@ -146,6 +146,8 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 | `meridian relay list` | List relay nodes |
 | `meridian relay remove RELAY_IP` | Remove a relay node |
 | `meridian relay check RELAY_IP` | Check relay health |
+| `meridian api schemas` | List meridian-core JSON schemas for automation/UI clients |
+| `meridian api schema NAME` | Print one JSON Schema |
 | `meridian server add [IP]` | Add a server to local registry |
 | `meridian server list` | List known servers |
 | `meridian server remove NAME` | Remove a server from registry |
@@ -158,7 +160,7 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 
 Meridian is moving toward **meridian-core**: typed install/control APIs with the CLI as one client. Read-only machine output is now standardized around a Pydantic-backed `meridian.output/v1` envelope (`schema`, `command`, `operation_id`, `status`, `summary`, `data`, `warnings`, `errors`). For example, `meridian plan --json`, `meridian fleet status --json`, and `meridian fleet inventory --json` return the same top-level shape, with command-specific fields under `data`.
 
-Use `status` and `summary.changed` for product logic; keep using process exit codes for shell control flow. Secrets are redacted before JSON leaves the process.
+Use `status` and `summary.changed` for product logic; keep using process exit codes for shell control flow. Secrets are redacted before JSON leaves the process. Run `meridian api schemas` and `meridian api schema output-envelope` to inspect the contract.
 | `meridian doctor [IP]` | Collect info for bug reports (alias: `rage`) |
 | `meridian update` | Update Meridian to the latest version |
 | `meridian teardown [IP]` | Remove proxy from server |

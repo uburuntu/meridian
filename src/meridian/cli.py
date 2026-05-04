@@ -25,12 +25,14 @@ server_app = typer.Typer(help="Manage known servers", no_args_is_help=True)
 node_app = typer.Typer(help="Manage proxy nodes in the fleet", no_args_is_help=True)
 relay_app = typer.Typer(help="Manage relay nodes", no_args_is_help=True)
 fleet_app = typer.Typer(help="Fleet health and recovery", no_args_is_help=True)
+api_app = typer.Typer(help="Machine-readable Meridian API contracts", no_args_is_help=True)
 dev_app = typer.Typer(help="Developer tools for testing and debugging", no_args_is_help=True)
 app.add_typer(client_app, name="client")
 app.add_typer(server_app, name="server")
 app.add_typer(node_app, name="node")
 app.add_typer(relay_app, name="relay")
 app.add_typer(fleet_app, name="fleet")
+app.add_typer(api_app, name="api")
 app.add_typer(dev_app, name="dev", hidden=True)
 
 
@@ -629,6 +631,71 @@ def fleet_recover_cmd(
     from meridian.commands.recover import run_recover
 
     run_recover(panel_url, api_token)
+
+
+# =============================================================================
+# API contracts
+# =============================================================================
+
+
+@api_app.command("schemas")
+def api_schemas_cmd(
+    json_mode: bool = typer.Option(False, "--json", help="Output schema catalog as JSON envelope"),
+    include_schemas: bool = typer.Option(False, "--include-schemas", help="Include full JSON Schemas in JSON output"),
+) -> None:
+    """List meridian-core JSON schemas."""
+    from meridian.console import err_console, is_json_mode
+    from meridian.core.models import Summary
+    from meridian.core.output import emit_json, envelope
+    from meridian.core.schema import schema_catalog
+
+    if json_mode:
+        _enable_json_output()
+    catalog = schema_catalog(include_schemas=include_schemas and (json_mode or is_json_mode()))
+    if json_mode or is_json_mode():
+        emit_json(
+            envelope(
+                command="api.schemas",
+                data={"schemas": catalog},
+                summary=Summary(text=f"{len(catalog)} schema(s)", changed=False, counts={"schemas": len(catalog)}),
+            )
+        )
+        return
+
+    err_console.print()
+    err_console.print("  [bold]Meridian API schemas[/bold]")
+    for item in catalog:
+        err_console.print(f"    {item['name']}  [dim]{item['title']}[/dim]")
+    err_console.print()
+
+
+@api_app.command("schema")
+def api_schema_cmd(
+    name: str = typer.Argument(..., help="Schema name from `meridian api schemas`"),
+    envelope_output: bool = typer.Option(False, "--envelope", help="Wrap schema in meridian.output/v1"),
+) -> None:
+    """Print one meridian-core JSON Schema."""
+    from meridian.console import fail, is_json_mode
+    from meridian.core.models import Summary
+    from meridian.core.output import emit_json, envelope
+    from meridian.core.schema import schema_for
+
+    try:
+        schema = schema_for(name)
+    except ValueError as exc:
+        fail(str(exc), hint="Run: meridian api schemas", hint_type="user")
+
+    if envelope_output or is_json_mode():
+        emit_json(
+            envelope(
+                command="api.schema",
+                data={"name": name, "schema": schema},
+                summary=Summary(text=f"Schema: {name}", changed=False, counts={"schemas": 1}),
+            )
+        )
+        return
+
+    emit_json(schema)
 
 
 # =============================================================================

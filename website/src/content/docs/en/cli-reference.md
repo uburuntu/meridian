@@ -111,6 +111,25 @@ meridian fleet recover IP [flags]
 
 **`fleet recover`** — rebuilds `~/.meridian/cluster.yml` from the live panel. Use it when the local file is lost, or when picking up someone else's deployment. Connects via SSH to read stable server-side metadata, then queries the panel API for nodes, relays, inbounds, hosts, and users.
 
+### meridian api
+
+Inspect the machine-readable meridian-core contract used by JSON output and future UI clients.
+
+```
+meridian api schemas [--json] [--include-schemas]
+meridian api schema NAME [--envelope]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--json` | | Emit the schema catalog as a `meridian.output/v1` envelope |
+| `--include-schemas` | | Include full JSON Schemas in `api schemas --json` output |
+| `--envelope` | | Wrap `api schema NAME` in a `meridian.output/v1` envelope instead of printing raw JSON Schema |
+
+**`api schemas`** — lists stable schema names such as `output-envelope`, `event`, `plan-result`, `fleet-status`, and `fleet-inventory`.
+
+**`api schema NAME`** — prints one JSON Schema. Example: `meridian api schema output-envelope`.
+
 ### meridian relay
 
 Manage relay nodes — lightweight TCP forwarders that route traffic through a domestic server to an exit server abroad.

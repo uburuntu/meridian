@@ -70,6 +70,13 @@ class TestSubcommandHelp:
         assert "inventory" in output
         assert "recover" in output
 
+    def test_api_help(self) -> None:
+        result = runner.invoke(app, ["api", "--help"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.output)
+        assert "schemas" in output
+        assert "schema" in output
+
     def test_fleet_status_help_documents_command_json(self) -> None:
         result = runner.invoke(app, ["fleet", "status", "--help"])
         assert result.exit_code == 0

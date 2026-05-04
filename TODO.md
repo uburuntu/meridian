@@ -184,6 +184,7 @@ Example:
 - [x] Guarantee monotonic `seq` in the core event stream primitive.
 - [ ] Preserve per-resource event order.
 - [ ] Add JSONL tests for provision step start, completion, failure, and redaction.
+- [x] Export JSON Schemas for public meridian-core contracts so UI clients can validate integrations.
 
 Example:
 
@@ -286,6 +287,7 @@ Example:
 
 - [ ] Add website docs page: API / Automation Contract.
 - [ ] Document JSON envelope, JSONL event stream, errors, exit codes, non-interactive behavior, redaction guarantees, and compatibility policy.
+- [x] Add CLI schema discovery/export for meridian-core contracts.
 - [ ] Add examples with `jq` for `plan`, `apply`, `deploy`, and `fleet status`.
 - [ ] Document which fields are stable and which are diagnostic/best-effort.
 - [ ] Add CHANGELOG notes whenever API schemas add fields or change behavior.
