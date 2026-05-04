@@ -105,7 +105,7 @@ meridian fleet recover IP [flags]
 | `--user USER` | root | SSH user on the panel host (for `fleet recover`) |
 | `--ssh-port PORT` | 22 | SSH port on the panel host |
 
-**`fleet status`** — shows panel health, every node's connection + Xray version + traffic, every relay's upstream, and user counts. With `--json`, stable field access: `panel.url`, `panel.healthy`, `nodes[].status` (`"connected"`, `"disconnected"`, `"disabled"`, `"unknown"`), `relays[].status`, `users.active/disabled/other`.
+**`fleet status`** — shows panel health, every node's connection + Xray version + traffic, every relay's upstream, and user counts. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data`: `data.panel.url`, `data.panel.healthy`, `data.nodes[].status` (`"connected"`, `"disconnected"`, `"disabled"`, `"unknown"`), `data.relays[].healthy`, and `data.summary.active_users/disabled_users/unknown_nodes/unhealthy_relays`.
 
 **`fleet inventory`** — shows the configured panel, nodes, relays, desired topology, and live panel node status when reachable. It never prints the panel API token. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data` includes `data.summary.*`, `data.nodes[].desired`, `data.nodes[].protocols`, `data.relays[].exit_node_*`, and `data.desired_nodes[].present`.
 
@@ -166,12 +166,15 @@ meridian plan [--json]
   "summary": {
     "text": "Plan: 1 to add, 1 to remove",
     "changed": true,
-    "counts": {"actions": 2}
+    "counts": {"actions": 2, "adds": 1, "updates": 0, "removes": 1,
+               "destructive": 1, "from_extras": 1}
   },
   "data": {
     "converged": false,
     "summary": "Plan: 1 to add, 1 to remove",
     "exit_code": 2,
+    "counts": {"actions": 2, "adds": 1, "updates": 0, "removes": 1,
+               "destructive": 1, "from_extras": 1},
     "actions": [
       {"kind": "add_client", "target": "alice", "detail": "create client alice",
        "destructive": false, "from_extras": false, "symbol": "+"},

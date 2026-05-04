@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol, Sequence
+from typing import Any, Mapping, Protocol, Sequence
 
 from pydantic import Field
 
@@ -12,6 +12,11 @@ from meridian.core.models import CoreModel
 
 class ApiNodeLike(Protocol):
     uuid: str
+
+
+class ApiUserLike(Protocol):
+    username: str
+    status: str
 
 
 class PanelInventory(CoreModel):
@@ -105,6 +110,69 @@ class FleetInventory(CoreModel):
         return to_plain(self)
 
 
+class PanelStatus(CoreModel):
+    url: str
+    healthy: bool
+
+
+class FleetStatusNode(CoreModel):
+    ip: str
+    name: str
+    uuid: str
+    is_panel_host: bool
+    status: str
+    xray_version: str
+    traffic_bytes: int
+
+
+class FleetStatusRelay(CoreModel):
+    ip: str
+    name: str
+    port: int
+    exit_node_ip: str
+    exit_node_name: str
+    healthy: bool
+
+
+class FleetStatusUser(CoreModel):
+    username: str
+    status: str
+
+
+class FleetStatusSummary(CoreModel):
+    nodes: int
+    relays: int
+    users: int
+    active_users: int
+    disabled_users: int
+    other_users: int
+    connected_nodes: int
+    disconnected_nodes: int
+    disabled_nodes: int
+    unknown_nodes: int
+    unhealthy_relays: int
+
+    @property
+    def text(self) -> str:
+        return (
+            f"{self.nodes} node(s), {self.relays} relay(s), "
+            f"{self.active_users} active user(s), {self.unhealthy_relays} unhealthy relay(s)"
+        )
+
+
+class FleetStatus(CoreModel):
+    panel: PanelStatus
+    summary: FleetStatusSummary
+    nodes: list[FleetStatusNode] = Field(default_factory=list)
+    relays: list[FleetStatusRelay] = Field(default_factory=list)
+    users: list[FleetStatusUser] = Field(default_factory=list)
+
+    def to_data(self) -> dict[str, Any]:
+        from meridian.core.serde import to_plain
+
+        return to_plain(self)
+
+
 def node_api_status(api_node: ApiNodeLike | None) -> str:
     if not api_node:
         return "unknown"
@@ -134,6 +202,74 @@ def relay_desired(relay: RelayEntry, desired_relays: list[DesiredRelay] | None) 
     if desired_relays is None:
         return None
     return any(relay.ip == desired.host for desired in desired_relays)
+
+
+def build_fleet_status(
+    cluster: ClusterConfig,
+    *,
+    panel_healthy: bool,
+    api_nodes: Sequence[ApiNodeLike] | None = None,
+    api_users: Sequence[ApiUserLike] | None = None,
+    relay_health: Mapping[tuple[str, int], bool] | None = None,
+) -> FleetStatus:
+    """Build fleet health status from local state plus live observations."""
+    api_by_uuid = {node.uuid: node for node in api_nodes or []}
+    relay_health = relay_health or {}
+
+    nodes = []
+    for node in cluster.nodes:
+        api_node = api_by_uuid.get(node.uuid)
+        status = node_api_status(api_node)
+        nodes.append(
+            FleetStatusNode(
+                ip=node.ip,
+                name=node.name,
+                uuid=node.uuid,
+                is_panel_host=node.is_panel_host,
+                status=status,
+                xray_version=getattr(api_node, "xray_version", "") if api_node else "",
+                traffic_bytes=getattr(api_node, "traffic_used", 0) if api_node else 0,
+            )
+        )
+
+    relays = []
+    for relay in cluster.relays:
+        exit_node = cluster.find_node(relay.exit_node_ip)
+        relays.append(
+            FleetStatusRelay(
+                ip=relay.ip,
+                name=relay.name,
+                port=relay.port,
+                exit_node_ip=relay.exit_node_ip,
+                exit_node_name=exit_node.name if exit_node else "",
+                healthy=relay_health.get((relay.ip, relay.port), False),
+            )
+        )
+
+    users = [FleetStatusUser(username=user.username, status=user.status) for user in api_users or []]
+    active_users = sum(1 for user in users if user.status.upper() == "ACTIVE")
+    disabled_users = sum(1 for user in users if user.status.upper() == "DISABLED")
+    other_users = len(users) - active_users - disabled_users
+    summary = FleetStatusSummary(
+        nodes=len(nodes),
+        relays=len(relays),
+        users=len(users),
+        active_users=active_users,
+        disabled_users=disabled_users,
+        other_users=other_users,
+        connected_nodes=sum(1 for node in nodes if node.status == "connected"),
+        disconnected_nodes=sum(1 for node in nodes if node.status == "disconnected"),
+        disabled_nodes=sum(1 for node in nodes if node.status == "disabled"),
+        unknown_nodes=sum(1 for node in nodes if node.status == "unknown"),
+        unhealthy_relays=sum(1 for relay in relays if not relay.healthy),
+    )
+    return FleetStatus(
+        panel=PanelStatus(url=cluster.panel.display_url or cluster.panel.url, healthy=panel_healthy),
+        summary=summary,
+        nodes=nodes,
+        relays=relays,
+        users=users,
+    )
 
 
 def build_fleet_inventory(

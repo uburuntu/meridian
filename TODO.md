@@ -248,8 +248,8 @@ Example:
 
 - [x] Move `fleet inventory` result construction into a service returning a typed result.
 - [x] Render `fleet inventory` text and JSON from that typed result.
-- [ ] Move `fleet status` result construction into a service returning a typed result.
-- [ ] Render `fleet status` text and JSON from that typed result.
+- [x] Move `fleet status` result construction into a service returning a typed result.
+- [x] Render `fleet status` text and JSON from that typed result.
 - [ ] Move `client list` and `client show` to service/result/renderer boundaries.
 - [ ] Preserve existing human output while adding envelope JSON.
 - [ ] Keep config loading/saving behind a store interface so UI clients can supply config through memory or files.
@@ -257,7 +257,7 @@ Example:
 ### Phase 3: Plan and Apply
 
 - [x] Convert `plan --json` to the shared envelope everywhere; v4 does not need a legacy JSON mode.
-- [ ] Expose plan actions as typed API result objects.
+- [x] Expose plan actions as typed API result objects.
 - [ ] Add `execute_plan()` reporter hooks for action start/completion/failure.
 - [ ] Add `apply --json` final envelope.
 - [ ] Add `apply --jsonl` event stream.

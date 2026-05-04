@@ -17,6 +17,7 @@ from meridian.core.models import (
     Summary,
 )
 from meridian.core.output import EventStream, emit_json, emit_jsonl, envelope, plan_payload
+from meridian.core.plan import PlanActionResult, PlanCounts, PlanResult, build_plan_result
 from meridian.core.redaction import REDACTED, redact
 
 __all__ = [
@@ -28,6 +29,9 @@ __all__ = [
     "MeridianError",
     "OutputEnvelope",
     "OutputStatus",
+    "PlanActionResult",
+    "PlanCounts",
+    "PlanResult",
     "REDACTED",
     "ResourceRef",
     "Summary",
@@ -36,4 +40,5 @@ __all__ = [
     "envelope",
     "plan_payload",
     "redact",
+    "build_plan_result",
 ]

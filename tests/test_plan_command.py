@@ -58,7 +58,14 @@ class TestPlanJsonOutput:
         assert payload["command"] == "plan"
         assert payload["status"] == "no_changes"
         assert payload["summary"]["changed"] is False
-        assert payload["summary"]["counts"] == {"actions": 0}
+        assert payload["summary"]["counts"] == {
+            "actions": 0,
+            "adds": 0,
+            "updates": 0,
+            "removes": 0,
+            "destructive": 0,
+            "from_extras": 0,
+        }
         assert payload["data"]["converged"] is True
         assert payload["data"]["actions"] == []
         assert payload["data"]["exit_code"] == 0

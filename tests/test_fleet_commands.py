@@ -202,12 +202,15 @@ class TestFleetStatus:
             patch("meridian.commands.fleet.make_panel", return_value=panel),
             patch("meridian.commands.fleet._check_relay_health", return_value=True),
             patch("meridian.commands.fleet.is_json_mode", return_value=True),
-            patch("meridian.commands.fleet.json_output") as mock_json,
+            patch("meridian.commands.fleet.emit_json") as mock_json,
         ):
             run_status()
 
         mock_json.assert_called_once()
-        data = mock_json.call_args[0][0]
+        payload = mock_json.call_args[0][0]
+        data = payload.data
+        assert payload.schema_version == "meridian.output/v1"
+        assert payload.command == "fleet.status"
         assert "panel" in data
         assert "nodes" in data
         assert "relays" in data
@@ -233,11 +236,11 @@ class TestFleetStatus:
             patch("meridian.commands.fleet.make_panel", return_value=panel),
             patch("meridian.commands.fleet._check_relay_health", return_value=True),
             patch("meridian.commands.fleet.is_json_mode", return_value=True),
-            patch("meridian.commands.fleet.json_output") as mock_json,
+            patch("meridian.commands.fleet.emit_json") as mock_json,
         ):
             run_status()
 
-        data = mock_json.call_args[0][0]
+        data = mock_json.call_args[0][0].data
         statuses = {n["uuid"]: n["status"] for n in data["nodes"]}
         assert statuses[_UUID_A] == "connected"
         assert statuses[_UUID_B] == "disconnected"
@@ -287,11 +290,11 @@ class TestFleetStatus:
             patch("meridian.commands.fleet.make_panel", return_value=panel),
             patch("meridian.commands.fleet._check_relay_health", return_value=True),
             patch("meridian.commands.fleet.is_json_mode", return_value=True),
-            patch("meridian.commands.fleet.json_output") as mock_json,
+            patch("meridian.commands.fleet.emit_json") as mock_json,
         ):
             run_status()
 
-        data = mock_json.call_args[0][0]
+        data = mock_json.call_args[0][0].data
         statuses = {n["uuid"]: n["status"] for n in data["nodes"]}
         assert statuses[_UUID_B] == "unknown"
 
@@ -318,11 +321,11 @@ class TestFleetStatus:
             patch("meridian.commands.fleet.make_panel", return_value=panel),
             patch("meridian.commands.fleet._check_relay_health", return_value=False),
             patch("meridian.commands.fleet.is_json_mode", return_value=True),
-            patch("meridian.commands.fleet.json_output") as mock_json,
+            patch("meridian.commands.fleet.emit_json") as mock_json,
         ):
             run_status()
 
-        data = mock_json.call_args[0][0]
+        data = mock_json.call_args[0][0].data
         assert len(data["relays"]) == 1
         assert data["relays"][0]["healthy"] is False
         assert data["relays"][0]["ip"] == "198.51.100.3"

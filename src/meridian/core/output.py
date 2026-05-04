@@ -11,6 +11,7 @@ from typing import IO, Any
 
 from meridian import __version__
 from meridian.core.models import Event, EventLevel, MeridianError, OutputEnvelope, OutputStatus, ResourceRef, Summary
+from meridian.core.plan import build_plan_result
 from meridian.core.redaction import redact
 from meridian.core.serde import to_plain
 
@@ -86,22 +87,7 @@ def emit_jsonl(value: Any, *, stream: IO[str] | None = None) -> None:
 
 def plan_payload(plan: Any, *, exit_code: int) -> dict[str, Any]:
     """Return the stable plan data payload used under output envelopes."""
-    return {
-        "converged": plan.is_empty,
-        "summary": plan.summary(),
-        "exit_code": exit_code,
-        "actions": [
-            {
-                "kind": action.kind.value,
-                "target": action.target,
-                "detail": action.detail,
-                "destructive": action.destructive,
-                "from_extras": action.from_extras,
-                "symbol": action.symbol,
-            }
-            for action in plan.actions
-        ],
-    }
+    return build_plan_result(plan, exit_code=exit_code).to_data()
 
 
 class EventStream:

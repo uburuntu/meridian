@@ -11,7 +11,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 - **`meridian plan --json`** now emits the shared envelope shape with plan details under `data`; `status` is `no_changes` or `changed`, and the process exit code remains `0` for converged and `2` for changes pending
-- **`meridian fleet inventory --json`** now emits the shared envelope shape while preserving the stable inventory fields under `data`
+- **`meridian fleet status --json`** and **`meridian fleet inventory --json`** now emit the shared envelope shape while preserving stable command fields under `data`
 
 ## [4.0.0] - 2026-04-12
 

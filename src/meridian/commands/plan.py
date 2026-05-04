@@ -13,7 +13,8 @@ import typer
 from meridian.cluster import ClusterConfig
 from meridian.console import err_console, fail, info
 from meridian.core.models import Summary
-from meridian.core.output import emit_json, envelope, plan_payload
+from meridian.core.output import emit_json, envelope
+from meridian.core.plan import build_plan_result
 from meridian.reconciler import compute_plan
 from meridian.reconciler.display import print_plan
 from meridian.reconciler.state import build_actual_state, build_desired_state
@@ -70,17 +71,17 @@ def run(json_output: bool = False) -> None:
     exit_code = 0 if plan.is_empty else 2
 
     if json_output:
-        data = plan_payload(plan, exit_code=exit_code)
+        result = build_plan_result(plan, exit_code=exit_code)
         emit_json(
             envelope(
                 command="plan",
-                data=data,
+                data=result.to_data(),
                 summary=Summary(
-                    text=plan.summary(),
-                    changed=not plan.is_empty,
-                    counts={"actions": len(plan.actions)},
+                    text=result.summary,
+                    changed=not result.converged,
+                    counts=result.counts.model_dump(),
                 ),
-                status="no_changes" if plan.is_empty else "changed",
+                status="no_changes" if result.converged else "changed",
                 exit_code=exit_code,
             )
         )

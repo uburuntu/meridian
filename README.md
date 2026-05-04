@@ -156,7 +156,7 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 
 ## Automation contract
 
-Meridian is moving toward **meridian-core**: typed install/control APIs with the CLI as one client. Read-only machine output is now standardized around a Pydantic-backed `meridian.output/v1` envelope (`schema`, `command`, `operation_id`, `status`, `summary`, `data`, `warnings`, `errors`). For example, `meridian plan --json` and `meridian fleet inventory --json` return the same top-level shape, with command-specific fields under `data`.
+Meridian is moving toward **meridian-core**: typed install/control APIs with the CLI as one client. Read-only machine output is now standardized around a Pydantic-backed `meridian.output/v1` envelope (`schema`, `command`, `operation_id`, `status`, `summary`, `data`, `warnings`, `errors`). For example, `meridian plan --json`, `meridian fleet status --json`, and `meridian fleet inventory --json` return the same top-level shape, with command-specific fields under `data`.
 
 Use `status` and `summary.changed` for product logic; keep using process exit codes for shell control flow. Secrets are redacted before JSON leaves the process.
 | `meridian doctor [IP]` | Collect info for bug reports (alias: `rage`) |
