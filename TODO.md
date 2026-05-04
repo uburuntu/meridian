@@ -4,37 +4,62 @@
 
 Meridian should become a structured installation and control API with a CLI client on top. Human terminal output stays polished, but the core product contract should be typed requests, typed results, structured errors, and structured progress events.
 
+Call this product layer **meridian-core**. The implementation package can be `meridian.core`, but the mental model matters more than the module name: core is the engine, and every UX surface is a client.
+
 The guiding rule: command modules parse CLI arguments and choose renderers; they should not own business logic, JSON schema, prompts inside core flows, or process exits below the entrypoint.
+
+## Shared Mental Model
+
+- The interactive CLI wizard is a Meridian client, not the core product. It gathers input, calls meridian-core, then renders a human experience.
+- A future UI is another Meridian client. It should be able to plan, execute, and observe deploys through the same core APIs the CLI uses.
+- JSON/JSONL is the process boundary for automation and UI clients that shell out to `meridian`. A supported Python API can expose the same request/result/event objects directly.
+- Cluster config is part of the API, not just a local implementation detail. Core should accept desired topology from disk, memory, or another client-provided source, then persist through the configured store.
+- Core should expose recipes for normal users and lower-level operations for advanced users. Advanced SSH-capable operations are allowed, but must be explicit, auditable, redacted, and clearly dangerous.
+- Idempotent operations are the recovery model for v1. If a UI wants resumability, it can track operation IDs/events and rerun safe recipes; core does not need durable workflow state yet.
+- Topology is a fleet of servers with roles and capabilities. A server may be a panel host, exit node, relay node, or multiple roles over time.
+- Routing policy is part of topology. Example future shape: `.ru` traffic exits through a Russia-zone exit, while non-RU traffic goes abroad; multiple relays can fan into one or more exits.
 
 ## Product Assumptions
 
 - Text output remains the default UX.
-- `--json` means one final machine-readable result on stdout.
-- `--jsonl` means machine-readable event stream on stdout for long-running operations.
+- `--json` means one final machine-readable result envelope on stdout, everywhere.
+- `--jsonl` means machine-readable event stream on stdout for long-running operations, including deploy/apply.
 - Human logs/progress go to stderr or are suppressed in API modes.
 - JSON/API modes are non-interactive by default. Missing input returns a structured user error.
 - Secrets are never emitted in JSON, JSONL, errors, event data, command metadata, or logs.
 - Current process exit codes stay compatible for now; JSON `status` and `error.category` carry richer meaning.
 
-## Product Questions
+## Open Product Questions
 
-- [ ] Is the first-class API contract only the CLI process contract, or should Meridian also expose a supported Python API?
-- [ ] Should `--json` immediately use the new envelope everywhere, or should legacy payloads be wrapped under `result` for one major version?
-- [ ] Should `--json` imply `--no-input` everywhere, or should any command be allowed to request input through JSONL events?
-- [ ] Do automation users need live progress on stdout via `--jsonl`, or is final JSON plus stderr progress enough for v1?
 - [ ] Is `plan` exit code `2` for changes-pending sacred, even though `2` also means user errors elsewhere?
 - [ ] Which commands are contract-stable in v1, and which stay best-effort/internal until later?
 - [ ] Should API fields optimize for shell/JQ consumers, Python SDK consumers, or both equally?
+- [ ] What exact advanced SSH operations should be supported as public escape hatches, and what guardrails do they need?
+- [ ] Which routing policies are v1 scope: per-domain category, per-country domain lists, per-node default egress, or all of these?
+- [ ] Should role terminology in config become explicit now (`panel`, `exit`, `relay`) or wait until topology work begins?
 
 ## Target Architecture
 
-- [ ] `meridian.api`: product use cases and request/result models; no Typer, Rich, `print`, or `typer.Exit`.
-- [ ] `meridian.api.models`: stable dataclasses for envelopes, errors, events, plans, inventory, clients, nodes, relays, deployment results, and provision results.
-- [ ] `meridian.api.services`: service functions such as `get_fleet_inventory()`, `compute_apply_plan()`, `apply_desired_state()`, `deploy_node()`, `deploy_relay()`, `add_client()`.
-- [ ] `meridian.api.renderers`: JSON, JSONL, and Rich/text renderers over the same result/event objects.
-- [ ] `meridian.api.reporters`: event sink abstraction for provisioners, reconciler execution, SSH diagnostics, warnings, and prompts.
+- [ ] `meridian.core`: product use cases and request/result models; no Typer, Rich, `print`, or `typer.Exit`.
+- [ ] `meridian.core.models`: stable dataclasses for envelopes, errors, events, plans, inventory, clients, servers, roles, routes, deployment results, and provision results.
+- [ ] `meridian.core.services`: service functions such as `get_fleet_inventory()`, `compute_apply_plan()`, `apply_desired_state()`, `deploy_server()`, `assign_role()`, `deploy_relay()`, `add_client()`.
+- [ ] `meridian.core.renderers`: JSON, JSONL, and Rich/text renderers over the same result/event objects.
+- [ ] `meridian.core.reporters`: event sink abstraction for provisioners, reconciler execution, SSH diagnostics, warnings, and prompts.
 - [ ] `meridian.cli`: Typer argument parsing, request construction, renderer selection, prompt collection, and exit-code mapping only.
 - [ ] Keep adapters explicit: Remnawave API, SSH, filesystem cluster store, cloud providers, and template rendering.
+
+## Topology Model
+
+- [ ] Model the fleet around servers with roles, not separate mental categories for "node" and "relay".
+- [ ] Represent roles explicitly: `panel`, `exit`, `relay`, and future role extensions.
+- [ ] Allow one server to carry multiple roles when safe.
+- [ ] Preserve today's simple single-server and node-only flows as recipes over the role model.
+- [ ] Support star topology: many relays forwarding to one exit.
+- [ ] Support multi-exit topology: relays and clients can select different exits based on policy.
+- [ ] Add route policy model for domain/category/country split routing, including RU-local exit for `.ru` or Russian content while non-RU traffic exits abroad.
+- [ ] Keep relay attachment explicit: relay role has one or more upstream exit targets and health state.
+- [ ] Keep server inventory stable enough for UI graph rendering.
+- [ ] Add topology planner tests for single-node, star relay, multi-relay, and RU-local-exit scenarios.
 
 ## JSON Envelope v1
 
@@ -179,6 +204,7 @@ Example:
   - `meridian fleet inventory --json`
 - [ ] Add `--jsonl` to long-running commands: `deploy`, `apply`, `node add`, `relay deploy`, `teardown`, and likely `doctor`.
 - [ ] Add `--no-input` and make `--json` imply it unless a command explicitly documents otherwise.
+- [ ] Treat the interactive wizard as a client of meridian-core; it does not need a special JSON mode as long as the underlying core calls are structured.
 - [ ] Audit every public command for JSON support:
   - `deploy`
   - `apply`
@@ -201,7 +227,7 @@ Example:
 
 ### Phase 1: Contract Foundation
 
-- [ ] Add `meridian.api.models` with output envelope, event, summary, and error dataclasses.
+- [ ] Add `meridian.core.models` with output envelope, event, summary, and error dataclasses.
 - [ ] Add JSON and JSONL serializer helpers with stable key ordering.
 - [ ] Add `operation_id` generation and monotonic event sequence support.
 - [ ] Add redaction utilities shared by SSH, JSON, JSONL, and diagnostics.
@@ -215,10 +241,11 @@ Example:
 - [ ] Render `fleet status` text and JSON from that typed result.
 - [ ] Move `client list` and `client show` to service/result/renderer boundaries.
 - [ ] Preserve existing human output while adding envelope JSON.
+- [ ] Keep config loading/saving behind a store interface so UI clients can supply config through memory or files.
 
 ### Phase 3: Plan and Apply
 
-- [ ] Convert `plan --json` to the shared envelope while preserving legacy shape under `data` or a compatibility key.
+- [ ] Convert `plan --json` to the shared envelope everywhere; v4 does not need a legacy JSON mode.
 - [ ] Expose plan actions as typed API result objects.
 - [ ] Add `execute_plan()` reporter hooks for action start/completion/failure.
 - [ ] Add `apply --json` final envelope.
@@ -242,6 +269,7 @@ Example:
 - [ ] Extract client add/remove operations into core service functions.
 - [ ] Extract recover operations into core service functions.
 - [ ] Keep CLI prompts, wizard copy, Rich panels, and confirmation handling in command/renderer layers.
+- [ ] Expose advanced lower-level operations with explicit consent and audit events: SSH connectivity check, fact collection, package ensure, service ensure, file write, command run, role deploy, role remove.
 
 ### Phase 6: Documentation and Compatibility
 
@@ -269,15 +297,17 @@ Example:
 - [ ] `commands/setup.py` is large and imperative; extraction must be incremental.
 - [ ] Parallel apply needs deterministic event ordering without hiding concurrency.
 - [ ] More JSON surface area increases secret leakage risk unless redaction is centralized.
-- [ ] Changing `plan --json` may break current scripts unless the compatibility path is explicit.
+- [ ] Changing `plan --json` may break current scripts; acceptable for v4, but release notes must call it out clearly.
 - [ ] Rich progress must remain polished when moved behind event renderers.
+- [ ] Advanced SSH escape hatches can become unsafe if they bypass redaction, idempotency, or audit events.
+- [ ] Current config names distinguish nodes and relays; the product model is moving toward servers with roles, so migration needs careful wording.
 
 ## Near-Term First Slice
 
-- [ ] Build `meridian.api.models` with `OutputEnvelope`, `MeridianError`, and `Event`.
+- [ ] Build `meridian.core.models` with `OutputEnvelope`, `MeridianError`, and `Event`.
 - [ ] Build shared `emit_json()` and `emit_jsonl()` renderers.
 - [ ] Add command-local `--json` support to all read-only commands.
 - [ ] Migrate `fleet inventory` to service/result/renderers.
-- [ ] Migrate `plan` to shared envelope and add compatibility tests.
+- [ ] Migrate `plan` to shared envelope and add contract tests.
 - [ ] Add JSON error rendering at CLI entrypoint boundary.
 - [ ] Add redaction tests before expanding JSON surface area further.
