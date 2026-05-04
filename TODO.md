@@ -19,6 +19,16 @@ The guiding rule: command modules parse CLI arguments and choose renderers; they
 - Topology is a fleet of servers with roles and capabilities. A server may be a panel host, exit node, relay node, or multiple roles over time.
 - Routing policy is part of topology. Example future shape: `.ru` traffic exits through a Russia-zone exit, while non-RU traffic goes abroad; multiple relays can fan into one or more exits.
 
+## Execution Mandate
+
+- [ ] Build toward a CLI/API that is impressive enough to show to UI-client authors as an integration contract, not just an internal refactor.
+- [ ] Prefer refactoring to stronger module boundaries before adding one-off feature behavior.
+- [ ] Make Meridian feel built from legos: each piece has a clear contract, focused tests, and minimal hidden global state.
+- [ ] Commit each significant architectural step separately.
+- [ ] Review platformization work with distinct perspectives: architecture, product/API contract, regression/security, and a Joker reviewer who is expected to challenge assumptions hard.
+- [ ] Repeat review/fix loops until the core surfaces feel disciplined, documented, and ready for new clients.
+- [ ] Keep user-facing docs and CLI text aligned with the API contract as part of every platformization change.
+
 ## Product Assumptions
 
 - Text output remains the default UX.
