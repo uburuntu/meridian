@@ -15,6 +15,7 @@ from meridian.config import (
     REMNAWAVE_NODE_DIR,
     REMNAWAVE_NODE_IMAGE,
 )
+from meridian.facts import ServerFacts
 from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
@@ -123,11 +124,7 @@ class DeployRemnawaveNode:
             )
 
         # -- Idempotency check: is the container already running? --
-        running_check = conn.run(
-            f"docker inspect -f '{{{{.State.Running}}}}' {_NODE_CONTAINER} 2>/dev/null",
-            timeout=15,
-        )
-        if running_check.returncode == 0 and running_check.stdout.strip() == "true":
+        if ServerFacts(conn).container_state(_NODE_CONTAINER).running:
             return StepResult(
                 name=self.name,
                 status="skipped",
@@ -148,43 +145,49 @@ class DeployRemnawaveNode:
         # -- Write .env file --
         env_content = _render_node_env(node_api_port=node_api_port, secret_key=secret_key)
         env_path = f"{node_dir}/.env"
-        write_env = f"cat > {shlex.quote(env_path)} << 'MERIDIAN_EOF'\n{env_content}MERIDIAN_EOF"
-        result = conn.run(write_env, timeout=15)
+        result = conn.put_text(
+            env_path,
+            env_content,
+            mode="600",
+            sensitive=True,
+            timeout=15,
+            operation_name="write remnawave node env",
+        )
         if result.returncode != 0:
             return StepResult(
                 name=self.name,
                 status="failed",
                 detail=f"failed to write .env: {result.stderr.strip()[:200]}",
             )
-        conn.run(f"chmod 600 {shlex.quote(env_path)}", timeout=15)
 
         # -- Write docker-compose.yml --
         compose_content = _render_node_compose(image=image, node_api_port=node_api_port)
         compose_path = f"{node_dir}/docker-compose.yml"
-        write_compose = f"cat > {shlex.quote(compose_path)} << 'MERIDIAN_EOF'\n{compose_content}MERIDIAN_EOF"
-        result = conn.run(write_compose, timeout=15)
+        result = conn.put_text(
+            compose_path,
+            compose_content,
+            mode="644",
+            timeout=15,
+            operation_name="write remnawave node compose",
+        )
         if result.returncode != 0:
             return StepResult(
                 name=self.name,
                 status="failed",
                 detail=f"failed to write docker-compose.yml: {result.stderr.strip()[:200]}",
             )
-        conn.run(f"chmod 644 {shlex.quote(compose_path)}", timeout=15)
 
         # -- Pull image (with retries) --
-        q_dir = shlex.quote(node_dir)
-        pull_ok = False
-        pull_result = None
-        for attempt in range(3):
-            pull_result = conn.run(f"cd {q_dir} && docker compose pull", timeout=300)
-            if pull_result.returncode == 0:
-                pull_ok = True
-                break
-            if attempt < 2:
-                time.sleep(10)
-
-        if not pull_ok:
-            stderr = pull_result.stderr.strip()[:200] if pull_result else "unknown"
+        pull_result = conn.run(
+            "docker compose pull",
+            cwd=node_dir,
+            timeout=300,
+            retries=3,
+            retry_delay=10,
+            operation_name="pull remnawave node image",
+        )
+        if pull_result.returncode != 0:
+            stderr = pull_result.stderr.strip()[:200] or "unknown"
             return StepResult(
                 name=self.name,
                 status="failed",
@@ -192,9 +195,9 @@ class DeployRemnawaveNode:
             )
 
         # -- Start container --
-        result = conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
+        result = conn.run("docker compose up -d", cwd=node_dir, timeout=120)
         if result.returncode != 0:
-            logs = conn.run(f"cd {q_dir} && docker compose logs --tail 50", timeout=15)
+            logs = conn.run("docker compose logs --tail 50", cwd=node_dir, timeout=15)
             log_output = logs.stdout.strip()[:500] if logs.returncode == 0 else "no logs available"
             return StepResult(
                 name=self.name,

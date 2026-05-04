@@ -8,20 +8,57 @@ The build_setup_steps() function assembles the full deployment pipeline:
 
 from __future__ import annotations
 
+from meridian.provision.recipe import Operation, Recipe, RecipeValidationError, Resource, op
 from meridian.provision.steps import ProvisionContext, Provisioner, Step, StepContext, StepResult
 
-__all__ = ["Provisioner", "ProvisionContext", "Step", "StepContext", "StepResult", "build_setup_steps"]
+__all__ = [
+    "Operation",
+    "Provisioner",
+    "ProvisionContext",
+    "Recipe",
+    "RecipeValidationError",
+    "Resource",
+    "Step",
+    "StepContext",
+    "StepResult",
+    "build_node_steps",
+    "build_setup_steps",
+]
 
 
-def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
-    """Assemble the full deployment step pipeline.
+def _needs_web_server(ctx: ProvisionContext) -> bool:
+    return ctx.needs_web_server
 
-    Execution order:
-    1. common: packages, hardening, sysctl, firewall
-    2. docker: install Docker
-    3. remnawave: panel (if is_panel_host) + node containers
-    4. nginx: SNI routing + TLS + web serving
-    5. connection page: PWA assets (if hosted page)
+
+def _domain_mode(ctx: ProvisionContext) -> bool:
+    return ctx.needs_web_server and ctx.domain_mode
+
+
+def _ip_web_mode(ctx: ProvisionContext) -> bool:
+    return ctx.needs_web_server and not ctx.domain_mode
+
+
+def _harden(ctx: ProvisionContext) -> bool:
+    return ctx.harden
+
+
+def _not_harden(ctx: ProvisionContext) -> bool:
+    return not ctx.harden
+
+
+def _panel_host(ctx: ProvisionContext) -> bool:
+    return ctx.is_panel_host
+
+
+def _warp(ctx: ProvisionContext) -> bool:
+    return ctx.warp
+
+
+def build_setup_steps(ctx: ProvisionContext) -> list[Operation]:
+    """Assemble the full deployment recipe.
+
+    Steps declare resource contracts and the recipe graph derives the
+    execution order for the active operations in the current context.
     """
     from meridian.provision.common import (
         REQUIRED_PACKAGES,
@@ -44,39 +81,58 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     # meaning REQUIRED_PACKAGES never get installed at all. Explicit form:
     extra_pkgs = ["fail2ban"] if ctx.harden else []
 
-    steps: list[Step] = [
+    operations = [
         # -- Pre-flight --
-        CheckDiskSpace(),
+        op(CheckDiskSpace(), provides=[Resource.DISK_SPACE_CHECKED]),
         # -- Common (OS-level setup) --
-        InstallPackages(REQUIRED_PACKAGES + extra_pkgs),
-        EnableAutoUpgrades(),
-        SetTimezone(),
-    ]
-
-    # Server hardening (optional — skip for shared servers with existing services)
-    if ctx.harden:
-        steps.append(HardenSSH())
-        steps.append(ConfigureFail2ban())
-
-    steps.append(ConfigureBBR())
-
-    if ctx.harden:
-        steps.append(ConfigureFirewall())
-    else:
+        op(
+            InstallPackages(REQUIRED_PACKAGES + extra_pkgs),
+            requires=[Resource.DISK_SPACE_CHECKED],
+            provides=[Resource.SYSTEM_PACKAGES],
+        ),
+        op(EnableAutoUpgrades(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.AUTO_UPGRADES]),
+        op(SetTimezone(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.TIMEZONE_UTC]),
+        # Server hardening (optional — skip for shared servers with existing services)
+        op(HardenSSH(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.SSH_HARDENED], when=_harden),
+        op(
+            ConfigureFail2ban(),
+            requires=[Resource.SYSTEM_PACKAGES, Resource.SSH_HARDENED],
+            provides=[Resource.FAIL2BAN_RUNNING],
+            when=_harden,
+        ),
+        op(ConfigureBBR(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.BBR_ENABLED]),
+        op(
+            ConfigureFirewall(),
+            requires=[Resource.SYSTEM_PACKAGES],
+            provides=[Resource.FIREWALL_CONFIGURED, Resource.HTTPS_ALLOWED],
+            when=_harden,
+        ),
         # Even without --harden, ensure port 443 is allowed if ufw is active.
-        steps.append(EnsurePort443())
-
-    # -- Docker --
-    steps.append(InstallDocker())
+        op(EnsurePort443(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.HTTPS_ALLOWED], when=_not_harden),
+        # -- Docker --
+        op(InstallDocker(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.DOCKER_INSTALLED]),
+    ]
 
     # -- Remove legacy 3x-ui if present (v3 → v4 upgrade) --
     from meridian.provision.legacy_cleanup import CleanupLegacyPanel
 
-    steps.append(CleanupLegacyPanel())
+    operations.append(
+        op(
+            CleanupLegacyPanel(),
+            requires=[Resource.DOCKER_INSTALLED],
+            provides=[Resource.LEGACY_PANEL_CLEANED],
+        )
+    )
 
     # -- Remnawave panel (node deployed after API setup, not here) --
-    if ctx.is_panel_host:
-        steps.append(DeployRemnawavePanel())
+    operations.append(
+        op(
+            DeployRemnawavePanel(),
+            requires=[Resource.DOCKER_INSTALLED, Resource.LEGACY_PANEL_CLEANED],
+            provides=[Resource.REMNAWAVE_PANEL_RUNNING],
+            when=_panel_host,
+        )
+    )
 
     # Note: DeployRemnawaveNode is NOT included here because it requires
     # the node_secret_key from the panel API. The node is deployed in the
@@ -84,42 +140,73 @@ def build_setup_steps(ctx: ProvisionContext) -> list[Step]:
     # the panel is up and the node has been registered via REST API.
 
     # -- WARP client (optional) --
-    if ctx.warp:
-        from meridian.provision.warp import InstallWarp
+    from meridian.provision.warp import InstallWarp
 
-        steps.append(InstallWarp())
+    operations.append(
+        op(InstallWarp(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.WARP_CONNECTED], when=_warp)
+    )
 
     # -- nginx + TLS + connection page --
-    if ctx.needs_web_server:
-        from meridian.provision.nginx import ConfigureNginx, InstallNginx
-        from meridian.provision.tls import IssueTLSCert
+    from meridian.provision.nginx import ConfigureNginx, InstallNginx
+    from meridian.provision.tls import IssueTLSCert
 
-        steps.append(InstallNginx())
-
-        if ctx.domain_mode:
-            steps.append(ConfigureNginx(domain=ctx.domain, reality_backend_port=ctx.reality_port))
-            steps.append(IssueTLSCert(domain=ctx.domain))
-        else:
-            steps.append(
+    operations.extend(
+        [
+            op(
+                InstallNginx(),
+                requires=[Resource.SYSTEM_PACKAGES],
+                provides=[Resource.NGINX_INSTALLED],
+                when=_needs_web_server,
+            ),
+            op(
+                ConfigureNginx(domain=ctx.domain, reality_backend_port=ctx.reality_port),
+                requires=[Resource.NGINX_INSTALLED],
+                provides=[Resource.NGINX_CONFIGURED],
+                when=_domain_mode,
+            ),
+            op(
                 ConfigureNginx(
                     domain="",
                     ip_mode=True,
                     server_ip=ctx.ip,
                     reality_backend_port=ctx.reality_port,
-                )
-            )
-            steps.append(IssueTLSCert(domain="", ip_mode=True, server_ip=ctx.ip))
+                ),
+                requires=[Resource.NGINX_INSTALLED],
+                provides=[Resource.NGINX_CONFIGURED],
+                when=_ip_web_mode,
+            ),
+            op(
+                IssueTLSCert(domain=ctx.domain),
+                requires=[Resource.NGINX_CONFIGURED],
+                provides=[Resource.TLS_CERTIFICATE],
+                when=_domain_mode,
+            ),
+            op(
+                IssueTLSCert(domain="", ip_mode=True, server_ip=ctx.ip),
+                requires=[Resource.NGINX_CONFIGURED],
+                provides=[Resource.TLS_CERTIFICATE],
+                when=_ip_web_mode,
+            ),
+        ]
+    )
 
-        # PWA assets (connection pages deployed via post-provisioner API setup)
-        from meridian.provision.services import DeployPWAAssets
+    # PWA assets (connection pages deployed via post-provisioner API setup)
+    from meridian.provision.services import DeployPWAAssets
 
-        steps.append(DeployPWAAssets())
+    operations.append(
+        op(
+            DeployPWAAssets(),
+            requires=[Resource.TLS_CERTIFICATE],
+            provides=[Resource.PWA_ASSETS],
+            when=_needs_web_server,
+        )
+    )
 
-    return steps
+    return Recipe(tuple(operations)).steps(ctx)
 
 
-def build_node_steps(ctx: ProvisionContext) -> list[Step]:
-    """Assemble the pipeline for adding a node-only server (no panel).
+def build_node_steps(ctx: ProvisionContext) -> list[Operation]:
+    """Assemble the recipe for adding a node-only server (no panel).
 
     Used by `meridian node add <IP>`.
     """
@@ -139,52 +226,78 @@ def build_node_steps(ctx: ProvisionContext) -> list[Step]:
 
     extra_pkgs = ["fail2ban"] if ctx.harden else []
 
-    steps: list[Step] = [
-        CheckDiskSpace(),
-        InstallPackages(REQUIRED_PACKAGES + extra_pkgs),
-        EnableAutoUpgrades(),
-        SetTimezone(),
-    ]
-
-    if ctx.harden:
-        steps.append(HardenSSH())
+    operations = [
+        op(CheckDiskSpace(), provides=[Resource.DISK_SPACE_CHECKED]),
+        op(
+            InstallPackages(REQUIRED_PACKAGES + extra_pkgs),
+            requires=[Resource.DISK_SPACE_CHECKED],
+            provides=[Resource.SYSTEM_PACKAGES],
+        ),
+        op(EnableAutoUpgrades(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.AUTO_UPGRADES]),
+        op(SetTimezone(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.TIMEZONE_UTC]),
+        op(HardenSSH(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.SSH_HARDENED], when=_harden),
         # Mirror `build_setup_steps` — without this, redeploys (which take
         # the node-only path because `is_panel_host=is_first_deploy`) never
         # configure fail2ban even when the operator asked for hardening.
-        steps.append(ConfigureFail2ban())
+        op(
+            ConfigureFail2ban(),
+            requires=[Resource.SYSTEM_PACKAGES, Resource.SSH_HARDENED],
+            provides=[Resource.FAIL2BAN_RUNNING],
+            when=_harden,
+        ),
+        op(ConfigureBBR(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.BBR_ENABLED]),
+        op(
+            ConfigureFirewall(),
+            requires=[Resource.SYSTEM_PACKAGES],
+            provides=[Resource.FIREWALL_CONFIGURED, Resource.HTTPS_ALLOWED],
+            when=_harden,
+        ),
+        op(EnsurePort443(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.HTTPS_ALLOWED], when=_not_harden),
+        op(InstallDocker(), requires=[Resource.SYSTEM_PACKAGES], provides=[Resource.DOCKER_INSTALLED]),
+        # Node deployed after API setup (setup.py), not in pipeline
+    ]
 
-    steps.append(ConfigureBBR())
+    from meridian.provision.nginx import ConfigureNginx, InstallNginx
+    from meridian.provision.tls import IssueTLSCert
 
-    if ctx.harden:
-        steps.append(ConfigureFirewall())
-    else:
-        steps.append(EnsurePort443())
-
-    steps.extend(
+    operations.extend(
         [
-            InstallDocker(),
-            # Node deployed after API setup (setup.py), not in pipeline
-        ]
-    )
-
-    if ctx.needs_web_server:
-        from meridian.provision.nginx import ConfigureNginx, InstallNginx
-        from meridian.provision.tls import IssueTLSCert
-
-        steps.append(InstallNginx())
-
-        if ctx.domain_mode:
-            steps.append(ConfigureNginx(domain=ctx.domain, reality_backend_port=ctx.reality_port))
-            steps.append(IssueTLSCert(domain=ctx.domain))
-        else:
-            steps.append(
+            op(
+                InstallNginx(),
+                requires=[Resource.SYSTEM_PACKAGES],
+                provides=[Resource.NGINX_INSTALLED],
+                when=_needs_web_server,
+            ),
+            op(
+                ConfigureNginx(domain=ctx.domain, reality_backend_port=ctx.reality_port),
+                requires=[Resource.NGINX_INSTALLED],
+                provides=[Resource.NGINX_CONFIGURED],
+                when=_domain_mode,
+            ),
+            op(
                 ConfigureNginx(
                     domain="",
                     ip_mode=True,
                     server_ip=ctx.ip,
                     reality_backend_port=ctx.reality_port,
-                )
-            )
-            steps.append(IssueTLSCert(domain="", ip_mode=True, server_ip=ctx.ip))
+                ),
+                requires=[Resource.NGINX_INSTALLED],
+                provides=[Resource.NGINX_CONFIGURED],
+                when=_ip_web_mode,
+            ),
+            op(
+                IssueTLSCert(domain=ctx.domain),
+                requires=[Resource.NGINX_CONFIGURED],
+                provides=[Resource.TLS_CERTIFICATE],
+                when=_domain_mode,
+            ),
+            op(
+                IssueTLSCert(domain="", ip_mode=True, server_ip=ctx.ip),
+                requires=[Resource.NGINX_CONFIGURED],
+                provides=[Resource.TLS_CERTIFICATE],
+                when=_ip_web_mode,
+            ),
+        ]
+    )
 
-    return steps
+    return Recipe(tuple(operations)).steps(ctx)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 from typing import Protocol as TypingProtocol
@@ -145,7 +146,8 @@ class Step(TypingProtocol):
     ``Provisioner.run()`` is similarly ``Any``-typed.
     """
 
-    name: str
+    @property
+    def name(self) -> str: ...
 
     def run(self, conn: ServerConnection, ctx: Any) -> StepResult: ...
 
@@ -153,8 +155,8 @@ class Step(TypingProtocol):
 class Provisioner:
     """Runs a list of steps with Rich progress output."""
 
-    def __init__(self, steps: list[Step]) -> None:
-        self.steps = steps
+    def __init__(self, steps: Sequence[Step]) -> None:
+        self.steps = list(steps)
 
     def run(self, conn: ServerConnection, ctx: Any) -> list[StepResult]:
         """Execute all steps, collecting results. Shows Rich spinner per step.

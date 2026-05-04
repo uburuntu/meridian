@@ -14,6 +14,7 @@ from meridian.commands.resolve import (
 )
 from meridian.config import DEFAULT_SNI, SERVERS_FILE
 from meridian.console import err_console, line
+from meridian.facts import ServerFacts
 from meridian.servers import ServerRegistry
 from meridian.ssh import ServerConnection
 
@@ -77,6 +78,22 @@ def run(
 
     deployment_info = f"Mode: {mode}\nProtocols: {', '.join(protocols)}"
     sections.append(("Deployment", deployment_info))
+
+    facts = ServerFacts(resolved.conn)
+    os_release = facts.os_release()
+    docker = facts.docker_state()
+    ufw = facts.ufw_state()
+    fact_parts = [
+        f"OS: {os_release.pretty_name or os_release.id}",
+        f"Architecture: {facts.arch() or 'unknown'} / dpkg {facts.dpkg_arch()}",
+        f"SSH ports: {', '.join(str(p) for p in facts.ssh_ports())}",
+        f"Free disk: {facts.free_disk_mb('/') or 'unknown'} MB",
+        f"Docker: {'installed' if docker.installed else 'not installed'}"
+        + (f" ({docker.version})" if docker.version else ""),
+        f"Docker compose: {'available' if docker.compose_available else 'missing'}",
+        f"UFW: {'active' if ufw.active else 'inactive' if ufw.installed else 'not installed'}",
+    ]
+    sections.append(("Server Facts", "\n".join(fact_parts)))
 
     # --- Server info ---
     server_parts = [

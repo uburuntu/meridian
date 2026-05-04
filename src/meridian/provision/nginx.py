@@ -548,15 +548,18 @@ class InstallNginx:
                 f"https://nginx.org/packages/{distro_name} "
                 f"{distro_codename} nginx"
             )
-            conn.run(
-                f"echo {shlex.quote(repo_line)} > /etc/apt/sources.list.d/nginx-official.list",
+            conn.put_text(
+                "/etc/apt/sources.list.d/nginx-official.list",
+                repo_line + "\n",
+                mode="644",
                 timeout=15,
             )
 
             # Pin official nginx packages higher to override distro
-            conn.run(
-                "printf 'Package: nginx*\\nPin: origin nginx.org\\n"
-                "Pin-Priority: 900\\n' > /etc/apt/preferences.d/99nginx",
+            conn.put_text(
+                "/etc/apt/preferences.d/99nginx",
+                "Package: nginx*\nPin: origin nginx.org\nPin-Priority: 900\n",
+                mode="644",
                 timeout=15,
             )
 
@@ -761,10 +764,12 @@ class ConfigureNginx:
             server_ip=server_ip,
             domain=self.domain,
         )
-        q_stream = shlex.quote(stream_config)
-        result = conn.run(
-            f"printf '%s' {q_stream} > /etc/nginx/stream.d/meridian.conf",
+        result = conn.put_text(
+            "/etc/nginx/stream.d/meridian.conf",
+            stream_config,
+            mode="644",
             timeout=15,
+            operation_name="write nginx stream config",
         )
         if result.returncode != 0:
             return StepResult(
@@ -800,10 +805,12 @@ class ConfigureNginx:
                 subscription_page_path=sub_page_path,
                 subscription_page_port=sub_page_port,
             )
-        q_http = shlex.quote(http_config)
-        result = conn.run(
-            f"printf '%s' {q_http} > /etc/nginx/conf.d/meridian-http.conf",
+        result = conn.put_text(
+            "/etc/nginx/conf.d/meridian-http.conf",
+            http_config,
+            mode="644",
             timeout=15,
+            operation_name="write nginx http config",
         )
         if result.returncode != 0:
             return StepResult(
@@ -815,11 +822,16 @@ class ConfigureNginx:
         # -- Ensure nginx.conf has a stream block --
         check = conn.run("grep -q 'stream {' /etc/nginx/nginx.conf", timeout=15)
         if check.returncode != 0:
-            stream_block = "\\nstream {\\n    include /etc/nginx/stream.d/*.conf;\\n}\\n"
-            conn.run(
-                f"printf '{stream_block}' >> /etc/nginx/nginx.conf",
-                timeout=15,
-            )
+            current = conn.get_text("/etc/nginx/nginx.conf", timeout=15)
+            if current.returncode == 0:
+                stream_block = "\nstream {\n    include /etc/nginx/stream.d/*.conf;\n}\n"
+                conn.put_text(
+                    "/etc/nginx/nginx.conf",
+                    current.stdout.rstrip() + stream_block,
+                    mode="644",
+                    timeout=15,
+                    operation_name="append nginx stream block",
+                )
 
         # -- Remove default site (conflicts with our port 80 listener) --
         conn.run("rm -f /etc/nginx/sites-enabled/default", timeout=15)
@@ -834,13 +846,16 @@ class ConfigureNginx:
             )
 
         # -- Ensure nginx restarts on failure --
-        conn.run(
-            "mkdir -p /etc/systemd/system/nginx.service.d && "
-            "printf '[Service]\\nRestart=on-failure\\nRestartSec=5\\n' "
-            "> /etc/systemd/system/nginx.service.d/restart.conf && "
-            "systemctl daemon-reload",
+        result = conn.put_text(
+            "/etc/systemd/system/nginx.service.d/restart.conf",
+            "[Service]\nRestart=on-failure\nRestartSec=5\n",
+            mode="644",
+            create_parent=True,
             timeout=15,
+            operation_name="write nginx restart override",
         )
+        if result.returncode == 0:
+            conn.run("systemctl daemon-reload", timeout=15)
 
         # -- Start/enable/reload nginx --
         conn.run("systemctl enable nginx", timeout=15)

@@ -62,6 +62,7 @@ class TestHandleAddSubscriptionPage:
         action = PlanAction(kind=PlanActionKind.ADD_SUBSCRIPTION_PAGE, target="subscription-page")
 
         conn = MagicMock()
+        conn.put_text.return_value = _result(0)
         conn.run.side_effect = [
             _result(0),  # docker compose config | grep subscription → service present
             _result(0),  # docker compose up -d remnawave-subscription-page → idempotent
@@ -95,11 +96,12 @@ class TestHandleAddSubscriptionPage:
         action = PlanAction(kind=PlanActionKind.ADD_SUBSCRIPTION_PAGE, target="subscription-page")
 
         conn = MagicMock()
+        conn.put_text.side_effect = [
+            _result(0),  # docker-compose.yml
+            _result(0),  # .env.subscription
+        ]
         conn.run.side_effect = [
             _result(1),  # docker compose config | grep → service missing
-            _result(0),  # cat > docker-compose.yml
-            _result(0),  # cat > .env.subscription
-            _result(0),  # chmod 600 .env.subscription
             _result(0),  # docker compose up -d
             _result(1),  # grep nginx → not present, must inject
             _result(0),  # sed -i inject
@@ -126,11 +128,12 @@ class TestHandleAddSubscriptionPage:
             _handle_add_subscription_page(action, _make_panel(), cluster)
 
         commands = [c.args[0] for c in conn.run.call_args_list]
-        # docker-compose.yml was written (delimiter is nonce-based MERIDIAN_<hex>_EOF)
-        assert any("docker-compose.yml" in c and "MERIDIAN_" in c and "_EOF" in c for c in commands)
-        # .env.subscription was written and locked down
-        assert any(".env.subscription" in c and "cat >" in c for c in commands)
-        assert any("chmod 600" in c and ".env.subscription" in c for c in commands)
+        writes = conn.put_text.call_args_list
+        assert any(c.args[0].endswith("/docker-compose.yml") and c.kwargs["mode"] == "644" for c in writes)
+        assert any(
+            c.args[0].endswith("/.env.subscription") and c.kwargs["mode"] == "600" and c.kwargs["sensitive"] is True
+            for c in writes
+        )
         # Containers brought up
         assert any("docker compose up -d" in c for c in commands)
         # Nginx location injected and reloaded
@@ -148,9 +151,9 @@ class TestHandleAddSubscriptionPage:
         action = PlanAction(kind=PlanActionKind.ADD_SUBSCRIPTION_PAGE, target="subscription-page")
 
         conn = MagicMock()
+        conn.put_text.return_value = _result(1, stderr="disk full")
         conn.run.side_effect = [
             _result(1),  # service missing
-            _result(1, stderr="disk full"),  # cat > docker-compose.yml fails
         ]
 
         save = MagicMock()
@@ -174,6 +177,7 @@ class TestHandleAddSubscriptionPage:
         action = PlanAction(kind=PlanActionKind.ADD_SUBSCRIPTION_PAGE, target="subscription-page")
 
         conn = MagicMock()
+        conn.put_text.return_value = _result(0)
         conn.run.side_effect = [
             _result(0),  # service present in compose
             _result(0),  # docker compose up -d remnawave-subscription-page

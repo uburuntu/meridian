@@ -347,12 +347,13 @@ class TestRelayProvisioner:
         # Mock ServerConnection
         conn = MagicMock()
         conn.run = MagicMock(return_value=MagicMock(returncode=0, stdout="", stderr=""))
+        conn.put_text = MagicMock(return_value=MagicMock(returncode=0, stdout="", stderr=""))
 
         result = step.run(conn, ctx)
         assert result.status == "changed"
 
         # Check that config was written with correct exit IP and port
-        calls = [str(c) for c in conn.run.call_args_list]
+        calls = [str(c) for c in conn.put_text.call_args_list]
         config_call = [c for c in calls if "realm.toml" in c]
         assert len(config_call) > 0
 

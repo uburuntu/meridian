@@ -10,6 +10,10 @@
 
 **SSH abstraction** — `ServerConnection` unifies local and remote execution. Local mode uses `bash -c`; remote uses SSH. Non-root triggers `sudo -n`.
 
+**Remote execution primitives** — `conn.run()` returns `CommandResult` metadata and supports `cwd`, `env`, retries, ok codes, sensitive commands, and operation labels. File writes use `put_text`/`put_bytes`; never embed generated file content in shell heredocs.
+
+**Server facts** — `facts.py` is the typed cache for OS, Docker, UFW, containers, sshd ports, disk, and sysctl data. Use it before adding one-off probe parsing in provisioners or diagnostics.
+
 **Console output** — `fail()` with `hint_type` (user/system/bug) controls the footer. Every error must be actionable.
 
 **Pinned version tuple** — `config.py` pins every Remnawave image (`backend`, `node`, `subscription-page`) and the SDK, plus external binaries (`XRAY_VERSION`, `REALM_VERSION`) and the Pebble test CA. The whole tuple moves together: bumping `backend` without matching `node` is unsupported by upstream Remnawave, and mismatched `SDK` vs backend will silently drop data (see Pitfalls). The tested set lives in `CHANGELOG.md` under each release's "Remnawave compatibility matrix". `acme.sh` is the one intentional exception — it ships via `curl | sh` from the project's installer and has no stable release-tag convention.

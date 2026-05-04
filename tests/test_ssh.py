@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from meridian.ssh import ServerConnection, SSHError, _verify_host_key, scp_host, tcp_connect
+from meridian.ssh import CommandResult, ServerConnection, SSHError, _verify_host_key, scp_host, tcp_connect
 
 
 class TestServerConnectionInit:
@@ -86,6 +86,72 @@ class TestServerConnectionRun:
             conn.run("echo test")
             kwargs = mock_run.call_args[1]
             assert kwargs["stdin"] == subprocess.DEVNULL
+
+    def test_returns_command_result_with_metadata(self) -> None:
+        conn = ServerConnection(ip="1.2.3.4")
+        with patch("meridian.ssh.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=["ssh"], returncode=0, stdout="ok\n", stderr="")
+            result = conn.run("echo ok", operation_name="smoke")
+
+        assert isinstance(result, CommandResult)
+        assert result.stdout == "ok\n"
+        assert result.operation_name == "smoke"
+        assert result.attempts == 1
+        assert result.timed_out is False
+
+    def test_retries_until_ok_code(self) -> None:
+        conn = ServerConnection(ip="1.2.3.4")
+        with patch("meridian.ssh.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                subprocess.CompletedProcess(args=["ssh"], returncode=1, stdout="", stderr="nope"),
+                subprocess.CompletedProcess(args=["ssh"], returncode=0, stdout="ok", stderr=""),
+            ]
+            result = conn.run("flaky", retries=2, retry_delay=0)
+
+        assert result.returncode == 0
+        assert result.attempts == 2
+        assert mock_run.call_count == 2
+
+    def test_cwd_and_env_are_applied_before_command(self) -> None:
+        conn = ServerConnection(ip="1.2.3.4", local_mode=True)
+        with patch("meridian.ssh.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+            conn.run("printenv FOO", cwd="/opt/app", env={"FOO": "bar baz"})
+
+        cmd = mock_run.call_args[0][0]
+        assert cmd == ["bash", "-c", "cd /opt/app && FOO='bar baz' printenv FOO"]
+
+    def test_invalid_env_name_raises(self) -> None:
+        conn = ServerConnection(ip="1.2.3.4")
+        with pytest.raises(ValueError):
+            conn.run("true", env={"BAD-NAME": "x"})
+
+    def test_timeout_returns_result(self) -> None:
+        conn = ServerConnection(ip="1.2.3.4")
+        with patch("meridian.ssh.subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="ssh", timeout=1)):
+            result = conn.run("sleep 10", timeout=1)
+
+        assert result.returncode == 124
+        assert result.timed_out is True
+
+    def test_put_text_uses_stdin_not_shell_interpolation(self) -> None:
+        conn = ServerConnection(ip="1.2.3.4", user="root")
+        with patch("meridian.ssh.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+            result = conn.put_text(
+                "/etc/meridian/secret.env",
+                "TOKEN=super-secret\n",
+                mode="600",
+                atomic=False,
+                sensitive=True,
+            )
+
+        assert result.returncode == 0
+        first_call = mock_run.call_args_list[0]
+        cmd = first_call[0][0]
+        kwargs = first_call[1]
+        assert "TOKEN=super-secret" not in " ".join(cmd)
+        assert kwargs["input"] == b"TOKEN=super-secret\n"
 
 
 class TestTcpConnect:
@@ -443,6 +509,16 @@ class TestRedactCommand:
         result = _redact_command(cmd)
         assert "supersecret123" not in result
         assert "POSTGRES_PASSWORD=***" in result
+
+    def test_redacts_token_and_database_url(self) -> None:
+        from meridian.ssh import _redact_command
+
+        cmd = "REMNAWAVE_API_TOKEN=abc123 DATABASE_URL=postgres://user:pass@db/app docker compose up"
+        result = _redact_command(cmd)
+        assert "abc123" not in result
+        assert "postgres://user:pass@db/app" not in result
+        assert "REMNAWAVE_API_TOKEN=***" in result
+        assert "DATABASE_URL=***" in result
 
     def test_redacts_jwt_secrets(self) -> None:
         from meridian.ssh import _redact_command

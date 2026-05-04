@@ -115,18 +115,31 @@ def _deploy_relay_nginx(
         "/etc/nginx/stream.d/meridian.conf",
         timeout=15,
     )
-    q_label = shlex.quote(label)
-    exit_conn.run(
-        f"mkdir -p /etc/nginx/stream.d/relay-maps && "
-        f"printf '%s' {shlex.quote(f'    {relay_sni}  {upstream};' + chr(10))} "
-        f"> /etc/nginx/stream.d/relay-maps/{q_label}.conf",
+    mkdir = exit_conn.run("mkdir -p /etc/nginx/stream.d/relay-maps", timeout=15)
+    if mkdir.returncode != 0:
+        warn(f"could not create relay nginx map directory: {mkdir.stderr.strip() or mkdir.stdout.strip()}")
+        return False
+    map_write = exit_conn.put_text(
+        f"/etc/nginx/stream.d/relay-maps/{label}.conf",
+        f"    {relay_sni}  {upstream};\n",
+        mode="644",
         timeout=15,
+        operation_name="write relay nginx map",
     )
+    if map_write.returncode != 0:
+        warn(f"could not write relay nginx map: {map_write.stderr.strip() or map_write.stdout.strip()}")
+        return False
     upstream_block = f"upstream {upstream} {{\n    server 127.0.0.1:{port};\n}}\n"
-    exit_conn.run(
-        f"printf '%s' {shlex.quote(upstream_block)} > /etc/nginx/stream.d/meridian-relay-{q_label}.conf",
+    upstream_write = exit_conn.put_text(
+        f"/etc/nginx/stream.d/meridian-relay-{label}.conf",
+        upstream_block,
+        mode="644",
         timeout=15,
+        operation_name="write relay nginx upstream",
     )
+    if upstream_write.returncode != 0:
+        warn(f"could not write relay nginx upstream: {upstream_write.stderr.strip() or upstream_write.stdout.strip()}")
+        return False
     result = exit_conn.run("nginx -t 2>&1", timeout=15)
     if result.returncode != 0:
         warn(f"nginx config validation failed: {result.stderr.strip() or result.stdout.strip()}")

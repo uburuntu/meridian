@@ -261,8 +261,11 @@ def run(
     # Persist sub_path on server for fleet recovery (not stored in panel API)
     if cluster.panel.sub_path:
         try:
-            resolved.conn.run(
-                f"printf '%s' {shlex.quote(cluster.panel.sub_path)} > /etc/meridian/sub_path 2>/dev/null",
+            resolved.conn.put_text(
+                "/etc/meridian/sub_path",
+                cluster.panel.sub_path,
+                mode="600",
+                sensitive=True,
                 timeout=10,
             )
         except Exception:
@@ -1429,33 +1432,48 @@ def _deploy_node_container(conn: ServerConnection, secret_key: str) -> bool:
     # Write .env
     env_content = _render_node_env(REMNAWAVE_NODE_API_PORT, secret_key)
     env_path = f"{node_dir}/.env"
-    write_env = f"cat > {shlex.quote(env_path)} << 'MERIDIAN_EOF'\n{env_content}MERIDIAN_EOF"
-    conn.run(write_env, timeout=15)
-    conn.run(f"chmod 600 {shlex.quote(env_path)}", timeout=15)
+    result = conn.put_text(
+        env_path,
+        env_content,
+        mode="600",
+        sensitive=True,
+        timeout=15,
+        operation_name="write remnawave node env",
+    )
+    if result.returncode != 0:
+        warn(f"Could not write {env_path}: {result.stderr.strip()[:200]}")
+        return False
 
     # Write docker-compose.yml
     compose_content = _render_node_compose(REMNAWAVE_NODE_IMAGE, REMNAWAVE_NODE_API_PORT)
     compose_path = f"{node_dir}/docker-compose.yml"
-    write_compose = f"cat > {shlex.quote(compose_path)} << 'MERIDIAN_EOF'\n{compose_content}MERIDIAN_EOF"
-    conn.run(write_compose, timeout=15)
+    result = conn.put_text(
+        compose_path,
+        compose_content,
+        mode="644",
+        timeout=15,
+        operation_name="write remnawave node compose",
+    )
+    if result.returncode != 0:
+        warn(f"Could not write {compose_path}: {result.stderr.strip()[:200]}")
+        return False
 
     # Pull image
     info("Pulling Remnawave node image...")
-    pull_ok = False
-    for attempt in range(3):
-        result = conn.run(f"cd {q_dir} && docker compose pull", timeout=300)
-        if result.returncode == 0:
-            pull_ok = True
-            break
-        if attempt < 2:
-            time.sleep(10)
-
-    if not pull_ok:
+    result = conn.run(
+        "docker compose pull",
+        cwd=node_dir,
+        timeout=300,
+        retries=3,
+        retry_delay=10,
+        operation_name="pull remnawave node image",
+    )
+    if result.returncode != 0:
         warn("Could not pull node image — node may not start")
         return False
 
     # Start container
-    result = conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
+    result = conn.run("docker compose up -d", cwd=node_dir, timeout=120)
     if result.returncode != 0:
         warn(f"Node container failed to start: {result.stderr.strip()[:200]}")
         return False

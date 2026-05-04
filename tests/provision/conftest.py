@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -67,6 +67,26 @@ class MockConnection:
             if pattern in command:
                 return response
         return self._default
+
+    def get_text(self, path: str, timeout: int = 30, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        """Mock ServerConnection.get_text."""
+        return self.run(f"cat {path} 2>/dev/null", timeout=timeout, **kwargs)
+
+    def put_text(self, path: str, text: str, timeout: int = 30, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        """Mock ServerConnection.put_text."""
+        if kwargs.get("create_parent"):
+            parent = str(PurePosixPath(path).parent)
+            if parent and parent != ".":
+                mkdir = self.run(f"mkdir -p {parent}", timeout=timeout)
+                if mkdir.returncode != 0:
+                    return mkdir
+        return self.run(f"cat > {path}\n{text}", timeout=timeout)
+
+    def put_bytes(
+        self, path: str, data: bytes, timeout: int = 30, **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        """Mock ServerConnection.put_bytes."""
+        return self.put_text(path, data.decode(errors="replace"), timeout=timeout, **kwargs)
 
     @property
     def call_count(self) -> int:

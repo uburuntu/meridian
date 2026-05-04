@@ -244,16 +244,21 @@ def configure_subscription_page(
 
     env_content = _render_subscription_env(api_token=api_token)
     env_path = f"{panel_dir}/.env.subscription"
-    write_cmd = f"cat > {shlex.quote(env_path)} << 'MERIDIAN_EOF'\n{env_content}MERIDIAN_EOF"
-    result = conn.run(write_cmd, timeout=15)
+    result = conn.put_text(
+        env_path,
+        env_content,
+        mode="600",
+        sensitive=True,
+        timeout=15,
+        operation_name="write subscription page env",
+    )
     if result.returncode != 0:
         logger.warning("Failed to write subscription page .env: %s", result.stderr.strip()[:200])
         return False
-    conn.run(f"chmod 600 {shlex.quote(env_path)}", timeout=15)
 
-    q_dir = shlex.quote(panel_dir)
     result = conn.run(
-        f"cd {q_dir} && docker compose restart {_SUBSCRIPTION_PAGE_CONTAINER}",
+        f"docker compose restart {_SUBSCRIPTION_PAGE_CONTAINER}",
+        cwd=panel_dir,
         timeout=60,
     )
     if result.returncode != 0:
@@ -363,20 +368,41 @@ class DeployRemnawavePanel:
                 subscription_page_host_port=sub_page_host_port,
             )
             compose_path = f"{panel_dir}/docker-compose.yml"
-            write_compose = f"cat > {shlex.quote(compose_path)} << 'MERIDIAN_EOF'\n{compose_content}MERIDIAN_EOF"
-            conn.run(write_compose, timeout=15)
+            write_compose = conn.put_text(
+                compose_path,
+                compose_content,
+                mode="644",
+                timeout=15,
+                operation_name="write remnawave panel compose",
+            )
+            if write_compose.returncode != 0:
+                return StepResult(
+                    name=self.name,
+                    status="failed",
+                    detail=f"failed to write docker-compose.yml: {write_compose.stderr.strip()[:200]}",
+                )
 
             # Write placeholder subscription env if not present
             sub_env_path = f"{panel_dir}/.env.subscription"
             sub_env_check = conn.run(f"test -f {shlex.quote(sub_env_path)}", timeout=15)
             if sub_env_check.returncode != 0:
                 sub_env_content = _render_subscription_env()
-                write_sub_env = f"cat > {shlex.quote(sub_env_path)} << 'MERIDIAN_EOF'\n{sub_env_content}MERIDIAN_EOF"
-                conn.run(write_sub_env, timeout=15)
-                conn.run(f"chmod 600 {shlex.quote(sub_env_path)}", timeout=15)
+                write_sub_env = conn.put_text(
+                    sub_env_path,
+                    sub_env_content,
+                    mode="600",
+                    sensitive=True,
+                    timeout=15,
+                    operation_name="write subscription page env",
+                )
+                if write_sub_env.returncode != 0:
+                    return StepResult(
+                        name=self.name,
+                        status="failed",
+                        detail=f"failed to write .env.subscription: {write_sub_env.stderr.strip()[:200]}",
+                    )
 
-            q_dir = shlex.quote(panel_dir)
-            conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
+            conn.run("docker compose up -d", cwd=panel_dir, timeout=120)
             return StepResult(
                 name=self.name,
                 status="changed",
@@ -411,28 +437,38 @@ class DeployRemnawavePanel:
             metrics_password=metrics_password,
         )
         env_path = f"{panel_dir}/.env"
-        write_env = f"cat > {shlex.quote(env_path)} << 'MERIDIAN_EOF'\n{env_content}MERIDIAN_EOF"
-        result = conn.run(write_env, timeout=15)
+        result = conn.put_text(
+            env_path,
+            env_content,
+            mode="600",
+            sensitive=True,
+            timeout=15,
+            operation_name="write remnawave panel env",
+        )
         if result.returncode != 0:
             return StepResult(
                 name=self.name,
                 status="failed",
                 detail=f"failed to write .env: {result.stderr.strip()[:200]}",
             )
-        conn.run(f"chmod 600 {shlex.quote(env_path)}", timeout=15)
 
         # -- Write .env.subscription placeholder (real token written by setup.py) --
         sub_env_content = _render_subscription_env()
         sub_env_path = f"{panel_dir}/.env.subscription"
-        write_sub_env = f"cat > {shlex.quote(sub_env_path)} << 'MERIDIAN_EOF'\n{sub_env_content}MERIDIAN_EOF"
-        result = conn.run(write_sub_env, timeout=15)
+        result = conn.put_text(
+            sub_env_path,
+            sub_env_content,
+            mode="600",
+            sensitive=True,
+            timeout=15,
+            operation_name="write subscription page env",
+        )
         if result.returncode != 0:
             return StepResult(
                 name=self.name,
                 status="failed",
                 detail=f"failed to write .env.subscription: {result.stderr.strip()[:200]}",
             )
-        conn.run(f"chmod 600 {shlex.quote(sub_env_path)}", timeout=15)
 
         # -- Write docker-compose.yml --
         compose_content = _render_panel_compose(
@@ -442,33 +478,34 @@ class DeployRemnawavePanel:
             subscription_page_host_port=sub_page_host_port,
         )
         compose_path = f"{panel_dir}/docker-compose.yml"
-        write_compose = f"cat > {shlex.quote(compose_path)} << 'MERIDIAN_EOF'\n{compose_content}MERIDIAN_EOF"
-        result = conn.run(write_compose, timeout=15)
+        result = conn.put_text(
+            compose_path,
+            compose_content,
+            mode="644",
+            timeout=15,
+            operation_name="write remnawave panel compose",
+        )
         if result.returncode != 0:
             return StepResult(
                 name=self.name,
                 status="failed",
                 detail=f"failed to write docker-compose.yml: {result.stderr.strip()[:200]}",
             )
-        conn.run(f"chmod 644 {shlex.quote(compose_path)}", timeout=15)
 
         # -- Stop old containers if partially deployed --
-        q_dir = shlex.quote(panel_dir)
-        conn.run(f"cd {q_dir} && docker compose down 2>/dev/null", timeout=60)
+        conn.run("docker compose down 2>/dev/null", cwd=panel_dir, timeout=60)
 
         # -- Pull images (with retries) --
-        pull_ok = False
-        pull_result = None
-        for attempt in range(3):
-            pull_result = conn.run(f"cd {q_dir} && docker compose pull", timeout=300)
-            if pull_result.returncode == 0:
-                pull_ok = True
-                break
-            if attempt < 2:
-                time.sleep(10)
-
-        if not pull_ok:
-            stderr = pull_result.stderr.strip()[:200] if pull_result else "unknown"
+        pull_result = conn.run(
+            "docker compose pull",
+            cwd=panel_dir,
+            timeout=300,
+            retries=3,
+            retry_delay=10,
+            operation_name="pull remnawave panel images",
+        )
+        if pull_result.returncode != 0:
+            stderr = pull_result.stderr.strip()[:200] or "unknown"
             return StepResult(
                 name=self.name,
                 status="failed",
@@ -476,9 +513,9 @@ class DeployRemnawavePanel:
             )
 
         # -- Start containers --
-        result = conn.run(f"cd {q_dir} && docker compose up -d", timeout=120)
+        result = conn.run("docker compose up -d", cwd=panel_dir, timeout=120)
         if result.returncode != 0:
-            logs = conn.run(f"cd {q_dir} && docker compose logs --tail 50", timeout=15)
+            logs = conn.run("docker compose logs --tail 50", cwd=panel_dir, timeout=15)
             log_out = logs.stdout.strip()[:500] if logs.returncode == 0 else "no logs available"
             return StepResult(
                 name=self.name,

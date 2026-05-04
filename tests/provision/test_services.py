@@ -1072,8 +1072,7 @@ class TestDeployPWAAssets:
     def test_uploads_static_files(self, tmp_path: Path):
         conn = MockConnection()
         conn.when("mkdir", stdout="")
-        conn.when("printf", stdout="")
-        conn.when("chown", stdout="")
+        conn.when("cat >", stdout="")
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
         step = DeployPWAAssets()
@@ -1085,7 +1084,7 @@ class TestDeployPWAAssets:
         conn = MockConnection()
         conn.when("mkdir", stdout="")
         # File upload fails
-        conn.when("printf", stdout="", rc=1)
+        conn.when("cat >", stdout="", rc=1)
 
         ctx = ProvisionContext(ip="198.51.100.1", creds_dir=str(tmp_path))
         step = DeployPWAAssets()

@@ -100,6 +100,7 @@ class _MockConnection:
     def __init__(self) -> None:
         self._rules: list[tuple[str, subprocess.CompletedProcess[str]]] = []
         self._calls: list[str] = []
+        self._writes: list[tuple[str, bytes, dict[str, object]]] = []
         self._default = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
     def when(self, pattern: str, *, stdout: str = "", stderr: str = "", rc: int = 0) -> _MockConnection:
@@ -113,9 +114,40 @@ class _MockConnection:
                 return response
         return self._default
 
+    def put_text(
+        self,
+        remote_path: str,
+        text: str,
+        timeout: int = 30,
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        return self.put_bytes(remote_path, text.encode(), timeout=timeout, **kwargs)
+
+    def put_bytes(
+        self,
+        remote_path: str,
+        data: bytes,
+        timeout: int = 30,
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        self._writes.append((remote_path, data, kwargs))
+        operation = f"put_bytes {remote_path}"
+        for pattern, response in self._rules:
+            if pattern in operation or pattern in remote_path:
+                return response
+        return self._default
+
     @property
     def calls(self) -> list[str]:
         return list(self._calls)
+
+    @property
+    def writes(self) -> list[tuple[str, bytes, dict[str, object]]]:
+        return list(self._writes)
+
+    @property
+    def write_map(self) -> dict[str, bytes]:
+        return {path: data for path, data, _kwargs in self._writes}
 
     def assert_called_with_pattern(self, pattern: str) -> None:
         assert any(pattern in c for c in self._calls), f"No call matching '{pattern}'. Calls: {self._calls}"
@@ -145,7 +177,7 @@ class TestUploadClientFiles:
 
     def test_returns_error_on_failure(self, sample_files: dict[str, str]) -> None:
         conn = _MockConnection()
-        conn.when("printf", rc=1)
+        conn.when("put_bytes", rc=1)
         result = upload_client_files(conn, "550e8400-e29b-41d4-a716-446655440000", sample_files)
         assert result  # non-empty error string
 
@@ -157,24 +189,21 @@ class TestUploadClientFiles:
     def test_uploads_all_files(self, sample_files: dict[str, str]) -> None:
         conn = _MockConnection()
         upload_client_files(conn, "550e8400-e29b-41d4-a716-446655440000", sample_files)
-        # mkdir call + 4 file uploads = 5 total calls
-        assert len(conn.calls) == 5
+        assert len(conn.calls) == 1
+        assert len(conn.writes) == 4
 
     def test_chown_www_data_on_files(self, sample_files: dict[str, str]) -> None:
         conn = _MockConnection()
         upload_client_files(conn, "550e8400-e29b-41d4-a716-446655440000", sample_files)
-        # Each printf command includes chown www-data:www-data
-        chown_calls = [c for c in conn.calls if "chown www-data:www-data" in c]
-        # mkdir + chown on dir, plus 4 file uploads each with chown
-        assert len(chown_calls) >= 5
+        assert any("chown www-data:www-data" in c for c in conn.calls)
+        assert all(kwargs["owner"] == "www-data:www-data" for _path, _data, kwargs in conn.writes)
 
-    def test_filenames_are_shlex_quoted(self, sample_files: dict[str, str]) -> None:
-        """Filenames in shell commands should be safely quoted."""
+    def test_writes_expected_paths(self, sample_files: dict[str, str]) -> None:
         conn = _MockConnection()
         upload_client_files(conn, "550e8400-e29b-41d4-a716-446655440000", sample_files)
-        # All file upload commands should contain the filename
+        written_paths = {path for path, _data, _kwargs in conn.writes}
         for filename in sample_files:
-            conn.assert_called_with_pattern(filename)
+            assert f"/var/www/private/550e8400-e29b-41d4-a716-446655440000/{filename}" in written_paths
 
 
 # ---------------------------------------------------------------------------
@@ -192,8 +221,7 @@ class TestUploadPWAAssets:
 
     def test_returns_error_on_failure(self) -> None:
         conn = _MockConnection()
-        # base64 -d write fails
-        conn.when("base64 -d", rc=1)
+        conn.when("put_bytes", rc=1)
         result = upload_pwa_assets(conn)
         assert result  # non-empty error string
 
@@ -205,45 +233,29 @@ class TestUploadPWAAssets:
     def test_uploads_all_four_static_files(self) -> None:
         conn = _MockConnection()
         upload_pwa_assets(conn)
-        # mkdir call + 4 file uploads = 5 total calls
-        assert len(conn.calls) == 5
+        assert len(conn.calls) == 1
+        assert len(conn.writes) == 4
 
-    def test_uses_base64_encoding(self) -> None:
-        """Assets are base64-encoded for safe shell transport."""
+    def test_uses_file_api_for_assets(self) -> None:
         conn = _MockConnection()
         upload_pwa_assets(conn)
-        # Each file upload should pipe base64 content through base64 -d
-        b64_calls = [c for c in conn.calls if "base64 -d" in c]
-        assert len(b64_calls) == 4
+        assert all(kwargs["owner"] == "www-data:www-data" for _path, _data, kwargs in conn.writes)
+        assert all(kwargs["mode"] == "644" for _path, _data, kwargs in conn.writes)
 
     def test_sw_cache_version_is_content_hash(self) -> None:
         """SW cache version is replaced with a content-derived hash at upload time."""
-        import base64
-
         conn = _MockConnection()
         upload_pwa_assets(conn)
-        # Find the sw.js upload call and decode its content
-        sw_calls = [c for c in conn.calls if "pwa/sw.js" in c]
-        assert len(sw_calls) == 1
-        # Extract base64 content between printf '%s' and | base64
-        call = sw_calls[0]
-        b64_start = call.index("printf '%s' ") + len("printf '%s' ")
-        b64_end = call.index(" | base64")
-        b64_content = call[b64_start:b64_end].strip("'")
-        sw_content = base64.b64decode(b64_content).decode()
+        sw_content = conn.write_map["/var/www/private/pwa/sw.js"].decode()
         # Should NOT contain the static 'pwa-v1' version
         assert "'pwa-v1'" not in sw_content
         # Should contain a dynamic hash version like 'pwa-abcd1234'
         assert "pwa-" in sw_content
-        conn = _MockConnection()
-        upload_pwa_assets(conn)
-        chown_calls = [c for c in conn.calls if "chown www-data:www-data" in c]
-        # mkdir chown + 4 file chowns = 5
-        assert len(chown_calls) >= 5
 
     def test_deploys_to_correct_paths(self) -> None:
         """Each static file should be written to /var/www/private/pwa/."""
         conn = _MockConnection()
         upload_pwa_assets(conn)
+        written_paths = {path for path, _data, _kwargs in conn.writes}
         for fname in ("app.js", "styles.css", "sw.js", "icon.svg"):
-            conn.assert_called_with_pattern(f"/var/www/private/pwa/{fname}")
+            assert f"/var/www/private/pwa/{fname}" in written_paths

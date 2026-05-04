@@ -6,6 +6,8 @@ executes. Reuses existing provisioning code via the reconciler executor.
 
 from __future__ import annotations
 
+import shlex
+
 import typer
 
 from meridian.cluster import ClusterConfig
@@ -237,8 +239,6 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
     (container exists but stopped). Regenerates docker-compose.yml if the
     subscription page service is missing, then configures with API token.
     """
-    import shlex
-
     from meridian.cluster import ClusterConfig
     from meridian.config import (
         REMNAWAVE_BACKEND_IMAGE,
@@ -263,9 +263,9 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
     conn = ServerConnection(cluster.panel.server_ip, cluster.panel.ssh_user, port=cluster.panel.ssh_port)
 
     # Check if subscription page container exists in docker-compose
-    q_dir = shlex.quote(REMNAWAVE_PANEL_DIR)
     check = conn.run(
-        f"cd {q_dir} && docker compose config --services 2>/dev/null | grep -q subscription",
+        "docker compose config --services 2>/dev/null | grep -q subscription",
+        cwd=REMNAWAVE_PANEL_DIR,
         timeout=15,
     )
     if check.returncode != 0:
@@ -278,11 +278,13 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
             subscription_page_host_port=REMNAWAVE_SUBSCRIPTION_PAGE_PORT,
         )
         compose_path = f"{REMNAWAVE_PANEL_DIR}/docker-compose.yml"
-        import secrets as _secrets
-
-        _delim = f"MERIDIAN_{_secrets.token_hex(4)}_EOF"
-        write_cmd = f"cat > {shlex.quote(compose_path)} << '{_delim}'\n{compose}{_delim}"
-        result = conn.run(write_cmd, timeout=15)
+        result = conn.put_text(
+            compose_path,
+            compose,
+            mode="644",
+            timeout=15,
+            operation_name="write remnawave panel compose",
+        )
         if result.returncode != 0:
             raise RuntimeError(f"Failed to write docker-compose.yml: {result.stderr.strip()[:200]}")
 
@@ -291,17 +293,23 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
 
         sub_env = _render_subscription_env()
         sub_env_path = f"{REMNAWAVE_PANEL_DIR}/.env.subscription"
-        _delim2 = f"MERIDIAN_{_secrets.token_hex(4)}_EOF"
-        write_env = f"cat > {shlex.quote(sub_env_path)} << '{_delim2}'\n{sub_env}{_delim2}"
-        conn.run(write_env, timeout=15)
-        conn.run(f"chmod 600 {shlex.quote(sub_env_path)}", timeout=15)
+        result = conn.put_text(
+            sub_env_path,
+            sub_env,
+            mode="600",
+            sensitive=True,
+            timeout=15,
+            operation_name="write subscription page env",
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to write .env.subscription: {result.stderr.strip()[:200]}")
 
         # --no-recreate: the panel and backend are already running — we only
         # want to bring up the newly-added subscription-page service. Without
         # this flag, any unrelated config drift in compose (image tag bump,
         # env churn) would recreate the panel container and cause a visible
         # outage during what should be a surgical subpage rollout.
-        result = conn.run(f"cd {q_dir} && docker compose up -d --no-recreate", timeout=120)
+        result = conn.run("docker compose up -d --no-recreate", cwd=REMNAWAVE_PANEL_DIR, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(f"Failed to start containers: {result.stderr.strip()[:200]}")
     else:
@@ -310,7 +318,8 @@ def _handle_add_subscription_page(action: PlanAction, panel: object, cluster: ob
         # up — `docker compose up -d <service>` is idempotent and a no-op
         # when the container is already running.
         result = conn.run(
-            f"cd {q_dir} && docker compose up -d remnawave-subscription-page",
+            "docker compose up -d remnawave-subscription-page",
+            cwd=REMNAWAVE_PANEL_DIR,
             timeout=120,
         )
         if result.returncode != 0:
@@ -395,10 +404,7 @@ def _handle_remove_subscription_page(action: PlanAction, panel: object, cluster:
         raise RuntimeError("Panel server IP not set in cluster config")
 
     conn = ServerConnection(cluster.panel.server_ip, cluster.panel.ssh_user, port=cluster.panel.ssh_port)
-    import shlex
-
-    q_dir = shlex.quote(REMNAWAVE_PANEL_DIR)
-    result = conn.run(f"cd {q_dir} && docker compose stop remnawave-subscription-page", timeout=60)
+    result = conn.run("docker compose stop remnawave-subscription-page", cwd=REMNAWAVE_PANEL_DIR, timeout=60)
     if result.returncode != 0:
         raise RuntimeError(f"Failed to stop subscription page: {result.stderr.strip()[:200]}")
 

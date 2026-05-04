@@ -44,6 +44,16 @@ def _fail_result(stderr: str = "error", stdout: str = "") -> SimpleNamespace:
     return SimpleNamespace(returncode=1, stdout=stdout, stderr=stderr)
 
 
+def _conn_mock() -> MagicMock:
+    """ServerConnection-like mock for _deploy_node_container tests."""
+    conn = MagicMock()
+    conn.user = "root"
+    conn.ip = _IP
+    conn.run.return_value = _ok_result()
+    conn.put_text.return_value = _ok_result()
+    return conn
+
+
 # ---------------------------------------------------------------------------
 # _deploy_node_container — happy path
 # ---------------------------------------------------------------------------
@@ -54,11 +64,7 @@ class TestDeployNodeContainerHappyPath:
 
     def _make_conn(self) -> MagicMock:
         """Conn that succeeds on every call, with health check returning 'true'."""
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
-        conn.run.return_value = _ok_result()
-        return conn
+        return _conn_mock()
 
     def _make_healthy_conn(self) -> MagicMock:
         """Conn where health check returns 'true' on first attempt."""
@@ -95,11 +101,10 @@ class TestDeployNodeContainerHappyPath:
     ) -> None:
         conn = self._make_healthy_conn()
         _deploy_node_container(conn, _SECRET_KEY)
-        commands = [c[0][0] for c in conn.run.call_args_list]
-        env_write = [c for c in commands if "cat >" in c and ".env" in c and "docker-compose" not in c]
-        assert len(env_write) == 1
-        env_chmod = [c for c in commands if "chmod 600" in c and ".env" in c]
-        assert len(env_chmod) == 1
+        env_writes = [c for c in conn.put_text.call_args_list if c[0][0].endswith("/.env")]
+        assert len(env_writes) == 1
+        assert env_writes[0].kwargs["mode"] == "600"
+        assert env_writes[0].kwargs["sensitive"] is True
 
     @patch("meridian.commands.setup.time")
     @patch("meridian.commands.setup.ok")
@@ -110,9 +115,9 @@ class TestDeployNodeContainerHappyPath:
     ) -> None:
         conn = self._make_healthy_conn()
         _deploy_node_container(conn, _SECRET_KEY)
-        commands = [c[0][0] for c in conn.run.call_args_list]
-        compose_write = [c for c in commands if "docker-compose.yml" in c and "cat >" in c]
-        assert len(compose_write) == 1
+        compose_writes = [c for c in conn.put_text.call_args_list if c[0][0].endswith("/docker-compose.yml")]
+        assert len(compose_writes) == 1
+        assert compose_writes[0].kwargs["mode"] == "644"
 
     @patch("meridian.commands.setup.time")
     @patch("meridian.commands.setup.ok")
@@ -123,9 +128,11 @@ class TestDeployNodeContainerHappyPath:
     ) -> None:
         conn = self._make_healthy_conn()
         _deploy_node_container(conn, _SECRET_KEY)
-        commands = [c[0][0] for c in conn.run.call_args_list]
-        pull_cmds = [c for c in commands if "docker compose pull" in c]
-        assert len(pull_cmds) == 1
+        pull_calls = [c for c in conn.run.call_args_list if c[0][0] == "docker compose pull"]
+        assert len(pull_calls) == 1
+        assert pull_calls[0].kwargs["cwd"] == _NODE_DIR
+        assert pull_calls[0].kwargs["retries"] == 3
+        assert pull_calls[0].kwargs["retry_delay"] == 10
 
     @patch("meridian.commands.setup.time")
     @patch("meridian.commands.setup.ok")
@@ -181,14 +188,9 @@ class TestDeployNodeContainerDockerPullRetry:
     def test_pull_succeeds_on_second_attempt(
         self, mock_warn: MagicMock, mock_info: MagicMock, mock_ok: MagicMock, mock_time: MagicMock
     ) -> None:
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
-        pull_results = iter([_fail_result(), _ok_result()])
+        conn = _conn_mock()
 
         def _run(cmd: str, **kwargs: object) -> SimpleNamespace:
-            if "docker compose pull" in cmd:
-                return next(pull_results)
             if "docker inspect remnawave-node" in cmd:
                 return _ok_result(stdout="true\n")
             return _ok_result()
@@ -196,8 +198,10 @@ class TestDeployNodeContainerDockerPullRetry:
         conn.run.side_effect = _run
         _deploy_node_container(conn, _SECRET_KEY)
         mock_warn.assert_not_called()
-        # One sleep(10) between first failure and second attempt
-        mock_time.sleep.assert_any_call(10)
+        pull_call = next(c for c in conn.run.call_args_list if c[0][0] == "docker compose pull")
+        assert pull_call.kwargs["retries"] == 3
+        assert pull_call.kwargs["retry_delay"] == 10
+        mock_time.sleep.assert_not_called()
 
     @patch("meridian.commands.setup.time")
     @patch("meridian.commands.setup.ok")
@@ -206,14 +210,9 @@ class TestDeployNodeContainerDockerPullRetry:
     def test_pull_succeeds_on_third_attempt(
         self, mock_warn: MagicMock, mock_info: MagicMock, mock_ok: MagicMock, mock_time: MagicMock
     ) -> None:
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
-        pull_results = iter([_fail_result(), _fail_result(), _ok_result()])
+        conn = _conn_mock()
 
         def _run(cmd: str, **kwargs: object) -> SimpleNamespace:
-            if "docker compose pull" in cmd:
-                return next(pull_results)
             if "docker inspect remnawave-node" in cmd:
                 return _ok_result(stdout="true\n")
             return _ok_result()
@@ -221,6 +220,8 @@ class TestDeployNodeContainerDockerPullRetry:
         conn.run.side_effect = _run
         _deploy_node_container(conn, _SECRET_KEY)
         mock_warn.assert_not_called()
+        pull_call = next(c for c in conn.run.call_args_list if c[0][0] == "docker compose pull")
+        assert pull_call.kwargs["operation_name"] == "pull remnawave node image"
 
     @patch("meridian.commands.setup.time")
     @patch("meridian.commands.setup.ok")
@@ -229,9 +230,7 @@ class TestDeployNodeContainerDockerPullRetry:
     def test_pull_fails_all_three_attempts_warns_and_returns(
         self, mock_warn: MagicMock, mock_info: MagicMock, mock_ok: MagicMock, mock_time: MagicMock
     ) -> None:
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
+        conn = _conn_mock()
 
         def _run(cmd: str, **kwargs: object) -> SimpleNamespace:
             if "docker compose pull" in cmd:
@@ -250,9 +249,7 @@ class TestDeployNodeContainerDockerPullRetry:
     def test_pull_failure_does_not_start_container(
         self, mock_warn: MagicMock, mock_info: MagicMock, mock_ok: MagicMock, mock_time: MagicMock
     ) -> None:
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
+        conn = _conn_mock()
 
         def _run(cmd: str, **kwargs: object) -> SimpleNamespace:
             if "docker compose pull" in cmd:
@@ -280,9 +277,7 @@ class TestDeployNodeContainerHealthGate:
     def test_health_succeeds_on_third_attempt(
         self, mock_warn: MagicMock, mock_info: MagicMock, mock_ok: MagicMock, mock_time: MagicMock
     ) -> None:
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
+        conn = _conn_mock()
         health_results = iter([_fail_result(), _fail_result(), _ok_result(stdout="true\n")])
 
         def _run(cmd: str, **kwargs: object) -> SimpleNamespace:
@@ -303,9 +298,7 @@ class TestDeployNodeContainerHealthGate:
     def test_health_timeout_warns_with_docker_logs(
         self, mock_warn: MagicMock, mock_info: MagicMock, mock_ok: MagicMock, mock_time: MagicMock
     ) -> None:
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
+        conn = _conn_mock()
 
         def _run(cmd: str, **kwargs: object) -> SimpleNamespace:
             if "docker inspect remnawave-node" in cmd:
@@ -329,9 +322,7 @@ class TestDeployNodeContainerHealthGate:
         self, mock_warn: MagicMock, mock_info: MagicMock, mock_ok: MagicMock, mock_time: MagicMock
     ) -> None:
         """UFW rule is opened regardless of health outcome."""
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
+        conn = _conn_mock()
 
         def _run(cmd: str, **kwargs: object) -> SimpleNamespace:
             if "docker inspect remnawave-node" in cmd:
@@ -353,9 +344,7 @@ class TestDeployNodeContainerHealthGate:
     def test_health_gate_polls_up_to_ten_times(
         self, mock_warn: MagicMock, mock_info: MagicMock, mock_ok: MagicMock, mock_time: MagicMock
     ) -> None:
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
+        conn = _conn_mock()
 
         def _run(cmd: str, **kwargs: object) -> SimpleNamespace:
             if "docker inspect remnawave-node" in cmd:
@@ -386,9 +375,7 @@ class TestDeployNodeContainerFailures:
     def test_mkdir_failure_warns_and_returns_early(
         self, mock_warn: MagicMock, mock_info: MagicMock, mock_ok: MagicMock, mock_time: MagicMock
     ) -> None:
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
+        conn = _conn_mock()
 
         def _run(cmd: str, **kwargs: object) -> SimpleNamespace:
             if "mkdir" in cmd:
@@ -409,9 +396,7 @@ class TestDeployNodeContainerFailures:
     def test_compose_up_failure_warns_and_returns_early(
         self, mock_warn: MagicMock, mock_info: MagicMock, mock_ok: MagicMock, mock_time: MagicMock
     ) -> None:
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
+        conn = _conn_mock()
 
         def _run(cmd: str, **kwargs: object) -> SimpleNamespace:
             if "docker compose up" in cmd:
@@ -434,9 +419,7 @@ class TestDeployNodeContainerFailures:
     def test_compose_up_failure_includes_stderr_in_warning(
         self, mock_warn: MagicMock, mock_info: MagicMock, mock_ok: MagicMock, mock_time: MagicMock
     ) -> None:
-        conn = MagicMock()
-        conn.user = "root"
-        conn.ip = _IP
+        conn = _conn_mock()
 
         def _run(cmd: str, **kwargs: object) -> SimpleNamespace:
             if "docker compose up" in cmd:
