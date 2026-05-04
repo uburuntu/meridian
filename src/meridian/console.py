@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json as _json
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 import typer
 from rich.console import Console
@@ -85,6 +85,32 @@ def fail(msg: str, *, hint: str = "", hint_type: str = "bug", exit_code: int | N
         exit_code: Explicit exit code. If None, derived from hint_type
             (user=2, system=3, bug=1).
     """
+    code = exit_code if exit_code is not None else _EXIT_CODES.get(hint_type, 1)
+    if _output_json:
+        from meridian.core.models import ErrorCategory, MeridianError
+        from meridian.core.output import emit_json, envelope
+
+        category = cast(ErrorCategory, hint_type if hint_type in ("user", "system", "bug", "cancelled") else "bug")
+        emit_json(
+            envelope(
+                command="cli.error",
+                summary=msg,
+                status="failed",
+                exit_code=code,
+                errors=[
+                    MeridianError(
+                        code=f"MERIDIAN_{category.upper()}_ERROR",
+                        category=category,
+                        message=msg,
+                        hint=hint,
+                        retryable=category == "system",
+                        exit_code=code,
+                    )
+                ],
+            )
+        )
+        raise typer.Exit(code=code)
+
     err_console.print(f"\n  [error]\u2717 {msg}[/error]")
     if hint:
         err_console.print(f"  [dim]{hint}[/dim]")
@@ -94,7 +120,6 @@ def fail(msg: str, *, hint: str = "", hint_type: str = "bug", exit_code: int | N
         err_console.print("  [dim]Run: meridian doctor  (to collect server info)[/dim]\n")
     else:  # "bug"
         err_console.print("  [dim]Report: https://github.com/uburuntu/meridian/issues[/dim]\n")
-    code = exit_code if exit_code is not None else _EXIT_CODES.get(hint_type, 1)
     raise typer.Exit(code=code)
 
 

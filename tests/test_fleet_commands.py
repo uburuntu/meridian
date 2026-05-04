@@ -347,11 +347,14 @@ class TestFleetInventory:
             patch("meridian.commands.fleet.load_cluster", return_value=cluster),
             patch("meridian.commands.fleet.make_panel", return_value=panel),
             patch("meridian.commands.fleet.is_json_mode", return_value=True),
-            patch("meridian.commands.fleet.json_output") as mock_json,
+            patch("meridian.commands.fleet.emit_json") as mock_json,
         ):
             run_inventory()
 
-        data = mock_json.call_args[0][0]
+        payload = mock_json.call_args[0][0]
+        data = payload.data
+        assert payload.schema_version == "meridian.output/v1"
+        assert payload.command == "fleet.inventory"
         assert "api_token" not in data["panel"]
         assert data["panel"]["url"] == "https://198.51.100.1/panel/"
         assert data["nodes"][0]["panel_status"] == "connected"
@@ -369,11 +372,11 @@ class TestFleetInventory:
             patch("meridian.commands.fleet.load_cluster", return_value=cluster),
             patch("meridian.commands.fleet.make_panel", return_value=panel),
             patch("meridian.commands.fleet.is_json_mode", return_value=True),
-            patch("meridian.commands.fleet.json_output") as mock_json,
+            patch("meridian.commands.fleet.emit_json") as mock_json,
         ):
             run_inventory()
 
-        data = mock_json.call_args[0][0]
+        data = mock_json.call_args[0][0].data
         node = next(n for n in data["nodes"] if n["ip"] == "198.51.100.2")
         assert node["protocols"] == ["reality", "xhttp"]
 
@@ -387,11 +390,11 @@ class TestFleetInventory:
             patch("meridian.commands.fleet.load_cluster", return_value=cluster),
             patch("meridian.commands.fleet.make_panel", return_value=panel),
             patch("meridian.commands.fleet.is_json_mode", return_value=True),
-            patch("meridian.commands.fleet.json_output") as mock_json,
+            patch("meridian.commands.fleet.emit_json") as mock_json,
         ):
             run_inventory()
 
-        data = mock_json.call_args[0][0]
+        data = mock_json.call_args[0][0].data
         assert data["nodes"][0]["desired"] is False
         assert data["relays"][0]["desired"] is False
         assert data["desired_nodes"][0]["present"] is False
@@ -409,11 +412,11 @@ class TestFleetInventory:
             patch("meridian.commands.fleet.load_cluster", return_value=cluster),
             patch("meridian.commands.fleet.make_panel", return_value=panel),
             patch("meridian.commands.fleet.is_json_mode", return_value=True),
-            patch("meridian.commands.fleet.json_output") as mock_json,
+            patch("meridian.commands.fleet.emit_json") as mock_json,
         ):
             run_inventory()
 
-        data = mock_json.call_args[0][0]
+        data = mock_json.call_args[0][0].data
         assert data["panel"]["healthy"] is False
         assert data["summary"]["unapplied_desired_nodes"] == 1
         assert data["summary"]["unapplied_desired_relays"] == 1

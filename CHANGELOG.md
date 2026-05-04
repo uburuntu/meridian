@@ -4,6 +4,15 @@ All notable changes to Meridian are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- **meridian-core JSON contract foundation** — Pydantic-backed `meridian.output/v1` envelopes, structured summary/error/event models, JSONL event primitives, JSON Schema export, and centralized secret redaction for automation and future UI clients
+
+### Changed
+- **`meridian plan --json`** now emits the shared envelope shape with plan details under `data`; `status` is `no_changes` or `changed`, and the process exit code remains `0` for converged and `2` for changes pending
+- **`meridian fleet inventory --json`** now emits the shared envelope shape while preserving the stable inventory fields under `data`
+
 ## [4.0.0] - 2026-04-12
 
 ### Remnawave compatibility matrix

@@ -54,9 +54,14 @@ def _capture_plan_json(plan: Plan) -> tuple[dict, int]:
 class TestPlanJsonOutput:
     def test_empty_plan_emits_converged_true_and_exit_zero(self) -> None:
         payload, exit_code = _capture_plan_json(Plan(actions=[]))
-        assert payload["converged"] is True
-        assert payload["actions"] == []
-        assert payload["exit_code"] == 0
+        assert payload["schema"] == "meridian.output/v1"
+        assert payload["command"] == "plan"
+        assert payload["status"] == "no_changes"
+        assert payload["summary"]["changed"] is False
+        assert payload["summary"]["counts"] == {"actions": 0}
+        assert payload["data"]["converged"] is True
+        assert payload["data"]["actions"] == []
+        assert payload["data"]["exit_code"] == 0
         assert exit_code == 0
 
     def test_non_empty_plan_emits_actions_and_exit_two(self) -> None:
@@ -73,18 +78,22 @@ class TestPlanJsonOutput:
             ]
         )
         payload, exit_code = _capture_plan_json(plan)
-        assert payload["converged"] is False
-        assert payload["exit_code"] == 2
+        assert payload["schema"] == "meridian.output/v1"
+        assert payload["command"] == "plan"
+        assert payload["status"] == "changed"
+        assert payload["summary"]["changed"] is True
+        assert payload["data"]["converged"] is False
+        assert payload["data"]["exit_code"] == 2
         assert exit_code == 2
-        assert len(payload["actions"]) == 2
+        assert len(payload["data"]["actions"]) == 2
         # ADD_CLIENT entry
-        add = next(a for a in payload["actions"] if a["kind"] == "add_client")
+        add = next(a for a in payload["data"]["actions"] if a["kind"] == "add_client")
         assert add["target"] == "alice"
         assert add["destructive"] is False
         assert add["from_extras"] is False
         assert add["symbol"] == "+"
         # REMOVE_CLIENT entry — extras flag preserved for downstream tooling
-        rm = next(a for a in payload["actions"] if a["kind"] == "remove_client")
+        rm = next(a for a in payload["data"]["actions"] if a["kind"] == "remove_client")
         assert rm["target"] == "ghost"
         assert rm["destructive"] is True
         assert rm["from_extras"] is True

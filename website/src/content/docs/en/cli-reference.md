@@ -107,7 +107,7 @@ meridian fleet recover IP [flags]
 
 **`fleet status`** — shows panel health, every node's connection + Xray version + traffic, every relay's upstream, and user counts. With `--json`, stable field access: `panel.url`, `panel.healthy`, `nodes[].status` (`"connected"`, `"disconnected"`, `"disabled"`, `"unknown"`), `relays[].status`, `users.active/disabled/other`.
 
-**`fleet inventory`** — shows the configured panel, nodes, relays, desired topology, and live panel node status when reachable. It never prints the panel API token. With `--json`, stable field access includes `summary.*`, `nodes[].desired`, `nodes[].protocols`, `relays[].exit_node_*`, and `desired_nodes[].present`.
+**`fleet inventory`** — shows the configured panel, nodes, relays, desired topology, and live panel node status when reachable. It never prints the panel API token. With `--json`, output uses the `meridian.output/v1` envelope. Stable field access inside `data` includes `data.summary.*`, `data.nodes[].desired`, `data.nodes[].protocols`, `data.relays[].exit_node_*`, and `data.desired_nodes[].present`.
 
 **`fleet recover`** — rebuilds `~/.meridian/cluster.yml` from the live panel. Use it when the local file is lost, or when picking up someone else's deployment. Connects via SSH to read stable server-side metadata, then queries the panel API for nodes, relays, inbounds, hosts, and users.
 
@@ -145,7 +145,7 @@ meridian plan [--json]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--json` | | Emit the plan as JSON for CI/CD consumption. Same exit codes; the rendered terraform-style output is suppressed |
+| `--json` | | Emit the plan as a `meridian.output/v1` JSON envelope for CI/CD and UI clients. Same exit codes; human plan output is suppressed |
 
 **Exit codes**:
 - `0` — converged (no changes needed)
@@ -155,19 +155,36 @@ meridian plan [--json]
 **JSON shape** (`--json` mode):
 ```json
 {
-  "converged": false,
-  "summary": "Plan: 1 to add, 1 to remove",
+  "schema": "meridian.output/v1",
+  "meridian_version": "4.x.x",
+  "command": "plan",
+  "operation_id": "9d0f...",
+  "started_at": "2026-05-04T21:00:00Z",
+  "duration_ms": 128,
+  "status": "changed",
   "exit_code": 2,
-  "actions": [
-    {"kind": "add_client", "target": "alice", "detail": "create client alice",
-     "destructive": false, "from_extras": false, "symbol": "+"},
-    {"kind": "remove_client", "target": "ghost", "detail": "delete client ghost",
-     "destructive": true, "from_extras": true, "symbol": "-"}
-  ]
+  "summary": {
+    "text": "Plan: 1 to add, 1 to remove",
+    "changed": true,
+    "counts": {"actions": 2}
+  },
+  "data": {
+    "converged": false,
+    "summary": "Plan: 1 to add, 1 to remove",
+    "exit_code": 2,
+    "actions": [
+      {"kind": "add_client", "target": "alice", "detail": "create client alice",
+       "destructive": false, "from_extras": false, "symbol": "+"},
+      {"kind": "remove_client", "target": "ghost", "detail": "delete client ghost",
+       "destructive": true, "from_extras": true, "symbol": "-"}
+    ]
+  },
+  "warnings": [],
+  "errors": []
 }
 ```
 
-`from_extras: true` flags resources that exist on the panel but are missing from `cluster.yml` — the inputs `meridian apply --prune-extras` operates on.
+`data.actions[].from_extras: true` flags resources that exist on the panel but are missing from `cluster.yml` — the inputs `meridian apply --prune-extras` operates on. `status` is `no_changes` when converged and `changed` when apply has work to do; `data.exit_code` mirrors the process exit code.
 
 See [Declarative workflow](/docs/en/getting-started/#declarative-workflow) for how to compose `cluster.yml`.
 

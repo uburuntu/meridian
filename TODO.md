@@ -13,6 +13,7 @@ The guiding rule: command modules parse CLI arguments and choose renderers; they
 - The interactive CLI wizard is a Meridian client, not the core product. It gathers input, calls meridian-core, then renders a human experience.
 - A future UI is another Meridian client. It should be able to plan, execute, and observe deploys through the same core APIs the CLI uses.
 - JSON/JSONL is the process boundary for automation and UI clients that shell out to `meridian`. A supported Python API can expose the same request/result/event objects directly.
+- Public meridian-core contracts should use Pydantic v2 models where validation, `model_dump_json()`, `model_validate*()`, or `model_json_schema()` helps UI/client integration. Keep Pydantic at API boundaries; internal execution objects do not need to become Pydantic by default.
 - Cluster config is part of the API, not just a local implementation detail. Core should accept desired topology from disk, memory, or another client-provided source, then persist through the configured store.
 - Core should expose recipes for normal users and lower-level operations for advanced users. Advanced SSH-capable operations are allowed, but must be explicit, auditable, redacted, and clearly dangerous.
 - Idempotent operations are the recovery model for v1. If a UI wants resumability, it can track operation IDs/events and rerun safe recipes; core does not need durable workflow state yet.
@@ -51,7 +52,7 @@ The guiding rule: command modules parse CLI arguments and choose renderers; they
 ## Target Architecture
 
 - [ ] `meridian.core`: product use cases and request/result models; no Typer, Rich, `print`, or `typer.Exit`.
-- [ ] `meridian.core.models`: stable dataclasses for envelopes, errors, events, plans, inventory, clients, servers, roles, routes, deployment results, and provision results.
+- [ ] `meridian.core.models`: stable Pydantic models for envelopes, errors, events, plans, inventory, clients, servers, roles, routes, deployment results, and provision results.
 - [ ] `meridian.core.services`: service functions such as `get_fleet_inventory()`, `compute_apply_plan()`, `apply_desired_state()`, `deploy_server()`, `assign_role()`, `deploy_relay()`, `add_client()`.
 - [ ] `meridian.core.renderers`: JSON, JSONL, and Rich/text renderers over the same result/event objects.
 - [ ] `meridian.core.reporters`: event sink abstraction for provisioners, reconciler execution, SSH diagnostics, warnings, and prompts.
@@ -73,8 +74,8 @@ The guiding rule: command modules parse CLI arguments and choose renderers; they
 
 ## JSON Envelope v1
 
-- [ ] Define `meridian.output/v1` for every non-streaming JSON result.
-- [ ] Standardize top-level fields:
+- [x] Define `meridian.output/v1` for migrated non-streaming JSON results.
+- [x] Standardize top-level fields:
   - `schema`
   - `meridian_version`
   - `command`
@@ -87,11 +88,11 @@ The guiding rule: command modules parse CLI arguments and choose renderers; they
   - `data`
   - `warnings`
   - `errors`
-- [ ] Use `status` values: `ok`, `changed`, `no_changes`, `failed`, `cancelled`.
-- [ ] Make `data` command-specific and stable by command.
-- [ ] Make `summary` structured enough for dashboards, not only prose.
-- [ ] Use one shared warning/error object shape in both `warnings` and `errors`.
-- [ ] Add serializer unit tests for envelope success, warning, failure, and redaction cases.
+- [x] Use `status` values: `ok`, `changed`, `no_changes`, `failed`, `cancelled`.
+- [x] Make `data` command-specific and stable by command.
+- [x] Make `summary` structured enough for dashboards, not only prose.
+- [x] Use one shared warning/error object shape in both `warnings` and `errors`.
+- [x] Add serializer unit tests for envelope success, failure, JSONL, and redaction cases.
 - [ ] Add golden JSON fixtures for the first migrated commands.
 
 Example:
@@ -118,7 +119,7 @@ Example:
 
 ## Error Model v1
 
-- [ ] Define `MeridianError` with:
+- [x] Define `MeridianError` with:
   - `code`
   - `category`
   - `message`
@@ -127,11 +128,11 @@ Example:
   - `exit_code`
   - `details`
   - `cause`
-- [ ] Use categories: `user`, `system`, `bug`, `cancelled`.
+- [x] Use categories: `user`, `system`, `bug`, `cancelled`.
 - [ ] Replace deep `console.fail()` calls with structured exceptions/results below CLI entrypoints.
 - [ ] Keep CLI entrypoints responsible for rendering human errors and mapping to `typer.Exit`.
 - [ ] Add JSON-mode error tests for user, system, bug, and cancelled paths.
-- [ ] Add redaction tests for panel tokens, admin passwords, private keys, JWT secrets, database URLs, API tokens, and subscription secrets.
+- [x] Add initial redaction tests for API tokens, passwords, JWTs, and database URLs.
 
 Example:
 
@@ -152,8 +153,8 @@ Example:
 
 ## JSONL Event Model v1
 
-- [ ] Define `meridian.event/v1` for streaming progress.
-- [ ] Standardize fields:
+- [x] Define `meridian.event/v1` for streaming progress primitives.
+- [x] Standardize fields:
   - `schema`
   - `operation_id`
   - `seq`
@@ -180,7 +181,7 @@ Example:
   - `warning`
   - `error`
 - [ ] Ensure the final JSONL event includes the same final envelope produced by `--json`.
-- [ ] Guarantee monotonic `seq` for global ordering, including parallel apply.
+- [x] Guarantee monotonic `seq` in the core event stream primitive.
 - [ ] Preserve per-resource event order.
 - [ ] Add JSONL tests for provision step start, completion, failure, and redaction.
 
@@ -237,16 +238,16 @@ Example:
 
 ### Phase 1: Contract Foundation
 
-- [ ] Add `meridian.core.models` with output envelope, event, summary, and error dataclasses.
-- [ ] Add JSON and JSONL serializer helpers with stable key ordering.
-- [ ] Add `operation_id` generation and monotonic event sequence support.
-- [ ] Add redaction utilities shared by SSH, JSON, JSONL, and diagnostics.
+- [x] Add `meridian.core.models` with Pydantic output envelope, event, summary, and error models.
+- [x] Add JSON and JSONL serializer helpers with stable key ordering.
+- [x] Add `operation_id` generation and monotonic event sequence support.
+- [x] Add redaction utilities for JSON and JSONL output.
 - [ ] Add golden contract tests for envelope and error rendering.
 
 ### Phase 2: Read-Only Commands First
 
-- [ ] Move `fleet inventory` result construction into a service returning a typed result.
-- [ ] Render `fleet inventory` text and JSON from that typed result.
+- [x] Move `fleet inventory` result construction into a service returning a typed result.
+- [x] Render `fleet inventory` text and JSON from that typed result.
 - [ ] Move `fleet status` result construction into a service returning a typed result.
 - [ ] Render `fleet status` text and JSON from that typed result.
 - [ ] Move `client list` and `client show` to service/result/renderer boundaries.
@@ -255,7 +256,7 @@ Example:
 
 ### Phase 3: Plan and Apply
 
-- [ ] Convert `plan --json` to the shared envelope everywhere; v4 does not need a legacy JSON mode.
+- [x] Convert `plan --json` to the shared envelope everywhere; v4 does not need a legacy JSON mode.
 - [ ] Expose plan actions as typed API result objects.
 - [ ] Add `execute_plan()` reporter hooks for action start/completion/failure.
 - [ ] Add `apply --json` final envelope.
@@ -314,10 +315,10 @@ Example:
 
 ## Near-Term First Slice
 
-- [ ] Build `meridian.core.models` with `OutputEnvelope`, `MeridianError`, and `Event`.
-- [ ] Build shared `emit_json()` and `emit_jsonl()` renderers.
+- [x] Build `meridian.core.models` with Pydantic `OutputEnvelope`, `MeridianError`, and `Event`.
+- [x] Build shared `emit_json()` and `emit_jsonl()` renderers.
 - [ ] Add command-local `--json` support to all read-only commands.
-- [ ] Migrate `fleet inventory` to service/result/renderers.
-- [ ] Migrate `plan` to shared envelope and add contract tests.
-- [ ] Add JSON error rendering at CLI entrypoint boundary.
-- [ ] Add redaction tests before expanding JSON surface area further.
+- [x] Migrate `fleet inventory` to service/result/renderers.
+- [x] Migrate `plan` to shared envelope and add contract tests.
+- [x] Add JSON error rendering at CLI entrypoint boundary.
+- [x] Add redaction tests before expanding JSON surface area further.

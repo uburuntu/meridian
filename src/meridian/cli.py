@@ -111,8 +111,11 @@ def plan_cmd(
       [yellow]2[/yellow] = changes pending
     """
     from meridian.commands.plan import run
+    from meridian.console import is_json_mode
 
-    run(json_output=json_output)
+    if json_output:
+        _enable_json_output()
+    run(json_output=json_output or is_json_mode())
 
 
 @app.command("apply")

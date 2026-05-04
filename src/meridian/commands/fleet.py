@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import socket
 
-from meridian.cluster import DesiredNode, DesiredRelay, NodeEntry, RelayEntry
 from meridian.commands._helpers import format_traffic, load_cluster, make_panel
 from meridian.console import err_console, is_json_mode, json_output, warn
+from meridian.core.fleet import build_fleet_inventory
+from meridian.core.models import Summary
+from meridian.core.output import emit_json, envelope
 from meridian.remnawave import RemnawaveError
 
 
@@ -23,52 +25,12 @@ def _check_relay_health(ip: str, port: int, timeout: float = 3.0) -> bool:
         return False
 
 
-def _node_api_status(api_node: object | None) -> str:
-    if not api_node:
-        return "unknown"
-    if getattr(api_node, "is_connected", False):
-        return "connected"
-    if getattr(api_node, "is_disabled", False):
-        return "disabled"
-    return "disconnected"
-
-
-def _node_protocols(node: NodeEntry) -> list[str]:
-    protocols = ["reality"]
-    if node.xhttp_path:
-        protocols.append("xhttp")
-    if node.domain and node.ws_path:
-        protocols.append("wss")
-    return protocols
-
-
-def _desired_node_key(desired: DesiredNode) -> str:
-    return desired.host
-
-
-def _desired_relay_key(desired: DesiredRelay) -> str:
-    return desired.host
-
-
-def _node_desired(node: NodeEntry, desired_nodes: list[DesiredNode] | None) -> bool | None:
-    if desired_nodes is None:
-        return None
-    return any(node.ip == d.host for d in desired_nodes)
-
-
-def _relay_desired(relay: RelayEntry, desired_relays: list[DesiredRelay] | None) -> bool | None:
-    if desired_relays is None:
-        return None
-    return any(relay.ip == d.host for d in desired_relays)
-
-
 # -- Fleet Inventory --
 
 
 def run_inventory() -> None:
     """Show the configured fleet inventory without exposing secrets."""
     cluster = load_cluster()
-    panel_url = cluster.panel.display_url or cluster.panel.url
     panel_ok = False
     api_nodes = []
 
@@ -84,112 +46,31 @@ def run_inventory() -> None:
     except RemnawaveError:
         panel_ok = False
 
-    api_by_uuid = {n.uuid: n for n in api_nodes}
-    desired_node_keys = {_desired_node_key(d) for d in cluster.desired_nodes or [] if _desired_node_key(d)}
-    desired_relay_keys = {_desired_relay_key(d) for d in cluster.desired_relays or [] if _desired_relay_key(d)}
-    actual_node_keys = {n.ip for n in cluster.nodes if n.ip}
-    actual_relay_keys = {r.ip for r in cluster.relays if r.ip}
-
-    nodes_json = []
-    for node in cluster.nodes:
-        api_node = api_by_uuid.get(node.uuid)
-        nodes_json.append(
-            {
-                "ip": node.ip,
-                "name": node.name,
-                "uuid": node.uuid,
-                "role": "panel+node" if node.is_panel_host else "node",
-                "ssh_user": node.ssh_user,
-                "ssh_port": node.ssh_port,
-                "domain": node.domain,
-                "sni": node.sni,
-                "protocols": _node_protocols(node),
-                "desired": _node_desired(node, cluster.desired_nodes),
-                "panel_status": _node_api_status(api_node),
-                "xray_version": api_node.xray_version if api_node else "",
-            }
-        )
-
-    relays_json = []
-    for relay in cluster.relays:
-        exit_node = cluster.find_node(relay.exit_node_ip)
-        relays_json.append(
-            {
-                "ip": relay.ip,
-                "name": relay.name,
-                "role": "relay",
-                "port": relay.port,
-                "ssh_user": relay.ssh_user,
-                "ssh_port": relay.ssh_port,
-                "exit_node_ip": relay.exit_node_ip,
-                "exit_node_name": exit_node.name if exit_node else "",
-                "sni": relay.sni,
-                "host_count": len(relay.host_uuids),
-                "desired": _relay_desired(relay, cluster.desired_relays),
-            }
-        )
-
-    desired_nodes_json = [
-        {
-            "host": d.host,
-            "name": d.name,
-            "ssh_user": d.ssh_user,
-            "ssh_port": d.ssh_port,
-            "domain": d.domain,
-            "sni": d.sni,
-            "warp": d.warp,
-            "present": bool(d.host and d.host in actual_node_keys),
-        }
-        for d in cluster.desired_nodes or []
-    ]
-    desired_relays_json = [
-        {
-            "host": d.host,
-            "name": d.name,
-            "ssh_user": d.ssh_user,
-            "ssh_port": d.ssh_port,
-            "exit_node": d.exit_node,
-            "sni": d.sni,
-            "present": bool(d.host and d.host in actual_relay_keys),
-        }
-        for d in cluster.desired_relays or []
-    ]
-    total_pending = len(desired_node_keys - actual_node_keys) + len(desired_relay_keys - actual_relay_keys)
-
-    data = {
-        "panel": {
-            "url": panel_url,
-            "server_ip": cluster.panel.server_ip,
-            "ssh_user": cluster.panel.ssh_user,
-            "ssh_port": cluster.panel.ssh_port,
-            "healthy": panel_ok,
-            "deployed_with": cluster.panel.deployed_with,
-            "subscription_page": {
-                "enabled": bool(cluster.subscription_page and cluster.subscription_page.enabled),
-                "path": cluster.subscription_page.path if cluster.subscription_page else "",
-            },
-        },
-        "summary": {
-            "nodes": len(cluster.nodes),
-            "relays": len(cluster.relays),
-            "desired_nodes": len(cluster.desired_nodes or []),
-            "desired_relays": len(cluster.desired_relays or []),
-            "unapplied_desired_nodes": len(desired_node_keys - actual_node_keys),
-            "unapplied_desired_relays": len(desired_relay_keys - actual_relay_keys),
-        },
-        "nodes": nodes_json,
-        "relays": relays_json,
-        "desired_nodes": desired_nodes_json,
-        "desired_relays": desired_relays_json,
-    }
+    inventory = build_fleet_inventory(cluster, panel_healthy=panel_ok, api_nodes=api_nodes)
+    data = inventory.to_data()
 
     if is_json_mode():
-        json_output(data)
+        emit_json(
+            envelope(
+                command="fleet.inventory",
+                data=data,
+                summary=Summary(
+                    text=inventory.summary.text,
+                    changed=inventory.summary.pending > 0,
+                    counts={
+                        "nodes": inventory.summary.nodes,
+                        "relays": inventory.summary.relays,
+                        "pending": inventory.summary.pending,
+                    },
+                ),
+                status="changed" if inventory.summary.pending else "ok",
+            )
+        )
         return
 
     err_console.print()
     status = "[green]healthy[/green]" if panel_ok else "[red]UNREACHABLE[/red]"
-    err_console.print(f"  [bold]Panel[/bold]   {panel_url}  {status}")
+    err_console.print(f"  [bold]Panel[/bold]   {inventory.panel.url}  {status}")
     if cluster.panel.server_ip:
         err_console.print(
             f"            SSH {cluster.panel.ssh_user}@{cluster.panel.server_ip}:{cluster.panel.ssh_port}"
@@ -197,45 +78,41 @@ def run_inventory() -> None:
 
     err_console.print()
     err_console.print("  [bold]Nodes[/bold]")
-    if not nodes_json:
+    if not inventory.nodes:
         err_console.print("    [dim]none[/dim]")
-    for display_node in nodes_json:
+    for display_node in inventory.nodes:
         desired = (
-            ""
-            if display_node["desired"] is None
-            else "  desired"
-            if display_node["desired"]
-            else "  [yellow]extra[/yellow]"
+            "" if display_node.desired is None else "  desired" if display_node.desired else "  [yellow]extra[/yellow]"
         )
-        domain = f"  domain={display_node['domain']}" if display_node["domain"] else ""
+        domain = f"  domain={display_node.domain}" if display_node.domain else ""
         err_console.print(
-            f"    {display_node['ip']}  {display_node['name'] or '-'}  {display_node['role']}  "
-            f"{display_node['panel_status']}{domain}{desired}"
+            f"    {display_node.ip}  {display_node.name or '-'}  {display_node.role}  "
+            f"{display_node.panel_status}{domain}{desired}"
         )
 
     err_console.print()
     err_console.print("  [bold]Relays[/bold]")
-    if not relays_json:
+    if not inventory.relays:
         err_console.print("    [dim]none[/dim]")
-    for display_relay in relays_json:
-        target = display_relay["exit_node_name"] or display_relay["exit_node_ip"]
+    for display_relay in inventory.relays:
+        target = display_relay.exit_node_name or display_relay.exit_node_ip
         desired = (
             ""
-            if display_relay["desired"] is None
+            if display_relay.desired is None
             else "  desired"
-            if display_relay["desired"]
+            if display_relay.desired
             else "  [yellow]extra[/yellow]"
         )
         err_console.print(
-            f"    {display_relay['ip']}  {display_relay['name'] or '-'}  :{display_relay['port']} -> {target}{desired}"
+            f"    {display_relay.ip}  {display_relay.name or '-'}  :{display_relay.port} -> {target}{desired}"
         )
 
-    if desired_node_keys or desired_relay_keys:
+    if inventory.summary.desired_nodes or inventory.summary.desired_relays:
         err_console.print()
         err_console.print(
             "  [bold]Desired[/bold] "
-            f"{len(desired_node_keys)} node(s), {len(desired_relay_keys)} relay(s); "
-            f"{total_pending} pending"
+            f"{inventory.summary.desired_nodes} node(s), {inventory.summary.desired_relays} relay(s); "
+            f"{inventory.summary.pending} pending"
         )
     err_console.print()
 

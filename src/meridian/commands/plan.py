@@ -8,44 +8,15 @@ API, and prints a terraform-style diff. Exit codes:
 
 from __future__ import annotations
 
-import json
-import sys
-
 import typer
 
 from meridian.cluster import ClusterConfig
 from meridian.console import err_console, fail, info
+from meridian.core.models import Summary
+from meridian.core.output import emit_json, envelope, plan_payload
 from meridian.reconciler import compute_plan
 from meridian.reconciler.display import print_plan
 from meridian.reconciler.state import build_actual_state, build_desired_state
-
-
-def _emit_json(plan, exit_code: int) -> None:
-    """Serialize a Plan to stdout as JSON for CI consumption.
-
-    Schema is intentionally flat and dataclass-friendly so a downstream
-    `jq` pipeline can do `.actions[] | select(.kind == "remove_client")`.
-    Writes to stdout (not stderr) so the JSON is the entire program output
-    in --json mode.
-    """
-    payload = {
-        "converged": plan.is_empty,
-        "summary": plan.summary(),
-        "exit_code": exit_code,
-        "actions": [
-            {
-                "kind": a.kind.value,
-                "target": a.target,
-                "detail": a.detail,
-                "destructive": a.destructive,
-                "from_extras": a.from_extras,
-                "symbol": a.symbol,
-            }
-            for a in plan.actions
-        ],
-    }
-    sys.stdout.write(json.dumps(payload, indent=2) + "\n")
-    sys.stdout.flush()
 
 
 def run(json_output: bool = False) -> None:
@@ -99,7 +70,20 @@ def run(json_output: bool = False) -> None:
     exit_code = 0 if plan.is_empty else 2
 
     if json_output:
-        _emit_json(plan, exit_code=exit_code)
+        data = plan_payload(plan, exit_code=exit_code)
+        emit_json(
+            envelope(
+                command="plan",
+                data=data,
+                summary=Summary(
+                    text=plan.summary(),
+                    changed=not plan.is_empty,
+                    counts={"actions": len(plan.actions)},
+                ),
+                status="no_changes" if plan.is_empty else "changed",
+                exit_code=exit_code,
+            )
+        )
     else:
         print_plan(plan, console=err_console)
 

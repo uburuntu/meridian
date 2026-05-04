@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
 
-from meridian.console import confirm, fail, prompt
+from meridian.console import confirm, fail, prompt, set_json_mode, set_quiet_mode
 
 
 class TestFail:
@@ -78,6 +79,32 @@ class TestFail:
             fail("unexpected state", hint_type="bug")
         captured = capsys.readouterr()
         assert "github.com/uburuntu/meridian/issues" in captured.err
+
+    def test_fail_json_mode_emits_structured_error(self, capsys: pytest.CaptureFixture[str]) -> None:
+        set_json_mode(True)
+        set_quiet_mode(True)
+        try:
+            with pytest.raises(typer.Exit) as exc_info:
+                fail(
+                    "Invalid token api_token=secret-token",
+                    hint="Set password=hunter2 again",
+                    hint_type="user",
+                )
+        finally:
+            set_json_mode(False)
+            set_quiet_mode(False)
+
+        assert exc_info.value.exit_code == 2
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["schema"] == "meridian.output/v1"
+        assert data["command"] == "cli.error"
+        assert data["status"] == "failed"
+        assert data["exit_code"] == 2
+        assert data["errors"][0]["code"] == "MERIDIAN_USER_ERROR"
+        assert data["errors"][0]["category"] == "user"
+        assert "secret-token" not in captured.out
+        assert "hunter2" not in captured.out
 
 
 def _make_tty_mock(input_text: str) -> MagicMock:
