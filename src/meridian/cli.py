@@ -587,6 +587,14 @@ def fleet_status_cmd() -> None:
     run_status()
 
 
+@fleet_app.command("inventory")
+def fleet_inventory_cmd() -> None:
+    """Show configured fleet inventory and live panel status."""
+    from meridian.commands.fleet import run_inventory
+
+    run_inventory()
+
+
 @fleet_app.command("recover")
 def fleet_recover_cmd(
     panel_url: str = typer.Option(..., "--panel-url", help="Panel HTTPS URL"),

@@ -14,11 +14,13 @@ import typer
 
 from meridian.cluster import (
     ClusterConfig,
+    DesiredNode,
+    DesiredRelay,
     NodeEntry,
     PanelConfig,
     RelayEntry,
 )
-from meridian.commands.fleet import run_status
+from meridian.commands.fleet import run_inventory, run_status
 from meridian.commands.recover import run_recover
 from meridian.remnawave import ConfigProfile, Inbound, Node, RemnawaveError, User
 
@@ -324,6 +326,66 @@ class TestFleetStatus:
         assert len(data["relays"]) == 1
         assert data["relays"][0]["healthy"] is False
         assert data["relays"][0]["ip"] == "198.51.100.3"
+
+
+# ---------------------------------------------------------------------------
+# TestFleetInventory
+# ---------------------------------------------------------------------------
+
+
+class TestFleetInventory:
+    def test_inventory_json_redacts_panel_token(self) -> None:
+        cluster = _fleet_cluster()
+        cluster.desired_nodes = [DesiredNode(host="198.51.100.1", name="node-1")]
+        cluster.desired_relays = [DesiredRelay(host="198.51.100.3", name="relay-1", exit_node="node-1")]
+        panel = _make_panel_mock(ping_ok=True)
+        panel.list_nodes.return_value = [_api_node(_UUID_A, connected=True)]
+
+        with (
+            patch("meridian.commands.fleet.load_cluster", return_value=cluster),
+            patch("meridian.commands.fleet.make_panel", return_value=panel),
+            patch("meridian.commands.fleet.is_json_mode", return_value=True),
+            patch("meridian.commands.fleet.json_output") as mock_json,
+        ):
+            run_inventory()
+
+        data = mock_json.call_args[0][0]
+        assert "api_token" not in data["panel"]
+        assert data["panel"]["url"] == "https://198.51.100.1/panel/"
+        assert data["nodes"][0]["panel_status"] == "connected"
+        assert data["nodes"][0]["desired"] is True
+        assert data["relays"][0]["desired"] is True
+
+    def test_inventory_json_counts_pending_desired_entries(self) -> None:
+        cluster = _fleet_cluster()
+        cluster.desired_nodes = [DesiredNode(host="198.51.100.9", name="future-node")]
+        cluster.desired_relays = [DesiredRelay(host="198.51.100.8", name="future-relay", exit_node="node-1")]
+        panel = _make_panel_mock(ping_ok=False)
+
+        with (
+            patch("meridian.commands.fleet.load_cluster", return_value=cluster),
+            patch("meridian.commands.fleet.make_panel", return_value=panel),
+            patch("meridian.commands.fleet.is_json_mode", return_value=True),
+            patch("meridian.commands.fleet.json_output") as mock_json,
+        ):
+            run_inventory()
+
+        data = mock_json.call_args[0][0]
+        assert data["panel"]["healthy"] is False
+        assert data["summary"]["unapplied_desired_nodes"] == 1
+        assert data["summary"]["unapplied_desired_relays"] == 1
+
+    def test_inventory_text_handles_panel_api_error(self) -> None:
+        cluster = _fleet_cluster()
+        panel = _make_panel_mock(ping_ok=True)
+        panel.list_nodes.side_effect = RemnawaveError("API error")
+
+        with (
+            patch("meridian.commands.fleet.load_cluster", return_value=cluster),
+            patch("meridian.commands.fleet.make_panel", return_value=panel),
+            patch("meridian.commands.fleet.is_json_mode", return_value=False),
+        ):
+            run_inventory()
 
 
 # ---------------------------------------------------------------------------

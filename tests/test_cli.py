@@ -60,6 +60,14 @@ class TestSubcommandHelp:
         assert "list" in output
         assert "remove" in output
 
+    def test_fleet_help(self) -> None:
+        result = runner.invoke(app, ["fleet", "--help"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.output)
+        assert "status" in output
+        assert "inventory" in output
+        assert "recover" in output
+
     def test_preflight_help(self) -> None:
         result = runner.invoke(app, ["preflight", "--help"])
         assert result.exit_code == 0

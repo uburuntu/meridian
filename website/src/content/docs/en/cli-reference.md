@@ -95,6 +95,7 @@ Inspect and repair the fleet from the live panel API.
 
 ```
 meridian fleet status [--json]
+meridian fleet inventory [--json]
 meridian fleet recover IP [flags]
 ```
 
@@ -105,6 +106,8 @@ meridian fleet recover IP [flags]
 | `--ssh-port PORT` | 22 | SSH port on the panel host |
 
 **`fleet status`** — shows panel health, every node's connection + Xray version + traffic, every relay's upstream, and user counts. With `--json`, stable field access: `panel.url`, `panel.healthy`, `nodes[].status` (`"connected"`, `"disconnected"`, `"disabled"`, `"unknown"`), `relays[].status`, `users.active/disabled/other`.
+
+**`fleet inventory`** — shows the configured panel, nodes, relays, desired topology, and live panel node status when reachable. It never prints the panel API token. With `--json`, stable field access includes `summary.*`, `nodes[].desired`, `nodes[].protocols`, `relays[].exit_node_*`, and `desired_nodes[].present`.
 
 **`fleet recover`** — rebuilds `~/.meridian/cluster.yml` from the live panel. Use it when the local file is lost, or when picking up someone else's deployment. Connects via SSH to read stable server-side metadata, then queries the panel API for nodes, relays, inbounds, hosts, and users.
 
