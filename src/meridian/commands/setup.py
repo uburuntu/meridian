@@ -7,7 +7,6 @@ from the deployer's machine to configure users, profiles, and hosts.
 
 from __future__ import annotations
 
-import hashlib
 import re
 import secrets
 import shlex
@@ -39,6 +38,12 @@ from meridian.config import (
 )
 from meridian.console import choose, confirm, err_console, fail, info, line, ok, prompt, warn
 from meridian.core.deploy import DeployRequest, DeployResult, build_deploy_workflow
+from meridian.core.deploy_planning import (
+    DeployClusterState,
+    DeployNodeState,
+    DeployPlanningError,
+    build_deploy_plan,
+)
 from meridian.core.output import OperationContext
 from meridian.core.reporters import Reporter
 from meridian.core.services.deploy import deploy_server
@@ -217,54 +222,44 @@ def _execute_deploy_request(
     # Load existing cluster config
     cluster = ClusterConfig.load()
 
-    # Determine deployment mode
     existing_node = cluster.find_node(resolved.ip)
-    is_first_deploy = not cluster.is_configured
-    is_redeploy = existing_node is not None
+    try:
+        deploy_plan = build_deploy_plan(
+            resolved.ip,
+            DeployClusterState(
+                is_configured=cluster.is_configured,
+                panel_secret_path=cluster.panel.secret_path,
+                panel_sub_path=cluster.panel.sub_path,
+                existing_node=(
+                    DeployNodeState(
+                        ip=existing_node.ip,
+                        xhttp_path=existing_node.xhttp_path,
+                        ws_path=existing_node.ws_path,
+                    )
+                    if existing_node is not None
+                    else None
+                ),
+                node_count=len(cluster.nodes),
+                relay_count=len(cluster.relays),
+            ),
+        )
+    except DeployPlanningError as exc:
+        fail(str(exc), hint=exc.hint, hint_type="user")
+
+    is_first_deploy = deploy_plan.mode == "first_deploy"
+    is_redeploy = deploy_plan.mode == "redeploy"
     if is_first_deploy:
         info("First deployment -- will set up panel + proxy node")
-    elif is_redeploy:
+    else:
         info(f"Redeploying existing node at {resolved.ip}")
-    elif cluster.is_configured:
-        # Cluster exists but this IP is new — user should use `node add`
-        fail(
-            f"Cluster already configured — use 'meridian node add {resolved.ip}' to add a new node",
-            hint="'meridian deploy' is for initial deployment or redeploying existing nodes.\n"
-            "To add new nodes to an existing cluster: meridian node add IP",
-            hint_type="user",
-        )
 
-    # Compute port layout
-    ip_hash = int(hashlib.sha256(resolved.ip.encode()).hexdigest()[:8], 16)
-    xhttp_port = 30000 + (ip_hash % 10000)
-    # nginx always runs in 4.0 (panel reverse proxy + connection pages),
-    # so Reality must use an internal port, never 443 directly
-    reality_port = 10000 + ip_hash % 1000
-    wss_port = 20000 + (ip_hash % 10000)
-
-    # Generate or reuse secret_path for panel nginx reverse proxy
-    if is_redeploy and cluster.panel.secret_path:
-        secret_path = cluster.panel.secret_path
-    elif is_first_deploy:
-        secret_path = secrets.token_hex(12)
-    else:
-        secret_path = cluster.panel.secret_path  # existing cluster
-
-    # Generate or reuse xhttp/ws paths (persist across redeploys)
-    if existing_node and existing_node.xhttp_path:
-        xhttp_path = existing_node.xhttp_path
-    else:
-        xhttp_path = secrets.token_hex(8)
-    if existing_node and existing_node.ws_path:
-        ws_path = existing_node.ws_path
-    else:
-        ws_path = secrets.token_hex(8)
-
-    # Generate or reuse info_page_path for connection pages
-    if cluster.panel.sub_path:
-        info_page_path = cluster.panel.sub_path
-    else:
-        info_page_path = secrets.token_hex(8)
+    xhttp_port = deploy_plan.ports.xhttp_port
+    reality_port = deploy_plan.ports.reality_port
+    wss_port = deploy_plan.ports.wss_port
+    secret_path = deploy_plan.secret_path
+    xhttp_path = deploy_plan.xhttp_path
+    ws_path = deploy_plan.ws_path
+    info_page_path = deploy_plan.info_page_path
 
     # Build and run provisioner pipeline
     _run_provisioner(

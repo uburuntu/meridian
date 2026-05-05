@@ -15,6 +15,15 @@ from meridian.core.clients import (
     ClientShowResult,
 )
 from meridian.core.deploy import DeployRequest, DeployResult, build_deploy_workflow
+from meridian.core.deploy_planning import (
+    DeployClusterState,
+    DeployNodeState,
+    DeployPlan,
+    DeployPlanningError,
+    DeployPorts,
+    build_deploy_plan,
+    compute_deploy_ports,
+)
 from meridian.core.events import (
     COMMAND_COMPLETED,
     COMMAND_FAILED,
@@ -120,6 +129,11 @@ __all__ = [
     "CoreModel",
     "CoreEventType",
     "DeployExecutor",
+    "DeployClusterState",
+    "DeployNodeState",
+    "DeployPlan",
+    "DeployPlanningError",
+    "DeployPorts",
     "DeployRequest",
     "DeployResult",
     "ErrorCategory",
@@ -187,4 +201,6 @@ __all__ = [
     "validate_command_envelope",
     "WorkflowPlan",
     "build_deploy_workflow",
+    "build_deploy_plan",
+    "compute_deploy_ports",
 ]

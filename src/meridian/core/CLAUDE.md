@@ -8,6 +8,7 @@
 - **Pydantic at API boundaries** - public request/result/event/error contracts use Pydantic v2 for validation, JSON serialization, and JSON Schema export. Internal execution objects can stay lighter until they cross a client boundary.
 - **Exported services return typed contracts** - service result wrappers are Pydantic too; do not publish dataclasses as core API.
 - **Deploy migration is service-first** - CLI deploy builds a `DeployRequest` and calls core; legacy SSH/panel mechanics stay injected until fully extracted.
+- **Deploy planning is pure** - mode, ports, and reusable paths are computed in core before adapters perform SSH or panel I/O.
 - **Remote execution is transport-neutral** - core workflows depend on executor contracts; SSH and future daemon transports live in adapters.
 
 ## What's done well
