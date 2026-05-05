@@ -72,8 +72,11 @@ def main_callback(
         from meridian.console import error_context, fail, set_json_mode
 
         set_json_mode(True)
-        if not _argv_supports_global_json():
-            command = _argv_command_name()
+        candidate_args = [list(ctx.args), sys.argv[1:]]
+        if ctx.invoked_subcommand:
+            candidate_args.append([ctx.invoked_subcommand])
+        if not any(args and _argv_supports_global_json(args) for args in candidate_args):
+            command = next((_argv_command_name(args) for args in candidate_args if args), "cli")
             with error_context(command):
                 fail(
                     f"JSON output is not yet supported for `{command}`",
@@ -117,6 +120,8 @@ def _argv_requests_machine_output(args: list[str] | None = None) -> bool:
     args = args or sys.argv[1:]
     if "--json" in args or "--envelope" in args:
         return True
+    if "--events" in args or any(arg.startswith("--events=") for arg in args):
+        return True
 
     # `meridian api schema NAME` writes raw JSON Schema even without a flag.
     positionals = [arg for arg in args if not arg.startswith("-")]
@@ -137,6 +142,8 @@ def _argv_positionals(args: list[str] | None = None) -> list[str]:
         "--ssh-port",
         "--prune-extras",
         "--parallel",
+        "--request",
+        "--events",
     }
     for arg in args:
         if skip_next:
@@ -167,6 +174,8 @@ def _argv_supports_global_json(args: list[str] | None = None) -> bool:
     if not positionals:
         return False
     if positionals[0] in {"plan", "apply"}:
+        return True
+    if positionals[0] == "deploy":
         return True
     if positionals[:2] in (["client", "list"], ["client", "show"], ["fleet", "status"], ["fleet", "inventory"]):
         return True
@@ -297,17 +306,26 @@ def deploy_cmd(
         help="Block Russian domains and IPs (geosite:category-ru + geoip:ru)",
     ),
     ssh_port: int = typer.Option(22, "--ssh-port", help="SSH port (if non-standard)"),
+    json_output: bool = typer.Option(False, "--json", help="Emit final deploy result as JSON"),
+    events: str = typer.Option("", "--events", help="Stream progress events as JSONL (use: jsonl)"),
+    request_path: str = typer.Option("", "--request", help="Read deploy-request JSON from file or '-' for stdin"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate and plan without SSH changes"),
 ) -> None:
     """Deploy a VLESS+Reality proxy server. Interactive wizard if no IP provided.
 
     [dim]Examples:[/dim]
       [cyan]meridian deploy[/cyan]                          Interactive wizard
-      [cyan]meridian deploy 1.2.3.4[/cyan]                  Deploy with defaults
-      [cyan]meridian deploy 1.2.3.4 --domain d.io[/cyan]    CDN fallback via Cloudflare
-      [cyan]meridian deploy 1.2.3.4 --no-harden[/cyan]      Skip SSH + firewall hardening
+      [cyan]meridian deploy 198.51.100.10[/cyan]            Deploy with defaults
+      [cyan]meridian deploy 198.51.100.10 --domain vpn.example[/cyan]  CDN fallback via Cloudflare
+      [cyan]meridian deploy 198.51.100.10 --no-harden[/cyan]  Skip SSH + firewall hardening
+      [cyan]meridian deploy --request deploy.json --json --events=jsonl[/cyan]
     """
     from meridian.commands.setup import run
+    from meridian.console import is_json_mode
 
+    json_enabled = json_output or is_json_mode() or bool(events)
+    if json_enabled:
+        _enable_json_output()
     run(
         ip,
         domain,
@@ -325,6 +343,10 @@ def deploy_cmd(
         warp=warp,
         geo_block=geo_block,
         ssh_port=ssh_port,
+        request_path=request_path,
+        json_output=json_enabled,
+        events=events,
+        dry_run=dry_run,
     )
 
 

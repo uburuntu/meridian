@@ -7,6 +7,7 @@ IP/flag validation, deterministic port computation, and path reuse.
 from __future__ import annotations
 
 import hashlib
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +23,7 @@ from meridian.cluster import (
     ProtocolKey,
 )
 from meridian.commands.setup import run
+from meridian.core.deploy import DeployRequest, DeployResult
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -72,6 +74,28 @@ def _make_resolved(ip: str = _IP_A) -> SimpleNamespace:
     conn.port = 22
     conn.local_mode = False
     return SimpleNamespace(ip=ip, user="root", conn=conn, local_mode=False)
+
+
+def _deploy_result(ip: str = _IP_A) -> DeployResult:
+    return DeployResult(
+        mode="first_deploy",
+        server_ip=ip,
+        ssh_user="root",
+        ssh_port=22,
+        domain="vpn.example",
+        sni="www.microsoft.com",
+        client_name="default",
+        harden=True,
+        pq=False,
+        warp=False,
+        geo_block=True,
+        panel_url=f"https://{ip}/panel",
+        panel_secret_path="secret_path",
+        connection_page_path="connection_path",
+        node_count=1,
+        relay_count=0,
+        summary=f"Deploy completed for {ip}",
+    )
 
 
 def _patch_all(**overrides: object):  # noqa: ANN202
@@ -167,6 +191,69 @@ class TestRunCoreBoundary:
         assert request.pq is True
         assert request.warp is True
         assert request.geo_block is False
+
+    def test_run_emits_deploy_json_envelope(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch("meridian.commands.setup.deploy_server", return_value=_deploy_result()) as mock_deploy:
+            run(ip=_IP_A, yes=True, json_output=True)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["command"] == "deploy"
+        assert payload["status"] == "changed"
+        assert payload["summary"]["changed"] is True
+        assert payload["data"]["server_ip"] == _IP_A
+        assert mock_deploy.call_args.kwargs["reporter"] is None
+
+    def test_run_loads_deploy_request_file(self, tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
+        request_path = tmp_path / "deploy.json"
+        request = DeployRequest(ip=_IP_A, user="admin", yes=True, domain="vpn.example")
+        request_path.write_text(request.model_dump_json(), encoding="utf-8")
+
+        with patch("meridian.commands.setup.deploy_server", return_value=_deploy_result()) as mock_deploy:
+            run(request_path=str(request_path), json_output=True)
+
+        loaded_request = mock_deploy.call_args.args[0]
+        assert loaded_request.ip == _IP_A
+        assert loaded_request.user == "admin"
+        assert loaded_request.yes is True
+        assert json.loads(capsys.readouterr().out)["command"] == "deploy"
+
+    def test_run_streams_deploy_events_as_jsonl(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch("meridian.commands.setup._execute_deploy_request", return_value=_deploy_result()):
+            run(ip=_IP_A, yes=True, events="jsonl")
+
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+        events = [json.loads(line) for line in captured.err.splitlines() if line.strip()]
+
+        assert output["command"] == "deploy"
+        assert output["status"] == "changed"
+        assert [event["type"] for event in events] == ["command.started", "command.completed"]
+        assert events[0]["schema"] == "meridian.event/v1"
+        assert events[0]["operation_id"] == output["operation_id"]
+
+    def test_run_dry_run_emits_deploy_plan_without_executing(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with (
+            patch("meridian.commands.setup.ClusterConfig.load", return_value=_empty_cluster()),
+            patch("meridian.commands.setup.deploy_server") as mock_deploy,
+        ):
+            run(ip=_IP_A, dry_run=True, json_output=True)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["command"] == "deploy"
+        assert payload["status"] == "ok"
+        assert payload["data"]["mode"] == "first_deploy"
+        assert payload["data"]["server_ip"] == _IP_A
+        mock_deploy.assert_not_called()
+
+    def test_run_machine_mode_requires_confirmation(self) -> None:
+        with (
+            patch("meridian.commands.setup.deploy_server") as mock_deploy,
+            pytest.raises(typer.Exit) as exc_info,
+        ):
+            run(ip=_IP_A, json_output=True)
+
+        assert exc_info.value.exit_code == 2
+        mock_deploy.assert_not_called()
 
 
 class TestRunModeDetection:

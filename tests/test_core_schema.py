@@ -6,11 +6,14 @@ import pytest
 from pydantic import ValidationError
 
 from meridian.core.clients import build_client_list_result
+from meridian.core.deploy import DeployResult
+from meridian.core.deploy_planning import DeployClusterState, build_deploy_plan
 from meridian.core.models import MeridianError
 from meridian.core.output import OperationTimer, command_envelope, envelope
 from meridian.core.schema import (
     ApiCommandsResult,
     ApiSchemasResult,
+    DeployOutputEnvelope,
     PlanOutputEnvelope,
     command_catalog,
     schema_catalog,
@@ -248,6 +251,66 @@ def test_command_envelope_schema_rejects_success_without_typed_data() -> None:
 
     with pytest.raises(ValidationError):
         PlanOutputEnvelope.model_validate(payload.model_dump(mode="json", by_alias=True))
+
+
+def test_deploy_command_envelope_accepts_result_and_dry_run_plan() -> None:
+    result = DeployResult(
+        mode="first_deploy",
+        server_ip="198.51.100.10",
+        ssh_user="root",
+        ssh_port=22,
+        domain="vpn.example",
+        sni="www.microsoft.com",
+        client_name="default",
+        harden=True,
+        pq=False,
+        warp=False,
+        geo_block=True,
+        panel_url="https://198.51.100.10/panel",
+        panel_secret_path="secret_path",
+        connection_page_path="connection_path",
+        node_count=1,
+        relay_count=0,
+        summary="Deploy completed for 198.51.100.10",
+    )
+    deployed = command_envelope(
+        command="deploy",
+        data=result.model_dump(mode="json"),
+        summary=result.summary,
+        status="changed",
+        exit_code=0,
+        timer=OperationTimer(started_at="2026-05-04T21:00:00Z", operation_id="op-deploy-result"),
+    )
+
+    parsed_result = DeployOutputEnvelope.model_validate(deployed.model_dump(mode="json", by_alias=True))
+
+    assert parsed_result.root.status == "changed"
+    assert parsed_result.root.data.server_ip == "198.51.100.10"
+
+    plan = build_deploy_plan(
+        "198.51.100.10",
+        DeployClusterState(
+            is_configured=False,
+            panel_secret_path="",
+            panel_sub_path="",
+            node_count=0,
+            relay_count=0,
+        ),
+        token_hex=lambda n: "0" * (n * 2),
+    )
+    planned = command_envelope(
+        command="deploy",
+        data=plan.model_dump(mode="json"),
+        summary="Deploy plan",
+        status="ok",
+        exit_code=0,
+        timer=OperationTimer(started_at="2026-05-04T21:00:00Z", operation_id="op-deploy-plan"),
+    )
+
+    parsed_plan = DeployOutputEnvelope.model_validate(planned.model_dump(mode="json", by_alias=True))
+
+    assert parsed_plan.root.status == "ok"
+    assert parsed_plan.root.data.mode == "first_deploy"
 
 
 def test_unknown_schema_name_is_actionable() -> None:

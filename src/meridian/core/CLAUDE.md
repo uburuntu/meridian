@@ -11,6 +11,7 @@
 - **Deploy migration is service-first** - CLI deploy builds a `DeployRequest` and calls core; legacy SSH/panel mechanics stay injected until fully extracted.
 - **Deploy planning is pure** - mode, ports, and reusable paths are computed in core before adapters perform SSH or panel I/O.
 - **Deploy validation is core-owned** - executable requests are normalized before adapters resolve servers or open connections.
+- **Deploy process API is first-class** - `deploy` has a command contract, a typed output envelope, request-file input, dry-run plan output, and JSONL progress events for UI clients.
 - **Remote execution is transport-neutral** - core workflows depend on executor contracts; SSH and future daemon transports live in adapters.
 
 ## What's done well

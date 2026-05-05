@@ -56,6 +56,10 @@ class TestSubcommandHelp:
         output = _strip_ansi(result.output)
         assert "--domain" in output
         assert "--sni" in output
+        assert "--json" in output
+        assert "--events" in output
+        assert "--request" in output
+        assert "--dry-run" in output
 
     def test_client_help(self) -> None:
         result = runner.invoke(app, ["client", "--help"])
@@ -148,6 +152,50 @@ class TestSubcommandHelp:
         assert result.exit_code == 0
         assert called["json"] is True
 
+    def test_deploy_accepts_command_json_and_events(self, monkeypatch) -> None:
+        called: dict[str, object] = {}
+
+        def fake_run(*_args: object, **kwargs: object) -> None:
+            called.update(kwargs)
+            called["json"] = is_json_mode()
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+        monkeypatch.setattr("meridian.commands.setup.run", fake_run)
+
+        result = runner.invoke(
+            app,
+            ["deploy", "198.51.100.10", "--yes", "--json", "--events=jsonl", "--request", "deploy.json", "--dry-run"],
+        )
+
+        _reset_output_modes()
+        assert result.exit_code == 0
+        assert called["json"] is True
+        assert called["json_output"] is True
+        assert called["events"] == "jsonl"
+        assert called["request_path"] == "deploy.json"
+        assert called["dry_run"] is True
+
+    def test_deploy_accepts_global_json(self, monkeypatch) -> None:
+        called: dict[str, object] = {}
+
+        def fake_run(*_args: object, **kwargs: object) -> None:
+            called.update(kwargs)
+            called["json"] = is_json_mode()
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+        monkeypatch.setattr("meridian.commands.setup.run", fake_run)
+
+        result = runner.invoke(app, ["--json", "deploy", "198.51.100.10", "--yes"])
+
+        _reset_output_modes()
+        assert result.exit_code == 0
+        assert called["json"] is True
+        assert called["json_output"] is True
+
     def test_preflight_help(self) -> None:
         result = runner.invoke(app, ["preflight", "--help"])
         assert result.exit_code == 0
@@ -199,6 +247,8 @@ class TestApiContractCLI:
         assert commands["fleet.status"]["data_schema"] == "fleet-status"
         assert commands["client.list"]["argv"] == ["client", "list"]
         assert commands["api.workflow"]["data_schema"] == "api-workflow"
+        assert commands["deploy"]["data_schema"] == "deploy-command-data"
+        assert commands["deploy"]["machine_flags"] == ["--json", "--events=jsonl", "--request", "--dry-run"]
 
     def test_api_workflow_json_returns_deploy_fields(self, monkeypatch) -> None:
         set_json_mode(False)

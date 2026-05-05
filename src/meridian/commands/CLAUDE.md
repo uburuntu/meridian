@@ -9,6 +9,8 @@
 **Server resolution cascade** in `resolve.py` — strict priority order for server-touching commands (deploy, node add):
 1. Explicit IP → 2. `--server` name → 3. `local` keyword → 4. Single-server auto-select → 5. Multi-server prompt → 6. Fail with hint
 
+**Machine deploy mode** — `deploy --json`, `deploy --events=jsonl`, `deploy --request FILE`, and `deploy --dry-run` are process API surfaces for UI clients. Keep prompts and Rich output out of these paths; final stdout must be a `meridian.output/v1` envelope and JSONL progress goes to stderr.
+
 **Command groups**: `client` (add/show/list/remove), `node` (add/list/remove), `relay` (deploy/list/remove/check), `fleet` (status/inventory/recover). Top-level: `deploy`, `migrate`, `test`, `probe`, `doctor`, `teardown`.
 
 ## What's done well

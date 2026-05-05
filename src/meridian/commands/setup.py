@@ -10,12 +10,17 @@ from __future__ import annotations
 import re
 import secrets
 import shlex
+import sys
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 import typer
+from pydantic import ValidationError
 
-from meridian.adapters import RemoteExecutorConnection, SSHRemoteExecutor
+from meridian.adapters import JsonlReporter, RemoteExecutorConnection, SSHRemoteExecutor
 from meridian.cluster import (
     BrandingConfig,
     ClusterConfig,
@@ -37,7 +42,20 @@ from meridian.config import (
     SERVERS_FILE,
     is_ip,
 )
-from meridian.console import choose, confirm, err_console, fail, info, line, ok, prompt, warn
+from meridian.console import (
+    choose,
+    confirm,
+    err_console,
+    error_context,
+    fail,
+    info,
+    is_quiet_mode,
+    line,
+    ok,
+    prompt,
+    set_quiet_mode,
+    warn,
+)
 from meridian.core.deploy import (
     DeployRequest,
     DeployResult,
@@ -48,15 +66,19 @@ from meridian.core.deploy import (
 from meridian.core.deploy_planning import (
     DeployClusterState,
     DeployNodeState,
+    DeployPlan,
     DeployPlanningError,
     build_deploy_plan,
 )
 from meridian.core.deploy_validation import DeployValidationError, normalize_deploy_request, validate_deploy_target
+from meridian.core.events import COMMAND_COMPLETED, COMMAND_STARTED
 from meridian.core.execution import RemoteExecutor
-from meridian.core.output import OperationContext
-from meridian.core.reporters import Reporter
+from meridian.core.models import OutputStatus, Summary
+from meridian.core.output import OperationContext, command_envelope
+from meridian.core.reporters import Reporter, emit_event
 from meridian.core.services.deploy import deploy_server
 from meridian.remnawave import MeridianPanel, NodeCredentials, RemnawaveError
+from meridian.renderers import emit_json
 from meridian.servers import ServerEntry, ServerRegistry
 from meridian.ssh import ServerConnection
 
@@ -83,61 +105,254 @@ def run(
     warp: bool = False,
     geo_block: bool = True,
     ssh_port: int = 22,
+    request_path: str = "",
+    json_output: bool = False,
+    events: str = "",
+    dry_run: bool = False,
 ) -> None:
     """Deploy a VLESS+Reality proxy server (Remnawave architecture)."""
-    request = DeployRequest(
-        ip=ip,
-        domain=domain,
-        sni=sni,
-        client_name=client_name,
-        user=user,
-        yes=yes,
-        harden=harden,
-        requested_server=requested_server,
-        server_name=server_name,
-        icon=icon,
-        color=color,
-        decoy=decoy,
-        pq=pq,
-        warp=warp,
-        geo_block=geo_block,
-        ssh_port=ssh_port,
-    )
-    if build_deploy_workflow(request).needs_input:
-        wizard_result = _interactive_wizard(
-            sni=sni,
-            domain=domain,
-            harden=harden,
-            yes=yes,
-            client_name=client_name,
-            server_name=server_name,
-            icon=icon,
-            color=color,
-            pq=pq,
-            warp=warp,
-            geo_block=geo_block,
-        )
-        ip, user, sni, domain, harden = wizard_result[:5]
-        client_name, server_name, icon, color, pq, warp, geo_block = wizard_result[5:]
-        request = apply_deploy_workflow_answers(
-            request,
-            DeployWorkflowAnswers(
+    operation = OperationContext()
+    final_json = json_output or events == "jsonl"
+    reporter: Reporter | None = JsonlReporter() if events == "jsonl" else None
+
+    with error_context("deploy", timer=operation.timer), _quiet_machine_output(final_json):
+        if events and events != "jsonl":
+            fail(f"Unsupported --events value: {events}", hint="Use: --events=jsonl", hint_type="user")
+
+        request = (
+            _load_deploy_request(request_path)
+            if request_path
+            else DeployRequest(
                 ip=ip,
                 domain=domain,
                 sni=sni,
                 client_name=client_name,
                 user=user,
+                yes=yes,
                 harden=harden,
+                requested_server=requested_server,
+                server_name=server_name,
+                icon=icon,
+                color=color,
+                decoy=decoy,
+                pq=pq,
+                warp=warp,
+                geo_block=geo_block,
+                ssh_port=ssh_port,
+            )
+        )
+        machine_mode = final_json or bool(request_path) or dry_run
+        if build_deploy_workflow(request).needs_input:
+            if machine_mode:
+                fail(
+                    "Deploy request is incomplete",
+                    hint="Call `meridian api workflow deploy --json`, collect fields, then pass --request FILE.",
+                    hint_type="user",
+                )
+            wizard_result = _interactive_wizard(
+                sni=sni,
+                domain=domain,
+                harden=harden,
+                yes=yes,
+                client_name=client_name,
                 server_name=server_name,
                 icon=icon,
                 color=color,
                 pq=pq,
                 warp=warp,
                 geo_block=geo_block,
-                confirm=True,
-            ),
+            )
+            ip, user, sni, domain, harden = wizard_result[:5]
+            client_name, server_name, icon, color, pq, warp, geo_block = wizard_result[5:]
+            request = apply_deploy_workflow_answers(
+                request,
+                DeployWorkflowAnswers(
+                    ip=ip,
+                    domain=domain,
+                    sni=sni,
+                    client_name=client_name,
+                    user=user,
+                    harden=harden,
+                    server_name=server_name,
+                    icon=icon,
+                    color=color,
+                    pq=pq,
+                    warp=warp,
+                    geo_block=geo_block,
+                    confirm=True,
+                ),
+            )
+
+        if dry_run:
+            plan = _plan_deploy_request(request, dry_run=True)
+            _emit_deploy_started_event(reporter, operation, dry_run=True)
+            _emit_deploy_completed_event(reporter, operation, plan, dry_run=True)
+            if final_json:
+                _emit_deploy_json(plan, operation=operation, status="ok")
+            else:
+                err_console.print()
+                err_console.print(f"  [bold]Deploy dry-run:[/bold] {plan.mode} for {plan.server_ip}")
+                err_console.print()
+            return
+
+        if machine_mode and not request.yes:
+            fail(
+                "Machine deploy requires confirmation in the request",
+                hint="Set `yes: true` after the UI user confirms the deployment.",
+                hint_type="user",
+            )
+
+        result = deploy_server(request, executor=_execute_deploy_request, reporter=reporter, operation=operation)
+        if final_json:
+            _emit_deploy_json(result, operation=operation, status="changed")
+
+
+@contextmanager
+def _quiet_machine_output(enabled: bool) -> Iterator[None]:
+    """Temporarily suppress human stderr rendering for JSON deploys."""
+    if not enabled:
+        yield
+        return
+
+    previous = is_quiet_mode()
+    set_quiet_mode(True)
+    try:
+        yield
+    finally:
+        set_quiet_mode(previous)
+
+
+def _load_deploy_request(source: str) -> DeployRequest:
+    """Load a DeployRequest from a JSON file or stdin."""
+    try:
+        text = sys.stdin.read() if source == "-" else Path(source).read_text(encoding="utf-8")
+    except OSError as exc:
+        fail(f"Could not read deploy request: {exc}", hint_type="user")
+    try:
+        return DeployRequest.model_validate_json(text)
+    except ValidationError as exc:
+        fail("Invalid deploy request JSON", hint=str(exc), hint_type="user")
+
+
+def _normalize_deploy_request_or_fail(request: DeployRequest) -> DeployRequest:
+    try:
+        return normalize_deploy_request(request)
+    except DeployValidationError as exc:
+        fail(str(exc), hint=exc.hint, hint_type="user")
+
+
+def _resolve_deploy_target(registry: ServerRegistry, request: DeployRequest) -> tuple[str, str]:
+    """Resolve request target to concrete server IP/local keyword and SSH user."""
+    server_ip = request.ip
+    ssh_user = request.user
+    if request.requested_server:
+        if is_local_keyword(request.requested_server):
+            server_ip = request.requested_server
+        else:
+            entry = registry.find(request.requested_server)
+            if not entry:
+                if is_ip(request.requested_server):
+                    server_ip = request.requested_server
+                else:
+                    raise DeployValidationError(
+                        f"Server '{request.requested_server}' not found",
+                        hint="See registered servers: meridian server list",
+                    )
+            else:
+                server_ip = entry.host
+                if request.user == "root" and entry.user:
+                    ssh_user = entry.user
+
+    try:
+        validate_deploy_target(server_ip)
+    except DeployValidationError:
+        raise
+    return server_ip, ssh_user
+
+
+def _deploy_cluster_state(cluster: ClusterConfig, server_ip: str) -> DeployClusterState:
+    existing_node = cluster.find_node(server_ip)
+    return DeployClusterState(
+        is_configured=cluster.is_configured,
+        panel_secret_path=cluster.panel.secret_path,
+        panel_sub_path=cluster.panel.sub_path,
+        existing_node=(
+            DeployNodeState(
+                ip=existing_node.ip,
+                xhttp_path=existing_node.xhttp_path,
+                ws_path=existing_node.ws_path,
+            )
+            if existing_node is not None
+            else None
+        ),
+        node_count=len(cluster.nodes),
+        relay_count=len(cluster.relays),
+    )
+
+
+def _plan_deploy_request(request: DeployRequest, *, dry_run: bool = False) -> DeployPlan:
+    """Resolve and plan a deploy request without opening SSH."""
+    request = _normalize_deploy_request_or_fail(request)
+    registry = ServerRegistry(SERVERS_FILE)
+    try:
+        server_ip, _ = _resolve_deploy_target(registry, request)
+        token_hex = (lambda n: "0" * (n * 2)) if dry_run else secrets.token_hex
+        return build_deploy_plan(server_ip, _deploy_cluster_state(ClusterConfig.load(), server_ip), token_hex=token_hex)
+    except (DeployPlanningError, DeployValidationError) as exc:
+        fail(str(exc), hint=getattr(exc, "hint", ""), hint_type="user")
+
+
+def _emit_deploy_json(result: DeployResult | DeployPlan, *, operation: OperationContext, status: OutputStatus) -> None:
+    """Emit a typed deploy envelope."""
+    if isinstance(result, DeployResult):
+        summary_text = result.summary
+        counts = {"nodes": result.node_count, "relays": result.relay_count}
+    else:
+        summary_text = f"Deploy plan: {result.mode} for {result.server_ip}"
+        counts = {"nodes": result.node_count, "relays": result.relay_count}
+
+    emit_json(
+        command_envelope(
+            command="deploy",
+            data=result.model_dump(mode="json"),
+            summary=Summary(text=summary_text, changed=status == "changed", counts=counts),
+            status=status,
+            exit_code=0,
+            timer=operation.timer,
         )
-    deploy_server(request, executor=_execute_deploy_request)
+    )
+
+
+def _emit_deploy_started_event(reporter: Reporter | None, operation: OperationContext, *, dry_run: bool) -> None:
+    if reporter is None:
+        return
+    emit_event(
+        reporter,
+        operation,
+        COMMAND_STARTED,
+        phase="deploy",
+        message="Deploy dry-run started" if dry_run else "Deploy started",
+        data={"command": "deploy", "dry_run": dry_run},
+    )
+
+
+def _emit_deploy_completed_event(
+    reporter: Reporter | None,
+    operation: OperationContext,
+    plan: DeployPlan,
+    *,
+    dry_run: bool,
+) -> None:
+    if reporter is None:
+        return
+    emit_event(
+        reporter,
+        operation,
+        COMMAND_COMPLETED,
+        phase="deploy",
+        message="Deploy dry-run completed" if dry_run else "Deploy completed",
+        data={"command": "deploy", "dry_run": dry_run, "mode": plan.mode, "server_ip": plan.server_ip},
+    )
 
 
 def _execute_deploy_request(
@@ -146,19 +361,13 @@ def _execute_deploy_request(
     operation: OperationContext | None = None,
 ) -> DeployResult:
     """Execute deploy request using the current SSH/panel implementation."""
-    try:
-        request = normalize_deploy_request(request)
-    except DeployValidationError as exc:
-        fail(str(exc), hint=exc.hint, hint_type="user")
+    request = _normalize_deploy_request_or_fail(request)
 
-    ip = request.ip
     domain = request.domain
     sni = request.sni
     client_name = request.client_name
-    user = request.user
     yes = request.yes
     harden = request.harden
-    requested_server = request.requested_server
     server_name = request.server_name
     icon = request.icon
     color = request.color
@@ -171,30 +380,8 @@ def _execute_deploy_request(
     # Accept silently for backwards compatibility but don't use it.
 
     registry = ServerRegistry(SERVERS_FILE)
-    server_ip = ip
-    ssh_user = user
-
-    if requested_server:
-        if is_local_keyword(requested_server):
-            server_ip = requested_server
-        else:
-            entry = registry.find(requested_server)
-            if not entry:
-                if is_ip(requested_server):
-                    server_ip = requested_server
-                else:
-                    fail(
-                        f"Server '{requested_server}' not found",
-                        hint="See registered servers: meridian server list",
-                        hint_type="user",
-                    )
-            else:
-                server_ip = entry.host
-                if user == "root" and entry.user:
-                    ssh_user = entry.user
-
     try:
-        validate_deploy_target(server_ip)
+        server_ip, ssh_user = _resolve_deploy_target(registry, request)
     except DeployValidationError as exc:
         fail(str(exc), hint=exc.hint, hint_type="user")
 
@@ -218,26 +405,10 @@ def _execute_deploy_request(
     # Load existing cluster config
     cluster = ClusterConfig.load()
 
-    existing_node = cluster.find_node(resolved.ip)
     try:
         deploy_plan = build_deploy_plan(
             resolved.ip,
-            DeployClusterState(
-                is_configured=cluster.is_configured,
-                panel_secret_path=cluster.panel.secret_path,
-                panel_sub_path=cluster.panel.sub_path,
-                existing_node=(
-                    DeployNodeState(
-                        ip=existing_node.ip,
-                        xhttp_path=existing_node.xhttp_path,
-                        ws_path=existing_node.ws_path,
-                    )
-                    if existing_node is not None
-                    else None
-                ),
-                node_count=len(cluster.nodes),
-                relay_count=len(cluster.relays),
-            ),
+            _deploy_cluster_state(cluster, resolved.ip),
         )
     except DeployPlanningError as exc:
         fail(str(exc), hint=exc.hint, hint_type="user")
@@ -447,7 +618,8 @@ def _run_provisioner(
     else:
         cluster.subscription_page.path = sub_page_path
 
-    err_console.print()
+    if not is_quiet_mode():
+        err_console.print()
     info(f"Configuring server at {ctx.ip}...")
     if domain:
         info(f"Domain: {domain}")
@@ -459,7 +631,8 @@ def _run_provisioner(
         info("Cloudflare WARP: enabled")
     if not geo_block:
         info("Geo-blocking: disabled (Russian sites accessible)")
-    err_console.print()
+    if not is_quiet_mode():
+        err_console.print()
 
     # Choose pipeline: full setup (panel + node) or node-only
     if is_panel_host:
@@ -474,7 +647,7 @@ def _run_provisioner(
     remote_executor = remote_executor or SSHRemoteExecutor(resolved.conn)
     conn = RemoteExecutorConnection(remote_executor)
 
-    results = provisioner.run(conn, ctx, reporter=reporter, operation=operation)
+    results = provisioner.run(conn, ctx, reporter=reporter, operation=operation, render=not is_quiet_mode())
 
     # Check for failures
     failed = [r for r in results if r.status == "failed"]
@@ -485,7 +658,8 @@ def _run_provisioner(
             hint_type="system",
         )
 
-    err_console.print()
+    if not is_quiet_mode():
+        err_console.print()
     ok("All provisioning steps completed")
 
 
@@ -671,7 +845,8 @@ def _configure_panel_and_node(
     """
     from meridian import __version__
 
-    err_console.print()
+    if not is_quiet_mode():
+        err_console.print()
     info("Configuring panel via API...")
 
     if is_first_deploy:
@@ -1722,9 +1897,10 @@ def _check_ports(conn: ServerConnection, ip: str, yes: bool) -> None:
                 break  # Meridian's own process -- OK for re-deploy
 
             warn(f"Port {port} is in use by {proc}")
-            err_console.print(f"  [dim]Port {port} must be free for Meridian.[/dim]")
-            err_console.print(f"  [dim]Stop {proc} and retry, or press Ctrl+C to abort.[/dim]")
-            err_console.print()
+            if not is_quiet_mode():
+                err_console.print(f"  [dim]Port {port} must be free for Meridian.[/dim]")
+                err_console.print(f"  [dim]Stop {proc} and retry, or press Ctrl+C to abort.[/dim]")
+                err_console.print()
 
             if yes:
                 fail(
@@ -1778,15 +1954,16 @@ def _check_legacy_panel(conn: ServerConnection, server_ip: str, yes: bool) -> No
     lines.append("  [yellow]\u2022[/yellow] Clients will need new QR codes / subscription links")
 
     warning = "\n".join(lines)
-    err_console.print()
-    err_console.print(
-        Panel(
-            warning,
-            title="[bold yellow]Upgrading from 3.x[/bold yellow]",
-            border_style="yellow",
-            padding=(0, 2),
+    if not is_quiet_mode():
+        err_console.print()
+        err_console.print(
+            Panel(
+                warning,
+                title="[bold yellow]Upgrading from 3.x[/bold yellow]",
+                border_style="yellow",
+                padding=(0, 2),
+            )
         )
-    )
 
     if not yes:
         if not confirm("Continue with deployment?"):
@@ -2218,6 +2395,9 @@ def _print_success(
     redeploy_cmd: str,
 ) -> None:
     """Print success output after deployment."""
+    if is_quiet_mode():
+        return
+
     client_label = client_name or "default"
     server_ip = resolved.ip
 

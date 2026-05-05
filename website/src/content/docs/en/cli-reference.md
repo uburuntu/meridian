@@ -28,10 +28,16 @@ meridian deploy [IP] [flags]
 | `--pq / --no-pq` | disabled | Post-quantum encryption — ML-KEM-768 hybrid (experimental) |
 | `--warp / --no-warp` | disabled | Route outgoing traffic through Cloudflare WARP |
 | `--server NAME` | | Target server (name or IP) |
-| `--decoy MODE` | none | Decoy response for unknown paths (`none` / `403`) |
+| `--decoy MODE` | ignored | Deprecated; unknown paths always use the hardened default response |
 | `--geo-block` / `--no-geo-block` | enabled | Block Russian domains and IPs (geosite:category-ru + geoip:ru) |
 | `--ssh-port PORT` | 22 | SSH port (if non-standard) |
 | `--yes` | | Skip confirmation prompts |
+| `--json` | | Emit the final deploy result as a `meridian.output/v1` envelope |
+| `--events=jsonl` | | Stream typed progress events as JSONL on stderr |
+| `--request FILE` | | Read a `deploy-request` JSON payload from a file; use `-` for stdin |
+| `--dry-run` | | Validate and plan deploy without SSH or panel mutation |
+
+**Machine/UI flow**: `meridian api workflow deploy --json` returns a renderable wizard contract. A UI collects those fields, validates against `deploy-request`, then runs `meridian deploy --request deploy.json --json --events=jsonl`. Machine deploys are non-interactive: the request must contain `yes: true` after the user confirms. `--dry-run --json` returns `deploy-plan` under `data` so a UI can preview mode, ports, and generated paths before opening SSH.
 
 ### meridian client
 
@@ -133,9 +139,9 @@ meridian api workflow NAME [--json]
 | `--include-schemas` | | Include full JSON Schemas in `api schemas --json` or `api commands --json` output |
 | `--envelope`, `--json` | | Wrap `api schema NAME` in a `meridian.output/v1` envelope instead of printing raw JSON Schema |
 
-**`api schemas`** — lists stable schema names such as `output-envelope`, `apply-envelope`, `client-list-envelope`, `client-show-envelope`, `deploy-request`, `deploy-workflow-answers`, `deploy-result`, `deploy-plan`, `workflow-plan`, `input-field`, `remote-target`, `command-spec`, `remote-command-result`, `plan-envelope`, `fleet-status-envelope`, `fleet-inventory-envelope`, `event`, `apply`, `plan-result`, `fleet-status`, and `fleet-inventory`. Command envelope schemas include a `commands` entry in the catalog.
+**`api schemas`** — lists stable schema names such as `output-envelope`, `apply-envelope`, `client-list-envelope`, `client-show-envelope`, `deploy-envelope`, `deploy-command-data`, `deploy-request`, `deploy-workflow-answers`, `deploy-result`, `deploy-plan`, `workflow-plan`, `input-field`, `remote-target`, `command-spec`, `remote-command-result`, `plan-envelope`, `fleet-status-envelope`, `fleet-inventory-envelope`, `event`, `apply`, `plan-result`, `fleet-status`, and `fleet-inventory`. Command envelope schemas include a `commands` entry in the catalog.
 
-**`api commands`** — lists migrated command contracts with `command`, `argv`, `envelope_schema`, `data_schema`, possible `statuses`, structured `outcomes`, exit-code meanings, machine flags, and stability. Use this before wiring a UI to decide which command payload schema validates a given envelope.
+**`api commands`** — lists migrated command contracts with `command`, `argv`, `envelope_schema`, `data_schema`, possible `statuses`, structured `outcomes`, exit-code meanings, machine flags, and stability. Use this before wiring a UI to decide which command payload schema validates a given envelope. `deploy` advertises `--json`, `--events=jsonl`, `--request`, and `--dry-run`.
 
 **`api schema NAME`** — prints one JSON Schema. Example: `meridian api schema output-envelope`.
 
