@@ -83,9 +83,10 @@ def upload_client_files(
     result = conn.run(
         f"mkdir -p /var/www/private/{q_uuid} && chown www-data:www-data /var/www/private/{q_uuid}",
         timeout=30,
+        sensitive=True,
     )
     if result.returncode != 0:
-        return f"Failed to create directory for {reality_uuid}: {result.stderr.strip()[:200]}"
+        return f"Failed to create client directory: {result.stderr.strip()[:200]}"
     for filename, content in files.items():
         result = conn.put_text(
             f"/var/www/private/{reality_uuid}/{filename}",

@@ -6,7 +6,7 @@ import typer
 
 from meridian.console import err_console, error_context, fail, is_json_mode
 from meridian.core.models import MeridianError, Summary
-from meridian.core.output import OperationContext, envelope
+from meridian.core.output import OperationContext, command_envelope
 from meridian.core.schema import command_catalog, schema_catalog, schema_for
 from meridian.renderers import emit_json
 
@@ -18,7 +18,7 @@ def run_schemas(*, json_output: bool = False, include_schemas: bool = False) -> 
         catalog = schema_catalog(include_schemas=include_schemas and (json_output or is_json_mode()))
         if json_output or is_json_mode():
             emit_json(
-                envelope(
+                command_envelope(
                     command="api.schemas",
                     data={"schemas": catalog},
                     summary=Summary(text=f"{len(catalog)} schema(s)", changed=False, counts={"schemas": len(catalog)}),
@@ -41,7 +41,7 @@ def run_commands(*, json_output: bool = False, include_schemas: bool = False) ->
         catalog = command_catalog(include_schemas=include_schemas and (json_output or is_json_mode()))
         if json_output or is_json_mode():
             emit_json(
-                envelope(
+                command_envelope(
                     command="api.commands",
                     data={"commands": catalog},
                     summary=Summary(
@@ -70,7 +70,7 @@ def run_schema(name: str, *, envelope_output: bool = False) -> None:
         except ValueError as exc:
             if not envelope_output and not is_json_mode():
                 emit_json(
-                    envelope(
+                    command_envelope(
                         command="api.schema",
                         summary=str(exc),
                         status="failed",
@@ -93,7 +93,7 @@ def run_schema(name: str, *, envelope_output: bool = False) -> None:
 
         if envelope_output or is_json_mode():
             emit_json(
-                envelope(
+                command_envelope(
                     command="api.schema",
                     data={"name": name, "schema": schema},
                     summary=Summary(text=f"Schema: {name}", changed=False, counts={"schemas": 1}),

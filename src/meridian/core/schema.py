@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, RootModel
 
+from meridian.core.clients import ClientListResult, ClientShowResult
 from meridian.core.fleet import FleetInventory, FleetStatus
-from meridian.core.models import CoreModel, Event, MeridianError, OutputEnvelope, OutputStatus, Summary
+from meridian.core.models import (
+    CoreModel,
+    ErrorCategory,
+    Event,
+    MeridianError,
+    OutputEnvelope,
+    OutputSchema,
+    OutputStatus,
+    Summary,
+)
 from meridian.core.plan import PlanActionResult, PlanCounts, PlanResult
 
 
@@ -15,86 +25,271 @@ class EmptyData(CoreModel):
     """Empty data object used by failed or cancelled envelopes."""
 
 
-class PlanOutputEnvelope(OutputEnvelope):
+class ApiSchemasResult(CoreModel):
+    """Result for `meridian api schemas --json`."""
+
+    schemas: list[dict[str, Any]]
+
+
+class ApiCommandsResult(CoreModel):
+    """Result for `meridian api commands --json`."""
+
+    commands: list[dict[str, Any]]
+
+
+class ApiSchemaResult(CoreModel):
+    """Result for `meridian api schema NAME --envelope`."""
+
+    name: str
+    json_schema: dict[str, Any] = Field(alias="schema")
+
+
+class _ContractEnvelope(CoreModel):
+    """Strict wire envelope base used by command-specific contracts."""
+
+    schema_version: OutputSchema = Field(alias="schema")
+    meridian_version: str
+    command: str
+    operation_id: str
+    started_at: str
+    duration_ms: int
+    status: OutputStatus
+    exit_code: int
+    summary: Summary
+    warnings: list[MeridianError]
+    errors: list[MeridianError]
+
+
+class _PlanSuccessEnvelope(_ContractEnvelope):
+    command: Literal["plan"]
+    status: Literal["changed", "no_changes"]
+    data: PlanResult
+    errors: list[MeridianError] = Field(max_length=0)
+
+
+class _PlanTerminalEnvelope(_ContractEnvelope):
+    command: Literal["plan"]
+    status: Literal["failed", "cancelled"]
+    data: EmptyData
+    errors: list[MeridianError] = Field(min_length=1)
+
+
+class PlanOutputEnvelope(
+    RootModel[Annotated[_PlanSuccessEnvelope | _PlanTerminalEnvelope, Field(discriminator="status")]]
+):
     """Envelope schema for `meridian plan --json`."""
 
-    command: Literal["plan"] = "plan"
-    data: PlanResult | EmptyData = Field(default_factory=EmptyData)  # type: ignore[assignment]
 
-    @model_validator(mode="after")
-    def validate_command_shape(self) -> Self:
-        _validate_envelope_shape(self, success_statuses={"changed", "no_changes"})
-        return self
+class _FleetStatusSuccessEnvelope(_ContractEnvelope):
+    command: Literal["fleet.status"]
+    status: Literal["ok"]
+    data: FleetStatus
+    errors: list[MeridianError] = Field(max_length=0)
 
 
-class FleetStatusOutputEnvelope(OutputEnvelope):
+class _FleetStatusTerminalEnvelope(_ContractEnvelope):
+    command: Literal["fleet.status"]
+    status: Literal["failed", "cancelled"]
+    data: EmptyData
+    errors: list[MeridianError] = Field(min_length=1)
+
+
+class FleetStatusOutputEnvelope(
+    RootModel[Annotated[_FleetStatusSuccessEnvelope | _FleetStatusTerminalEnvelope, Field(discriminator="status")]]
+):
     """Envelope schema for `meridian fleet status --json`."""
 
-    command: Literal["fleet.status"] = "fleet.status"
-    data: FleetStatus | EmptyData = Field(default_factory=EmptyData)  # type: ignore[assignment]
 
-    @model_validator(mode="after")
-    def validate_command_shape(self) -> Self:
-        _validate_envelope_shape(self, success_statuses={"ok"})
-        return self
+class _FleetInventorySuccessEnvelope(_ContractEnvelope):
+    command: Literal["fleet.inventory"]
+    status: Literal["ok"]
+    data: FleetInventory
+    errors: list[MeridianError] = Field(max_length=0)
 
 
-class FleetInventoryOutputEnvelope(OutputEnvelope):
+class _FleetInventoryTerminalEnvelope(_ContractEnvelope):
+    command: Literal["fleet.inventory"]
+    status: Literal["failed", "cancelled"]
+    data: EmptyData
+    errors: list[MeridianError] = Field(min_length=1)
+
+
+class FleetInventoryOutputEnvelope(
+    RootModel[
+        Annotated[_FleetInventorySuccessEnvelope | _FleetInventoryTerminalEnvelope, Field(discriminator="status")]
+    ]
+):
     """Envelope schema for `meridian fleet inventory --json`."""
 
-    command: Literal["fleet.inventory"] = "fleet.inventory"
-    data: FleetInventory | EmptyData = Field(default_factory=EmptyData)  # type: ignore[assignment]
 
-    @model_validator(mode="after")
-    def validate_command_shape(self) -> Self:
-        _validate_envelope_shape(self, success_statuses={"ok"})
-        return self
+class _ClientListSuccessEnvelope(_ContractEnvelope):
+    command: Literal["client.list"]
+    status: Literal["ok"]
+    data: ClientListResult
+    errors: list[MeridianError] = Field(max_length=0)
 
 
-def _validate_envelope_shape(envelope: OutputEnvelope, *, success_statuses: set[OutputStatus]) -> None:
-    """Keep command-specific envelopes internally consistent."""
-    terminal_statuses: set[OutputStatus] = {*success_statuses, "failed", "cancelled"}
-    if envelope.status not in terminal_statuses:
-        raise ValueError(f"{envelope.command} does not support status {envelope.status!r}")
+class _ClientListTerminalEnvelope(_ContractEnvelope):
+    command: Literal["client.list"]
+    status: Literal["failed", "cancelled"]
+    data: EmptyData
+    errors: list[MeridianError] = Field(min_length=1)
 
-    is_success = envelope.status in success_statuses
-    has_empty_data = isinstance(envelope.data, EmptyData)
-    if is_success:
-        if has_empty_data:
-            raise ValueError(f"{envelope.command} status {envelope.status!r} requires typed data")
-        if envelope.errors:
-            raise ValueError(f"{envelope.command} status {envelope.status!r} cannot include errors")
-        return
 
-    if not has_empty_data:
-        raise ValueError(f"{envelope.command} status {envelope.status!r} requires empty data")
-    if not envelope.errors:
-        raise ValueError(f"{envelope.command} status {envelope.status!r} requires at least one error")
+class ClientListOutputEnvelope(
+    RootModel[Annotated[_ClientListSuccessEnvelope | _ClientListTerminalEnvelope, Field(discriminator="status")]]
+):
+    """Envelope schema for `meridian client list --json`."""
+
+
+class _ClientShowSuccessEnvelope(_ContractEnvelope):
+    command: Literal["client.show"]
+    status: Literal["ok"]
+    data: ClientShowResult
+    errors: list[MeridianError] = Field(max_length=0)
+
+
+class _ClientShowTerminalEnvelope(_ContractEnvelope):
+    command: Literal["client.show"]
+    status: Literal["failed", "cancelled"]
+    data: EmptyData
+    errors: list[MeridianError] = Field(min_length=1)
+
+
+class ClientShowOutputEnvelope(
+    RootModel[Annotated[_ClientShowSuccessEnvelope | _ClientShowTerminalEnvelope, Field(discriminator="status")]]
+):
+    """Envelope schema for `meridian client show --json`."""
+
+
+class _ApiSchemasSuccessEnvelope(_ContractEnvelope):
+    command: Literal["api.schemas"]
+    status: Literal["ok"]
+    data: ApiSchemasResult
+    errors: list[MeridianError] = Field(max_length=0)
+
+
+class _ApiSchemasTerminalEnvelope(_ContractEnvelope):
+    command: Literal["api.schemas"]
+    status: Literal["failed", "cancelled"]
+    data: EmptyData
+    errors: list[MeridianError] = Field(min_length=1)
+
+
+class ApiSchemasOutputEnvelope(
+    RootModel[Annotated[_ApiSchemasSuccessEnvelope | _ApiSchemasTerminalEnvelope, Field(discriminator="status")]]
+):
+    """Envelope schema for `meridian api schemas --json`."""
+
+
+class _ApiCommandsSuccessEnvelope(_ContractEnvelope):
+    command: Literal["api.commands"]
+    status: Literal["ok"]
+    data: ApiCommandsResult
+    errors: list[MeridianError] = Field(max_length=0)
+
+
+class _ApiCommandsTerminalEnvelope(_ContractEnvelope):
+    command: Literal["api.commands"]
+    status: Literal["failed", "cancelled"]
+    data: EmptyData
+    errors: list[MeridianError] = Field(min_length=1)
+
+
+class ApiCommandsOutputEnvelope(
+    RootModel[Annotated[_ApiCommandsSuccessEnvelope | _ApiCommandsTerminalEnvelope, Field(discriminator="status")]]
+):
+    """Envelope schema for `meridian api commands --json`."""
+
+
+class _ApiSchemaSuccessEnvelope(_ContractEnvelope):
+    command: Literal["api.schema"]
+    status: Literal["ok"]
+    data: ApiSchemaResult
+    errors: list[MeridianError] = Field(max_length=0)
+
+
+class _ApiSchemaTerminalEnvelope(_ContractEnvelope):
+    command: Literal["api.schema"]
+    status: Literal["failed", "cancelled"]
+    data: EmptyData
+    errors: list[MeridianError] = Field(min_length=1)
+
+
+class ApiSchemaOutputEnvelope(
+    RootModel[Annotated[_ApiSchemaSuccessEnvelope | _ApiSchemaTerminalEnvelope, Field(discriminator="status")]]
+):
+    """Envelope schema for `meridian api schema NAME --envelope`."""
+
+
+OutcomeCategory = ErrorCategory | Literal["none"]
+
+
+class CommandOutcome(CoreModel):
+    """Structured command outcome for process clients."""
+
+    status: OutputStatus
+    exit_code: int
+    category: OutcomeCategory
+    meaning: str
 
 
 class CommandContract(CoreModel):
     """Discoverable command-to-schema contract for process API clients."""
 
     command: str
+    argv: list[str]
     envelope_schema: str
     data_schema: str
     failure_data_schema: str
     error_schema: str
     statuses: list[OutputStatus]
+    outcomes: list[CommandOutcome]
     exit_codes: dict[str, str]
     machine_flags: list[str]
     stability: Literal["stable", "preview"]
     description: str
 
 
-_SCHEMAS: dict[str, type[CoreModel]] = {
+def _standard_outcomes(success_status: Literal["ok"], success_meaning: str) -> list[CommandOutcome]:
+    return [
+        CommandOutcome(status=success_status, exit_code=0, category="none", meaning=success_meaning),
+        CommandOutcome(status="failed", exit_code=2, category="user", meaning="user or configuration error"),
+        CommandOutcome(status="failed", exit_code=3, category="system", meaning="system or infrastructure failure"),
+        CommandOutcome(status="failed", exit_code=1, category="bug", meaning="unexpected Meridian bug"),
+        CommandOutcome(status="cancelled", exit_code=130, category="cancelled", meaning="cancelled by the user"),
+    ]
+
+
+def _plan_outcomes() -> list[CommandOutcome]:
+    return [
+        CommandOutcome(status="no_changes", exit_code=0, category="none", meaning="desired state already matches"),
+        CommandOutcome(status="changed", exit_code=2, category="none", meaning="changes pending"),
+        CommandOutcome(status="failed", exit_code=2, category="user", meaning="user or configuration error"),
+        CommandOutcome(status="failed", exit_code=3, category="system", meaning="system or infrastructure failure"),
+        CommandOutcome(status="failed", exit_code=1, category="bug", meaning="unexpected Meridian bug"),
+        CommandOutcome(status="cancelled", exit_code=130, category="cancelled", meaning="cancelled by the user"),
+    ]
+
+
+_SCHEMAS: dict[str, type[BaseModel]] = {
     "output-envelope": OutputEnvelope,
+    "api-commands": ApiCommandsResult,
+    "api-commands-envelope": ApiCommandsOutputEnvelope,
+    "api-schema": ApiSchemaResult,
+    "api-schema-envelope": ApiSchemaOutputEnvelope,
+    "api-schemas": ApiSchemasResult,
+    "api-schemas-envelope": ApiSchemasOutputEnvelope,
+    "client-list-envelope": ClientListOutputEnvelope,
+    "client-show-envelope": ClientShowOutputEnvelope,
     "plan-envelope": PlanOutputEnvelope,
     "fleet-status-envelope": FleetStatusOutputEnvelope,
     "fleet-inventory-envelope": FleetInventoryOutputEnvelope,
     "event": Event,
     "error": MeridianError,
     "summary": Summary,
+    "client-list": ClientListResult,
+    "client-show": ClientShowResult,
     "empty-data": EmptyData,
     "plan-result": PlanResult,
     "plan-action": PlanActionResult,
@@ -102,16 +297,116 @@ _SCHEMAS: dict[str, type[CoreModel]] = {
     "fleet-status": FleetStatus,
     "fleet-inventory": FleetInventory,
     "command-contract": CommandContract,
+    "command-outcome": CommandOutcome,
 }
 
 _COMMAND_CONTRACTS: dict[str, CommandContract] = {
+    "api.commands": CommandContract(
+        command="api.commands",
+        argv=["api", "commands"],
+        envelope_schema="api-commands-envelope",
+        data_schema="api-commands",
+        failure_data_schema="empty-data",
+        error_schema="error",
+        statuses=["ok", "failed", "cancelled"],
+        outcomes=_standard_outcomes("ok", "command contracts were listed"),
+        exit_codes={
+            "0": "command contracts were listed",
+            "2": "user/config error",
+            "3": "system or infrastructure failure",
+            "130": "cancelled by the user",
+        },
+        machine_flags=["--json", "--include-schemas"],
+        stability="stable",
+        description=(
+            "List migrated command contracts; with --include-schemas, embed envelope, data, error, and failure schemas."
+        ),
+    ),
+    "api.schema": CommandContract(
+        command="api.schema",
+        argv=["api", "schema", "NAME"],
+        envelope_schema="api-schema-envelope",
+        data_schema="api-schema",
+        failure_data_schema="empty-data",
+        error_schema="error",
+        statuses=["ok", "failed", "cancelled"],
+        outcomes=_standard_outcomes("ok", "schema was found"),
+        exit_codes={
+            "0": "schema was found",
+            "2": "schema name is unknown",
+            "3": "system or infrastructure failure",
+            "130": "cancelled by the user",
+        },
+        machine_flags=["--envelope", "--json"],
+        stability="stable",
+        description="Return one JSON Schema. Without --envelope/global --json, success remains raw schema JSON.",
+    ),
+    "api.schemas": CommandContract(
+        command="api.schemas",
+        argv=["api", "schemas"],
+        envelope_schema="api-schemas-envelope",
+        data_schema="api-schemas",
+        failure_data_schema="empty-data",
+        error_schema="error",
+        statuses=["ok", "failed", "cancelled"],
+        outcomes=_standard_outcomes("ok", "schema catalog was listed"),
+        exit_codes={
+            "0": "schema catalog was listed",
+            "2": "user/config error",
+            "3": "system or infrastructure failure",
+            "130": "cancelled by the user",
+        },
+        machine_flags=["--json", "--include-schemas"],
+        stability="stable",
+        description="List meridian-core JSON Schema names; with --include-schemas, embed full schemas.",
+    ),
+    "client.list": CommandContract(
+        command="client.list",
+        argv=["client", "list"],
+        envelope_schema="client-list-envelope",
+        data_schema="client-list",
+        failure_data_schema="empty-data",
+        error_schema="error",
+        statuses=["ok", "failed", "cancelled"],
+        outcomes=_standard_outcomes("ok", "client list was collected"),
+        exit_codes={
+            "0": "client list was collected",
+            "2": "user/config error",
+            "3": "system or infrastructure failure",
+            "130": "cancelled by the user",
+        },
+        machine_flags=["--json"],
+        stability="stable",
+        description="List panel clients as redacted metadata plus aggregate status counts.",
+    ),
+    "client.show": CommandContract(
+        command="client.show",
+        argv=["client", "show", "NAME"],
+        envelope_schema="client-show-envelope",
+        data_schema="client-show",
+        failure_data_schema="empty-data",
+        error_schema="error",
+        statuses=["ok", "failed", "cancelled"],
+        outcomes=_standard_outcomes("ok", "client was found"),
+        exit_codes={
+            "0": "client was found",
+            "2": "client not found or input/config error",
+            "3": "system or infrastructure failure",
+            "130": "cancelled by the user",
+        },
+        machine_flags=["--json"],
+        stability="stable",
+        description="Return one panel client and redacted handoff links.",
+    ),
     "plan": CommandContract(
         command="plan",
+        argv=["plan"],
         envelope_schema="plan-envelope",
         data_schema="plan-result",
         failure_data_schema="empty-data",
         error_schema="error",
         statuses=["no_changes", "changed", "failed", "cancelled"],
+        outcomes=_plan_outcomes(),
         exit_codes={
             "0": "desired state already matches actual state",
             "2": "changes pending; user/config errors also use category=user in the error envelope",
@@ -124,11 +419,13 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
     ),
     "fleet.status": CommandContract(
         command="fleet.status",
+        argv=["fleet", "status"],
         envelope_schema="fleet-status-envelope",
         data_schema="fleet-status",
         failure_data_schema="empty-data",
         error_schema="error",
         statuses=["ok", "failed", "cancelled"],
+        outcomes=_standard_outcomes("ok", "fleet status was collected"),
         exit_codes={
             "0": "fleet status was collected; inspect data.summary.health and warnings for degraded state",
             "2": "user/config error",
@@ -141,11 +438,13 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
     ),
     "fleet.inventory": CommandContract(
         command="fleet.inventory",
+        argv=["fleet", "inventory"],
         envelope_schema="fleet-inventory-envelope",
         data_schema="fleet-inventory",
         failure_data_schema="empty-data",
         error_schema="error",
         statuses=["ok", "failed", "cancelled"],
+        outcomes=_standard_outcomes("ok", "inventory was collected"),
         exit_codes={
             "0": "inventory was collected; plan --json is the drift/apply authority",
             "2": "user/config error",
@@ -168,7 +467,7 @@ def schema_names() -> list[str]:
     return sorted(_SCHEMAS)
 
 
-def schema_model(name: str) -> type[CoreModel]:
+def schema_model(name: str) -> type[BaseModel]:
     """Return the Pydantic model for a stable schema name."""
     try:
         return _SCHEMAS[name]
@@ -180,6 +479,15 @@ def schema_model(name: str) -> type[CoreModel]:
 def schema_for(name: str) -> dict[str, Any]:
     """Return JSON Schema for one meridian-core contract."""
     return schema_model(name).model_json_schema(mode="serialization", by_alias=True)
+
+
+def validate_command_envelope(payload: OutputEnvelope) -> OutputEnvelope:
+    """Validate a produced envelope against its advertised command contract."""
+    contract = _COMMAND_CONTRACTS.get(payload.command)
+    if contract is None:
+        return payload
+    schema_model(contract.envelope_schema).model_validate(payload.model_dump(mode="json", by_alias=True))
+    return payload
 
 
 def schema_catalog(*, include_schemas: bool = False) -> list[dict[str, Any]]:
@@ -214,5 +522,7 @@ def command_catalog(*, include_schemas: bool = False) -> list[dict[str, Any]]:
         if include_schemas:
             item["envelope"] = schema_for(contract.envelope_schema)
             item["data"] = schema_for(contract.data_schema)
+            item["failure_data"] = schema_for(contract.failure_data_schema)
+            item["error"] = schema_for(contract.error_schema)
         catalog.append(item)
     return catalog

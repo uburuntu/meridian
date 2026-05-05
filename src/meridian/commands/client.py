@@ -12,8 +12,12 @@ import typer
 
 from meridian.cluster import ClusterConfig
 from meridian.commands._helpers import format_traffic, load_cluster, make_panel
-from meridian.console import confirm, err_console, fail, info, is_json_mode, ok
+from meridian.console import confirm, err_console, error_context, fail, info, is_json_mode, ok
+from meridian.core.models import Summary
+from meridian.core.output import OperationContext, command_envelope
+from meridian.core.services.clients import ClientNotFoundError, collect_client_list, collect_client_show
 from meridian.remnawave import MeridianPanel, RemnawaveError, User
+from meridian.renderers import emit_json
 
 # -- Helpers --
 
@@ -58,9 +62,13 @@ def _build_page_url(cluster: ClusterConfig, vless_uuid: str) -> str:
 
 def _print_subscription(panel: MeridianPanel, user: User, *, page_url: str = "") -> None:
     """Print connection page URL and/or subscription URL with QR code."""
-    from meridian.urls import generate_qr_terminal
-
     sub_url = panel.get_subscription_url(user.short_uuid)
+    _print_handoff_links(sub_url, page_url=page_url)
+
+
+def _print_handoff_links(subscription_url: str, *, page_url: str = "") -> None:
+    """Print connection page URL and/or subscription URL with QR code."""
+    from meridian.urls import generate_qr_terminal
 
     if page_url:
         err_console.print()
@@ -73,12 +81,12 @@ def _print_subscription(panel: MeridianPanel, user: User, *, page_url: str = "")
             err_console.print(qr)
         err_console.print()
         err_console.print("  [bold]Subscription URL[/bold] [dim](for Xray/V2Ray apps)[/dim]")
-        err_console.print(f"  {sub_url}")
+        err_console.print(f"  {subscription_url}")
     else:
         err_console.print()
         err_console.print("  [bold]Subscription URL[/bold]")
-        err_console.print(f"  {sub_url}")
-        qr = generate_qr_terminal(sub_url)
+        err_console.print(f"  {subscription_url}")
+        qr = generate_qr_terminal(subscription_url)
         if qr:
             err_console.print()
             err_console.print(qr)
@@ -167,49 +175,62 @@ def run_show(
     requested_server: str = "",
 ) -> None:
     """Display connection info for an existing client."""
+    operation = OperationContext()
+    with error_context("client.show", timer=operation.timer):
+        _run_show(name=name, user=user, requested_server=requested_server, operation=operation)
+
+
+def _run_show(
+    *,
+    name: str,
+    user: str = "",
+    requested_server: str = "",
+    operation: OperationContext,
+) -> None:
+    """Implementation for client show with command metadata attached."""
     _validate_client_name(name)
     cluster = load_cluster()
-    panel = make_panel(cluster)
+    try:
+        result = collect_client_show(
+            make_panel(cluster),
+            name,
+            build_share_url=lambda panel_user: _build_page_url(cluster, panel_user.vless_uuid),
+        )
+    except ClientNotFoundError:
+        fail(
+            f"Client '{name}' not found",
+            hint="Check client name with: meridian client list",
+            hint_type="user",
+        )
+    except RemnawaveError as e:
+        fail(
+            f"Could not show client: {e}",
+            hint=e.hint or "Check panel connectivity",
+            hint_type=e.hint_type,
+        )
 
-    with panel:
-        client = panel.get_user(name)
-        if client is None:
-            fail(
-                f"Client '{name}' not found",
-                hint="Check client name with: meridian client list",
-                hint_type="user",
+    detail = result.client.client
+    if is_json_mode():
+        emit_json(
+            command_envelope(
+                command="client.show",
+                data=result.client.to_data(),
+                summary=Summary(text=f"Client {detail.username}", changed=False, counts={"clients": 1}),
+                timer=operation.timer,
             )
+        )
+        return
 
-        if is_json_mode():
-            from meridian.console import json_output
+    # Print connection page URL + subscription
+    _print_handoff_links(detail.subscription_url, page_url=detail.share_url)
 
-            json_output(
-                {
-                    "client": {
-                        "username": client.username,
-                        "uuid": client.uuid,
-                        "status": client.status,
-                        "traffic_used": client.used_traffic_bytes,
-                        "traffic_limit": client.traffic_limit_bytes,
-                        "created_at": client.created_at,
-                        "last_seen": client.online_at,
-                        "subscription_url": panel.get_subscription_url(client.short_uuid),
-                    }
-                }
-            )
-            return
-
-        # Print connection page URL + subscription
-        page_url = _build_page_url(cluster, client.vless_uuid)
-        _print_subscription(panel, client, page_url=page_url)
-
-        # Print traffic stats
-        err_console.print()
-        err_console.print(f"  [bold]Status[/bold]    {_format_status(client.status)}")
-        traffic = format_traffic(client.used_traffic_bytes, client.traffic_limit_bytes)
-        err_console.print(f"  [bold]Traffic[/bold]   {traffic}")
-        if client.online_at:
-            err_console.print(f"  [bold]Last seen[/bold] {client.online_at}")
+    # Print traffic stats
+    err_console.print()
+    err_console.print(f"  [bold]Status[/bold]    {_format_status(detail.status)}")
+    traffic = format_traffic(detail.traffic_used_bytes, detail.traffic_limit_bytes)
+    err_console.print(f"  [bold]Traffic[/bold]   {traffic}")
+    if detail.last_seen:
+        err_console.print(f"  [bold]Last seen[/bold] {detail.last_seen}")
 
     err_console.print()
     if cluster.panel.url:
@@ -226,37 +247,45 @@ def run_list(
     requested_server: str = "",
 ) -> None:
     """List all clients from the Remnawave panel."""
+    operation = OperationContext()
+    with error_context("client.list", timer=operation.timer):
+        _run_list(user=user, requested_server=requested_server, operation=operation)
+
+
+def _run_list(
+    *,
+    user: str = "",
+    requested_server: str = "",
+    operation: OperationContext,
+) -> None:
+    """Implementation for client list with command metadata attached."""
     from rich.box import ROUNDED
     from rich.table import Table
 
     cluster = load_cluster()
-    panel = make_panel(cluster)
-
-    with panel:
-        try:
-            users = panel.list_users()
-        except RemnawaveError as e:
-            fail(
-                f"Could not list clients: {e}",
-                hint=e.hint or "Check panel connectivity",
-                hint_type=e.hint_type,
-            )
-
-    from meridian.console import is_json_mode, json_output
+    try:
+        result = collect_client_list(make_panel(cluster))
+    except RemnawaveError as e:
+        fail(
+            f"Could not list clients: {e}",
+            hint=e.hint or "Check panel connectivity",
+            hint_type=e.hint_type,
+        )
 
     if is_json_mode():
-        clients_data = [
-            {
-                "username": u.username,
-                "uuid": u.uuid,
-                "status": u.status,
-                "traffic_used": u.used_traffic_bytes,
-                "traffic_limit": u.traffic_limit_bytes,
-                "created_at": u.created_at,
-            }
-            for u in users
-        ]
-        json_output({"clients": clients_data})
+        data = result.clients.to_data()
+        emit_json(
+            command_envelope(
+                command="client.list",
+                data=data,
+                summary=Summary(
+                    text=result.clients.summary.text,
+                    changed=False,
+                    counts=result.clients.summary.model_dump(),
+                ),
+                timer=operation.timer,
+            )
+        )
         return
 
     table = Table(
@@ -271,15 +300,15 @@ def run_list(
     table.add_column("Traffic", style="dim")
     table.add_column("Last seen", style="dim")
 
-    for u in users:
+    for client in result.clients.clients:
         table.add_row(
-            u.username,
-            _format_status(u.status),
-            format_traffic(u.used_traffic_bytes, u.traffic_limit_bytes),
-            u.online_at or "-",
+            client.username,
+            _format_status(client.status),
+            format_traffic(client.traffic_used_bytes, client.traffic_limit_bytes),
+            client.last_seen or "-",
         )
 
-    count = len(users)
+    count = result.clients.summary.clients
     suffix = "s" if count != 1 else ""
 
     err_console.print()

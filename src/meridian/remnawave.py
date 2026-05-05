@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
+import httpx
 from remnawave import RemnawaveSDK
 from remnawave.exceptions import ApiError, ForbiddenError, NetworkError, NotFoundError, UnauthorizedError
 from remnawave.models.config_profiles import CreateConfigProfileRequestDto
@@ -280,6 +281,8 @@ def _sdk_call(coro: Any) -> Any:
     except (RemnawaveError, RemnawaveNotFoundError, RemnawaveAuthError, RemnawaveNetworkError):
         raise
     except NetworkError as e:
+        raise RemnawaveNetworkError(f"Panel network error: {e}", hint_type="system") from e
+    except httpx.HTTPError as e:
         raise RemnawaveNetworkError(f"Panel network error: {e}", hint_type="system") from e
     except Exception as e:
         if isinstance(e, NotFoundError):

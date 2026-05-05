@@ -638,7 +638,10 @@ class ServerConnection:
         """Write bytes to one target path without chmod/chown/mv."""
         q_path = shlex.quote(path)
         started = time.monotonic()
-        redacted = f"write {len(data)} bytes to {q_path}" if sensitive else f"write {len(data)} bytes to {q_path}"
+        if sensitive:
+            redacted = f"write {len(data)} bytes to <sensitive path>"
+        else:
+            redacted = f"write {len(data)} bytes to {q_path}"
         logger.debug("SSH %s@%s: %s", self.user, self.ip, redacted)
 
         if self.local_mode:

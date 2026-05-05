@@ -287,6 +287,7 @@ def client_show_cmd(
     name: str = typer.Argument(..., help="Client name"),
     server: str = typer.Option("", "--server", help="Target server (name or IP)"),
     user: str = typer.Option("", "--user", "-u", help="SSH user"),
+    json_mode: bool = typer.Option(False, "--json", help="Output JSON to stdout"),
 ) -> None:
     """Show connection info for an existing client.
 
@@ -296,6 +297,8 @@ def client_show_cmd(
     """
     from meridian.commands.client import run_show
 
+    if json_mode:
+        _enable_json_output()
     run_show(name, user, server)
 
 
@@ -303,10 +306,13 @@ def client_show_cmd(
 def client_list_cmd(
     server: str = typer.Option("", "--server", help="Target server (name or IP)"),
     user: str = typer.Option("", "--user", "-u", help="SSH user"),
+    json_mode: bool = typer.Option(False, "--json", help="Output JSON to stdout"),
 ) -> None:
     """List all clients."""
     from meridian.commands.client import run_list
 
+    if json_mode:
+        _enable_json_output()
     run_list(user, server)
 
 

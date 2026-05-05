@@ -258,8 +258,8 @@ Example:
 - [x] Render `fleet inventory` text and JSON from that typed result.
 - [x] Move `fleet status` result construction into a service returning a typed result.
 - [x] Render `fleet status` text and JSON from that typed result.
-- [ ] Move `client list` and `client show` to service/result/renderer boundaries.
-- [ ] Preserve existing human output while adding envelope JSON.
+- [x] Move `client list` and `client show` to service/result/renderer boundaries.
+- [x] Preserve existing human output while adding envelope JSON.
 - [ ] Keep config loading/saving behind a store interface so UI clients can supply config through memory or files.
 
 ### Phase 3: Plan and Apply

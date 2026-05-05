@@ -13,7 +13,7 @@ import typer
 from meridian.cluster import ClusterConfig
 from meridian.console import err_console, error_context, fail, info
 from meridian.core.models import Summary
-from meridian.core.output import OperationContext, envelope
+from meridian.core.output import OperationContext, command_envelope
 from meridian.core.plan import build_plan_result
 from meridian.reconciler import compute_plan
 from meridian.reconciler.display import print_plan
@@ -83,7 +83,7 @@ def _run(*, json_output: bool, operation: OperationContext) -> None:
     if json_output:
         result = build_plan_result(plan, exit_code=exit_code)
         emit_json(
-            envelope(
+            command_envelope(
                 command="plan",
                 data=result.to_data(),
                 summary=Summary(

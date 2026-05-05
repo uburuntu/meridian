@@ -102,6 +102,42 @@ class TestSubcommandHelp:
         assert result.exit_code == 0
         assert called["json"] is True
 
+    def test_client_list_accepts_command_json(self, monkeypatch) -> None:
+        called: dict[str, bool] = {}
+
+        def fake_run_list(*_args: object, **_kwargs: object) -> None:
+            called["json"] = is_json_mode()
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+        monkeypatch.setattr("meridian.commands.client.run_list", fake_run_list)
+
+        result = runner.invoke(app, ["client", "list", "--json"])
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        assert result.exit_code == 0
+        assert called["json"] is True
+
+    def test_client_show_accepts_command_json(self, monkeypatch) -> None:
+        called: dict[str, bool] = {}
+
+        def fake_run_show(*_args: object, **_kwargs: object) -> None:
+            called["json"] = is_json_mode()
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+        monkeypatch.setattr("meridian.commands.client.run_show", fake_run_show)
+
+        result = runner.invoke(app, ["client", "show", "alice", "--json"])
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        assert result.exit_code == 0
+        assert called["json"] is True
+
     def test_preflight_help(self) -> None:
         result = runner.invoke(app, ["preflight", "--help"])
         assert result.exit_code == 0
@@ -153,6 +189,7 @@ class TestApiContractCLI:
         commands = {item["command"]: item for item in payload["data"]["commands"]}
         assert commands["plan"]["envelope_schema"] == "plan-envelope"
         assert commands["fleet.status"]["data_schema"] == "fleet-status"
+        assert commands["client.list"]["argv"] == ["client", "list"]
 
     def test_api_schema_envelope_error_is_command_scoped_json(self, monkeypatch) -> None:
         set_json_mode(False)
@@ -168,6 +205,21 @@ class TestApiContractCLI:
         assert payload["command"] == "api.schema"
         assert payload["status"] == "failed"
         assert payload["errors"][0]["category"] == "user"
+
+    def test_api_schema_raw_schema_preserves_sensitive_property_names(self, monkeypatch) -> None:
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+
+        result = runner.invoke(app, ["api", "schema", "client-show"])
+
+        set_json_mode(False)
+        set_quiet_mode(False)
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        props = payload["$defs"]["ClientDetail"]["properties"]
+        assert props["subscription_url"]["type"] == "string"
+        assert props["share_url"]["type"] == "string"
 
     def test_api_schema_raw_error_is_machine_readable(self, monkeypatch) -> None:
         set_json_mode(False)

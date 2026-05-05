@@ -39,14 +39,19 @@ Manage client access keys and connection details.
 
 ```
 meridian client add NAME [--server NAME]
-meridian client show NAME [--server NAME]
-meridian client list [--server NAME]
+meridian client show NAME [--server NAME] [--json]
+meridian client list [--server NAME] [--json]
 meridian client remove NAME [--server NAME] [--yes]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--json` | | Emit `client show` / `client list` as a `meridian.output/v1` envelope |
 | `--yes`, `-y` | | Skip removal confirmation (applies to `client remove`) |
+
+**`client list`** — with `--json`, returns `data.summary` status counts and `data.clients[]` records with username, UUID, status, traffic counters, creation time, and last seen time.
+
+**`client show`** — with `--json`, returns one `data.client` record plus redacted handoff-link fields. The human command still prints the usable subscription/share URLs.
 
 ### meridian server
 
@@ -127,9 +132,9 @@ meridian api schema NAME [--envelope]
 | `--include-schemas` | | Include full JSON Schemas in `api schemas --json` or `api commands --json` output |
 | `--envelope` | | Wrap `api schema NAME` in a `meridian.output/v1` envelope instead of printing raw JSON Schema |
 
-**`api schemas`** — lists stable schema names such as `output-envelope`, `plan-envelope`, `fleet-status-envelope`, `fleet-inventory-envelope`, `event`, `plan-result`, `fleet-status`, and `fleet-inventory`. Command envelope schemas include a `commands` entry in the catalog.
+**`api schemas`** — lists stable schema names such as `output-envelope`, `client-list-envelope`, `client-show-envelope`, `plan-envelope`, `fleet-status-envelope`, `fleet-inventory-envelope`, `event`, `plan-result`, `fleet-status`, and `fleet-inventory`. Command envelope schemas include a `commands` entry in the catalog.
 
-**`api commands`** — lists migrated command contracts with `command`, `envelope_schema`, `data_schema`, possible `statuses`, exit-code meanings, machine flags, and stability. Use this before wiring a UI to decide which command payload schema validates a given envelope.
+**`api commands`** — lists migrated command contracts with `command`, `argv`, `envelope_schema`, `data_schema`, possible `statuses`, structured `outcomes`, exit-code meanings, machine flags, and stability. Use this before wiring a UI to decide which command payload schema validates a given envelope.
 
 **`api schema NAME`** — prints one JSON Schema. Example: `meridian api schema output-envelope`.
 
@@ -172,7 +177,7 @@ meridian plan [--json]
 **Exit codes**:
 - `0` — converged (no changes needed)
 - `2` — changes pending (run `meridian apply` to converge)
-- non-zero (`1`, `3`, `130`) — error or cancellation
+- errors also use non-zero exits; process clients should treat JSON `status` and `errors[].category` as authoritative because `2` can also mean a user/config error when `status` is `failed`
 
 **JSON shape** (`--json` mode):
 ```json

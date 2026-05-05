@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
 from typing import Literal, Protocol, Self
 
 from meridian.core.fleet import (
@@ -17,7 +16,7 @@ from meridian.core.fleet import (
     build_fleet_inventory,
     build_fleet_status,
 )
-from meridian.core.models import MeridianError
+from meridian.core.models import CoreModel, MeridianError
 
 PanelErrorKind = Literal["auth", "system"]
 
@@ -40,16 +39,14 @@ PanelErrorClassifier = Callable[[Exception], PanelErrorKind]
 RelayHealthChecker = Callable[[list[TopologyRelay]], Mapping[tuple[str, int], bool]]
 
 
-@dataclass(frozen=True)
-class FleetStatusServiceResult:
+class FleetStatusServiceResult(CoreModel):
     """Status result plus non-fatal collection warnings."""
 
     status: FleetStatus
     warnings: list[MeridianError]
 
 
-@dataclass(frozen=True)
-class FleetInventoryServiceResult:
+class FleetInventoryServiceResult(CoreModel):
     """Inventory result plus non-fatal collection warnings."""
 
     inventory: FleetInventory

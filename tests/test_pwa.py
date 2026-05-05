@@ -100,6 +100,7 @@ class _MockConnection:
     def __init__(self) -> None:
         self._rules: list[tuple[str, subprocess.CompletedProcess[str]]] = []
         self._calls: list[str] = []
+        self._run_kwargs: list[dict[str, object]] = []
         self._writes: list[tuple[str, bytes, dict[str, object]]] = []
         self._default = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
@@ -109,6 +110,7 @@ class _MockConnection:
 
     def run(self, command: str, timeout: int = 30, **kwargs: object) -> subprocess.CompletedProcess[str]:
         self._calls.append(command)
+        self._run_kwargs.append(kwargs)
         for pattern, response in self._rules:
             if pattern in command:
                 return response
@@ -140,6 +142,10 @@ class _MockConnection:
     @property
     def calls(self) -> list[str]:
         return list(self._calls)
+
+    @property
+    def run_kwargs(self) -> list[dict[str, object]]:
+        return list(self._run_kwargs)
 
     @property
     def writes(self) -> list[tuple[str, bytes, dict[str, object]]]:
@@ -185,6 +191,13 @@ class TestUploadClientFiles:
         conn = _MockConnection()
         upload_client_files(conn, "550e8400-e29b-41d4-a716-446655440000", sample_files)
         conn.assert_called_with_pattern("mkdir -p /var/www/private/550e8400")
+        assert conn.run_kwargs[0]["sensitive"] is True
+
+    def test_create_directory_error_redacts_uuid(self, sample_files: dict[str, str]) -> None:
+        conn = _MockConnection()
+        conn.when("mkdir -p", stderr="permission denied", rc=1)
+        result = upload_client_files(conn, "550e8400-e29b-41d4-a716-446655440000", sample_files)
+        assert "550e8400" not in result
 
     def test_uploads_all_files(self, sample_files: dict[str, str]) -> None:
         conn = _MockConnection()

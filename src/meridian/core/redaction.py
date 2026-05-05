@@ -95,9 +95,18 @@ def redact(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, dict):
-        return {str(k): REDACTED if is_sensitive_key(str(k)) else redact(v) for k, v in value.items()}
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            key_str = str(key)
+            if key_str == "properties" and isinstance(item, dict):
+                redacted[key_str] = {str(prop): redact(schema) for prop, schema in item.items()}
+            else:
+                redacted[key_str] = REDACTED if is_sensitive_key(key_str) else redact(item)
+        return redacted
     if isinstance(value, list | tuple | set | frozenset):
         return [redact(v) for v in value]
     if isinstance(value, str):
         return redact_string(value)
-    return value
+    if value is None or isinstance(value, bool | int | float):
+        return value
+    return redact_string(str(value))

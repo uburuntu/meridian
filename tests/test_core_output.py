@@ -112,6 +112,33 @@ def test_redact_string_handles_url_userinfo() -> None:
     assert redact("postgres://user:pass@example.org/db") == f"postgres://{REDACTED}@example.org/db"
 
 
+def test_json_dumps_redacts_unknown_object_stringification() -> None:
+    class SecretObject:
+        def __str__(self) -> str:
+            return "Authorization: Bearer opaque-token"
+
+    data = json.loads(json_dumps({"value": SecretObject()}))
+
+    assert data["value"] == f"Authorization: Bearer {REDACTED}"
+
+
+def test_redaction_preserves_json_schema_property_definitions() -> None:
+    data = json.loads(
+        json_dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "subscription_url": {"type": "string"},
+                    "share_url": {"type": "string"},
+                },
+            }
+        )
+    )
+
+    assert data["properties"]["subscription_url"] == {"type": "string"}
+    assert data["properties"]["share_url"] == {"type": "string"}
+
+
 def test_jsonl_events_are_monotonic_and_redacted() -> None:
     events = EventStream(operation_id="op-test")
 

@@ -92,14 +92,41 @@ def envelope(
     )
 
 
+def command_envelope(
+    *,
+    command: str,
+    data: dict[str, Any] | None = None,
+    summary: Summary | str = "",
+    status: OutputStatus = "ok",
+    exit_code: int = 0,
+    warnings: list[MeridianError] | None = None,
+    errors: list[MeridianError] | None = None,
+    timer: OperationTimer | None = None,
+) -> OutputEnvelope:
+    """Build and validate an advertised command-specific output envelope."""
+    payload = envelope(
+        command=command,
+        data=data,
+        summary=summary,
+        status=status,
+        exit_code=exit_code,
+        warnings=warnings,
+        errors=errors,
+        timer=timer,
+    )
+    from meridian.core.schema import validate_command_envelope
+
+    return validate_command_envelope(payload)
+
+
 def json_dumps(value: Any) -> str:
     """Return a redacted, formatted JSON string for a core model or plain value."""
-    return json.dumps(redact(to_plain(value)), indent=2, sort_keys=True, default=str)
+    return json.dumps(redact(to_plain(value)), indent=2, sort_keys=True)
 
 
 def jsonl_dumps(value: Any) -> str:
     """Return a redacted, compact JSON string for one JSONL record."""
-    return json.dumps(redact(to_plain(value)), sort_keys=True, separators=(",", ":"), default=str)
+    return json.dumps(redact(to_plain(value)), sort_keys=True, separators=(",", ":"))
 
 
 def plan_payload(plan: Any, *, exit_code: int) -> dict[str, Any]:

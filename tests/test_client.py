@@ -51,6 +51,8 @@ def _make_user(name: str = "alice", status: str = "ACTIVE") -> User:
 def _make_panel_mock() -> MagicMock:
     """Create a mock MeridianPanel."""
     panel = MagicMock()
+    panel.__enter__ = MagicMock(return_value=panel)
+    panel.__exit__ = MagicMock(return_value=False)
     panel.create_user.return_value = _make_user()
     panel.get_user.return_value = _make_user()
     panel.list_users.return_value = [_make_user("alice"), _make_user("bob")]
@@ -158,7 +160,9 @@ class TestRunShow:
             set_json_mode(False)
 
         payload = json.loads(capsys.readouterr().out)
-        assert payload["client"]["subscription_url"] == REDACTED
+        assert payload["schema"] == "meridian.output/v1"
+        assert payload["command"] == "client.show"
+        assert payload["data"]["client"]["subscription_url"] == REDACTED
         assert "abc123" not in json.dumps(payload)
 
 
@@ -187,6 +191,26 @@ class TestRunList:
         ):
             mock_load.return_value = _make_cluster(tmp_home)
             run_list()
+
+    def test_list_json_outputs_envelope(self, tmp_home: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """Client list JSON uses the standard output envelope."""
+        panel = _make_panel_mock()
+        set_json_mode(True)
+        try:
+            with (
+                patch("meridian.commands._helpers.ClusterConfig.load") as mock_load,
+                patch("meridian.commands._helpers.MeridianPanel", return_value=panel),
+            ):
+                mock_load.return_value = _make_cluster(tmp_home)
+                run_list()
+        finally:
+            set_json_mode(False)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["schema"] == "meridian.output/v1"
+        assert payload["command"] == "client.list"
+        assert payload["data"]["summary"]["clients"] == 2
+        assert payload["data"]["clients"][0]["traffic_used_bytes"] == 104857600
 
 
 class TestRunRemove:

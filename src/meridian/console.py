@@ -106,12 +106,12 @@ def fail(msg: str, *, hint: str = "", hint_type: str = "bug", exit_code: int | N
     code = exit_code if exit_code is not None else _EXIT_CODES.get(hint_type, 1)
     if _output_json:
         from meridian.core.models import ErrorCategory, MeridianError
-        from meridian.core.output import envelope
+        from meridian.core.output import command_envelope
         from meridian.renderers import emit_json
 
         category = cast(ErrorCategory, hint_type if hint_type in ("user", "system", "bug", "cancelled") else "bug")
         emit_json(
-            envelope(
+            command_envelope(
                 command=_error_command.get(),
                 summary=msg,
                 status="cancelled" if category == "cancelled" else "failed",

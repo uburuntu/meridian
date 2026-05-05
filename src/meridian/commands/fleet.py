@@ -15,7 +15,7 @@ from meridian.commands._helpers import format_traffic, load_cluster, make_panel
 from meridian.console import err_console, error_context, fail, is_json_mode, warn
 from meridian.core.fleet import FleetStatus, TopologyRelay
 from meridian.core.models import MeridianError, Summary
-from meridian.core.output import OperationContext, envelope
+from meridian.core.output import OperationContext, command_envelope
 from meridian.core.services.fleet import collect_fleet_inventory, collect_fleet_status
 from meridian.remnawave import RemnawaveAuthError
 from meridian.renderers import emit_json
@@ -90,7 +90,7 @@ def _run_inventory(*, operation: OperationContext) -> None:
 
     if is_json_mode():
         emit_json(
-            envelope(
+            command_envelope(
                 command="fleet.inventory",
                 data=data,
                 summary=Summary(
@@ -241,7 +241,7 @@ def _run_status(*, operation: OperationContext) -> None:
 
     if is_json_mode():
         emit_json(
-            envelope(
+            command_envelope(
                 command="fleet.status",
                 data=status.to_data(),
                 summary=Summary(

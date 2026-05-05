@@ -165,6 +165,8 @@ class TestServerConnectionRun:
         kwargs = write_call[1]
         assert "TOKEN=super-secret" not in " ".join(cmd)
         assert kwargs["input"] == b"TOKEN=super-secret\n"
+        assert "/etc/meridian/secret.env" not in result.redacted_command
+        assert "<sensitive path>" in result.redacted_command
 
     def test_sensitive_atomic_write_precreates_temp_with_private_mode(self) -> None:
         conn = ServerConnection(ip="1.2.3.4", user="root")

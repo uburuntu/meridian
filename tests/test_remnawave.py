@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from remnawave.models.config_profiles import CreateConfigProfileRequestDto
 from remnawave.models.internal_squads import UpdateInternalSquadRequestDto
@@ -982,6 +983,17 @@ class TestSdkExceptionTranslation:
 
         with pytest.raises(RemnawaveNetworkError):
             _sdk_call(coro())
+
+    def test_sdk_httpx_timeout_becomes_remnawave_network_error(self) -> None:
+        from meridian.remnawave import _sdk_call
+
+        async def coro() -> None:
+            raise httpx.ReadTimeout("slow")
+
+        with pytest.raises(RemnawaveNetworkError) as exc_info:
+            _sdk_call(coro())
+
+        assert exc_info.value.hint_type == "system"
 
     def test_sdk_api_error_becomes_remnawave_error(self) -> None:
         from remnawave.exceptions import ApiError
