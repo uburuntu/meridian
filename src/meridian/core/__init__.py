@@ -15,6 +15,15 @@ from meridian.core.clients import (
     ClientShowResult,
 )
 from meridian.core.deploy import DeployRequest, DeployResult
+from meridian.core.events import (
+    COMMAND_COMPLETED,
+    COMMAND_FAILED,
+    COMMAND_STARTED,
+    PROVISION_STEP_COMPLETED,
+    PROVISION_STEP_FAILED,
+    PROVISION_STEP_STARTED,
+    CoreEventType,
+)
 from meridian.core.fleet import FleetInventory, FleetSources, FleetStatus, FleetTopology, RelayHostRef
 from meridian.core.models import (
     CoreModel,
@@ -95,7 +104,11 @@ __all__ = [
     "ClientShowResult",
     "ClientShowServiceResult",
     "CaptureReporter",
+    "COMMAND_COMPLETED",
+    "COMMAND_FAILED",
+    "COMMAND_STARTED",
     "CoreModel",
+    "CoreEventType",
     "DeployExecutor",
     "DeployRequest",
     "DeployResult",
@@ -118,6 +131,9 @@ __all__ = [
     "PlanActionResult",
     "PlanCounts",
     "PlanResult",
+    "PROVISION_STEP_COMPLETED",
+    "PROVISION_STEP_FAILED",
+    "PROVISION_STEP_STARTED",
     "REDACTED",
     "Reporter",
     "RelayHealthChecker",

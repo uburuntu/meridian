@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from meridian.core.events import CoreEventType
 from meridian.core.models import Event, EventLevel, ResourceRef
 from meridian.core.output import OperationContext
 
@@ -34,7 +35,7 @@ class CaptureReporter:
 def emit_event(
     reporter: Reporter,
     operation: OperationContext,
-    event_type: str,
+    event_type: CoreEventType,
     *,
     level: EventLevel = "info",
     phase: str = "",

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from meridian.core.deploy import DeployRequest, DeployResult
+from meridian.core.events import COMMAND_COMPLETED, COMMAND_FAILED, COMMAND_STARTED
 from meridian.core.output import OperationContext
 from meridian.core.reporters import NoopReporter, Reporter, emit_event
 
@@ -28,7 +29,7 @@ def deploy_server(
     emit_event(
         reporter,
         operation,
-        "command.started",
+        COMMAND_STARTED,
         phase="deploy",
         message="Deploy started",
         data={"command": "deploy"},
@@ -39,7 +40,7 @@ def deploy_server(
         emit_event(
             reporter,
             operation,
-            "command.failed",
+            COMMAND_FAILED,
             level="error",
             phase="deploy",
             message=str(exc),
@@ -49,7 +50,7 @@ def deploy_server(
     emit_event(
         reporter,
         operation,
-        "command.completed",
+        COMMAND_COMPLETED,
         phase="deploy",
         message=result.summary,
         data={"command": "deploy", "mode": result.mode, "server_ip": result.server_ip},

@@ -15,6 +15,7 @@ from meridian.config import DEFAULT_SNI
 
 if TYPE_CHECKING:
     from meridian.cluster import ClusterConfig
+    from meridian.core.events import CoreEventType
     from meridian.core.models import EventLevel
     from meridian.core.output import OperationContext
     from meridian.core.reporters import Reporter
@@ -253,7 +254,7 @@ class Provisioner:
 def _report_step_event(
     reporter: Reporter | None,
     operation: OperationContext | None,
-    event_type: str,
+    event_type: CoreEventType,
     step_name: str,
     *,
     level: EventLevel = "info",
