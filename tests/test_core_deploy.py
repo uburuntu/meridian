@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from meridian.core.deploy import DeployRequest, DeployResult, build_deploy_workflow
+from meridian.core.deploy import (
+    DeployRequest,
+    DeployResult,
+    DeployWorkflowAnswers,
+    apply_deploy_workflow_answers,
+    build_deploy_workflow,
+)
 from meridian.core.output import OperationContext
 from meridian.core.reporters import CaptureReporter
 from meridian.core.services.deploy import deploy_server
@@ -104,3 +110,36 @@ def test_deploy_workflow_describes_wizard_inputs() -> None:
 def test_deploy_workflow_is_ready_when_target_is_supplied() -> None:
     assert build_deploy_workflow(DeployRequest(ip="198.51.100.10")).needs_input is False
     assert build_deploy_workflow(DeployRequest(requested_server="edge")).needs_input is False
+
+
+def test_apply_deploy_workflow_answers_updates_request() -> None:
+    request = DeployRequest(yes=True, ssh_port=2222)
+    updated = apply_deploy_workflow_answers(
+        request,
+        DeployWorkflowAnswers(
+            ip="198.51.100.10",
+            user="admin",
+            sni="www.microsoft.com",
+            domain="vpn.example",
+            harden=False,
+            client_name="alice",
+            server_name="Family VPN",
+            icon="shield",
+            color="ocean",
+            pq=True,
+            warp=True,
+            geo_block=False,
+            confirm=True,
+        ),
+    )
+
+    assert updated.ip == "198.51.100.10"
+    assert updated.user == "admin"
+    assert updated.domain == "vpn.example"
+    assert updated.harden is False
+    assert updated.client_name == "alice"
+    assert updated.pq is True
+    assert updated.warp is True
+    assert updated.geo_block is False
+    assert updated.yes is True
+    assert updated.ssh_port == 2222

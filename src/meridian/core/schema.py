@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, RootModel
 
 from meridian.core.apply import ApplyActionResult, ApplyCounts, ApplyResult
 from meridian.core.clients import ClientListResult, ClientShowResult
-from meridian.core.deploy import DeployRequest, DeployResult
+from meridian.core.deploy import DeployRequest, DeployResult, DeployWorkflowAnswers
 from meridian.core.deploy_planning import DeployClusterState, DeployNodeState, DeployPlan, DeployPorts
 from meridian.core.execution import CommandSpec, PutBytesSpec, PutTextSpec, RemoteCommandResult, RemoteTarget
 from meridian.core.fleet import FleetInventory, FleetStatus
@@ -356,6 +356,7 @@ _SCHEMAS: dict[str, type[BaseModel]] = {
     "client-show": ClientShowResult,
     "deploy-request": DeployRequest,
     "deploy-result": DeployResult,
+    "deploy-workflow-answers": DeployWorkflowAnswers,
     "deploy-plan": DeployPlan,
     "deploy-ports": DeployPorts,
     "deploy-cluster-state": DeployClusterState,

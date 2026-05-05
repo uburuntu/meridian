@@ -14,7 +14,13 @@ from meridian.core.clients import (
     ClientRecord,
     ClientShowResult,
 )
-from meridian.core.deploy import DeployRequest, DeployResult, build_deploy_workflow
+from meridian.core.deploy import (
+    DeployRequest,
+    DeployResult,
+    DeployWorkflowAnswers,
+    apply_deploy_workflow_answers,
+    build_deploy_workflow,
+)
 from meridian.core.deploy_planning import (
     DeployClusterState,
     DeployNodeState,
@@ -136,6 +142,7 @@ __all__ = [
     "DeployPorts",
     "DeployRequest",
     "DeployResult",
+    "DeployWorkflowAnswers",
     "ErrorCategory",
     "Event",
     "EventLevel",
@@ -195,6 +202,7 @@ __all__ = [
     "redact",
     "build_plan_result",
     "build_apply_result",
+    "apply_deploy_workflow_answers",
     "schema_catalog",
     "schema_for",
     "schema_names",

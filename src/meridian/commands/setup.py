@@ -37,7 +37,13 @@ from meridian.config import (
     is_ip,
 )
 from meridian.console import choose, confirm, err_console, fail, info, line, ok, prompt, warn
-from meridian.core.deploy import DeployRequest, DeployResult, build_deploy_workflow
+from meridian.core.deploy import (
+    DeployRequest,
+    DeployResult,
+    DeployWorkflowAnswers,
+    apply_deploy_workflow_answers,
+    build_deploy_workflow,
+)
 from meridian.core.deploy_planning import (
     DeployClusterState,
     DeployNodeState,
@@ -110,21 +116,23 @@ def run(
         )
         ip, user, sni, domain, harden = wizard_result[:5]
         client_name, server_name, icon, color, pq, warp, geo_block = wizard_result[5:]
-        request = request.model_copy(
-            update={
-                "ip": ip,
-                "domain": domain,
-                "sni": sni,
-                "client_name": client_name,
-                "user": user,
-                "harden": harden,
-                "server_name": server_name,
-                "icon": icon,
-                "color": color,
-                "pq": pq,
-                "warp": warp,
-                "geo_block": geo_block,
-            }
+        request = apply_deploy_workflow_answers(
+            request,
+            DeployWorkflowAnswers(
+                ip=ip,
+                domain=domain,
+                sni=sni,
+                client_name=client_name,
+                user=user,
+                harden=harden,
+                server_name=server_name,
+                icon=icon,
+                color=color,
+                pq=pq,
+                warp=warp,
+                geo_block=geo_block,
+                confirm=True,
+            ),
         )
     deploy_server(request, executor=_execute_deploy_request)
 

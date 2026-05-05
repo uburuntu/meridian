@@ -132,7 +132,7 @@ meridian api schema NAME [--envelope|--json]
 | `--include-schemas` | | Include full JSON Schemas in `api schemas --json` or `api commands --json` output |
 | `--envelope`, `--json` | | Wrap `api schema NAME` in a `meridian.output/v1` envelope instead of printing raw JSON Schema |
 
-**`api schemas`** — lists stable schema names such as `output-envelope`, `apply-envelope`, `client-list-envelope`, `client-show-envelope`, `deploy-request`, `deploy-result`, `deploy-plan`, `workflow-plan`, `input-field`, `remote-target`, `command-spec`, `remote-command-result`, `plan-envelope`, `fleet-status-envelope`, `fleet-inventory-envelope`, `event`, `apply`, `plan-result`, `fleet-status`, and `fleet-inventory`. Command envelope schemas include a `commands` entry in the catalog.
+**`api schemas`** — lists stable schema names such as `output-envelope`, `apply-envelope`, `client-list-envelope`, `client-show-envelope`, `deploy-request`, `deploy-workflow-answers`, `deploy-result`, `deploy-plan`, `workflow-plan`, `input-field`, `remote-target`, `command-spec`, `remote-command-result`, `plan-envelope`, `fleet-status-envelope`, `fleet-inventory-envelope`, `event`, `apply`, `plan-result`, `fleet-status`, and `fleet-inventory`. Command envelope schemas include a `commands` entry in the catalog.
 
 **`api commands`** — lists migrated command contracts with `command`, `argv`, `envelope_schema`, `data_schema`, possible `statuses`, structured `outcomes`, exit-code meanings, machine flags, and stability. Use this before wiring a UI to decide which command payload schema validates a given envelope.
 

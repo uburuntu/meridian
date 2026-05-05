@@ -33,6 +33,24 @@ class DeployRequest(CoreModel):
     ssh_port: int = 22
 
 
+class DeployWorkflowAnswers(CoreModel):
+    """Answers collected by a deploy wizard renderer."""
+
+    ip: str = ""
+    user: str = "root"
+    sni: str = ""
+    domain: str = ""
+    harden: bool = True
+    client_name: str = ""
+    server_name: str = ""
+    icon: str = ""
+    color: str = ""
+    pq: bool = False
+    warp: bool = False
+    geo_block: bool = True
+    confirm: bool = False
+
+
 class DeployResult(CoreModel):
     """Result returned after a deploy/redeploy operation completes."""
 
@@ -70,6 +88,26 @@ def build_deploy_workflow(request: DeployRequest) -> WorkflowPlan:
         fields=fields,
         sections=_deploy_input_sections(fields) if needs_input else [],
         ready_request_schema="deploy-request",
+    )
+
+
+def apply_deploy_workflow_answers(request: DeployRequest, answers: DeployWorkflowAnswers) -> DeployRequest:
+    """Return a deploy request updated with renderer-collected wizard answers."""
+    return request.model_copy(
+        update={
+            "ip": answers.ip,
+            "domain": answers.domain,
+            "sni": answers.sni,
+            "client_name": answers.client_name,
+            "user": answers.user,
+            "harden": answers.harden,
+            "server_name": answers.server_name,
+            "icon": answers.icon,
+            "color": answers.color,
+            "pq": answers.pq,
+            "warp": answers.warp,
+            "geo_block": answers.geo_block,
+        }
     )
 
 
