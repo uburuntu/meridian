@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Protocol, Self
 
+from pydantic import Field
+
 from meridian.core.clients import (
     ClientListResult,
     ClientShowResult,
@@ -50,6 +52,8 @@ class ClientShowServiceResult(CoreModel):
     """Client show service result."""
 
     client: ClientShowResult
+    share_url: str = Field(default="", exclude=True)
+    subscription_url: str = Field(default="", exclude=True)
 
 
 def collect_client_list(panel_client: ClientPanelClient) -> ClientListServiceResult:
@@ -73,5 +77,7 @@ def collect_client_show(
         share_url = build_share_url(user) if build_share_url else ""
         subscription_url = panel.get_subscription_url(user.short_uuid) if user.short_uuid else ""
     return ClientShowServiceResult(
-        client=build_client_show_result(user, share_url=share_url, subscription_url=subscription_url)
+        client=build_client_show_result(user, share_url=share_url, subscription_url=subscription_url),
+        share_url=share_url,
+        subscription_url=subscription_url,
     )

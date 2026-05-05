@@ -57,7 +57,12 @@ def main_callback(
             handlers=[logging.StreamHandler(sys.stderr)],
         )
 
-    machine_output = json_mode or ctx.invoked_subcommand == "api" or _argv_requests_machine_output(list(ctx.args))
+    machine_output = (
+        json_mode
+        or ctx.invoked_subcommand == "api"
+        or _argv_requests_machine_output()
+        or _argv_requests_machine_output(list(ctx.args))
+    )
     if machine_output:
         from meridian.console import set_quiet_mode
 
@@ -81,7 +86,7 @@ def main_callback(
         raise typer.Exit()
 
     # Show banner before subcommands (but not for --help)
-    if "--help" not in sys.argv and "-h" not in sys.argv:
+    if not machine_output and "--help" not in sys.argv and "-h" not in sys.argv:
         banner(__version__)
 
     # Auto-update check (skip for meta commands)

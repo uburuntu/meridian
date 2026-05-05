@@ -67,7 +67,7 @@ def test_client_list_result_counts_statuses() -> None:
     assert data["clients"][0]["last_seen"] == "2026-04-02T12:00:00Z"
 
 
-def test_client_show_result_keeps_handoff_links_as_sensitive_fields() -> None:
+def test_client_show_result_reports_handoff_availability_without_links() -> None:
     result = build_client_show_result(
         PanelUser(),
         share_url="https://example.org/private/vless-uuid/",
@@ -76,8 +76,13 @@ def test_client_show_result_keeps_handoff_links_as_sensitive_fields() -> None:
     data = result.to_data()
 
     assert data["client"]["username"] == "alice"
-    assert data["client"]["share_url"] == "https://example.org/private/vless-uuid/"
-    assert data["client"]["subscription_url"] == "https://198.51.100.1/api/sub/short-uuid"
+    assert "share_url" not in data["client"]
+    assert "subscription_url" not in data["client"]
+    assert data["handoff"] == {
+        "share_available": True,
+        "subscription_available": True,
+        "redacted": True,
+    }
 
 
 def test_collect_client_list_uses_panel_adapter() -> None:
@@ -95,8 +100,10 @@ def test_collect_client_show_builds_subscription_and_share_urls() -> None:
     )
 
     assert result.client.client.username == "alice"
-    assert result.client.client.share_url == "https://example.org/connect/vless-uuid/"
-    assert result.client.client.subscription_url == "https://198.51.100.1/api/sub/short-uuid"
+    assert result.client.handoff.share_available is True
+    assert result.client.handoff.subscription_available is True
+    assert result.share_url == "https://example.org/connect/vless-uuid/"
+    assert result.subscription_url == "https://198.51.100.1/api/sub/short-uuid"
 
 
 def test_collect_client_show_raises_not_found() -> None:

@@ -16,7 +16,6 @@ import typer
 from meridian.cluster import ClusterConfig, PanelConfig
 from meridian.commands.client import run_add, run_list, run_remove, run_show
 from meridian.console import set_json_mode
-from meridian.core.redaction import REDACTED
 from meridian.remnawave import RemnawaveError, User
 
 # ---------------------------------------------------------------------------
@@ -162,7 +161,9 @@ class TestRunShow:
         payload = json.loads(capsys.readouterr().out)
         assert payload["schema"] == "meridian.output/v1"
         assert payload["command"] == "client.show"
-        assert payload["data"]["client"]["subscription_url"] == REDACTED
+        assert payload["data"]["handoff"]["subscription_available"] is True
+        assert payload["data"]["handoff"]["redacted"] is True
+        assert "subscription_url" not in payload["data"]["client"]
         assert "abc123" not in json.dumps(payload)
 
 

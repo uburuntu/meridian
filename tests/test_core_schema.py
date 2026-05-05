@@ -5,9 +5,18 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from meridian.core.clients import build_client_list_result
 from meridian.core.models import MeridianError
 from meridian.core.output import OperationTimer, command_envelope, envelope
-from meridian.core.schema import PlanOutputEnvelope, command_catalog, schema_catalog, schema_for, schema_names
+from meridian.core.schema import (
+    ApiCommandsResult,
+    ApiSchemasResult,
+    PlanOutputEnvelope,
+    command_catalog,
+    schema_catalog,
+    schema_for,
+    schema_names,
+)
 
 
 def test_schema_catalog_lists_public_contracts() -> None:
@@ -23,7 +32,9 @@ def test_schema_catalog_lists_public_contracts() -> None:
     assert "fleet-status-envelope" in names
     assert "fleet-inventory-envelope" in names
     assert "event" in names
+    assert "schema-catalog-entry" in names
     assert "command-contract" in names
+    assert "command-catalog-entry" in names
     assert "empty-data" in names
     assert "plan-result" in names
     assert "fleet-status" in names
@@ -65,6 +76,17 @@ def test_schema_catalog_can_include_full_schemas() -> None:
     assert "oneOf" in plan["schema"]
 
 
+def test_schema_catalog_entries_are_typed() -> None:
+    catalog = schema_catalog(include_schemas=True)
+
+    parsed = ApiSchemasResult.model_validate({"schemas": catalog})
+    entry = next(item for item in parsed.schemas if item.name == "plan-envelope")
+
+    assert entry.commands == ["plan"]
+    assert entry.json_schema is not None
+    assert next(item for item in catalog if item["name"] == "plan-envelope")["schema"] == entry.json_schema
+
+
 def test_command_catalog_maps_commands_to_envelope_and_data_schemas() -> None:
     catalog = command_catalog()
     by_command = {item["command"]: item for item in catalog}
@@ -95,6 +117,7 @@ def test_command_catalog_maps_commands_to_envelope_and_data_schemas() -> None:
 def test_command_catalog_can_embed_command_schemas() -> None:
     catalog = command_catalog(include_schemas=True)
     plan = next(item for item in catalog if item["command"] == "plan")
+    parsed = ApiCommandsResult.model_validate({"commands": catalog})
 
     success_ref = next(
         option["$ref"] for option in plan["envelope"]["oneOf"] if option["$ref"].endswith("/_PlanSuccessEnvelope")
@@ -104,6 +127,7 @@ def test_command_catalog_can_embed_command_schemas() -> None:
     assert plan["data"]["title"] == "PlanResult"
     assert plan["failure_data"]["title"] == "EmptyData"
     assert plan["error"]["title"] == "MeridianError"
+    assert next(item for item in parsed.commands if item.command == "plan").data is not None
 
 
 def test_command_envelope_schema_validates_failed_output_shape() -> None:
@@ -136,6 +160,37 @@ def test_command_envelope_producer_validates_migrated_commands() -> None:
             summary="Plan has changes",
             status="changed",
             exit_code=2,
+            timer=OperationTimer(started_at="2026-05-04T21:00:00Z", operation_id="op-test"),
+        )
+
+
+def test_command_envelope_producer_rejects_unsupported_success_exit_code() -> None:
+    with pytest.raises(ValueError, match="unsupported outcome"):
+        command_envelope(
+            command="client.list",
+            data=build_client_list_result([]).to_data(),
+            summary="0 clients",
+            status="ok",
+            exit_code=2,
+            timer=OperationTimer(started_at="2026-05-04T21:00:00Z", operation_id="op-test"),
+        )
+
+
+def test_command_envelope_producer_rejects_unsupported_failure_exit_code() -> None:
+    error = MeridianError(
+        code="MERIDIAN_USER_ERROR",
+        category="user",
+        message="User error",
+        exit_code=2,
+    )
+
+    with pytest.raises(ValueError, match="unsupported outcome"):
+        command_envelope(
+            command="client.list",
+            summary="User error",
+            status="failed",
+            exit_code=0,
+            errors=[error],
             timer=OperationTimer(started_at="2026-05-04T21:00:00Z", operation_id="op-test"),
         )
 

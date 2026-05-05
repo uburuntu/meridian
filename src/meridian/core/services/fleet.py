@@ -99,7 +99,7 @@ def collect_fleet_inventory(
                     _system_warning(
                         "MERIDIAN_PANEL_UNREACHABLE",
                         "Cannot reach panel API; live inventory status is unavailable",
-                        hint="Check panel connectivity and run meridian doctor.",
+                        hint="Verify panel connectivity from the caller environment.",
                     )
                 )
                 sources = sources.model_copy(update={"nodes": "unavailable"})
@@ -126,7 +126,7 @@ def collect_fleet_inventory(
             _system_warning(
                 "MERIDIAN_PANEL_UNREACHABLE",
                 "Cannot reach panel API; live inventory status is unavailable",
-                hint="Check panel connectivity and run meridian doctor.",
+                hint="Verify panel connectivity from the caller environment.",
                 details={"cause": type(exc).__name__},
             )
         )
@@ -161,7 +161,7 @@ def collect_fleet_status(
                     _system_warning(
                         "MERIDIAN_PANEL_UNREACHABLE",
                         "Cannot reach panel API -- node and user data may be stale",
-                        hint="Check panel connectivity and run meridian doctor.",
+                        hint="Verify panel connectivity from the caller environment.",
                     )
                 )
                 sources = sources.model_copy(update={"nodes": "unavailable", "users": "unavailable"})
@@ -202,7 +202,7 @@ def collect_fleet_status(
             _system_warning(
                 "MERIDIAN_PANEL_UNREACHABLE",
                 "Cannot reach panel API -- node and user data may be stale",
-                hint="Check panel connectivity and run meridian doctor.",
+                hint="Verify panel connectivity from the caller environment.",
                 details={"cause": type(exc).__name__},
             )
         )

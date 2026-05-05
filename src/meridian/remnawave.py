@@ -282,7 +282,18 @@ def _sdk_call(coro: Any) -> Any:
         raise
     except NetworkError as e:
         raise RemnawaveNetworkError(f"Panel network error: {e}", hint_type="system") from e
-    except httpx.HTTPError as e:
+    except httpx.HTTPStatusError as e:
+        status_code = e.response.status_code
+        if status_code in (401, 403):
+            raise RemnawaveAuthError(
+                f"Panel authentication failed: {e}",
+                hint="Check your API token — it may have expired",
+                hint_type="user",
+            ) from e
+        if status_code == 404:
+            raise RemnawaveNotFoundError(f"Resource not found: {e}", hint_type="system") from e
+        raise RemnawaveError(f"Panel API error: {e}", hint_type="system") from e
+    except httpx.RequestError as e:
         raise RemnawaveNetworkError(f"Panel network error: {e}", hint_type="system") from e
     except Exception as e:
         if isinstance(e, NotFoundError):

@@ -139,6 +139,40 @@ def test_redaction_preserves_json_schema_property_definitions() -> None:
     assert data["properties"]["share_url"] == {"type": "string"}
 
 
+def test_redaction_does_not_treat_arbitrary_properties_as_schema() -> None:
+    data = json.loads(
+        json_dumps(
+            {
+                "properties": {
+                    "api_token": "secret-token",
+                    "subscription_url": "https://198.51.100.1/sub/abc123",
+                }
+            }
+        )
+    )
+
+    assert data["properties"]["api_token"] == REDACTED
+    assert data["properties"]["subscription_url"] == REDACTED
+
+
+def test_redaction_handles_json_style_secrets_inside_strings() -> None:
+    data = json.loads(
+        json_dumps(
+            {
+                "message": (
+                    '{"api_token":"secret-token","subscription_url":"https://198.51.100.1/sub/abc123"} '
+                    'Authorization: "Bearer opaque-token" X-API-Key: "opaque-key"'
+                )
+            }
+        )
+    )
+
+    assert "secret-token" not in data["message"]
+    assert "abc123" not in data["message"]
+    assert "opaque-token" not in data["message"]
+    assert "opaque-key" not in data["message"]
+
+
 def test_jsonl_events_are_monotonic_and_redacted() -> None:
     events = EventStream(operation_id="op-test")
 

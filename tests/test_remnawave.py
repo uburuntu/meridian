@@ -995,6 +995,35 @@ class TestSdkExceptionTranslation:
 
         assert exc_info.value.hint_type == "system"
 
+    def _http_status_error(self, status_code: int) -> httpx.HTTPStatusError:
+        request = httpx.Request("GET", "https://panel.example/api")
+        response = httpx.Response(status_code, request=request)
+        return httpx.HTTPStatusError(f"status {status_code}", request=request, response=response)
+
+    @pytest.mark.parametrize(
+        ("status_code", "expected"),
+        [
+            (401, RemnawaveAuthError),
+            (403, RemnawaveAuthError),
+            (404, RemnawaveNotFoundError),
+            (500, RemnawaveError),
+        ],
+    )
+    def test_sdk_httpx_status_errors_keep_semantics(
+        self,
+        status_code: int,
+        expected: type[RemnawaveError],
+    ) -> None:
+        from meridian.remnawave import _sdk_call
+
+        async def coro() -> None:
+            raise self._http_status_error(status_code)
+
+        with pytest.raises(expected) as exc_info:
+            _sdk_call(coro())
+
+        assert not isinstance(exc_info.value, RemnawaveNetworkError)
+
     def test_sdk_api_error_becomes_remnawave_error(self) -> None:
         from remnawave.exceptions import ApiError
 

@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-import sys
 import tempfile
 from dataclasses import asdict, dataclass, field
 from enum import Enum
@@ -23,19 +22,11 @@ logger = logging.getLogger("meridian.cluster")
 
 
 def _load_warning(message: str, *, details: list[str] | None = None) -> None:
-    """Surface cluster load warnings unless machine-output mode is quiet."""
-    try:
-        from meridian.console import err_console, is_quiet_mode
-
-        if is_quiet_mode():
-            return
-        err_console.print(f"  [warn]![/warn] {message}")
-        for detail in details or []:
-            err_console.print(f"  [dim]{detail}[/dim]")
-    except Exception:
-        print(message, file=sys.stderr)
-        for detail in details or []:
-            print(detail, file=sys.stderr)
+    """Record cluster load warnings without importing CLI renderers."""
+    if details:
+        logger.warning("%s %s", message, " ".join(details))
+    else:
+        logger.warning("%s", message)
 
 
 class ClusterConfigExternallyModifiedError(RuntimeError):

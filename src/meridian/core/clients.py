@@ -50,11 +50,16 @@ class ClientRecord(CoreModel):
     last_seen: str
 
 
-class ClientDetail(ClientRecord):
-    """Client metadata plus optional handoff links."""
+class ClientHandoff(CoreModel):
+    """Availability metadata for client handoff links in redacted JSON."""
 
-    share_url: str = ""
-    subscription_url: str = ""
+    share_available: bool
+    subscription_available: bool
+    redacted: bool = True
+
+
+class ClientDetail(ClientRecord):
+    """Client metadata for a detail view."""
 
 
 class ClientListSummary(CoreModel):
@@ -89,6 +94,7 @@ class ClientShowResult(CoreModel):
     """Result for showing one client."""
 
     client: ClientDetail
+    handoff: ClientHandoff
 
     def to_data(self) -> dict[str, Any]:
         from meridian.core.serde import to_plain
@@ -109,14 +115,10 @@ def build_client_record(user: PanelUserLike) -> ClientRecord:
     )
 
 
-def build_client_detail(user: PanelUserLike, *, share_url: str = "", subscription_url: str = "") -> ClientDetail:
-    """Build one client detail result from panel state and handoff links."""
+def build_client_detail(user: PanelUserLike) -> ClientDetail:
+    """Build one client detail result from panel state."""
     base = build_client_record(user)
-    return ClientDetail(
-        **base.model_dump(),
-        share_url=share_url,
-        subscription_url=subscription_url,
-    )
+    return ClientDetail(**base.model_dump())
 
 
 def build_client_list_result(users: Sequence[PanelUserLike]) -> ClientListResult:
@@ -149,5 +151,9 @@ def build_client_show_result(
 ) -> ClientShowResult:
     """Build a one-client result with optional handoff links."""
     return ClientShowResult(
-        client=build_client_detail(user, share_url=share_url, subscription_url=subscription_url),
+        client=build_client_detail(user),
+        handoff=ClientHandoff(
+            share_available=bool(share_url),
+            subscription_available=bool(subscription_url),
+        ),
     )

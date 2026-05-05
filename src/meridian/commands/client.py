@@ -222,7 +222,7 @@ def _run_show(
         return
 
     # Print connection page URL + subscription
-    _print_handoff_links(detail.subscription_url, page_url=detail.share_url)
+    _print_handoff_links(result.subscription_url, page_url=result.share_url)
 
     # Print traffic stats
     err_console.print()

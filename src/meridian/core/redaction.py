@@ -51,8 +51,14 @@ _PEM_RE = re.compile(
     r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
     re.DOTALL,
 )
-_AUTH_HEADER_RE = re.compile(r"\b(?P<key>Authorization\s*:\s*(?:Bearer\s+)?)(?P<value>[^\s,;'\"`]+)", re.I)
-_API_KEY_HEADER_RE = re.compile(r"\b(?P<key>(?:X-API-Key|API-Key)\s*:\s*)(?P<value>[^\s,;'\"`]+)", re.I)
+_AUTH_HEADER_RE = re.compile(
+    r"\b(?P<key>Authorization\"?\s*:\s*\"?(?:Bearer\s+)?)(?P<value>[^\"'\s,;`]+)",
+    re.I,
+)
+_API_KEY_HEADER_RE = re.compile(
+    r"\b(?P<key>(?:X-API-Key|API-Key)\"?\s*:\s*\"?)(?P<value>[^\"'\s,;`]+)",
+    re.I,
+)
 _URL_USERINFO_RE = re.compile(r"(?P<scheme>[a-z][a-z0-9+.-]*://)(?P<userinfo>[^/@\s]+)@(?P<host>[^/\s]+)", re.I)
 _HTTP_URL_PATH_RE = re.compile(
     r"(?P<scheme>https?://)(?P<host>[^/\s?#]+)/(?P<secret>[^/\s?#,;'\"`][^\s?#,;'\"`]*)(?P<suffix>[?#][^\s,;'\"`]*)?",
@@ -66,6 +72,31 @@ _ASSIGNMENT_RE = re.compile(
     r"(?P<value>[^\s,;]+)",
     re.I,
 )
+_JSON_SECRET_PAIR_RE = re.compile(
+    r"(?P<key>[\"']?(?:api[_-]?key|api[_-]?token|access[_-]?token|refresh[_-]?token|"
+    r"auth[_-]?token|jwt|password|passwd|secret(?:[_-]?key)?|private[_-]?key|"
+    r"database[_-]?url|db[_-]?url|subscription[_-]?url|sub[_-]?url|share[_-]?url|"
+    r"access[_-]?link|connection[_-]?url)[\"']?\s*:\s*)"
+    r"(?P<quote>[\"']?)(?P<value>[^\"'\s,;}]+)(?P=quote)",
+    re.I,
+)
+_JSON_SCHEMA_KEYS = {
+    "$ref",
+    "additionalProperties",
+    "allOf",
+    "anyOf",
+    "const",
+    "description",
+    "enum",
+    "format",
+    "items",
+    "maxLength",
+    "minLength",
+    "oneOf",
+    "properties",
+    "title",
+    "type",
+}
 
 
 def is_sensitive_key(key: str) -> bool:
@@ -83,7 +114,23 @@ def redact_string(value: str) -> str:
     redacted = _JWT_RE.sub(REDACTED, redacted)
     redacted = _URL_USERINFO_RE.sub(lambda m: f"{m.group('scheme')}{REDACTED}@{m.group('host')}", redacted)
     redacted = _HTTP_URL_PATH_RE.sub(lambda m: f"{m.group('scheme')}{m.group('host')}/{REDACTED}", redacted)
+    redacted = _JSON_SECRET_PAIR_RE.sub(
+        lambda m: f"{m.group('key')}{m.group('quote')}{REDACTED}{m.group('quote')}",
+        redacted,
+    )
     return _ASSIGNMENT_RE.sub(lambda m: f"{m.group('key')}{m.group('sep')}{REDACTED}", redacted)
+
+
+def _is_json_schema_property_map(value: dict[Any, Any]) -> bool:
+    """Return True for JSON Schema properties maps, not arbitrary property bags."""
+    if not value:
+        return False
+    for schema in value.values():
+        if not isinstance(schema, dict):
+            return False
+        if not any(str(key) in _JSON_SCHEMA_KEYS for key in schema):
+            return False
+    return True
 
 
 def redact(value: Any) -> Any:
@@ -98,7 +145,7 @@ def redact(value: Any) -> Any:
         redacted: dict[str, Any] = {}
         for key, item in value.items():
             key_str = str(key)
-            if key_str == "properties" and isinstance(item, dict):
+            if key_str == "properties" and isinstance(item, dict) and _is_json_schema_property_map(item):
                 redacted[key_str] = {str(prop): redact(schema) for prop, schema in item.items()}
             else:
                 redacted[key_str] = REDACTED if is_sensitive_key(key_str) else redact(item)

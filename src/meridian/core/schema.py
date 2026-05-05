@@ -25,16 +25,26 @@ class EmptyData(CoreModel):
     """Empty data object used by failed or cancelled envelopes."""
 
 
+class SchemaCatalogEntry(CoreModel):
+    """Discoverable schema catalog entry."""
+
+    name: str
+    title: str
+    description: str
+    commands: list[str] = Field(default_factory=list)
+    json_schema: dict[str, Any] | None = Field(default=None, alias="schema")
+
+
 class ApiSchemasResult(CoreModel):
     """Result for `meridian api schemas --json`."""
 
-    schemas: list[dict[str, Any]]
+    schemas: list[SchemaCatalogEntry]
 
 
 class ApiCommandsResult(CoreModel):
     """Result for `meridian api commands --json`."""
 
-    commands: list[dict[str, Any]]
+    commands: list[CommandCatalogEntry]
 
 
 class ApiSchemaResult(CoreModel):
@@ -251,6 +261,15 @@ class CommandContract(CoreModel):
     description: str
 
 
+class CommandCatalogEntry(CommandContract):
+    """Command contract entry with optional embedded schemas."""
+
+    envelope: dict[str, Any] | None = None
+    data: dict[str, Any] | None = None
+    failure_data: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
+
+
 def _standard_outcomes(success_status: Literal["ok"], success_meaning: str) -> list[CommandOutcome]:
     return [
         CommandOutcome(status=success_status, exit_code=0, category="none", meaning=success_meaning),
@@ -290,6 +309,7 @@ _SCHEMAS: dict[str, type[BaseModel]] = {
     "summary": Summary,
     "client-list": ClientListResult,
     "client-show": ClientShowResult,
+    "schema-catalog-entry": SchemaCatalogEntry,
     "empty-data": EmptyData,
     "plan-result": PlanResult,
     "plan-action": PlanActionResult,
@@ -297,6 +317,7 @@ _SCHEMAS: dict[str, type[BaseModel]] = {
     "fleet-status": FleetStatus,
     "fleet-inventory": FleetInventory,
     "command-contract": CommandContract,
+    "command-catalog-entry": CommandCatalogEntry,
     "command-outcome": CommandOutcome,
 }
 
@@ -487,6 +508,18 @@ def validate_command_envelope(payload: OutputEnvelope) -> OutputEnvelope:
     if contract is None:
         return payload
     schema_model(contract.envelope_schema).model_validate(payload.model_dump(mode="json", by_alias=True))
+    categories: set[OutcomeCategory] = {error.category for error in payload.errors} if payload.errors else {"none"}
+    if not any(
+        outcome.status == payload.status and outcome.exit_code == payload.exit_code and outcome.category in categories
+        for outcome in contract.outcomes
+    ):
+        expected = ", ".join(
+            f"{outcome.status}/{outcome.exit_code}/{outcome.category}" for outcome in contract.outcomes
+        )
+        raise ValueError(
+            f"{payload.command} produced unsupported outcome "
+            f"{payload.status}/{payload.exit_code}/{', '.join(sorted(categories))}; expected one of: {expected}"
+        )
     return payload
 
 
@@ -495,17 +528,15 @@ def schema_catalog(*, include_schemas: bool = False) -> list[dict[str, Any]]:
     catalog = []
     for name in schema_names():
         model = schema_model(name)
-        item: dict[str, Any] = {
-            "name": name,
-            "title": model.__name__,
-            "description": (model.__doc__ or "").strip(),
-        }
         commands = [command for command, schema_name in _COMMAND_SCHEMAS.items() if schema_name == name]
-        if commands:
-            item["commands"] = commands
-        if include_schemas:
-            item["schema"] = schema_for(name)
-        catalog.append(item)
+        entry = SchemaCatalogEntry(
+            name=name,
+            title=model.__name__,
+            description=(model.__doc__ or "").strip(),
+            commands=commands,
+            schema=schema_for(name) if include_schemas else None,
+        )
+        catalog.append(entry.model_dump(mode="json", by_alias=True, exclude_none=True))
     return catalog
 
 
@@ -518,11 +549,12 @@ def command_catalog(*, include_schemas: bool = False) -> list[dict[str, Any]]:
     """Return command contract metadata, optionally including JSON Schemas."""
     catalog: list[dict[str, Any]] = []
     for contract in command_contracts():
-        item: dict[str, Any] = contract.model_dump(mode="json")
-        if include_schemas:
-            item["envelope"] = schema_for(contract.envelope_schema)
-            item["data"] = schema_for(contract.data_schema)
-            item["failure_data"] = schema_for(contract.failure_data_schema)
-            item["error"] = schema_for(contract.error_schema)
-        catalog.append(item)
+        entry = CommandCatalogEntry(
+            **contract.model_dump(mode="json"),
+            envelope=schema_for(contract.envelope_schema) if include_schemas else None,
+            data=schema_for(contract.data_schema) if include_schemas else None,
+            failure_data=schema_for(contract.failure_data_schema) if include_schemas else None,
+            error=schema_for(contract.error_schema) if include_schemas else None,
+        )
+        catalog.append(entry.model_dump(mode="json", by_alias=True, exclude_none=True))
     return catalog
