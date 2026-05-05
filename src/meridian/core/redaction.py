@@ -144,6 +144,11 @@ def _is_json_schema_property_map(value: dict[Any, Any]) -> bool:
     return True
 
 
+def _is_safe_metadata_key(key: str, value: Any) -> bool:
+    """Return True for fields whose names look sensitive but values are metadata."""
+    return key.lower().replace("-", "_") == "secret" and isinstance(value, bool)
+
+
 def redact(value: Any) -> Any:
     """Return a JSON-safe structure with obvious secrets removed."""
     if isinstance(value, BaseModel):
@@ -159,7 +164,9 @@ def redact(value: Any) -> Any:
             if key_str == "properties" and isinstance(item, dict) and _is_json_schema_property_map(item):
                 redacted[key_str] = {str(prop): redact(schema) for prop, schema in item.items()}
             else:
-                redacted[key_str] = REDACTED if is_sensitive_key(key_str) else redact(item)
+                redacted[key_str] = (
+                    REDACTED if is_sensitive_key(key_str) and not _is_safe_metadata_key(key_str, item) else redact(item)
+                )
         return redacted
     if isinstance(value, list | tuple | set | frozenset):
         return [redact(v) for v in value]

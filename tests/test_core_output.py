@@ -180,6 +180,14 @@ def test_redaction_handles_json_style_secrets_inside_strings() -> None:
     assert "opaque-key" not in data["message"]
 
 
+def test_redaction_preserves_boolean_secret_metadata() -> None:
+    data = redact({"secret": False, "nested": {"secret": True}, "secret_key": "value"})
+
+    assert data["secret"] is False
+    assert data["nested"]["secret"] is True
+    assert data["secret_key"] == REDACTED
+
+
 def test_jsonl_events_are_monotonic_and_redacted() -> None:
     events = EventStream(operation_id="op-test")
 
