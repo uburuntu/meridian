@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, RootModel
 
 from meridian.core.apply import ApplyActionResult, ApplyCounts, ApplyResult
 from meridian.core.clients import ClientListResult, ClientShowResult
+from meridian.core.deploy import DeployRequest, DeployResult
 from meridian.core.fleet import FleetInventory, FleetStatus
 from meridian.core.models import (
     CoreModel,
@@ -350,6 +351,8 @@ _SCHEMAS: dict[str, type[BaseModel]] = {
     "summary": Summary,
     "client-list": ClientListResult,
     "client-show": ClientShowResult,
+    "deploy-request": DeployRequest,
+    "deploy-result": DeployResult,
     "schema-catalog-entry": SchemaCatalogEntry,
     "empty-data": EmptyData,
     "plan-result": PlanResult,

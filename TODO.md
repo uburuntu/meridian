@@ -281,8 +281,8 @@ Example:
 
 ### Phase 4: Provisioning Events
 
-- [ ] Add optional reporter to `Provisioner.run()`.
-- [ ] Emit `provision.step.started` and `provision.step.completed` from `Provisioner`.
+- [x] Add optional reporter to `Provisioner.run()`.
+- [x] Emit `provision.step.started` and `provision.step.completed` from `Provisioner`.
 - [ ] Render existing Rich progress from provision events.
 - [ ] Keep `StepResult` as the compact step contract.
 - [ ] Decide whether redacted `CommandResult` data is included in verbose JSONL only.

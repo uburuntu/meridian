@@ -96,6 +96,75 @@ def _patch_all(**overrides: object):  # noqa: ANN202
 # ---------------------------------------------------------------------------
 
 
+class TestRunCoreBoundary:
+    def test_run_builds_deploy_request_for_core_service(self) -> None:
+        with patch("meridian.commands.setup.deploy_server") as mock_deploy:
+            run(
+                ip=_IP_A,
+                domain="vpn.example",
+                sni="www.microsoft.com",
+                client_name="alice",
+                user="admin",
+                yes=True,
+                harden=False,
+                requested_server="",
+                server_name="Family VPN",
+                icon="shield",
+                color="ocean",
+                pq=True,
+                warp=True,
+                geo_block=False,
+                ssh_port=2222,
+            )
+
+        request = mock_deploy.call_args.args[0]
+        assert request.ip == _IP_A
+        assert request.domain == "vpn.example"
+        assert request.client_name == "alice"
+        assert request.user == "admin"
+        assert request.yes is True
+        assert request.harden is False
+        assert request.server_name == "Family VPN"
+        assert request.pq is True
+        assert request.warp is True
+        assert request.geo_block is False
+        assert request.ssh_port == 2222
+        assert mock_deploy.call_args.kwargs["executor"].__name__ == "_execute_deploy_request"
+
+    def test_run_collects_wizard_input_before_core_service(self) -> None:
+        wizard_result = (
+            _IP_A,
+            "admin",
+            "www.microsoft.com",
+            "vpn.example",
+            False,
+            "alice",
+            "Family VPN",
+            "shield",
+            "ocean",
+            True,
+            True,
+            False,
+        )
+        with (
+            patch("meridian.commands.setup._interactive_wizard", return_value=wizard_result) as mock_wizard,
+            patch("meridian.commands.setup.deploy_server") as mock_deploy,
+        ):
+            run(yes=True)
+
+        mock_wizard.assert_called_once()
+        request = mock_deploy.call_args.args[0]
+        assert request.ip == _IP_A
+        assert request.user == "admin"
+        assert request.domain == "vpn.example"
+        assert request.harden is False
+        assert request.client_name == "alice"
+        assert request.server_name == "Family VPN"
+        assert request.pq is True
+        assert request.warp is True
+        assert request.geo_block is False
+
+
 class TestRunModeDetection:
     def _run_with_cluster(self, cluster: ClusterConfig, ip: str = _IP_A) -> dict:
         """Execute run() with given cluster config, capturing calls."""

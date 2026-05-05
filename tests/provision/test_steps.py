@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from meridian.core.output import OperationContext
+from meridian.core.reporters import CaptureReporter
 from meridian.provision.steps import ProvisionContext, Provisioner, StepResult
 
 from .conftest import MockConnection
@@ -134,3 +136,43 @@ class TestProvisioner:
         results = provisioner.run(conn, ctx)
 
         assert results[0].duration_ms >= 0
+
+    def test_provisioner_emits_step_events_without_rich_rendering(self):
+        steps = [MockStep(name="A", status="changed"), MockStep(name="B", status="skipped")]
+
+        conn = MockConnection()
+        ctx = ProvisionContext(ip="198.51.100.1")
+        reporter = CaptureReporter()
+        operation = OperationContext(operation_id="op-provision", started_at="2026-05-04T21:00:00Z")
+        provisioner = Provisioner(steps=steps)
+
+        provisioner.run(conn, ctx, reporter=reporter, operation=operation, render=False)
+
+        assert [event.type for event in reporter.events] == [
+            "provision.step.started",
+            "provision.step.completed",
+            "provision.step.started",
+            "provision.step.completed",
+        ]
+        assert {event.operation_id for event in reporter.events} == {"op-provision"}
+        assert reporter.events[1].data["status"] == "changed"
+        assert reporter.events[3].data["status"] == "skipped"
+
+    def test_provisioner_emits_failed_step_event(self):
+        steps = [MockStep(name="A", status="failed", detail="nope"), MockStep(name="B", status="ok")]
+
+        conn = MockConnection()
+        ctx = ProvisionContext(ip="198.51.100.1")
+        reporter = CaptureReporter()
+        operation = OperationContext(operation_id="op-provision", started_at="2026-05-04T21:00:00Z")
+        provisioner = Provisioner(steps=steps)
+
+        provisioner.run(conn, ctx, reporter=reporter, operation=operation, render=False)
+
+        assert [event.type for event in reporter.events] == [
+            "provision.step.started",
+            "provision.step.failed",
+        ]
+        assert reporter.events[-1].level == "error"
+        assert reporter.events[-1].data["status"] == "failed"
+        assert reporter.events[-1].data["detail"] == "nope"

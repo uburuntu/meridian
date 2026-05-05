@@ -38,6 +38,10 @@ from meridian.config import (
     is_ip,
 )
 from meridian.console import choose, confirm, err_console, fail, info, line, ok, prompt, warn
+from meridian.core.deploy import DeployRequest, DeployResult
+from meridian.core.output import OperationContext
+from meridian.core.reporters import Reporter
+from meridian.core.services.deploy import deploy_server
 from meridian.remnawave import MeridianPanel, NodeCredentials, RemnawaveError
 from meridian.servers import ServerEntry, ServerRegistry
 from meridian.ssh import ServerConnection
@@ -67,7 +71,67 @@ def run(
     ssh_port: int = 22,
 ) -> None:
     """Deploy a VLESS+Reality proxy server (Remnawave architecture)."""
-    # --decoy is deprecated (403/404 is now always the default).
+    if not ip and not requested_server:
+        wizard_result = _interactive_wizard(
+            sni=sni,
+            domain=domain,
+            harden=harden,
+            yes=yes,
+            client_name=client_name,
+            server_name=server_name,
+            icon=icon,
+            color=color,
+            pq=pq,
+            warp=warp,
+            geo_block=geo_block,
+        )
+        ip, user, sni, domain, harden = wizard_result[:5]
+        client_name, server_name, icon, color, pq, warp, geo_block = wizard_result[5:]
+
+    request = DeployRequest(
+        ip=ip,
+        domain=domain,
+        sni=sni,
+        client_name=client_name,
+        user=user,
+        yes=yes,
+        harden=harden,
+        requested_server=requested_server,
+        server_name=server_name,
+        icon=icon,
+        color=color,
+        decoy=decoy,
+        pq=pq,
+        warp=warp,
+        geo_block=geo_block,
+        ssh_port=ssh_port,
+    )
+    deploy_server(request, executor=_execute_deploy_request)
+
+
+def _execute_deploy_request(
+    request: DeployRequest,
+    reporter: Reporter | None = None,
+    operation: OperationContext | None = None,
+) -> DeployResult:
+    """Execute deploy request using the current SSH/panel implementation."""
+    ip = request.ip
+    domain = request.domain
+    sni = request.sni
+    client_name = request.client_name
+    user = request.user
+    yes = request.yes
+    harden = request.harden
+    requested_server = request.requested_server
+    server_name = request.server_name
+    icon = request.icon
+    color = request.color
+    pq = request.pq
+    warp = request.warp
+    geo_block = request.geo_block
+    ssh_port = request.ssh_port
+
+    # request.decoy is deprecated (403/404 is now always the default).
     # Accept silently for backwards compatibility but don't use it.
 
     registry = ServerRegistry(SERVERS_FILE)
@@ -99,24 +163,6 @@ def run(
                 server_ip = entry.host
                 if user == "root" and entry.user:
                     ssh_user = entry.user
-
-    # Interactive wizard if no IP given
-    if not server_ip:
-        wizard_result = _interactive_wizard(
-            sni=sni,
-            domain=domain,
-            harden=harden,
-            yes=yes,
-            client_name=client_name,
-            server_name=server_name,
-            icon=icon,
-            color=color,
-            pq=pq,
-            warp=warp,
-            geo_block=geo_block,
-        )
-        server_ip, ssh_user, sni, domain, harden = wizard_result[:5]
-        client_name, server_name, icon, color, pq, warp, geo_block = wizard_result[5:]
 
     # Validate IP (skip for 'local' keyword -- resolve_server handles it)
     if not is_local_keyword(server_ip) and not is_ip(server_ip):
@@ -223,6 +269,8 @@ def run(
         xhttp_path=xhttp_path,
         ws_path=ws_path,
         info_page_path=info_page_path,
+        reporter=reporter,
+        operation=operation,
     )
 
     # Post-provisioner: configure panel via REST API
@@ -299,6 +347,26 @@ def run(
     # Offer relay setup
     _offer_relay(resolved, yes)
 
+    return DeployResult(
+        mode="first_deploy" if is_first_deploy else "redeploy",
+        server_ip=resolved.ip,
+        ssh_user=resolved.user,
+        ssh_port=getattr(resolved.conn, "port", ssh_port),
+        domain=domain,
+        sni=sni or DEFAULT_SNI,
+        client_name=client_name,
+        harden=harden,
+        pq=pq,
+        warp=warp,
+        geo_block=geo_block,
+        panel_url=cluster.panel.url,
+        panel_secret_path=cluster.panel.secret_path,
+        connection_page_path=cluster.panel.sub_path,
+        node_count=len(cluster.nodes),
+        relay_count=len(cluster.relays),
+        summary=f"Deploy completed for {resolved.ip}",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Provisioner pipeline
@@ -323,6 +391,8 @@ def _run_provisioner(
     xhttp_path: str = "",
     ws_path: str = "",
     info_page_path: str = "",
+    reporter: Reporter | None = None,
+    operation: OperationContext | None = None,
 ) -> None:
     """Run the SSH-based provisioner pipeline (OS, Docker, containers)."""
     from meridian.provision import ProvisionContext, Provisioner, build_node_steps, build_setup_steps
@@ -396,7 +466,7 @@ def _run_provisioner(
     if not isinstance(conn, ServerConnection):
         fail("No SSH connection available", hint_type="bug")
 
-    results = provisioner.run(conn, ctx)
+    results = provisioner.run(conn, ctx, reporter=reporter, operation=operation)
 
     # Check for failures
     failed = [r for r in results if r.status == "failed"]

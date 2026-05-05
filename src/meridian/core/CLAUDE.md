@@ -6,12 +6,14 @@
 - **Events are JSONL-ready** - long-running flows should report progress as typed events, not ad hoc log lines.
 - **Pydantic at API boundaries** - public request/result/event/error contracts use Pydantic v2 for validation, JSON serialization, and JSON Schema export. Internal execution objects can stay lighter until they cross a client boundary.
 - **Exported services return typed contracts** - service result wrappers are Pydantic too; do not publish dataclasses as core API.
+- **Deploy migration is service-first** - CLI deploy builds a `DeployRequest` and calls core; legacy SSH/panel mechanics stay injected until fully extracted.
 
 ## What's done well
 - Shared serializers keep JSON output stable and recursively handle core Pydantic models.
 - Redaction is centralized so expanding JSON/API surfaces does not multiply secret-leak risk.
 - Fleet inventory is built as a redacted result object before any CLI rendering happens.
 - Client list/show use the same service/result/envelope pattern as fleet reads.
+- Reporter primitives let provision/apply/deploy flows emit typed events without choosing a renderer.
 
 ## Pitfalls
 - Do not import command modules, `meridian.console`, Typer, or Rich here.

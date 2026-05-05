@@ -9,6 +9,7 @@ from meridian.core.services.clients import (
     collect_client_list,
     collect_client_show,
 )
+from meridian.core.services.deploy import DeployExecutor, deploy_server
 from meridian.core.services.fleet import (
     FleetInventoryServiceResult,
     FleetPanelClient,
@@ -25,6 +26,7 @@ __all__ = [
     "ClientListServiceResult",
     "ClientNotFoundError",
     "ClientShowServiceResult",
+    "DeployExecutor",
     "FleetPanelClient",
     "FleetInventoryServiceResult",
     "FleetStatusServiceResult",
@@ -34,6 +36,7 @@ __all__ = [
     "ShareUrlBuilder",
     "collect_client_list",
     "collect_client_show",
+    "deploy_server",
     "collect_fleet_inventory",
     "collect_fleet_status",
 ]

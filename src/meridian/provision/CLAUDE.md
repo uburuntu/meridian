@@ -18,6 +18,8 @@
 
 **Semantic ensure helpers** — `ensure.py` wraps package, file, service, and UFW operations. Prefer these helpers plus `ServerFacts` for idempotency checks instead of duplicating check/act shell snippets.
 
+**Reporter hook** — `Provisioner.run()` may emit typed core events while preserving Rich rendering by default. CLI/UI renderers subscribe; steps still return `StepResult`.
+
 **Relay pipeline is separate** — uses `RelayContext` and Realm TCP forwarding. Panel-agnostic.
 
 ## What's done well

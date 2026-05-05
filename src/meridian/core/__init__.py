@@ -14,6 +14,7 @@ from meridian.core.clients import (
     ClientRecord,
     ClientShowResult,
 )
+from meridian.core.deploy import DeployRequest, DeployResult
 from meridian.core.fleet import FleetInventory, FleetSources, FleetStatus, FleetTopology, RelayHostRef
 from meridian.core.models import (
     CoreModel,
@@ -37,6 +38,7 @@ from meridian.core.output import (
 )
 from meridian.core.plan import PlanActionResult, PlanCounts, PlanResult, build_plan_result
 from meridian.core.redaction import REDACTED, redact
+from meridian.core.reporters import CaptureReporter, NoopReporter, Reporter, emit_event
 from meridian.core.schema import (
     ApiCommandsResult,
     ApiSchemaResult,
@@ -58,6 +60,7 @@ from meridian.core.services import (
     ClientNotFoundError,
     ClientPanelClient,
     ClientShowServiceResult,
+    DeployExecutor,
     FleetInventoryServiceResult,
     FleetPanelClient,
     FleetStatusServiceResult,
@@ -69,6 +72,7 @@ from meridian.core.services import (
     collect_client_show,
     collect_fleet_inventory,
     collect_fleet_status,
+    deploy_server,
 )
 
 __all__ = [
@@ -90,7 +94,11 @@ __all__ = [
     "ClientRecord",
     "ClientShowResult",
     "ClientShowServiceResult",
+    "CaptureReporter",
     "CoreModel",
+    "DeployExecutor",
+    "DeployRequest",
+    "DeployResult",
     "ErrorCategory",
     "Event",
     "EventLevel",
@@ -102,6 +110,7 @@ __all__ = [
     "FleetStatusServiceResult",
     "FleetTopology",
     "MeridianError",
+    "NoopReporter",
     "OutputEnvelope",
     "OutputStatus",
     "PanelErrorClassifier",
@@ -110,6 +119,7 @@ __all__ = [
     "PlanCounts",
     "PlanResult",
     "REDACTED",
+    "Reporter",
     "RelayHealthChecker",
     "ResourceRef",
     "RelayHostRef",
@@ -122,12 +132,14 @@ __all__ = [
     "SchemaCatalogEntry",
     "collect_client_list",
     "collect_client_show",
+    "deploy_server",
     "command_envelope",
     "command_catalog",
     "command_contracts",
     "collect_fleet_inventory",
     "collect_fleet_status",
     "envelope",
+    "emit_event",
     "json_dumps",
     "jsonl_dumps",
     "plan_payload",

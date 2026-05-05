@@ -15,6 +15,9 @@ from meridian.config import DEFAULT_SNI
 
 if TYPE_CHECKING:
     from meridian.cluster import ClusterConfig
+    from meridian.core.models import EventLevel
+    from meridian.core.output import OperationContext
+    from meridian.core.reporters import Reporter
     from meridian.remnawave import MeridianPanel
     from meridian.ssh import ServerConnection
 
@@ -158,7 +161,15 @@ class Provisioner:
     def __init__(self, steps: Sequence[Step]) -> None:
         self.steps = list(steps)
 
-    def run(self, conn: ServerConnection, ctx: Any) -> list[StepResult]:
+    def run(
+        self,
+        conn: ServerConnection,
+        ctx: Any,
+        *,
+        reporter: Reporter | None = None,
+        operation: OperationContext | None = None,
+        render: bool = True,
+    ) -> list[StepResult]:
         """Execute all steps, collecting results. Shows Rich spinner per step.
 
         Accepts any context type (ProvisionContext, RelayContext, etc.)
@@ -172,7 +183,18 @@ class Provisioner:
         for i, step in enumerate(self.steps):
             start = time.monotonic()
             prefix = f"[{i + 1}/{total}]"
-            with Status(f"  [cyan]{prefix} {step.name}[/cyan]", console=console, spinner="dots"):
+            _report_step_event(
+                reporter,
+                operation,
+                "provision.step.started",
+                step.name,
+                index=i + 1,
+                total=total,
+            )
+            if render:
+                with Status(f"  [cyan]{prefix} {step.name}[/cyan]", console=console, spinner="dots"):
+                    result = step.run(conn, ctx)
+            else:
                 result = step.run(conn, ctx)
             elapsed_ms = int((time.monotonic() - start) * 1000)
             result.duration_ms = elapsed_ms
@@ -182,16 +204,83 @@ class Provisioner:
                 ctx.results.append(result)
 
             if result.status == "failed":
+                _report_step_event(
+                    reporter,
+                    operation,
+                    "provision.step.failed",
+                    result.name,
+                    level="error",
+                    index=i + 1,
+                    total=total,
+                    result=result,
+                )
                 detail = f" ({result.detail})" if result.detail else ""
-                console.print(f"  [red bold]\u2717[/red bold] {result.name}{detail}")
+                if render:
+                    console.print(f"  [red bold]\u2717[/red bold] {result.name}{detail}")
                 break
             elif result.status == "skipped":
+                _report_step_event(
+                    reporter,
+                    operation,
+                    "provision.step.completed",
+                    result.name,
+                    index=i + 1,
+                    total=total,
+                    result=result,
+                )
                 detail = f" ({result.detail})" if result.detail else ""
-                console.print(f"  [dim]\u2013 {result.name}{detail}[/dim]")
+                if render:
+                    console.print(f"  [dim]\u2013 {result.name}{detail}[/dim]")
             else:
+                _report_step_event(
+                    reporter,
+                    operation,
+                    "provision.step.completed",
+                    result.name,
+                    index=i + 1,
+                    total=total,
+                    result=result,
+                )
                 # ok or changed
                 marker = "\u2713"
                 detail = f" [dim]({result.detail})[/dim]" if result.detail else ""
-                console.print(f"  [green]{marker}[/green] {result.name}{detail}")
+                if render:
+                    console.print(f"  [green]{marker}[/green] {result.name}{detail}")
 
         return results
+
+
+def _report_step_event(
+    reporter: Reporter | None,
+    operation: OperationContext | None,
+    event_type: str,
+    step_name: str,
+    *,
+    level: EventLevel = "info",
+    index: int,
+    total: int,
+    result: StepResult | None = None,
+) -> None:
+    """Emit a provisioning event when a reporter is attached."""
+    if reporter is None or operation is None:
+        return
+    from meridian.core.reporters import emit_event
+
+    data: dict[str, object] = {"step": step_name, "index": index, "total": total}
+    if result is not None:
+        data.update(
+            {
+                "status": result.status,
+                "detail": result.detail,
+                "duration_ms": result.duration_ms,
+            }
+        )
+    emit_event(
+        reporter,
+        operation,
+        event_type,
+        level=level,
+        phase="provision",
+        message=step_name,
+        data=data,
+    )
