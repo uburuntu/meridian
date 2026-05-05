@@ -33,6 +33,10 @@ def test_schema_catalog_lists_public_contracts() -> None:
     assert "client-show-envelope" in names
     assert "deploy-request" in names
     assert "deploy-result" in names
+    assert "workflow-plan" in names
+    assert "input-field" in names
+    assert "input-option" in names
+    assert "input-section" in names
     assert "plan-envelope" in names
     assert "fleet-status-envelope" in names
     assert "fleet-inventory-envelope" in names

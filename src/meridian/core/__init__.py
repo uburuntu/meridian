@@ -14,7 +14,7 @@ from meridian.core.clients import (
     ClientRecord,
     ClientShowResult,
 )
-from meridian.core.deploy import DeployRequest, DeployResult
+from meridian.core.deploy import DeployRequest, DeployResult, build_deploy_workflow
 from meridian.core.events import (
     COMMAND_COMPLETED,
     COMMAND_FAILED,
@@ -91,6 +91,7 @@ from meridian.core.services import (
     collect_fleet_status,
     deploy_server,
 )
+from meridian.core.workflow import InputField, InputKind, InputOption, InputSection, WorkflowPlan
 
 __all__ = [
     "EventStream",
@@ -131,6 +132,10 @@ __all__ = [
     "FleetStatus",
     "FleetStatusServiceResult",
     "FleetTopology",
+    "InputField",
+    "InputKind",
+    "InputOption",
+    "InputSection",
     "MeridianError",
     "NoopReporter",
     "OutputEnvelope",
@@ -180,4 +185,6 @@ __all__ = [
     "schema_for",
     "schema_names",
     "validate_command_envelope",
+    "WorkflowPlan",
+    "build_deploy_workflow",
 ]

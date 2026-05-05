@@ -38,7 +38,7 @@ from meridian.config import (
     is_ip,
 )
 from meridian.console import choose, confirm, err_console, fail, info, line, ok, prompt, warn
-from meridian.core.deploy import DeployRequest, DeployResult
+from meridian.core.deploy import DeployRequest, DeployResult, build_deploy_workflow
 from meridian.core.output import OperationContext
 from meridian.core.reporters import Reporter
 from meridian.core.services.deploy import deploy_server
@@ -71,23 +71,6 @@ def run(
     ssh_port: int = 22,
 ) -> None:
     """Deploy a VLESS+Reality proxy server (Remnawave architecture)."""
-    if not ip and not requested_server:
-        wizard_result = _interactive_wizard(
-            sni=sni,
-            domain=domain,
-            harden=harden,
-            yes=yes,
-            client_name=client_name,
-            server_name=server_name,
-            icon=icon,
-            color=color,
-            pq=pq,
-            warp=warp,
-            geo_block=geo_block,
-        )
-        ip, user, sni, domain, harden = wizard_result[:5]
-        client_name, server_name, icon, color, pq, warp, geo_block = wizard_result[5:]
-
     request = DeployRequest(
         ip=ip,
         domain=domain,
@@ -106,6 +89,38 @@ def run(
         geo_block=geo_block,
         ssh_port=ssh_port,
     )
+    if build_deploy_workflow(request).needs_input:
+        wizard_result = _interactive_wizard(
+            sni=sni,
+            domain=domain,
+            harden=harden,
+            yes=yes,
+            client_name=client_name,
+            server_name=server_name,
+            icon=icon,
+            color=color,
+            pq=pq,
+            warp=warp,
+            geo_block=geo_block,
+        )
+        ip, user, sni, domain, harden = wizard_result[:5]
+        client_name, server_name, icon, color, pq, warp, geo_block = wizard_result[5:]
+        request = request.model_copy(
+            update={
+                "ip": ip,
+                "domain": domain,
+                "sni": sni,
+                "client_name": client_name,
+                "user": user,
+                "harden": harden,
+                "server_name": server_name,
+                "icon": icon,
+                "color": color,
+                "pq": pq,
+                "warp": warp,
+                "geo_block": geo_block,
+            }
+        )
     deploy_server(request, executor=_execute_deploy_request)
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from meridian.core.deploy import DeployRequest, DeployResult
+from meridian.core.deploy import DeployRequest, DeployResult, build_deploy_workflow
 from meridian.core.output import OperationContext
 from meridian.core.reporters import CaptureReporter
 from meridian.core.services.deploy import deploy_server
@@ -66,3 +66,41 @@ def test_deploy_server_emits_failure_event() -> None:
     assert [event.type for event in reporter.events] == ["command.started", "command.failed"]
     assert reporter.events[-1].level == "error"
     assert reporter.events[-1].data["cause"] == "RuntimeError"
+
+
+def test_deploy_workflow_describes_wizard_inputs() -> None:
+    workflow = build_deploy_workflow(DeployRequest())
+
+    assert workflow.needs_input is True
+    assert workflow.ready_request_schema == "deploy-request"
+    assert [section.id for section in workflow.sections] == ["target", "stealth", "experience", "advanced"]
+    assert [field.id for field in workflow.fields] == [
+        "ip",
+        "user",
+        "harden",
+        "sni",
+        "domain",
+        "server_name",
+        "icon",
+        "color",
+        "client_name",
+        "pq",
+        "warp",
+        "geo_block",
+        "confirm",
+    ]
+    color_field = next(field for field in workflow.fields if field.id == "color")
+    assert color_field.kind == "choice"
+    assert [option.value for option in color_field.options] == [
+        "ocean",
+        "sunset",
+        "forest",
+        "lavender",
+        "rose",
+        "slate",
+    ]
+
+
+def test_deploy_workflow_is_ready_when_target_is_supplied() -> None:
+    assert build_deploy_workflow(DeployRequest(ip="198.51.100.10")).needs_input is False
+    assert build_deploy_workflow(DeployRequest(requested_server="edge")).needs_input is False

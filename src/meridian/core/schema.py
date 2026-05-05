@@ -22,6 +22,7 @@ from meridian.core.models import (
     Summary,
 )
 from meridian.core.plan import PlanActionResult, PlanCounts, PlanResult
+from meridian.core.workflow import InputField, InputOption, InputSection, WorkflowPlan
 
 
 class EmptyData(CoreModel):
@@ -359,6 +360,10 @@ _SCHEMAS: dict[str, type[BaseModel]] = {
     "remote-command-result": RemoteCommandResult,
     "put-bytes-spec": PutBytesSpec,
     "put-text-spec": PutTextSpec,
+    "workflow-plan": WorkflowPlan,
+    "input-field": InputField,
+    "input-option": InputOption,
+    "input-section": InputSection,
     "schema-catalog-entry": SchemaCatalogEntry,
     "empty-data": EmptyData,
     "plan-result": PlanResult,

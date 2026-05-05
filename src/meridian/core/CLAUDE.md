@@ -4,6 +4,7 @@
 - **Core has no CLI globals** - no Typer, Rich, prompt, process exit, or console mode dependencies. CLI and future UI clients are adapters over core contracts.
 - **Envelope first** - JSON clients get one stable `meridian.output/v1` result shape; command-specific data lives under `data`.
 - **Events are JSONL-ready** - long-running flows should report progress as typed events, not ad hoc log lines.
+- **Workflows are renderable data** - wizard-style interactions expose typed fields/sections; CLI and UI decide how to render them.
 - **Pydantic at API boundaries** - public request/result/event/error contracts use Pydantic v2 for validation, JSON serialization, and JSON Schema export. Internal execution objects can stay lighter until they cross a client boundary.
 - **Exported services return typed contracts** - service result wrappers are Pydantic too; do not publish dataclasses as core API.
 - **Deploy migration is service-first** - CLI deploy builds a `DeployRequest` and calls core; legacy SSH/panel mechanics stay injected until fully extracted.
