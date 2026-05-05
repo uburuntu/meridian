@@ -126,6 +126,33 @@ class ApplyFailureData(RootModel[ApplyResult | EmptyData]):
     """Failure data schema for `meridian apply --json`."""
 
 
+class DeployCommandData(RootModel[DeployResult | DeployPlan]):
+    """Success data for `meridian deploy --json`.
+
+    Normal execution returns DeployResult. Dry-run returns DeployPlan.
+    """
+
+
+class _DeploySuccessEnvelope(_ContractEnvelope):
+    command: Literal["deploy"]
+    status: Literal["changed", "ok"]
+    data: DeployResult | DeployPlan
+    errors: list[MeridianError] = Field(max_length=0)
+
+
+class _DeployTerminalEnvelope(_ContractEnvelope):
+    command: Literal["deploy"]
+    status: Literal["failed", "cancelled"]
+    data: EmptyData
+    errors: list[MeridianError] = Field(min_length=1)
+
+
+class DeployOutputEnvelope(
+    RootModel[Annotated[_DeploySuccessEnvelope | _DeployTerminalEnvelope, Field(discriminator="status")]]
+):
+    """Envelope schema for `meridian deploy --json`."""
+
+
 class _FleetStatusSuccessEnvelope(_ContractEnvelope):
     command: Literal["fleet.status"]
     status: Literal["ok"]
@@ -358,6 +385,17 @@ def _apply_outcomes() -> list[CommandOutcome]:
     ]
 
 
+def _deploy_outcomes() -> list[CommandOutcome]:
+    return [
+        CommandOutcome(status="changed", exit_code=0, category="none", meaning="server was deployed"),
+        CommandOutcome(status="ok", exit_code=0, category="none", meaning="deploy request was validated or planned"),
+        CommandOutcome(status="failed", exit_code=2, category="user", meaning="user or configuration error"),
+        CommandOutcome(status="failed", exit_code=3, category="system", meaning="system or infrastructure failure"),
+        CommandOutcome(status="failed", exit_code=1, category="bug", meaning="unexpected Meridian bug"),
+        CommandOutcome(status="cancelled", exit_code=130, category="cancelled", meaning="cancelled by the user"),
+    ]
+
+
 _SCHEMAS: dict[str, type[BaseModel]] = {
     "output-envelope": OutputEnvelope,
     "apply": ApplyResult,
@@ -383,6 +421,8 @@ _SCHEMAS: dict[str, type[BaseModel]] = {
     "summary": Summary,
     "client-list": ClientListResult,
     "client-show": ClientShowResult,
+    "deploy-command-data": DeployCommandData,
+    "deploy-envelope": DeployOutputEnvelope,
     "deploy-request": DeployRequest,
     "deploy-result": DeployResult,
     "deploy-workflow-answers": DeployWorkflowAnswers,
@@ -431,6 +471,26 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         machine_flags=["--json"],
         stability="preview",
         description="Converge desired state and emit typed action execution results.",
+    ),
+    "deploy": CommandContract(
+        command="deploy",
+        argv=["deploy"],
+        envelope_schema="deploy-envelope",
+        data_schema="deploy-command-data",
+        failure_data_schema="empty-data",
+        error_schema="error",
+        statuses=["changed", "ok", "failed", "cancelled"],
+        outcomes=_deploy_outcomes(),
+        exit_codes={
+            "0": "server was deployed or deploy request was validated/planned",
+            "1": "unexpected Meridian bug",
+            "2": "user/config error",
+            "3": "system or infrastructure failure",
+            "130": "cancelled by the user",
+        },
+        machine_flags=["--json", "--events=jsonl", "--request", "--dry-run"],
+        stability="preview",
+        description="Deploy or validate a Meridian server from a typed deploy request.",
     ),
     "api.commands": CommandContract(
         command="api.commands",
