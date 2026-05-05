@@ -4,15 +4,97 @@
 
 Meridian should become a structured installation and control API with a CLI client on top. Human terminal output stays polished, but the core product contract should be typed requests, typed results, structured errors, and structured progress events.
 
-Call this product layer **meridian-core**. The implementation package can be `meridian.core`, but the mental model matters more than the module name: core is the engine, and every UX surface is a client.
+Call this contract layer **meridian-core**. The implementation package can be `meridian.core`, but the mental model matters more than the module name: core is the shared brain, the local Engine is the runtime, and every UX surface is a client.
 
 The guiding rule: command modules parse CLI arguments and choose renderers; they should not own business logic, JSON schema, prompts inside core flows, or process exits below the entrypoint.
+
+## Meridian Studio Product Plan
+
+Meridian should grow into a polished local control surface for self-hosters: deploy, watch, recover, and share from one trustworthy UI. This is not a generic admin panel and not just a CLI wrapper.
+
+### Product Bet
+
+- [ ] Build **Meridian Studio** as one contract-driven web UI, first shipped through `meridian ui`.
+- [ ] Build **Meridian Engine** as the local-only runtime started by `meridian ui`; it owns SSH, secrets, filesystem state, operation execution, cancellation, and event streaming.
+- [ ] Keep **meridian-core** pure: contracts, schemas, validation, planning, redaction, events, and typed operation results.
+- [ ] Keep static Studio mode as a plan-only demo/request builder: render workflows, validate input, export `deploy.json`, copy CLI commands, and parse pasted output.
+- [ ] Make local Engine mode the real product path for deploy, recovery, fleet management, and operation timelines.
+- [ ] Defer Tauri/desktop packaging until localhost Studio works; the desktop app should start the same Engine and render the same Studio UI.
+- [ ] Keep mobile companion-only until there is a separate execution strategy; mobile can scan, share, view, pair, and troubleshoot, but should not promise phone-native deploy yet.
+- [ ] Keep remote daemon support future-only and gated by a dedicated threat model.
+
+### Must-Win User Journeys
+
+- [ ] First deploy without fear: explain prerequisites, validate VPS/domain/SSH, dry-run, deploy, show progress, and make retry safe.
+- [ ] Resume after failure: show what succeeded, what failed, what is safe to retry, and the exact next action.
+- [ ] Share access cleanly: create clients, preview recipient pages, show QR/deeplink flows, and guide app-specific import.
+- [ ] Verify censorship-resistance: post-deploy checks for open ports, SNI/cert mismatch, Reality reachability, domain/CDN assumptions, and common leak risks.
+- [ ] Operate the fleet: show servers, roles, health, clients, relays, drift, and pending changes without requiring YAML fluency.
+- [ ] Work offline/in blocked regions: bundled UI, bundled fonts/assets, no telemetry, no CDN dependency, local troubleshooting docs.
+- [ ] Preserve power-user trust: every Studio operation can show or copy the equivalent CLI command/request.
+
+### Architecture Direction
+
+- [ ] Add `meridian.engine` as a localhost-only Engine with HTTP JSON endpoints and SSE event streams.
+- [ ] Add `meridian ui` and `meridian ui serve`; bind to `127.0.0.1` only on a random high port.
+- [ ] Engine API v1 exposes only typed endpoints: command catalog, schema discovery, workflow discovery, validation, dry-run, start operation, operation status, SSE events, terminal result, and cancel.
+- [ ] Engine responses use existing `meridian.output/v1`; SSE streams `meridian.event/v1`.
+- [ ] Add `meridian.core.operations` with operation IDs, in-memory operation registry, event replay by sequence, terminal result storage, and best-effort cancellation at step boundaries.
+- [ ] Build Studio inside the existing Astro website with adapters: `StaticAdapter`, `LocalEngineAdapter`, `MockAdapter`, future `DesktopAdapter`, and future `MobileCompanionAdapter`.
+- [ ] Package built Studio assets with the Python package so `meridian ui` does not require Node at runtime.
+
+### Local Engine Security Bar
+
+- [ ] Treat localhost as hostile: malicious websites, browser extensions, and DNS rebinding are in scope.
+- [ ] Use a per-launch 128-bit+ session token; open Studio with the token in the URL fragment only, then exchange it once for a same-origin session cookie.
+- [ ] Enforce exact `Host` allowlist and strict `Origin` / `Sec-Fetch-Site` checks for unsafe methods.
+- [ ] Disable permissive CORS; v1 does not support cross-origin browser access.
+- [ ] Require CSRF protection for every mutating endpoint.
+- [ ] Set strict local UI/API headers: CSP, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, and `Cache-Control: no-store` for API responses.
+- [ ] Never store long-lived secrets in browser `localStorage`, IndexedDB, URLs, generated contracts, logs, events, screenshots, or telemetry.
+- [ ] Redact in core/Engine before data reaches HTTP/SSE; Studio is not a redaction boundary.
+- [ ] Do not expose generic shell execution, arbitrary file read/write, raw SSH, or proxy endpoints.
+
+### Generated Contracts and CI
+
+- [ ] Keep Python Pydantic models as the source of truth.
+- [ ] Add `scripts/export_contracts.py` to write deterministic JSON Schemas, command catalog, and workflow manifests without spawning the CLI.
+- [ ] Add `website/scripts/generate-contract-types.mjs` to generate TypeScript types/manifests from exported contracts.
+- [ ] Check generated artifacts into `contracts/meridian/` and `website/src/studio/generated/` with "do not edit" headers.
+- [ ] Add CI drift checks: `uv run python scripts/export_contracts.py --check` and `cd website && npm run contracts:check`.
+- [ ] Add golden fixtures for deploy dry-run, deploy success envelope, deploy failure envelope, and event stream.
+
+### Implementation Phases
+
+- [ ] Contractgen foundation: export current schemas, command contracts, deploy workflow, and event schema deterministically.
+- [ ] Core deploy extraction: finish moving deploy orchestration out of `commands/setup.py` into typed core services; keep Typer, Rich, prompts, `console.fail()`, and process exits outside core.
+- [ ] Operation runtime: add operation snapshots, replayable event streams, terminal result cache, and best-effort cancellation.
+- [ ] Local Engine: serve Studio assets plus `/api/v1/*` endpoints for workflow/schema/dry-run/start/events/result/cancel.
+- [ ] Studio prototype: render deploy workflow, build `DeployRequest`, run dry-run, start deploy, render event timeline, and show final result.
+- [ ] Docs and cleanup: add an API/Studio integration page, document preview stability, and document `--events=jsonl` as the process event-stream flag.
+
+### What To Avoid
+
+- [ ] Do not make the Engine shell out to `meridian deploy`; call core services directly.
+- [ ] Do not hand-write TypeScript contract types.
+- [ ] Do not make Studio forms or generated TypeScript the source of truth.
+- [ ] Do not add remote daemon, desktop packaging, or mobile-native deploy before localhost Studio works.
+- [ ] Do not build a durable workflow database in v1; in-memory operation state is enough.
+- [ ] Do not let Astro/website concerns leak into `meridian.core`.
+
+### Success Criteria
+
+- [ ] A non-expert self-hoster can complete first deploy from Studio without reading the CLI reference.
+- [ ] A failed deploy can be retried safely from Studio with clear state and no secret leakage.
+- [ ] The same UI runs in static mode with reduced capability and local mode with execution capability.
+- [ ] Runtime execution mode requires no external assets, CDNs, fonts, telemetry, or public website availability.
+- [ ] UI contracts are generated and validated in CI from Meridian schemas.
 
 ## Shared Mental Model
 
 - The interactive CLI wizard is a Meridian client, not the core product. It gathers input, calls meridian-core, then renders a human experience.
-- A future UI is another Meridian client. It should be able to plan, execute, and observe deploys through the same core APIs the CLI uses.
-- JSON/JSONL is the process boundary for automation and UI clients that shell out to `meridian`. A supported Python API can expose the same request/result/event objects directly.
+- Meridian Studio is another Meridian client. It should be able to plan, execute, and observe deploys through the same core APIs the CLI uses.
+- JSON envelopes and event streams are the process boundary for automation and UI clients that shell out to `meridian`. A supported Python API can expose the same request/result/event objects directly.
 - Public meridian-core contracts should use Pydantic v2 models where validation, `model_dump_json()`, `model_validate*()`, or `model_json_schema()` helps UI/client integration. Keep Pydantic at API boundaries; internal execution objects do not need to become Pydantic by default.
 - Cluster config is part of the API, not just a local implementation detail. Core should accept desired topology from disk, memory, or another client-provided source, then persist through the configured store.
 - Core should expose recipes for normal users and lower-level operations for advanced users. Advanced SSH-capable operations are allowed, but must be explicit, auditable, redacted, and clearly dangerous.
@@ -34,7 +116,7 @@ The guiding rule: command modules parse CLI arguments and choose renderers; they
 
 - Text output remains the default UX.
 - `--json` means one final machine-readable result envelope on stdout, everywhere.
-- `--jsonl` means machine-readable event stream on stdout for long-running operations, including deploy/apply.
+- `--events=jsonl` means machine-readable event stream on stderr for long-running operations, including deploy/apply.
 - Human logs/progress go to stderr or are suppressed in API modes.
 - JSON/API modes are non-interactive by default. Missing input returns a structured user error.
 - Secrets are never emitted in JSON, JSONL, errors, event data, command metadata, or logs.
@@ -224,7 +306,7 @@ Example:
   - `meridian --json fleet inventory`
   - `meridian fleet inventory --json`
 - [x] Reject global `--json` for commands that are not migrated to the envelope contract yet.
-- [ ] Add `--jsonl` to long-running commands: `deploy`, `apply`, `node add`, `relay deploy`, `teardown`, and likely `doctor`.
+- [ ] Add `--events=jsonl` to long-running commands: `apply`, `node add`, `relay deploy`, `teardown`, and likely `doctor`; deploy already has the preview process API.
 - [ ] Add `--no-input` and make `--json` imply it unless a command explicitly documents otherwise.
 - [ ] Treat the interactive wizard as a client of meridian-core; it does not need a special JSON mode as long as the underlying core calls are structured.
 - [ ] Audit every public command for JSON support:
@@ -274,7 +356,7 @@ Example:
 - [x] Mark destructive relay replacements explicitly in plan JSON (`operation: "replace"`).
 - [ ] Add `execute_plan()` reporter hooks for action start/completion/failure.
 - [x] Add `apply --json` final envelope.
-- [ ] Add `apply --jsonl` event stream.
+- [ ] Add `apply --events=jsonl` event stream.
 - [x] Make `apply --json` non-interactive; callers must pass explicit `yes` and drift decisions.
 - [ ] Ensure prompts are CLI-only across every remaining API-capable command.
 - [ ] Redesign apply execution phases toward preflight -> create/enable -> switch/verify -> delete/disable, with operation journaling instead of destructive-first deletes.
