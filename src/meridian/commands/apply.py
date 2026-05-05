@@ -464,6 +464,31 @@ def _emit_apply_json(
     )
 
 
+def _emit_apply_confirmation_required(
+    *,
+    plan: object,
+    operation: OperationContext,
+    message: str = "Apply requires explicit confirmation",
+) -> None:
+    """Emit a non-interactive apply error that still includes the computed plan."""
+    error = MeridianError(
+        code="MERIDIAN_CONFIRMATION_REQUIRED",
+        category="user",
+        message=message,
+        hint="Pass --yes after reviewing data.plan, and use --prune-extras=yes only when drift should be removed.",
+        retryable=False,
+        exit_code=2,
+    )
+    _emit_apply_json(
+        plan=plan,
+        execution_result=ExecutionResult(),
+        exit_code=2,
+        status="failed",
+        operation=operation,
+        error=error,
+    )
+
+
 def run(
     yes: bool = False,
     parallel: int = 4,
@@ -563,6 +588,8 @@ def _run(
                 # Safety: never silently auto-remove drift under --yes unless
                 # the operator explicitly asked for `--prune-extras=yes`.
                 effective_prune = "no"
+            if json_output and effective_prune == "ask":
+                effective_prune = "no"
 
             if extras_actions:
                 if effective_prune == "no":
@@ -597,9 +624,15 @@ def _run(
                     raise typer.Exit(0)
 
             if plan.has_destructive and not yes:
+                if json_output:
+                    _emit_apply_confirmation_required(plan=plan, operation=operation)
+                    raise typer.Exit(2)
                 if not confirm("Plan includes destructive actions. Apply?"):
                     raise typer.Exit(1)
             elif not yes:
+                if json_output:
+                    _emit_apply_confirmation_required(plan=plan, operation=operation)
+                    raise typer.Exit(2)
                 if not confirm("Apply this plan?"):
                     raise typer.Exit(1)
 

@@ -275,7 +275,8 @@ Example:
 - [ ] Add `execute_plan()` reporter hooks for action start/completion/failure.
 - [x] Add `apply --json` final envelope.
 - [ ] Add `apply --jsonl` event stream.
-- [ ] Ensure prompts are CLI-only and API callers pass explicit decisions such as `yes` and `prune_extras`.
+- [x] Make `apply --json` non-interactive; callers must pass explicit `yes` and drift decisions.
+- [ ] Ensure prompts are CLI-only across every remaining API-capable command.
 - [ ] Redesign apply execution phases toward preflight -> create/enable -> switch/verify -> delete/disable, with operation journaling instead of destructive-first deletes.
 
 ### Phase 4: Provisioning Events

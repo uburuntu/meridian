@@ -243,7 +243,7 @@ meridian apply [--yes] [--prune-extras=ask|yes|no] [--json]
 
 Destructive actions (removals, UPDATE_RELAY re-provisioning) print a warning and require a separate confirmation. A failure early in the plan skips remaining destructive actions — `cluster.yml` stays truthful.
 
-With `--json`, `data.plan` contains the typed plan and `data.actions[]` contains execution results with `status: "succeeded" | "failed" | "skipped"`. The JSON contract reports execution; it does not make destructive operations transactional. UI clients should inspect failed/skipped actions and rerun idempotently after fixing the underlying issue.
+With `--json`, `data.plan` contains the typed plan and `data.actions[]` contains execution results with `status: "succeeded" | "failed" | "skipped"`. JSON mode is non-interactive: if changes need confirmation and `--yes` is missing, Meridian returns `MERIDIAN_CONFIRMATION_REQUIRED` with the computed plan. The JSON contract reports execution; it does not make destructive operations transactional. UI clients should inspect failed/skipped actions and rerun idempotently after fixing the underlying issue.
 
 **Drift handling example:** if `cluster.yml` lists `desired_clients: ['alice']` but the panel also has `bob` (e.g. created via the panel UI), `meridian plan` shows `- remove client: bob`. With default `--prune-extras=ask` you'll be asked whether to remove `bob` or keep him. `--yes --prune-extras=yes` runs the removal silently; `--yes` alone (no explicit `--prune-extras`) skips it.
 

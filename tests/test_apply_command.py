@@ -343,6 +343,33 @@ class TestApplyRunFailureSafety:
         assert payload["data"]["actions"][0]["status"] == "failed"
         assert payload["data"]["actions"][0]["error"] == "API down"
 
+    def test_apply_json_requires_explicit_confirmation(self) -> None:
+        cluster = self._build_cluster_with_desired_clients()
+        add_action = PlanAction(kind=PlanActionKind.ADD_CLIENT, target="alice", detail="create client alice")
+        plan = Plan(actions=[add_action])
+        buf = io.StringIO()
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.execute_plan") as execute,
+            redirect_stdout(buf),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                apply_run(yes=False, parallel=1, prune_extras="ask", json_output=True)
+
+        assert exc_info.value.exit_code == 2
+        execute.assert_not_called()
+        payload = json.loads(buf.getvalue())
+        assert payload["command"] == "apply"
+        assert payload["status"] == "failed"
+        assert payload["errors"][0]["code"] == "MERIDIAN_CONFIRMATION_REQUIRED"
+        assert payload["data"]["plan"]["actions"][0]["kind"] == "add_client"
+
 
 class TestPruneExtras:
     """`--prune-extras={ask,yes,no}` controls how REMOVE_* actions tagged
