@@ -51,6 +51,7 @@ from meridian.core.deploy_planning import (
     DeployPlanningError,
     build_deploy_plan,
 )
+from meridian.core.deploy_validation import DeployValidationError, normalize_deploy_request, validate_deploy_target
 from meridian.core.execution import RemoteExecutor
 from meridian.core.output import OperationContext
 from meridian.core.reporters import Reporter
@@ -145,6 +146,11 @@ def _execute_deploy_request(
     operation: OperationContext | None = None,
 ) -> DeployResult:
     """Execute deploy request using the current SSH/panel implementation."""
+    try:
+        request = normalize_deploy_request(request)
+    except DeployValidationError as exc:
+        fail(str(exc), hint=exc.hint, hint_type="user")
+
     ip = request.ip
     domain = request.domain
     sni = request.sni
@@ -168,14 +174,7 @@ def _execute_deploy_request(
     server_ip = ip
     ssh_user = user
 
-    # --server flag: resolve from registry (or 'local' keyword)
     if requested_server:
-        if server_ip:
-            fail(
-                "Use either the IP address or --server, not both.\n"
-                "  Example: meridian deploy 1.2.3.4  OR  meridian deploy --server mybox",
-                hint_type="user",
-            )
         if is_local_keyword(requested_server):
             server_ip = requested_server
         else:
@@ -194,13 +193,10 @@ def _execute_deploy_request(
                 if user == "root" and entry.user:
                     ssh_user = entry.user
 
-    # Validate IP (skip for 'local' keyword -- resolve_server handles it)
-    if not is_local_keyword(server_ip) and not is_ip(server_ip):
-        fail(
-            f"Invalid IP address: {server_ip}",
-            hint="Enter a valid IP address (e.g. meridian deploy 123.45.67.89)",
-            hint_type="user",
-        )
+    try:
+        validate_deploy_target(server_ip)
+    except DeployValidationError as exc:
+        fail(str(exc), hint=exc.hint, hint_type="user")
 
     # Resolve and prepare SSH connection
     resolved = resolve_server(
@@ -218,16 +214,6 @@ def _execute_deploy_request(
     # Only check for legacy 3x-ui on first deploy — redeploy means v4 is already running
     if not cluster.is_configured:
         _check_legacy_panel(resolved.conn, resolved.ip, yes)
-
-    # Validate client name
-    if client_name and not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", client_name):
-        fail(
-            f"Client name '{client_name}' is invalid",
-            hint="Use letters, numbers, hyphens, and underscores.",
-            hint_type="user",
-        )
-    if not client_name:
-        client_name = "default"
 
     # Load existing cluster config
     cluster = ClusterConfig.load()

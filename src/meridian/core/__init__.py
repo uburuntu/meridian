@@ -30,6 +30,14 @@ from meridian.core.deploy_planning import (
     build_deploy_plan,
     compute_deploy_ports,
 )
+from meridian.core.deploy_validation import (
+    DeployValidationError,
+    is_ip_deploy_target,
+    is_local_deploy_target,
+    normalize_client_name,
+    normalize_deploy_request,
+    validate_deploy_target,
+)
 from meridian.core.events import (
     COMMAND_COMPLETED,
     COMMAND_FAILED,
@@ -146,6 +154,7 @@ __all__ = [
     "DeployPorts",
     "DeployRequest",
     "DeployResult",
+    "DeployValidationError",
     "DeployWorkflowAnswers",
     "ErrorCategory",
     "Event",
@@ -202,6 +211,10 @@ __all__ = [
     "emit_event",
     "json_dumps",
     "jsonl_dumps",
+    "is_ip_deploy_target",
+    "is_local_deploy_target",
+    "normalize_client_name",
+    "normalize_deploy_request",
     "plan_payload",
     "redact",
     "build_plan_result",
@@ -211,6 +224,7 @@ __all__ = [
     "schema_for",
     "schema_names",
     "validate_command_envelope",
+    "validate_deploy_target",
     "WorkflowPlan",
     "WorkflowNotFoundError",
     "build_deploy_workflow",

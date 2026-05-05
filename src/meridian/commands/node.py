@@ -7,13 +7,13 @@ reference and SSH access.
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 
 import typer
 
 from meridian.commands._helpers import format_traffic, load_cluster, make_panel
 from meridian.console import confirm, err_console, fail, info, ok, warn
+from meridian.core.deploy_planning import compute_deploy_ports
 from meridian.remnawave import RemnawaveError
 
 # -- Node Add --
@@ -67,11 +67,7 @@ def run_add(
         if not confirm(f"Provision and add node at {resolved.ip}?"):
             raise typer.Exit(1)
 
-    # Compute port layout (same scheme as deploy)
-    ip_hash = int(hashlib.sha256(resolved.ip.encode()).hexdigest()[:8], 16)
-    xhttp_port = 30000 + (ip_hash % 10000)
-    reality_port = 10000 + ip_hash % 1000
-    wss_port = 20000 + (ip_hash % 10000)
+    ports = compute_deploy_ports(resolved.ip)
 
     # Generate paths
     xhttp_path = secrets.token_hex(8)
@@ -86,9 +82,9 @@ def run_add(
         harden=harden,
         is_panel_host=False,
         secret_path=cluster.panel.secret_path,
-        xhttp_port=xhttp_port,
-        reality_port=reality_port,
-        wss_port=wss_port,
+        xhttp_port=ports.xhttp_port,
+        reality_port=ports.reality_port,
+        wss_port=ports.wss_port,
         xhttp_path=xhttp_path,
         ws_path=ws_path,
     )
@@ -101,9 +97,9 @@ def run_add(
         cluster=cluster,
         domain=domain,
         sni=effective_sni,
-        reality_port=reality_port,
-        xhttp_port=xhttp_port,
-        wss_port=wss_port,
+        reality_port=ports.reality_port,
+        xhttp_port=ports.xhttp_port,
+        wss_port=ports.wss_port,
         version=__version__,
         xhttp_path=xhttp_path,
         ws_path=ws_path,
