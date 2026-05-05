@@ -213,6 +213,21 @@ class TestApiContractCLI:
         assert payload["status"] == "failed"
         assert payload["errors"][0]["category"] == "user"
 
+    def test_api_schema_json_alias_wraps_envelope(self, monkeypatch) -> None:
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+
+        result = runner.invoke(app, ["api", "schema", "plan-result", "--json"])
+
+        _reset_output_modes()
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["command"] == "api.schema"
+        assert payload["status"] == "ok"
+        assert payload["data"]["name"] == "plan-result"
+        assert payload["data"]["schema"]["title"] == "PlanResult"
+
     def test_api_schema_raw_schema_preserves_sensitive_property_names(self, monkeypatch) -> None:
         set_json_mode(False)
         set_quiet_mode(False)
@@ -246,6 +261,21 @@ class TestApiContractCLI:
 
 
 class TestCommandLocalJsonQuieting:
+    def test_global_json_rejects_unmigrated_command(self, monkeypatch) -> None:
+        _reset_output_modes()
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+        monkeypatch.setattr(cli.sys, "argv", ["meridian", "--json", "client", "add", "alice"])
+
+        result = runner.invoke(app, ["--json", "client", "add", "alice"])
+
+        _reset_output_modes()
+        assert result.exit_code == 2
+        payload = json.loads(result.output)
+        assert payload["command"] == "client.add"
+        assert payload["status"] == "failed"
+        assert payload["errors"][0]["category"] == "user"
+        assert "Meridian v" not in result.output
+
     def test_plan_command_json_suppresses_banner(self, monkeypatch) -> None:
         def fake_run(*, json_output: bool) -> None:
             assert json_output is True

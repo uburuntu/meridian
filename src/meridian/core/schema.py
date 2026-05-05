@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, RootModel
 
+from meridian.core.apply import ApplyActionResult, ApplyCounts, ApplyResult
 from meridian.core.clients import ClientListResult, ClientShowResult
 from meridian.core.fleet import FleetInventory, FleetStatus
 from meridian.core.models import (
@@ -88,6 +89,26 @@ class PlanOutputEnvelope(
     RootModel[Annotated[_PlanSuccessEnvelope | _PlanTerminalEnvelope, Field(discriminator="status")]]
 ):
     """Envelope schema for `meridian plan --json`."""
+
+
+class _ApplySuccessEnvelope(_ContractEnvelope):
+    command: Literal["apply"]
+    status: Literal["changed", "no_changes"]
+    data: ApplyResult
+    errors: list[MeridianError] = Field(max_length=0)
+
+
+class _ApplyTerminalEnvelope(_ContractEnvelope):
+    command: Literal["apply"]
+    status: Literal["failed", "cancelled"]
+    data: ApplyResult | EmptyData
+    errors: list[MeridianError] = Field(min_length=1)
+
+
+class ApplyOutputEnvelope(
+    RootModel[Annotated[_ApplySuccessEnvelope | _ApplyTerminalEnvelope, Field(discriminator="status")]]
+):
+    """Envelope schema for `meridian apply --json`."""
 
 
 class _FleetStatusSuccessEnvelope(_ContractEnvelope):
@@ -291,8 +312,23 @@ def _plan_outcomes() -> list[CommandOutcome]:
     ]
 
 
+def _apply_outcomes() -> list[CommandOutcome]:
+    return [
+        CommandOutcome(status="no_changes", exit_code=0, category="none", meaning="desired state already matches"),
+        CommandOutcome(status="changed", exit_code=0, category="none", meaning="changes were applied"),
+        CommandOutcome(status="failed", exit_code=2, category="user", meaning="user or configuration error"),
+        CommandOutcome(status="failed", exit_code=3, category="system", meaning="system or infrastructure failure"),
+        CommandOutcome(status="failed", exit_code=1, category="bug", meaning="unexpected Meridian bug"),
+        CommandOutcome(status="cancelled", exit_code=130, category="cancelled", meaning="cancelled by the user"),
+    ]
+
+
 _SCHEMAS: dict[str, type[BaseModel]] = {
     "output-envelope": OutputEnvelope,
+    "apply": ApplyResult,
+    "apply-action": ApplyActionResult,
+    "apply-counts": ApplyCounts,
+    "apply-envelope": ApplyOutputEnvelope,
     "api-commands": ApiCommandsResult,
     "api-commands-envelope": ApiCommandsOutputEnvelope,
     "api-schema": ApiSchemaResult,
@@ -322,6 +358,26 @@ _SCHEMAS: dict[str, type[BaseModel]] = {
 }
 
 _COMMAND_CONTRACTS: dict[str, CommandContract] = {
+    "apply": CommandContract(
+        command="apply",
+        argv=["apply"],
+        envelope_schema="apply-envelope",
+        data_schema="apply",
+        failure_data_schema="apply",
+        error_schema="error",
+        statuses=["no_changes", "changed", "failed", "cancelled"],
+        outcomes=_apply_outcomes(),
+        exit_codes={
+            "0": "desired state was already converged or changes were applied",
+            "1": "unexpected Meridian bug",
+            "2": "user/config error",
+            "3": "system or infrastructure failure",
+            "130": "cancelled by the user",
+        },
+        machine_flags=["--json"],
+        stability="preview",
+        description="Converge desired state and emit typed action execution results.",
+    ),
     "api.commands": CommandContract(
         command="api.commands",
         argv=["api", "commands"],
@@ -333,6 +389,7 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         outcomes=_standard_outcomes("ok", "command contracts were listed"),
         exit_codes={
             "0": "command contracts were listed",
+            "1": "unexpected Meridian bug",
             "2": "user/config error",
             "3": "system or infrastructure failure",
             "130": "cancelled by the user",
@@ -354,6 +411,7 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         outcomes=_standard_outcomes("ok", "schema was found"),
         exit_codes={
             "0": "schema was found",
+            "1": "unexpected Meridian bug",
             "2": "schema name is unknown",
             "3": "system or infrastructure failure",
             "130": "cancelled by the user",
@@ -373,6 +431,7 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         outcomes=_standard_outcomes("ok", "schema catalog was listed"),
         exit_codes={
             "0": "schema catalog was listed",
+            "1": "unexpected Meridian bug",
             "2": "user/config error",
             "3": "system or infrastructure failure",
             "130": "cancelled by the user",
@@ -392,6 +451,7 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         outcomes=_standard_outcomes("ok", "client list was collected"),
         exit_codes={
             "0": "client list was collected",
+            "1": "unexpected Meridian bug",
             "2": "user/config error",
             "3": "system or infrastructure failure",
             "130": "cancelled by the user",
@@ -411,6 +471,7 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         outcomes=_standard_outcomes("ok", "client was found"),
         exit_codes={
             "0": "client was found",
+            "1": "unexpected Meridian bug",
             "2": "client not found or input/config error",
             "3": "system or infrastructure failure",
             "130": "cancelled by the user",
@@ -430,6 +491,7 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         outcomes=_plan_outcomes(),
         exit_codes={
             "0": "desired state already matches actual state",
+            "1": "unexpected Meridian bug",
             "2": "changes pending; user/config errors also use category=user in the error envelope",
             "3": "system or infrastructure failure",
             "130": "cancelled by the user",
@@ -449,6 +511,7 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         outcomes=_standard_outcomes("ok", "fleet status was collected"),
         exit_codes={
             "0": "fleet status was collected; inspect data.summary.health and warnings for degraded state",
+            "1": "unexpected Meridian bug",
             "2": "user/config error",
             "3": "system or infrastructure failure",
             "130": "cancelled by the user",
@@ -468,6 +531,7 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         outcomes=_standard_outcomes("ok", "inventory was collected"),
         exit_codes={
             "0": "inventory was collected; plan --json is the drift/apply authority",
+            "1": "unexpected Meridian bug",
             "2": "user/config error",
             "3": "system or infrastructure failure",
             "130": "cancelled by the user",

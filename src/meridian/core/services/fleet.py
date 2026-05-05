@@ -18,7 +18,7 @@ from meridian.core.fleet import (
 )
 from meridian.core.models import CoreModel, MeridianError
 
-PanelErrorKind = Literal["auth", "system"]
+PanelErrorKind = Literal["auth", "system", "bug"]
 
 
 class FleetPanelClient(Protocol):
@@ -74,7 +74,7 @@ def _system_warning(
 
 def _handle_error(exc: Exception, classify_error: PanelErrorClassifier) -> None:
     """Reraise auth errors; keep system errors as partial observations."""
-    if classify_error(exc) == "auth":
+    if classify_error(exc) in ("auth", "bug"):
         raise exc
 
 
@@ -207,7 +207,19 @@ def collect_fleet_status(
             )
         )
 
-    relay_health = check_relays(topology.relays)
+    try:
+        relay_health = check_relays(topology.relays)
+    except Exception as exc:
+        relay_health = {}
+        sources = sources.model_copy(update={"relays": "unavailable"})
+        warnings.append(
+            _system_warning(
+                "MERIDIAN_RELAYS_UNAVAILABLE",
+                "Could not check relay health",
+                hint="Verify relay connectivity from the caller environment.",
+                details={"cause": type(exc).__name__},
+            )
+        )
     return FleetStatusServiceResult(
         status=build_fleet_status(
             topology,

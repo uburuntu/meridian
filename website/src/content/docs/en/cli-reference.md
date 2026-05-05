@@ -51,7 +51,7 @@ meridian client remove NAME [--server NAME] [--yes]
 
 **`client list`** — with `--json`, returns `data.summary` status counts and `data.clients[]` records with username, UUID, status, traffic counters, creation time, and last seen time.
 
-**`client show`** — with `--json`, returns one `data.client` record plus redacted handoff-link fields. The human command still prints the usable subscription/share URLs.
+**`client show`** — with `--json`, returns one `data.client` record plus `data.handoff.*` availability metadata. The human command still prints the usable subscription/share URLs.
 
 ### meridian server
 
@@ -123,16 +123,16 @@ Inspect the machine-readable meridian-core contract used by JSON output and futu
 ```
 meridian api schemas [--json] [--include-schemas]
 meridian api commands [--json] [--include-schemas]
-meridian api schema NAME [--envelope]
+meridian api schema NAME [--envelope|--json]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--json` | | Emit the schema catalog as a `meridian.output/v1` envelope |
 | `--include-schemas` | | Include full JSON Schemas in `api schemas --json` or `api commands --json` output |
-| `--envelope` | | Wrap `api schema NAME` in a `meridian.output/v1` envelope instead of printing raw JSON Schema |
+| `--envelope`, `--json` | | Wrap `api schema NAME` in a `meridian.output/v1` envelope instead of printing raw JSON Schema |
 
-**`api schemas`** — lists stable schema names such as `output-envelope`, `client-list-envelope`, `client-show-envelope`, `plan-envelope`, `fleet-status-envelope`, `fleet-inventory-envelope`, `event`, `plan-result`, `fleet-status`, and `fleet-inventory`. Command envelope schemas include a `commands` entry in the catalog.
+**`api schemas`** — lists stable schema names such as `output-envelope`, `apply-envelope`, `client-list-envelope`, `client-show-envelope`, `plan-envelope`, `fleet-status-envelope`, `fleet-inventory-envelope`, `event`, `apply`, `plan-result`, `fleet-status`, and `fleet-inventory`. Command envelope schemas include a `commands` entry in the catalog.
 
 **`api commands`** — lists migrated command contracts with `command`, `argv`, `envelope_schema`, `data_schema`, possible `statuses`, structured `outcomes`, exit-code meanings, machine flags, and stability. Use this before wiring a UI to decide which command payload schema validates a given envelope.
 
@@ -193,26 +193,28 @@ meridian plan [--json]
   "summary": {
     "text": "Plan: 1 to add, 1 to remove",
     "changed": true,
-    "counts": {"actions": 2, "adds": 1, "updates": 0, "removes": 1,
+    "counts": {"actions": 2, "adds": 1, "updates": 0, "replacements": 0, "removes": 1,
                "destructive": 1, "from_extras": 1}
   },
   "data": {
     "converged": false,
     "summary": "Plan: 1 to add, 1 to remove",
     "exit_code": 2,
-    "counts": {"actions": 2, "adds": 1, "updates": 0, "removes": 1,
+    "counts": {"actions": 2, "adds": 1, "updates": 0, "replacements": 0, "removes": 1,
                "destructive": 1, "from_extras": 1},
     "actions": [
-      {"kind": "add_client", "operation": "add", "resource_type": "client",
+      {"plan_index": 0, "execution_order": 2, "kind": "add_client", "operation": "add", "resource_type": "client",
        "resource_id": "alice", "target": "alice", "detail": "create client alice",
        "phase": "provision", "requires_confirmation": false,
-       "destructive": false, "destructive_reason": "", "from_extras": false,
-       "change_set": [], "symbol": "+"},
-      {"kind": "remove_client", "operation": "remove", "resource_type": "client",
+       "destructive": false, "replacement": false, "replacement_strategy": "none",
+       "destructive_reason": "", "from_extras": false,
+       "change_set": [], "symbol": "+", "can_run_parallel": false},
+      {"plan_index": 1, "execution_order": 1, "kind": "remove_client", "operation": "remove", "resource_type": "client",
        "resource_id": "ghost", "target": "ghost", "detail": "delete client ghost",
        "phase": "deprovision", "requires_confirmation": true,
-       "destructive": true, "destructive_reason": "delete client ghost",
-       "from_extras": true, "change_set": [], "symbol": "-"}
+       "destructive": true, "replacement": false, "replacement_strategy": "none",
+       "destructive_reason": "delete client ghost",
+       "from_extras": true, "change_set": [], "symbol": "-", "can_run_parallel": false}
     ]
   },
   "warnings": [],
@@ -220,7 +222,7 @@ meridian plan [--json]
 }
 ```
 
-`data.actions[].from_extras: true` flags resources that exist on the panel but are missing from `cluster.yml` — the inputs `meridian apply --prune-extras` operates on. `status` is `no_changes` when converged and `changed` when apply has work to do; `data.exit_code` mirrors the process exit code.
+`data.actions[].from_extras: true` flags resources that exist on the panel but are missing from `cluster.yml` — the inputs `meridian apply --prune-extras` operates on. `execution_order` shows the order `apply` will use, which may differ from display order for replacement safety. `operation: "replace"` marks destructive replacements such as relay reprovisioning. `status` is `no_changes` when converged and `changed` when apply has work to do; `data.exit_code` mirrors the process exit code.
 
 See [Declarative workflow](/docs/en/getting-started/#declarative-workflow) for how to compose `cluster.yml`.
 
@@ -229,7 +231,7 @@ See [Declarative workflow](/docs/en/getting-started/#declarative-workflow) for h
 Converge the cluster to the desired state declared in `cluster.yml`. Runs `plan` internally, shows the diff, asks for confirmation, then executes the actions in dependency order (removals first, then adds, then removals of nodes last).
 
 ```
-meridian apply [--yes] [--prune-extras=ask|yes|no]
+meridian apply [--yes] [--prune-extras=ask|yes|no] [--json]
 ```
 
 | Flag | Default | Description |
@@ -237,8 +239,11 @@ meridian apply [--yes] [--prune-extras=ask|yes|no]
 | `--yes`, `-y` | | Skip confirmation prompts |
 | `--parallel N` | 4 | Max parallel node provisioning threads (each node gets its own SSH session and panel client) |
 | `--prune-extras` | `ask` | How to handle drift — resources present on the panel but missing from `cluster.yml`. `ask` prompts per-resource (downgraded to `no` under `--yes` for safety); `yes` auto-removes; `no` skips and prints a one-line summary |
+| `--json` | | Emit a `meridian.output/v1` final apply result with per-action execution status |
 
 Destructive actions (removals, UPDATE_RELAY re-provisioning) print a warning and require a separate confirmation. A failure early in the plan skips remaining destructive actions — `cluster.yml` stays truthful.
+
+With `--json`, `data.plan` contains the typed plan and `data.actions[]` contains execution results with `status: "succeeded" | "failed" | "skipped"`. The JSON contract reports execution; it does not make destructive operations transactional. UI clients should inspect failed/skipped actions and rerun idempotently after fixing the underlying issue.
 
 **Drift handling example:** if `cluster.yml` lists `desired_clients: ['alice']` but the panel also has `bob` (e.g. created via the panel UI), `meridian plan` shows `- remove client: bob`. With default `--prune-extras=ask` you'll be asked whether to remove `bob` or keep him. `--yes --prune-extras=yes` runs the removal silently; `--yes` alone (no explicit `--prune-extras`) skips it.
 

@@ -17,7 +17,7 @@ from meridian.core.fleet import FleetStatus, TopologyRelay
 from meridian.core.models import MeridianError, Summary
 from meridian.core.output import OperationContext, command_envelope
 from meridian.core.services.fleet import collect_fleet_inventory, collect_fleet_status
-from meridian.remnawave import RemnawaveAuthError
+from meridian.remnawave import RemnawaveAuthError, RemnawaveError
 from meridian.renderers import emit_json
 
 
@@ -47,9 +47,13 @@ def _check_relays_health(
     return results
 
 
-def _classify_panel_error(exc: Exception) -> Literal["auth", "system"]:
+def _classify_panel_error(exc: Exception) -> Literal["auth", "system", "bug"]:
     """Tell core services which panel errors must abort instead of warn."""
-    return "auth" if isinstance(exc, RemnawaveAuthError) else "system"
+    if isinstance(exc, RemnawaveAuthError):
+        return "auth"
+    if isinstance(exc, RemnawaveError):
+        return "system"
+    return "bug"
 
 
 def _render_warnings(warnings: list[MeridianError]) -> None:
@@ -82,6 +86,8 @@ def _run_inventory(*, operation: OperationContext) -> None:
         )
     except RemnawaveAuthError as exc:
         fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
+    except Exception as exc:
+        fail(f"Could not collect fleet inventory: {exc}", hint_type="bug")
 
     inventory = result.inventory
     warnings = result.warnings
@@ -234,6 +240,8 @@ def _run_status(*, operation: OperationContext) -> None:
         )
     except RemnawaveAuthError as exc:
         fail(str(exc), hint=exc.hint, hint_type=exc.hint_type)
+    except Exception as exc:
+        fail(f"Could not collect fleet status: {exc}", hint_type="bug")
 
     status = result.status
     warnings = result.warnings

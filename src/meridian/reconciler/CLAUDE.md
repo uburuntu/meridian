@@ -9,12 +9,12 @@ Remnawave panel state. Pure `compute_plan()` + `execute_plan()` executor.
 - **Typed `PlanAction.kind`** — `ADD_NODE / UPDATE_NODE / REMOVE_NODE / ADD_RELAY / UPDATE_RELAY / REMOVE_RELAY / ADD_CLIENT / REMOVE_CLIENT / ADD_SUBSCRIPTION_PAGE / REMOVE_SUBSCRIPTION_PAGE`. Executor dispatches by kind.
 - **Applied-state snapshot** — `cluster._extra["desired_*_applied"]` recorded after every successful apply. Distinguishes intentional removal (in applied → from_extras=False → executes under `--yes`) from drift (not in applied → from_extras=True → requires `--prune-extras=yes`).
 - **Parallel executor** — `ADD_NODE` actions run via `ThreadPoolExecutor`. Per-worker `MeridianPanel` clone (`_make_worker_panel`); `threading.local()` event loop keeps async SDK calls isolated. Destructive kinds stay serial.
-- **Plan ordering matches dependency** — adds run before removes; node removals run last (so relays referencing the node can be cleaned up first); `UPDATE_RELAY` is implemented as delete + recreate, so it's treated as destructive.
+- **Display order is not execution order** — `plan --json` exposes both `plan_index` and `execution_order`. Relay/client removals run before some adds for host-remark safety; node removals still run last. `UPDATE_RELAY` is a destructive replacement.
 
 ## What's done well
 
 - **Drift-aware apply** — panel-side edits (admin adds a user in the UI) surface as plan actions on next `meridian plan`. Users see diffs; `--prune-extras` controls whether drift is pruned.
-- **Failure-safety gate** — after any failure in a phase, subsequent destructive actions in the same plan are skipped. `cluster.yml` never gets rewritten to reflect a partial apply.
+- **Failure-safety gate** — after any failure in a phase, later destructive phases are skipped. This does not make early destructive phases atomic; future work needs preflight/journal/switch phases.
 - **Rich terraform-style display** — `+` adds, `-` removes, `~` updates; `[drift]` marker on `from_extras=True`.
 
 ## Pitfalls

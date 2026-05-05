@@ -338,6 +338,23 @@ class TestFleetStatus:
         with p_load, p_panel, p_relay, p_json:
             run_status()  # should not raise
 
+    def test_status_list_nodes_unexpected_error_is_bug(self) -> None:
+        """Unexpected adapter bugs must not be reported as successful partial status."""
+        cluster = _fleet_cluster()
+        panel = _make_panel_mock(ping_ok=True)
+        panel.list_nodes.side_effect = ValueError("bad adapter")
+        panel.list_users.return_value = []
+
+        with (
+            patch("meridian.commands.fleet.load_cluster", return_value=cluster),
+            patch("meridian.commands.fleet.make_panel", return_value=panel),
+            patch("meridian.commands.fleet.is_json_mode", return_value=False),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                run_status()
+
+        assert exc_info.value.exit_code == 1
+
     def test_status_json_preserves_partial_panel_failures(self) -> None:
         """JSON mode reports source availability and warnings for partial API failures."""
         cluster = _fleet_cluster()
@@ -361,6 +378,28 @@ class TestFleetStatus:
         assert payload.data["nodes"][0]["status"] == "unknown"
         assert payload.data["summary"]["health"] == "unknown"
         assert payload.data["summary"]["needs_attention"] is True
+
+    def test_status_json_preserves_relay_check_failure_as_warning(self) -> None:
+        """Relay checker failures degrade relay source without failing panel data."""
+        cluster = _fleet_cluster()
+        panel = _make_panel_mock(ping_ok=True)
+        panel.list_nodes.return_value = [_api_node(_UUID_A, connected=True)]
+        panel.list_users.return_value = [_api_user("alice")]
+
+        with (
+            patch("meridian.commands.fleet.load_cluster", return_value=cluster),
+            patch("meridian.commands.fleet.make_panel", return_value=panel),
+            patch("meridian.commands.fleet._check_relay_health", side_effect=RuntimeError("probe crashed")),
+            patch("meridian.commands.fleet.is_json_mode", return_value=True),
+            patch("meridian.commands.fleet.emit_json") as mock_json,
+        ):
+            run_status()
+
+        payload = mock_json.call_args[0][0]
+        assert payload.warnings[0].code == "MERIDIAN_RELAYS_UNAVAILABLE"
+        assert payload.data["sources"]["relays"] == "unavailable"
+        assert payload.data["relays"][0]["health"] == "unknown"
+        assert payload.data["summary"]["health"] == "unknown"
 
     def test_status_json_relay_health(self) -> None:
         """JSON output includes relay health status."""
@@ -502,6 +541,21 @@ class TestFleetInventory:
             patch("meridian.commands.fleet.is_json_mode", return_value=False),
         ):
             run_inventory()
+
+    def test_inventory_unexpected_panel_error_is_bug(self) -> None:
+        cluster = _fleet_cluster()
+        panel = _make_panel_mock(ping_ok=True)
+        panel.list_nodes.side_effect = TypeError("adapter shape changed")
+
+        with (
+            patch("meridian.commands.fleet.load_cluster", return_value=cluster),
+            patch("meridian.commands.fleet.make_panel", return_value=panel),
+            patch("meridian.commands.fleet.is_json_mode", return_value=False),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                run_inventory()
+
+        assert exc_info.value.exit_code == 1
 
 
 # ---------------------------------------------------------------------------

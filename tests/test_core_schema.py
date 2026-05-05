@@ -23,6 +23,8 @@ def test_schema_catalog_lists_public_contracts() -> None:
     names = schema_names()
 
     assert "output-envelope" in names
+    assert "apply" in names
+    assert "apply-envelope" in names
     assert "api-commands-envelope" in names
     assert "api-schema-envelope" in names
     assert "api-schemas-envelope" in names
@@ -108,10 +110,15 @@ def test_command_catalog_maps_commands_to_envelope_and_data_schemas() -> None:
         "meaning": "user or configuration error",
     } in by_command["plan"]["outcomes"]
     assert by_command["client.list"]["data_schema"] == "client-list"
+    assert by_command["apply"]["data_schema"] == "apply"
+    assert by_command["apply"]["machine_flags"] == ["--json"]
+    assert by_command["apply"]["stability"] == "preview"
     assert by_command["api.commands"]["data_schema"] == "api-commands"
     assert by_command["fleet.status"]["data_schema"] == "fleet-status"
     assert by_command["fleet.inventory"]["statuses"] == ["ok", "failed", "cancelled"]
     assert by_command["fleet.inventory"]["exit_codes"]["130"] == "cancelled by the user"
+    for contract in by_command.values():
+        assert contract["exit_codes"]["1"] == "unexpected Meridian bug"
 
 
 def test_command_catalog_can_embed_command_schemas() -> None:

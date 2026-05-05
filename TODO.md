@@ -100,6 +100,8 @@ The guiding rule: command modules parse CLI arguments and choose renderers; they
 - [x] Make command envelope schemas accept both typed success data and empty failed/cancelled data.
 - [x] Validate command envelope status/data/error consistency in Pydantic models.
 - [x] Strip secret URL paths from fleet API output; expose origins and booleans, not bearer-style routes.
+- [x] Add typed `apply --json` final-result contract with per-action execution status.
+- [x] Expose plan display order vs apply execution order so UI clients do not infer execution from list position.
 - [ ] Add golden JSON fixtures for the first migrated commands.
 
 Example:
@@ -218,9 +220,10 @@ Example:
 
 ## CLI Contract
 
-- [ ] Support both global and command-local JSON flags everywhere:
+- [ ] Support both global and command-local JSON flags for migrated commands:
   - `meridian --json fleet inventory`
   - `meridian fleet inventory --json`
+- [x] Reject global `--json` for commands that are not migrated to the envelope contract yet.
 - [ ] Add `--jsonl` to long-running commands: `deploy`, `apply`, `node add`, `relay deploy`, `teardown`, and likely `doctor`.
 - [ ] Add `--no-input` and make `--json` imply it unless a command explicitly documents otherwise.
 - [ ] Treat the interactive wizard as a client of meridian-core; it does not need a special JSON mode as long as the underlying core calls are structured.
@@ -268,10 +271,12 @@ Example:
 - [x] Expose plan actions as typed API result objects.
 - [x] Add semantic plan action fields (`operation`, `resource_type`, `resource_id`, `phase`, `requires_confirmation`) so clients do not infer behavior from display symbols.
 - [x] Populate `change_set` for node and relay update plans.
+- [x] Mark destructive relay replacements explicitly in plan JSON (`operation: "replace"`).
 - [ ] Add `execute_plan()` reporter hooks for action start/completion/failure.
-- [ ] Add `apply --json` final envelope.
+- [x] Add `apply --json` final envelope.
 - [ ] Add `apply --jsonl` event stream.
 - [ ] Ensure prompts are CLI-only and API callers pass explicit decisions such as `yes` and `prune_extras`.
+- [ ] Redesign apply execution phases toward preflight -> create/enable -> switch/verify -> delete/disable, with operation journaling instead of destructive-first deletes.
 
 ### Phase 4: Provisioning Events
 

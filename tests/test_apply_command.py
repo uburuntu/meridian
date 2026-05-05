@@ -6,6 +6,9 @@ not the underlying provisioning, which is unit-tested elsewhere.
 
 from __future__ import annotations
 
+import io
+import json
+from contextlib import redirect_stdout
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -276,6 +279,69 @@ class TestApplyRunFailureSafety:
         # Snapshot must be in _extra after apply
         assert "desired_clients_applied" in cluster._extra
         assert cluster._extra["desired_clients_applied"] == ["alice", "bob"]
+
+    def test_apply_json_success_outputs_typed_result(self) -> None:
+        cluster = self._build_cluster_with_desired_clients()
+        add_action = PlanAction(kind=PlanActionKind.ADD_CLIENT, target="alice", detail="create client alice")
+        plan = Plan(actions=[add_action])
+        exec_result = ExecutionResult(results=[ActionResult(action=add_action, success=True)])
+        buf = io.StringIO()
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.execute_plan", return_value=exec_result),
+            patch.object(ClusterConfig, "save"),
+            redirect_stdout(buf),
+        ):
+            apply_run(yes=True, parallel=1, prune_extras="yes", json_output=True)
+
+        payload = json.loads(buf.getvalue())
+        assert payload["command"] == "apply"
+        assert payload["status"] == "changed"
+        assert payload["exit_code"] == 0
+        assert payload["data"]["all_succeeded"] is True
+        assert payload["data"]["counts"] == {"actions": 1, "succeeded": 1, "failed": 0, "skipped": 0}
+        assert payload["data"]["actions"][0]["status"] == "succeeded"
+        assert payload["data"]["actions"][0]["action"]["kind"] == "add_client"
+        assert payload["data"]["actions"][0]["action"]["execution_order"] == 1
+
+    def test_apply_json_failure_outputs_one_partial_result_envelope(self) -> None:
+        cluster = self._build_cluster_with_desired_clients()
+        failed_action = PlanAction(kind=PlanActionKind.ADD_CLIENT, target="alice", detail="create client alice")
+        plan = Plan(actions=[failed_action])
+        exec_result = ExecutionResult(results=[ActionResult(action=failed_action, success=False, error="API down")])
+        buf = io.StringIO()
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.execute_plan", return_value=exec_result),
+            patch.object(ClusterConfig, "save"),
+            redirect_stdout(buf),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                apply_run(yes=True, parallel=1, prune_extras="yes", json_output=True)
+
+        assert exc_info.value.exit_code == 3
+        payload, end = json.JSONDecoder().raw_decode(buf.getvalue())
+        assert buf.getvalue()[end:].strip() == ""
+        assert payload["command"] == "apply"
+        assert payload["status"] == "failed"
+        assert payload["exit_code"] == 3
+        assert payload["errors"][0]["code"] == "MERIDIAN_APPLY_FAILED"
+        assert payload["data"]["all_succeeded"] is False
+        assert payload["data"]["counts"] == {"actions": 1, "succeeded": 0, "failed": 1, "skipped": 0}
+        assert payload["data"]["actions"][0]["status"] == "failed"
+        assert payload["data"]["actions"][0]["error"] == "API down"
 
 
 class TestPruneExtras:

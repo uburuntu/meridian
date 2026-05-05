@@ -89,6 +89,8 @@ def test_emit_json_redacts_sensitive_keys_and_text() -> None:
                 "nested": {
                     "database_url": "postgres://user:pass@example/db",
                     "apiKey": "opaque",
+                    "token": "plain-token",
+                    "sessionToken": "session-secret",
                     "subscription_url": "https://198.51.100.1/sub/abc123",
                 },
             }
@@ -105,6 +107,8 @@ def test_emit_json_redacts_sensitive_keys_and_text() -> None:
     assert "secret-panel" not in data["message"]
     assert data["nested"]["database_url"] == REDACTED
     assert data["nested"]["apiKey"] == REDACTED
+    assert data["nested"]["token"] == REDACTED
+    assert data["nested"]["sessionToken"] == REDACTED
     assert data["nested"]["subscription_url"] == REDACTED
 
 
@@ -161,6 +165,7 @@ def test_redaction_handles_json_style_secrets_inside_strings() -> None:
             {
                 "message": (
                     '{"api_token":"secret-token","subscription_url":"https://198.51.100.1/sub/abc123"} '
+                    '{"token":"plain-token","sessionToken":"session-secret"} '
                     'Authorization: "Bearer opaque-token" X-API-Key: "opaque-key"'
                 )
             }
@@ -169,6 +174,8 @@ def test_redaction_handles_json_style_secrets_inside_strings() -> None:
 
     assert "secret-token" not in data["message"]
     assert "abc123" not in data["message"]
+    assert "plain-token" not in data["message"]
+    assert "session-secret" not in data["message"]
     assert "opaque-token" not in data["message"]
     assert "opaque-key" not in data["message"]
 

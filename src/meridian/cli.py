@@ -69,9 +69,17 @@ def main_callback(
         set_quiet_mode(True)
 
     if json_mode:
-        from meridian.console import set_json_mode
+        from meridian.console import error_context, fail, set_json_mode
 
         set_json_mode(True)
+        if not _argv_supports_global_json():
+            command = _argv_command_name()
+            with error_context(command):
+                fail(
+                    f"JSON output is not yet supported for `{command}`",
+                    hint="Run `meridian api commands --json` to list supported machine-readable commands.",
+                    hint_type="user",
+                )
 
     if quiet:
         from meridian.console import set_quiet_mode
@@ -115,6 +123,56 @@ def _argv_requests_machine_output(args: list[str] | None = None) -> bool:
     return len(positionals) >= 2 and positionals[:2] == ["api", "schema"]
 
 
+def _argv_positionals(args: list[str] | None = None) -> list[str]:
+    """Return argv tokens that identify the command path."""
+    args = args or sys.argv[1:]
+    positionals: list[str] = []
+    skip_next = False
+    value_options = {
+        "--config",
+        "--domain",
+        "--server",
+        "--sni",
+        "--user",
+        "--ssh-port",
+        "--prune-extras",
+        "--parallel",
+    }
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in value_options:
+            skip_next = True
+            continue
+        if arg.startswith("-"):
+            continue
+        positionals.append(arg)
+    return positionals
+
+
+def _argv_command_name(args: list[str] | None = None) -> str:
+    """Best-effort command name for early global JSON validation."""
+    positionals = _argv_positionals(args)
+    if not positionals:
+        return "cli"
+    if positionals[0] in {"client", "fleet", "api"} and len(positionals) >= 2:
+        return f"{positionals[0]}.{positionals[1]}"
+    return positionals[0]
+
+
+def _argv_supports_global_json(args: list[str] | None = None) -> bool:
+    """Return True when global --json maps to a migrated command envelope."""
+    positionals = _argv_positionals(args)
+    if not positionals:
+        return False
+    if positionals[0] in {"plan", "apply"}:
+        return True
+    if positionals[:2] in (["client", "list"], ["client", "show"], ["fleet", "status"], ["fleet", "inventory"]):
+        return True
+    return positionals[0] == "api"
+
+
 # =============================================================================
 # Plan / Apply (declarative workflow)
 # =============================================================================
@@ -156,6 +214,7 @@ def apply_cmd(
         "--parallel",
         help="Max parallel node provisioning threads",
     ),
+    json_output: bool = typer.Option(False, "--json", help="Emit final apply result as JSON"),
 ) -> None:
     """Apply desired state — converge infrastructure to cluster.yml.
 
@@ -175,7 +234,9 @@ def apply_cmd(
 
     # Parallel node provisioning is temporarily disabled — see executor.py
     # for the reasoning. The flag is hidden but still accepted.
-    run(yes=yes, parallel=parallel, prune_extras=prune_extras)
+    if json_output:
+        _enable_json_output()
+    run(yes=yes, parallel=parallel, prune_extras=prune_extras, json_output=json_output)
 
 
 # =============================================================================
@@ -695,13 +756,14 @@ def api_commands_cmd(
 def api_schema_cmd(
     name: str = typer.Argument(..., help="Schema name from `meridian api schemas`"),
     envelope_output: bool = typer.Option(False, "--envelope", help="Wrap schema in meridian.output/v1"),
+    json_mode: bool = typer.Option(False, "--json", help="Alias for --envelope"),
 ) -> None:
     """Print one meridian-core JSON Schema."""
     from meridian.commands.api import run_schema
 
-    if envelope_output:
+    if envelope_output or json_mode:
         _enable_json_output()
-    run_schema(name, envelope_output=envelope_output)
+    run_schema(name, envelope_output=envelope_output or json_mode)
 
 
 # =============================================================================

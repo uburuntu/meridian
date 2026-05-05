@@ -114,7 +114,7 @@ Admin UI is reverse-proxied by nginx at `/<panel.secret_path>/` on port 443 in a
 
 ## Drift and plan / apply
 
-Whenever an admin edits state directly in the Remnawave UI (e.g. adds a user, renames a host), the next `meridian plan` reads actual state from the panel, compares it against desired state (`cluster.yml`), and emits the diff as typed `PlanAction` objects. `meridian apply` executes them, calling the same SDK surfaces.
+Whenever an admin edits state directly in the Remnawave UI (e.g. adds a user, renames a host), the next `meridian plan` reads actual state from the panel, compares it against desired state (`cluster.yml`), and emits the diff as typed `PlanAction` objects. `meridian apply` executes them, calling the same SDK surfaces; `meridian apply --json` returns typed per-action execution results for process/UI clients.
 
 `meridian apply` snapshots desired state into `cluster._extra["desired_*_applied"]` after every successful run. The next plan uses that snapshot to distinguish intentional removals (was in last-applied) from drift (was never applied). This mirrors Terraform's state-tracking behaviour.
 

@@ -5,6 +5,7 @@ UI clients, and automation adapters. They must not depend on Typer command
 parsing or Rich console state.
 """
 
+from meridian.core.apply import ApplyActionResult, ApplyCounts, ApplyResult, build_apply_result
 from meridian.core.clients import (
     ClientDetail,
     ClientHandoff,
@@ -76,6 +77,9 @@ __all__ = [
     "ApiCommandsResult",
     "ApiSchemaResult",
     "ApiSchemasResult",
+    "ApplyActionResult",
+    "ApplyCounts",
+    "ApplyResult",
     "ClientDetail",
     "ClientHandoff",
     "ClientListResult",
@@ -129,6 +133,7 @@ __all__ = [
     "plan_payload",
     "redact",
     "build_plan_result",
+    "build_apply_result",
     "schema_catalog",
     "schema_for",
     "schema_names",

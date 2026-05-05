@@ -45,6 +45,13 @@ _SENSITIVE_KEY_PARTS = (
     "connection_url",
     "connectionurl",
 )
+_SENSITIVE_EXACT_KEYS = {
+    "token",
+    "session_token",
+    "sessiontoken",
+    "id_token",
+    "idtoken",
+}
 
 _JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")
 _PEM_RE = re.compile(
@@ -66,7 +73,8 @@ _HTTP_URL_PATH_RE = re.compile(
 )
 _ASSIGNMENT_RE = re.compile(
     r"(?P<key>\b(?:api[_-]?key|api[_-]?token|access[_-]?token|refresh[_-]?token|"
-    r"auth[_-]?token|jwt|password|passwd|secret(?:[_-]?key)?|private[_-]?key|"
+    r"auth[_-]?token|session[_-]?token|id[_-]?token|token|jwt|password|passwd|"
+    r"secret(?:[_-]?key)?|private[_-]?key|"
     r"database[_-]?url|db[_-]?url)\b)"
     r"(?P<sep>\s*[:=]\s*)"
     r"(?P<value>[^\s,;]+)",
@@ -74,7 +82,8 @@ _ASSIGNMENT_RE = re.compile(
 )
 _JSON_SECRET_PAIR_RE = re.compile(
     r"(?P<key>[\"']?(?:api[_-]?key|api[_-]?token|access[_-]?token|refresh[_-]?token|"
-    r"auth[_-]?token|jwt|password|passwd|secret(?:[_-]?key)?|private[_-]?key|"
+    r"auth[_-]?token|session[_-]?token|id[_-]?token|token|jwt|password|passwd|"
+    r"secret(?:[_-]?key)?|private[_-]?key|"
     r"database[_-]?url|db[_-]?url|subscription[_-]?url|sub[_-]?url|share[_-]?url|"
     r"access[_-]?link|connection[_-]?url)[\"']?\s*:\s*)"
     r"(?P<quote>[\"']?)(?P<value>[^\"'\s,;}]+)(?P=quote)",
@@ -103,6 +112,8 @@ def is_sensitive_key(key: str) -> bool:
     """Return True when a mapping key should never expose its value."""
     normalized = key.lower().replace("-", "_")
     compact = normalized.replace("_", "")
+    if normalized in _SENSITIVE_EXACT_KEYS or compact in _SENSITIVE_EXACT_KEYS:
+        return True
     return any(part in normalized or part in compact for part in _SENSITIVE_KEY_PARTS)
 
 

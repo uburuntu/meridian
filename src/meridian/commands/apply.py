@@ -11,12 +11,16 @@ import shlex
 import typer
 
 from meridian.cluster import ClusterConfig
-from meridian.console import confirm, err_console, fail, info, ok, warn
+from meridian.console import confirm, err_console, error_context, fail, info, ok, warn
+from meridian.core.apply import build_apply_result
+from meridian.core.models import MeridianError, OutputStatus, Summary
+from meridian.core.output import OperationContext, command_envelope
 from meridian.reconciler import PlanActionKind, compute_plan
 from meridian.reconciler.diff import PlanAction
 from meridian.reconciler.display import print_plan
-from meridian.reconciler.executor import execute_plan
+from meridian.reconciler.executor import ExecutionResult, execute_plan
 from meridian.reconciler.state import build_actual_state, build_desired_state
+from meridian.renderers import emit_json
 
 
 def _looks_like_ip(s: str) -> bool:
@@ -432,10 +436,53 @@ def _handle_remove_subscription_page(action: PlanAction, panel: object, cluster:
     cluster.save()
 
 
+def _emit_apply_json(
+    *,
+    plan: object,
+    execution_result: ExecutionResult,
+    exit_code: int,
+    status: OutputStatus,
+    operation: OperationContext,
+    error: MeridianError | None = None,
+) -> None:
+    """Emit a typed apply envelope."""
+    result = build_apply_result(plan, execution_result, exit_code=exit_code)
+    emit_json(
+        command_envelope(
+            command="apply",
+            data=result.to_data(),
+            summary=Summary(
+                text=result.summary,
+                changed=status == "changed",
+                counts=result.counts.model_dump(),
+            ),
+            status=status,
+            exit_code=exit_code,
+            errors=[error] if error else None,
+            timer=operation.timer,
+        )
+    )
+
+
 def run(
     yes: bool = False,
     parallel: int = 4,
     prune_extras: str = "ask",
+    json_output: bool = False,
+) -> None:
+    """Converge actual state to desired state declared in cluster.yml."""
+    operation = OperationContext()
+    with error_context("apply", timer=operation.timer):
+        _run(yes=yes, parallel=parallel, prune_extras=prune_extras, json_output=json_output, operation=operation)
+
+
+def _run(
+    yes: bool,
+    parallel: int,
+    prune_extras: str,
+    *,
+    json_output: bool,
+    operation: OperationContext,
 ) -> None:
     """Converge actual state to desired state declared in cluster.yml.
 
@@ -495,10 +542,19 @@ def run(
             )
 
             if plan.is_empty:
+                if json_output:
+                    _emit_apply_json(
+                        plan=plan,
+                        execution_result=ExecutionResult(),
+                        exit_code=0,
+                        status="no_changes",
+                        operation=operation,
+                    )
                 ok("No changes needed — infrastructure is up to date.")
                 raise typer.Exit(0)
 
-            print_plan(plan, console=err_console)
+            if not json_output:
+                print_plan(plan, console=err_console)
 
             # --- Drift / extras handling (--prune-extras) ---
             extras_actions = [a for a in plan.actions if a.from_extras]
@@ -529,6 +585,14 @@ def run(
                     plan.actions = keep
                 # effective_prune == "yes": leave plan untouched, extras run
                 if plan.is_empty:
+                    if json_output:
+                        _emit_apply_json(
+                            plan=plan,
+                            execution_result=ExecutionResult(),
+                            exit_code=0,
+                            status="no_changes",
+                            operation=operation,
+                        )
                     ok("No changes needed after extras filter.")
                     raise typer.Exit(0)
 
@@ -571,8 +635,34 @@ def run(
             cluster.save()
 
             if result.all_succeeded:
+                if json_output:
+                    _emit_apply_json(
+                        plan=plan,
+                        execution_result=result,
+                        exit_code=0,
+                        status="changed",
+                        operation=operation,
+                    )
                 ok(result.summary())
             else:
+                error = MeridianError(
+                    code="MERIDIAN_APPLY_FAILED",
+                    category="system",
+                    message=result.summary(),
+                    hint="Review failed actions and rerun apply after fixing the underlying issue.",
+                    retryable=True,
+                    exit_code=3,
+                )
+                if json_output:
+                    _emit_apply_json(
+                        plan=plan,
+                        execution_result=result,
+                        exit_code=3,
+                        status="failed",
+                        operation=operation,
+                        error=error,
+                    )
+                    raise typer.Exit(3)
                 for failed_action in result.failed:
                     warn(f"Failed: {failed_action.action.detail} — {failed_action.error}")
                 fail(result.summary(), hint_type="system")

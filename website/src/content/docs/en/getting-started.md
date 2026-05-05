@@ -135,7 +135,7 @@ meridian apply --yes               # converge (skips confirmations; panel-only d
 
 Each section is independent. Omitting `desired_clients` entirely leaves client management imperative (`meridian client add/remove` still works); listing it with `[]` tells Meridian to remove every client. Same pattern for `desired_nodes` and `desired_relays`.
 
-`meridian plan` exits `0` when the cluster is converged, `2` when changes are pending — so you can gate CI workflows on it. Use `meridian plan --json` to get the `meridian.output/v1` envelope for `jq`, CI, or a UI client shelling out to Meridian. See [CLI reference](/docs/en/cli-reference/#meridian-plan) for full options.
+`meridian plan` exits `0` when the cluster is converged, `2` when changes are pending — so you can gate CI workflows on it. Use `meridian plan --json` to inspect the typed plan, and `meridian apply --json --yes` when a process or UI client needs the final execution result. Both use the `meridian.output/v1` envelope. See [CLI reference](/docs/en/cli-reference/#meridian-plan) for full options.
 
 For an annotated reference of every field cluster.yml accepts (state, desired-state, branding, inbound cache), see the [`cluster.example.yml`](https://github.com/uburuntu/meridian/blob/v4/cluster.example.yml) at the repo root. Imperative commands (`meridian client add`, `meridian node add`, etc.) automatically mirror their effect into the matching `desired_*` list when that list is non-null — so mixing imperative and declarative is safe.
 

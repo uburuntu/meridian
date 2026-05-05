@@ -64,6 +64,7 @@ class TestPlanJsonOutput:
             "actions": 0,
             "adds": 0,
             "updates": 0,
+            "replacements": 0,
             "removes": 0,
             "destructive": 0,
             "from_extras": 0,
@@ -98,12 +99,16 @@ class TestPlanJsonOutput:
         # ADD_CLIENT entry
         add = next(a for a in payload["data"]["actions"] if a["kind"] == "add_client")
         assert add["target"] == "alice"
+        assert add["plan_index"] == 0
         assert add["operation"] == "add"
+        assert add["execution_order"] == 2
         assert add["resource_type"] == "client"
         assert add["resource_id"] == "alice"
         assert add["phase"] == "provision"
         assert add["requires_confirmation"] is False
         assert add["destructive"] is False
+        assert add["replacement"] is False
+        assert add["replacement_strategy"] == "none"
         assert add["from_extras"] is False
         assert add["destructive_reason"] == ""
         assert add["change_set"] == []
@@ -111,12 +116,16 @@ class TestPlanJsonOutput:
         # REMOVE_CLIENT entry — extras flag preserved for downstream tooling
         rm = next(a for a in payload["data"]["actions"] if a["kind"] == "remove_client")
         assert rm["target"] == "ghost"
+        assert rm["plan_index"] == 1
         assert rm["operation"] == "remove"
+        assert rm["execution_order"] == 1
         assert rm["resource_type"] == "client"
         assert rm["resource_id"] == "ghost"
         assert rm["phase"] == "deprovision"
         assert rm["requires_confirmation"] is True
         assert rm["destructive"] is True
+        assert rm["replacement"] is False
+        assert rm["replacement_strategy"] == "none"
         assert rm["destructive_reason"] == "delete client ghost"
         assert rm["from_extras"] is True
         assert rm["symbol"] == "-"
@@ -166,6 +175,30 @@ class TestPlanJsonOutput:
         assert action["kind"] == "update_node"
         assert action["operation"] == "update"
         assert action["change_set"] == [{"field": "sni", "before": "old.example", "after": "new.example"}]
+
+    def test_relay_update_is_explicit_replacement(self) -> None:
+        plan = Plan(
+            actions=[
+                PlanAction(
+                    kind=PlanActionKind.UPDATE_RELAY,
+                    target="198.51.100.3",
+                    detail="update relay relay-a: exit_node: old -> new",
+                    destructive=True,
+                    changes=[ActionChange("exit_node", "old", "new")],
+                )
+            ]
+        )
+
+        payload, exit_code = _capture_plan_json(plan)
+
+        action = payload["data"]["actions"][0]
+        assert exit_code == 2
+        assert action["kind"] == "update_relay"
+        assert action["operation"] == "replace"
+        assert action["phase"] == "replace"
+        assert action["replacement"] is True
+        assert action["replacement_strategy"] == "delete_then_create"
+        assert payload["data"]["counts"]["replacements"] == 1
 
     def test_panel_auth_failure_is_user_error_json(self) -> None:
         cluster = _configured_cluster_with_desired()
