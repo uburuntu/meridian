@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import typer
 
+from meridian.adapters import RemoteExecutorConnection
 from meridian.cluster import (
     ClusterConfig,
     InboundRef,
@@ -66,7 +67,10 @@ def _configured_cluster(ip: str = _IP_A) -> ClusterConfig:
 
 def _make_resolved(ip: str = _IP_A) -> SimpleNamespace:
     conn = MagicMock()
+    conn.ip = ip
+    conn.user = "root"
     conn.port = 22
+    conn.local_mode = False
     return SimpleNamespace(ip=ip, user="root", conn=conn, local_mode=False)
 
 
@@ -509,7 +513,7 @@ class TestSubscriptionPagePathPersistence:
         resolved = _make_resolved()
 
         with (
-            patch("meridian.provision.Provisioner.run", return_value=[]),
+            patch("meridian.provision.Provisioner.run", return_value=[]) as mock_run,
             patch("meridian.commands.setup.ok"),
             patch("meridian.commands.setup.info"),
             patch("meridian.commands.setup.fail"),
@@ -538,6 +542,7 @@ class TestSubscriptionPagePathPersistence:
         )
         # Path is secrets.token_hex(8) — 16 hex chars
         assert len(cluster.subscription_page.path) == 16
+        assert isinstance(mock_run.call_args.args[0], RemoteExecutorConnection)
 
     def test_redeploy_reuses_existing_subscription_page_path(self) -> None:
         """When cluster.yml already has a subscription_page.path, re-running

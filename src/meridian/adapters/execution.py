@@ -1,0 +1,144 @@
+"""Compatibility adapters for the remote execution migration."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from typing import Any
+
+from meridian.core.execution import CommandSpec, PutBytesSpec, PutTextSpec, RemoteCommandResult, RemoteExecutor
+from meridian.ssh import CommandResult
+
+
+def legacy_command_result(result: RemoteCommandResult) -> CommandResult:
+    """Convert a core command result into the legacy connection result."""
+    return CommandResult(
+        args=result.args,
+        returncode=result.returncode,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        duration_ms=result.duration_ms,
+        attempts=result.attempts,
+        timed_out=result.timed_out,
+        sudo=result.sudo,
+        redacted_command=result.redacted_command,
+        operation_name=result.operation_name,
+    )
+
+
+class RemoteExecutorConnection:
+    """ServerConnection-shaped facade backed by a core RemoteExecutor.
+
+    This is a migration bridge: provision steps can keep their existing
+    ``conn.run(...)`` surface while orchestration depends on executor
+    contracts that can later be implemented by SSH, local, or daemon transports.
+    """
+
+    def __init__(self, executor: RemoteExecutor) -> None:
+        self.executor = executor
+        self.ip = executor.target.host
+        self.user = executor.target.user
+        self.port = executor.target.port
+        self.local_mode = executor.target.local
+        self.needs_sudo = False
+
+    def run(
+        self,
+        command: str,
+        timeout: int = 30,
+        *,
+        sudo: bool | None = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        retries: int = 1,
+        retry_delay: float = 0.0,
+        ok_codes: Iterable[int] = (0,),
+        sensitive: bool = False,
+        input: str | None = None,
+        operation_name: str = "",
+    ) -> CommandResult:
+        return legacy_command_result(
+            self.executor.run(
+                CommandSpec(
+                    command=command,
+                    timeout=timeout,
+                    sudo=sudo,
+                    cwd=cwd,
+                    env=env or {},
+                    retries=retries,
+                    retry_delay=retry_delay,
+                    ok_codes=tuple(ok_codes),
+                    sensitive=sensitive,
+                    stdin=input,
+                    operation_name=operation_name,
+                )
+            )
+        )
+
+    def put_bytes(
+        self,
+        remote_path: str,
+        data: bytes,
+        *,
+        mode: str | int | None = None,
+        owner: str | None = None,
+        sudo: bool | None = None,
+        atomic: bool = True,
+        create_parent: bool = False,
+        sensitive: bool = False,
+        timeout: int = 30,
+        operation_name: str = "write file",
+    ) -> CommandResult:
+        return legacy_command_result(
+            self.executor.put_bytes(
+                PutBytesSpec(
+                    remote_path=remote_path,
+                    data=data,
+                    mode=mode,
+                    owner=owner,
+                    sudo=sudo,
+                    atomic=atomic,
+                    create_parent=create_parent,
+                    sensitive=sensitive,
+                    timeout=timeout,
+                    operation_name=operation_name,
+                )
+            )
+        )
+
+    def put_text(
+        self,
+        remote_path: str,
+        text: str,
+        *,
+        encoding: str = "utf-8",
+        **kwargs: Any,
+    ) -> CommandResult:
+        return legacy_command_result(
+            self.executor.put_text(
+                PutTextSpec(
+                    remote_path=remote_path,
+                    text=text,
+                    encoding=encoding,
+                    mode=kwargs.get("mode"),
+                    owner=kwargs.get("owner"),
+                    sudo=kwargs.get("sudo"),
+                    atomic=kwargs.get("atomic", True),
+                    create_parent=kwargs.get("create_parent", False),
+                    sensitive=kwargs.get("sensitive", False),
+                    timeout=kwargs.get("timeout", 30),
+                    operation_name=kwargs.get("operation_name", "write file"),
+                )
+            )
+        )
+
+    def get_text(self, remote_path: str, *, timeout: int = 30, sudo: bool | None = None) -> CommandResult:
+        return legacy_command_result(self.executor.get_text(remote_path, timeout=timeout, sudo=sudo))
+
+    def get_bytes(self, remote_path: str, *, timeout: int = 30, sudo: bool | None = None) -> bytes:
+        result = self.get_text(remote_path, timeout=timeout, sudo=sudo)
+        if result.returncode != 0:
+            return b""
+        return result.stdout.encode()
+
+    def close(self) -> None:
+        self.executor.close()

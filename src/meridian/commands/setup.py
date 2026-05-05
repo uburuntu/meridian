@@ -15,6 +15,7 @@ from typing import Any
 
 import typer
 
+from meridian.adapters import RemoteExecutorConnection, SSHRemoteExecutor
 from meridian.cluster import (
     BrandingConfig,
     ClusterConfig,
@@ -50,6 +51,7 @@ from meridian.core.deploy_planning import (
     DeployPlanningError,
     build_deploy_plan,
 )
+from meridian.core.execution import RemoteExecutor
 from meridian.core.output import OperationContext
 from meridian.core.reporters import Reporter
 from meridian.core.services.deploy import deploy_server
@@ -411,6 +413,7 @@ def _run_provisioner(
     info_page_path: str = "",
     reporter: Reporter | None = None,
     operation: OperationContext | None = None,
+    remote_executor: RemoteExecutor | None = None,
 ) -> None:
     """Run the SSH-based provisioner pipeline (OS, Docker, containers)."""
     from meridian.provision import ProvisionContext, Provisioner, build_node_steps, build_setup_steps
@@ -480,9 +483,10 @@ def _run_provisioner(
 
     provisioner = Provisioner(steps)
 
-    conn = resolved.conn
-    if not isinstance(conn, ServerConnection):
+    if remote_executor is None and not isinstance(resolved.conn, ServerConnection):
         fail("No SSH connection available", hint_type="bug")
+    remote_executor = remote_executor or SSHRemoteExecutor(resolved.conn)
+    conn = RemoteExecutorConnection(remote_executor)
 
     results = provisioner.run(conn, ctx, reporter=reporter, operation=operation)
 

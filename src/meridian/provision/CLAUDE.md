@@ -20,6 +20,8 @@
 
 **Reporter hook** — `Provisioner.run()` may emit typed core events while preserving Rich rendering by default. CLI/UI renderers subscribe; steps still return `StepResult`.
 
+**Executor bridge** — deploy provisioning enters through `RemoteExecutorConnection`; steps can keep `conn.run()` while transports move behind core executor contracts.
+
 **Relay pipeline is separate** — uses `RelayContext` and Realm TCP forwarding. Panel-agnostic.
 
 ## What's done well
