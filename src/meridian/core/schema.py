@@ -59,6 +59,13 @@ class ApiSchemaResult(CoreModel):
     json_schema: dict[str, Any] = Field(alias="schema")
 
 
+class ApiWorkflowResult(CoreModel):
+    """Result for `meridian api workflow NAME --json`."""
+
+    name: str
+    workflow: WorkflowPlan
+
+
 class _ContractEnvelope(CoreModel):
     """Strict wire envelope base used by command-specific contracts."""
 
@@ -261,6 +268,26 @@ class ApiSchemaOutputEnvelope(
     """Envelope schema for `meridian api schema NAME --envelope`."""
 
 
+class _ApiWorkflowSuccessEnvelope(_ContractEnvelope):
+    command: Literal["api.workflow"]
+    status: Literal["ok"]
+    data: ApiWorkflowResult
+    errors: list[MeridianError] = Field(max_length=0)
+
+
+class _ApiWorkflowTerminalEnvelope(_ContractEnvelope):
+    command: Literal["api.workflow"]
+    status: Literal["failed", "cancelled"]
+    data: EmptyData
+    errors: list[MeridianError] = Field(min_length=1)
+
+
+class ApiWorkflowOutputEnvelope(
+    RootModel[Annotated[_ApiWorkflowSuccessEnvelope | _ApiWorkflowTerminalEnvelope, Field(discriminator="status")]]
+):
+    """Envelope schema for `meridian api workflow NAME --json`."""
+
+
 OutcomeCategory = ErrorCategory | Literal["none"]
 
 
@@ -344,6 +371,8 @@ _SCHEMAS: dict[str, type[BaseModel]] = {
     "api-schema-envelope": ApiSchemaOutputEnvelope,
     "api-schemas": ApiSchemasResult,
     "api-schemas-envelope": ApiSchemasOutputEnvelope,
+    "api-workflow": ApiWorkflowResult,
+    "api-workflow-envelope": ApiWorkflowOutputEnvelope,
     "client-list-envelope": ClientListOutputEnvelope,
     "client-show-envelope": ClientShowOutputEnvelope,
     "plan-envelope": PlanOutputEnvelope,
@@ -464,6 +493,26 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         machine_flags=["--json", "--include-schemas"],
         stability="stable",
         description="List meridian-core JSON Schema names; with --include-schemas, embed full schemas.",
+    ),
+    "api.workflow": CommandContract(
+        command="api.workflow",
+        argv=["api", "workflow", "NAME"],
+        envelope_schema="api-workflow-envelope",
+        data_schema="api-workflow",
+        failure_data_schema="empty-data",
+        error_schema="error",
+        statuses=["ok", "failed", "cancelled"],
+        outcomes=_standard_outcomes("ok", "workflow contract was returned"),
+        exit_codes={
+            "0": "workflow contract was returned",
+            "1": "unexpected Meridian bug",
+            "2": "workflow name is unknown",
+            "3": "system or infrastructure failure",
+            "130": "cancelled by the user",
+        },
+        machine_flags=["--json"],
+        stability="preview",
+        description="Return a UI-renderable workflow plan such as the deploy wizard field layout.",
     ),
     "client.list": CommandContract(
         command="client.list",

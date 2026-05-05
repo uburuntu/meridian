@@ -75,6 +75,7 @@ from meridian.core.schema import (
     ApiCommandsResult,
     ApiSchemaResult,
     ApiSchemasResult,
+    ApiWorkflowResult,
     CommandCatalogEntry,
     CommandContract,
     CommandOutcome,
@@ -100,10 +101,12 @@ from meridian.core.services import (
     PanelErrorKind,
     RelayHealthChecker,
     ShareUrlBuilder,
+    WorkflowNotFoundError,
     collect_client_list,
     collect_client_show,
     collect_fleet_inventory,
     collect_fleet_status,
+    collect_workflow,
     deploy_server,
 )
 from meridian.core.workflow import InputField, InputKind, InputOption, InputSection, WorkflowPlan
@@ -114,6 +117,7 @@ __all__ = [
     "ApiCommandsResult",
     "ApiSchemaResult",
     "ApiSchemasResult",
+    "ApiWorkflowResult",
     "ApplyActionResult",
     "ApplyCounts",
     "ApplyResult",
@@ -208,7 +212,9 @@ __all__ = [
     "schema_names",
     "validate_command_envelope",
     "WorkflowPlan",
+    "WorkflowNotFoundError",
     "build_deploy_workflow",
     "build_deploy_plan",
+    "collect_workflow",
     "compute_deploy_ports",
 ]

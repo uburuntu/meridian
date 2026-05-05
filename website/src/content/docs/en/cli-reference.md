@@ -124,6 +124,7 @@ Inspect the machine-readable meridian-core contract used by JSON output and futu
 meridian api schemas [--json] [--include-schemas]
 meridian api commands [--json] [--include-schemas]
 meridian api schema NAME [--envelope|--json]
+meridian api workflow NAME [--json]
 ```
 
 | Flag | Default | Description |
@@ -137,6 +138,8 @@ meridian api schema NAME [--envelope|--json]
 **`api commands`** — lists migrated command contracts with `command`, `argv`, `envelope_schema`, `data_schema`, possible `statuses`, structured `outcomes`, exit-code meanings, machine flags, and stability. Use this before wiring a UI to decide which command payload schema validates a given envelope.
 
 **`api schema NAME`** — prints one JSON Schema. Example: `meridian api schema output-envelope`.
+
+**`api workflow NAME`** — prints a UI-renderable workflow plan. Example: `meridian api workflow deploy --json` returns deploy wizard sections and fields.
 
 ### meridian relay
 

@@ -768,6 +768,19 @@ def api_schema_cmd(
     run_schema(name, envelope_output=envelope_output or json_mode)
 
 
+@api_app.command("workflow")
+def api_workflow_cmd(
+    name: str = typer.Argument(..., help="Workflow name, e.g. deploy"),
+    json_mode: bool = typer.Option(False, "--json", help="Output workflow plan as JSON envelope"),
+) -> None:
+    """Print one meridian-core workflow plan."""
+    from meridian.commands.api import run_workflow
+
+    if json_mode:
+        _enable_json_output()
+    run_workflow(name, json_output=json_mode)
+
+
 # =============================================================================
 # Dev tools
 # =============================================================================

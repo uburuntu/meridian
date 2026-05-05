@@ -198,6 +198,24 @@ class TestApiContractCLI:
         assert commands["plan"]["envelope_schema"] == "plan-envelope"
         assert commands["fleet.status"]["data_schema"] == "fleet-status"
         assert commands["client.list"]["argv"] == ["client", "list"]
+        assert commands["api.workflow"]["data_schema"] == "api-workflow"
+
+    def test_api_workflow_json_returns_deploy_fields(self, monkeypatch) -> None:
+        set_json_mode(False)
+        set_quiet_mode(False)
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+
+        result = runner.invoke(app, ["api", "workflow", "deploy", "--json"])
+
+        _reset_output_modes()
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["command"] == "api.workflow"
+        assert payload["data"]["name"] == "deploy"
+        workflow = payload["data"]["workflow"]
+        assert workflow["id"] == "deploy"
+        assert workflow["ready_request_schema"] == "deploy-request"
+        assert [field["id"] for field in workflow["fields"]][:2] == ["ip", "user"]
 
     def test_api_schema_envelope_error_is_command_scoped_json(self, monkeypatch) -> None:
         set_json_mode(False)
