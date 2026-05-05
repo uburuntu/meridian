@@ -33,6 +33,28 @@ Meridian should grow into a polished local control surface for self-hosters: dep
 - [ ] Work offline/in blocked regions: bundled UI, bundled fonts/assets, no telemetry, no CDN dependency, local troubleshooting docs.
 - [ ] Preserve power-user trust: every Studio operation can show or copy the equivalent CLI command/request.
 
+### Backlog Lessons
+
+The open issues say Meridian Studio cannot be just a prettier deploy command. They describe a real operations product where users need proof, recovery, topology control, secure handoff, and guided repair. Treat each cluster as a design constraint for meridian-core and Engine contracts.
+
+- [ ] Recovery is product-critical because partial deploys, migrations, backups, offline pulls, missing credential files, teardown ownership, and stale SNI state are normal failure modes, not edge cases. Issues: #30, #42, #48, #53, #70, #71, #72.
+- [ ] Topology must become a graph because multi-hop chains, multi-IP nodes, split routing, IPv6, selective outbound paths, relay fan-out, geo-block routing, SNI rotation, and health-based DNS cannot fit a single-server recipe model. Issues: #32, #33, #34, #35, #56, #61, #65, #67, #68.
+- [ ] Verification must be evidence, not optimism, because deploy success is not enough in hostile networks; users need tunnel tests, active probing, metrics, real-VM coverage, and clear operator diagnostics. Issues: #36, #37, #52, #55, #57, #63.
+- [ ] Client handoff is core product UX because the deployer still fails if recipients cannot import, update, rotate, or disable access safely across real client apps. Issues: #40, #41, #44, #50, #51, #58, #62.
+- [ ] Security posture must be explicit because supply-chain verification, process obfuscation, plugin activation, firewall backend choice, and DNS sidecars change the threat model and must not become hidden toggles. Issues: #38, #39, #47, #49, #60, #66.
+- [ ] Onboarding must absorb platform friction because Windows/WSL setup, password-only VPS access, custom SSH ports, and nginx/fallback explanations are part of whether users can trust the tool. Issues: #43, #45, #59, #69.
+- [ ] AI and automation should be adapters over typed operations because an MCP server is useful only if Engine exposes narrow, audited actions instead of generic shell access. Issue: #64.
+
+### Plan Impact
+
+- [ ] Design Engine as an operation runtime over durable resources, not as a deploy-only HTTP wrapper.
+- [ ] Treat `DeployRequest` as one recipe over the future topology graph; do not let it become the whole fleet model.
+- [ ] Add first-class resource concepts as the backlog demands them: server, role, route, relay path, client, handoff, backup, probe, metric, secret, plugin, and operation.
+- [ ] Make every mutating flow produce a plan, confirmation boundary, operation ID, event stream, terminal envelope, retry guidance, and CLI equivalent.
+- [ ] Prioritize deploy + verify + recover as the first Studio proof instead of deploy alone.
+- [ ] Keep issue-to-contract traceability: when an issue introduces a durable concept, add or extend a core schema before building UI-only behavior around it.
+- [ ] Keep the security model ahead of capabilities: new Engine endpoints need typed permissions, redaction, auditability, and no raw shell/SSH escape hatch by default.
+
 ### Architecture Direction
 
 - [ ] Add `meridian.engine` as a localhost-only Engine with HTTP JSON endpoints and SSE event streams.
