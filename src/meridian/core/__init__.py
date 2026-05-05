@@ -24,6 +24,14 @@ from meridian.core.events import (
     PROVISION_STEP_STARTED,
     CoreEventType,
 )
+from meridian.core.execution import (
+    CommandSpec,
+    PutBytesSpec,
+    PutTextSpec,
+    RemoteCommandResult,
+    RemoteExecutor,
+    RemoteTarget,
+)
 from meridian.core.fleet import FleetInventory, FleetSources, FleetStatus, FleetTopology, RelayHostRef
 from meridian.core.models import (
     CoreModel,
@@ -107,6 +115,7 @@ __all__ = [
     "COMMAND_COMPLETED",
     "COMMAND_FAILED",
     "COMMAND_STARTED",
+    "CommandSpec",
     "CoreModel",
     "CoreEventType",
     "DeployExecutor",
@@ -136,6 +145,11 @@ __all__ = [
     "PROVISION_STEP_STARTED",
     "REDACTED",
     "Reporter",
+    "RemoteCommandResult",
+    "RemoteExecutor",
+    "RemoteTarget",
+    "PutBytesSpec",
+    "PutTextSpec",
     "RelayHealthChecker",
     "ResourceRef",
     "RelayHostRef",
