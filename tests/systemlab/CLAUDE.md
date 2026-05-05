@@ -1,7 +1,7 @@
 # tests/systemlab — Multi-node system validation lab
 
 ```bash
-make system-lab               # ~3 min (cached images), ~5 min (cold)
+make system-lab               # ~5 min (cached images), ~15 min (cold)
 # or manually:
 bash tests/systemlab/scripts/setup-fixtures.sh
 docker compose -f tests/systemlab/compose.yml up --build \
@@ -11,49 +11,40 @@ docker compose -f tests/systemlab/compose.yml down -v
 
 ## What is tested
 
-The system lab deploys Meridian across two separate containers via SSH — exactly like a real VPS deployment — and verifies the full relay data path.
+The system lab deploys Meridian across two containers via SSH — exactly like a real VPS — and verifies the full lifecycle with real Remnawave containers.
 
-### Commands exercised
+### 10 test stages
 
-| # | Command | What it validates |
-|---|---------|-------------------|
-| 1 | `meridian deploy EXIT_IP --user root --yes --no-harden` | Full provisioner pipeline: Docker install, 3x-ui panel, Xray Reality+XHTTP inbounds, nginx SNI routing, TLS bootstrap cert |
-| 2 | `meridian client add alice` | Panel API client creation, credential generation, connection page rendering |
-| 3 | `meridian relay deploy RELAY_IP --exit EXIT_IP --sni www.google.com --yes` | Realm install, relay firewall (ufw), per-relay Xray inbound on exit, nginx relay-map, credential sync |
-| 4 | **Reality direct** (xray client → exit:443) | VLESS+Reality tunnel through nginx SNI routing — proves port, UUID, keys, SNI all match |
-| 5 | **Reality via relay** (xray client → relay:443 → exit) | Realm TCP forwarding + per-relay Xray inbound — proves relay port, relay SNI, and full tunnel chain |
-| 6 | `meridian teardown EXIT_IP --yes` | 3x-ui removal, nginx cleanup, credential removal |
-
-### Checks asserted
-
-- `proxy.yml` credentials file exists after deploy
-- 3x-ui container is running (`docker ps`)
-- nginx config is valid (`nginx -t`)
-- `meridian-relay` systemd service is active after relay deploy
-- Reality tunnel returns HTTP response through SOCKS5 (direct + via relay)
-
-### What is NOT tested (phase 2)
-
-- **XHTTP/TLS** — needs domain mode + Pebble cert (Pebble runs but can't issue IP certs)
-- **Domain mode / WSS** — needs internal DNS via pebble-challtestsrv
-- **IP verification** — xray `geoip:private` blocks lab IPs; x-ui regenerates routing rules
-- **Idempotent redeploy** — deploy-over-existing not exercised
-- **WARP** — Cloudflare WARP client not installed in lab
+| # | Stage | What it validates |
+|---|-------|-------------------|
+| 1 | SSH/systemd setup | Host key scanning, systemd boot, Pebble CA install |
+| 2 | Fresh deploy | Full provisioner pipeline: Docker, Remnawave panel+DB+Valkey+node, nginx, TLS |
+| 3 | Verify deployment | 4 containers running, nginx valid, port 443, cluster.yml, fleet status connected |
+| 4 | Client lifecycle | Multi-client isolation: add alice+bob, remove alice, verify bob survives |
+| 5 | PWA page serving | Security headers, shared assets; per-client pages if deployed |
+| 6 | Relay deploy | Realm install, systemd service, relay host entries in panel |
+| 7 | Connection test | Reality tunnel (fatal), negative test with bogus UUID |
+| 8 | Redeploy | Key preservation — Reality keys unchanged, connections still work (fatal) |
+| 9 | Declarative plan/apply | Write desired state, plan convergence, apply add/remove client, verify |
+| 10 | Hardening verification | UFW rules (22/80/443), SSH password auth disabled, fail2ban active |
+| 11 | Teardown | Container removal, port freed, nginx cleaned |
 
 ## Design decisions
 
 **Real systemd, real SSH** — containers run `/sbin/init`, services managed by real unit files. No mocked systemctl.
 
-**Separate Docker daemon** — exit node runs its own `dockerd` (vfs driver, no iptables). 3x-ui pulls from GHCR inside this nested daemon.
+**Nested Docker daemon** — exit node runs its own `dockerd` (vfs driver, no iptables). Remnawave images pulled inside this nested daemon, exactly like production.
 
-**Static IPs** — deterministic `172.30.0.0/24` bridge so SSH known_hosts, credential paths, and deploy commands are stable.
+**Static IPs** — deterministic `172.30.0.0/24` bridge. SSH known_hosts, credential paths, and deploy commands are stable.
 
-**Fixtures generated at runtime** — SSH keypair and Pebble CA created by `setup-fixtures.sh`, never committed (`.gitignore`).
+**Fixtures generated at runtime** — SSH keypair and Pebble CA created by `setup-fixtures.sh`, never committed.
 
 ## Pitfalls
 
-- **xray `geoip:private` blocks lab IPs** — can't use internal echo service; x-ui regenerates config on restart. Test uses ifconfig.me (external, flaky).
-- **Pebble can't issue IP certs** — ACME protocol limitation. Infrastructure is ready; needs domain mode (phase 2).
-- **Relay remove fails** — credential sync bug: `_refresh_exit_credentials_or_fail` overwrites local relay data. Product bug, not test bug.
+- **xray `geoip:private` blocks lab IPs** — can't use internal echo service. Test uses ifconfig.me (external).
+- **Pebble can't issue IP certs** — ACME protocol limitation. Infrastructure ready; needs domain mode (phase 2).
+- **Image pull time** — 4 Remnawave images (~500MB) pulled inside nested Docker on first run. Expect 3-5 min in CI.
 - **systemd reports `degraded`** — some kernel features missing in containers. Accepted.
-- **Base image build is slow** — docker-ce from official repo. Uses BuildKit apt cache mounts. Cached after first build.
+- **Base image build is slow** — docker-ce from official repo. Uses BuildKit apt cache mounts.
+- **Reality TLS handshake needs vless_uuid** — Remnawave has two UUIDs: database `uuid` and `vless_uuid` (xray auth). Connection tests must use `vless_uuid` from the panel API, not the database UUID from `client show`.
+- **UFW filtering untestable on Docker bridge** — all container ports reachable regardless of iptables. Stage 9 verifies UFW *configuration* (rules, status), not actual packet filtering.

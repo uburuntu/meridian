@@ -12,6 +12,7 @@ from meridian.commands.resolve import (
 )
 from meridian.config import DEFAULT_SNI, SERVERS_FILE
 from meridian.console import err_console, info, line, ok, warn
+from meridian.facts import ServerFacts
 from meridian.servers import ServerRegistry
 from meridian.ssh import tcp_connect
 
@@ -40,6 +41,7 @@ def run(
     sni_host = sni or DEFAULT_SNI
     q_sni = shlex.quote(sni_host)
     results: dict[str, str] = {}
+    facts = ServerFacts(resolved.conn)
 
     # --- SNI reachability ---
     info(f"Checking camouflage target ({sni_host}) reachability from server...")
@@ -114,7 +116,7 @@ def run(
 
         match = re.search(r'users:\(\("([^"]*)"', port_check)
         port_user = match.group(1) if match else "unknown"
-        allowed = {"nginx", "3x-ui", "xray"}
+        allowed = {"nginx", "xray", "remnawave", "remnawave-node", "docker-proxy", "3x-ui"}
         if port_user in allowed:
             ok(f"Port 443 is in use by {port_user} (Meridian -- OK)")
             results["port443"] = f"in use by {port_user} (OK)"
@@ -161,11 +163,8 @@ def run(
 
     # --- Server OS ---
     info("Checking server OS...")
-    os_result = resolved.conn.run(
-        "cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"'",
-        timeout=10,
-    )
-    os_info = os_result.stdout.strip()
+    os_release = facts.os_release()
+    os_info = os_release.pretty_name or os_release.id
     if "Ubuntu" in os_info or "Debian" in os_info:
         # Check for non-LTS Ubuntu (only even-year .04 releases are LTS)
         import re
@@ -189,13 +188,11 @@ def run(
 
     # --- Disk space ---
     info("Checking disk space...")
-    disk_result = resolved.conn.run(
-        "df -BG / 2>/dev/null | tail -1 | awk '{print $4}' | tr -d 'G'",
-        timeout=10,
-    )
-    disk_avail = disk_result.stdout.strip()
-    if disk_avail and disk_avail.isdigit():
-        avail_gb = int(disk_avail)
+    disk_mb = facts.free_disk_mb("/")
+    disk_avail = ""
+    if disk_mb is not None:
+        avail_gb = disk_mb // 1024
+        disk_avail = str(avail_gb)
         if avail_gb >= 2:
             ok(f"Disk space: {avail_gb}G available")
         else:

@@ -38,3 +38,7 @@ tests/systemlab/fixtures/id_ed25519
 tests/systemlab/fixtures/id_ed25519.pub
 tests/systemlab/fixtures/controller_authorized_keys
 tests/systemlab/fixtures/pebble-ca.pem
+
+# Real-VM harness local artifacts — see tests/realvm/README.md
+tests/realvm/.local/
+/tmp/realvm_*

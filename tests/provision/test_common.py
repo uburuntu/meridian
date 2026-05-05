@@ -92,7 +92,7 @@ class TestInstallPackages:
 class TestEnableAutoUpgrades:
     def test_already_configured_returns_ok(self, mock_conn: MockConnection, base_ctx):
         """When config file already has expected content, nothing is written."""
-        mock_conn.when("cat", stdout=_AUTO_UPGRADES_CONF.strip())
+        mock_conn.when("cat", stdout=_AUTO_UPGRADES_CONF)
 
         result = EnableAutoUpgrades().run(mock_conn, base_ctx)
 
@@ -140,7 +140,7 @@ class TestSetTimezone:
 class TestHardenSSH:
     def test_already_hardened_returns_ok(self, mock_conn: MockConnection, base_ctx):
         """When Meridian's drop-in is present and effective config matches, status is ok."""
-        mock_conn.when("cat /etc/ssh/sshd_config.d/00-meridian.conf", stdout=_SSH_HARDENING_DROPIN.strip())
+        mock_conn.when("cat /etc/ssh/sshd_config.d/00-meridian.conf", stdout=_SSH_HARDENING_DROPIN)
         mock_conn.when("sshd -t", rc=0)
         mock_conn.when("sshd -T", rc=0)
 
@@ -197,7 +197,7 @@ class TestHardenSSH:
 
     def test_debianbanner_unrecognized_skips_verification(self, mock_conn: MockConnection, base_ctx):
         """When sshd doesn't recognize DebianBanner, skip its verification (issue #20)."""
-        mock_conn.when("cat /etc/ssh/sshd_config.d/00-meridian.conf", stdout=_SSH_HARDENING_DROPIN.strip())
+        mock_conn.when("cat /etc/ssh/sshd_config.d/00-meridian.conf", stdout=_SSH_HARDENING_DROPIN)
         mock_conn.when("sshd -t", rc=0)
         # Required settings pass
         mock_conn.when("sshd -T | grep -q '^passwordauthentication no$'", rc=0)

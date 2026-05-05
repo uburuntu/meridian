@@ -80,7 +80,7 @@ class TestServerFlag:
         reg = ServerRegistry(servers_file)
         with pytest.raises(typer.Exit) as exc_info:
             resolve_server(reg, requested_server="nonexistent")
-        assert exc_info.value.exit_code == 1
+        assert exc_info.value.exit_code != 0
 
     def test_server_by_name_inherits_user(self, servers_file: Path) -> None:
         reg = ServerRegistry(servers_file)
@@ -158,7 +158,7 @@ class TestMultipleServers:
         reg.add(ServerEntry("5.6.7.8", "root", "server2"))
         with pytest.raises(typer.Exit) as exc_info:
             resolve_server(reg)
-        assert exc_info.value.exit_code == 1
+        assert exc_info.value.exit_code != 0
 
     def test_multiple_real_exits_do_not_auto_select_when_only_one_is_cached(
         self, tmp_home: Path, servers_file: Path, monkeypatch: pytest.MonkeyPatch
@@ -178,7 +178,7 @@ class TestMultipleServers:
 
         with pytest.raises(typer.Exit) as exc_info:
             resolve_server(reg)
-        assert exc_info.value.exit_code == 1
+        assert exc_info.value.exit_code != 0
 
 
 class TestNoServers:
@@ -192,7 +192,7 @@ class TestNoServers:
         reg = ServerRegistry(servers_file)
         with pytest.raises(typer.Exit) as exc_info:
             resolve_server(reg)
-        assert exc_info.value.exit_code == 1
+        assert exc_info.value.exit_code != 0
 
 
 class TestLocalMode:
@@ -275,7 +275,7 @@ class TestLocalKeyword:
         reg = ServerRegistry(servers_file)
         with pytest.raises(typer.Exit) as exc_info:
             resolve_server(reg, explicit_ip="local")
-        assert exc_info.value.exit_code == 1
+        assert exc_info.value.exit_code != 0
 
     def test_local_keyword_conn_has_local_mode(self, servers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(

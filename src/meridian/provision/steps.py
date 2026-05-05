@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 from typing import Protocol as TypingProtocol
@@ -10,12 +11,16 @@ from typing import Protocol as TypingProtocol
 from rich.console import Console
 from rich.status import Status
 
-from meridian.config import DEFAULT_PANEL_PORT, DEFAULT_SNI
-from meridian.ssh import ServerConnection
+from meridian.config import DEFAULT_SNI
 
 if TYPE_CHECKING:
-    from meridian.credentials import ServerCredentials
-    from meridian.panel import PanelClient
+    from meridian.cluster import ClusterConfig
+    from meridian.core.events import CoreEventType
+    from meridian.core.models import EventLevel
+    from meridian.core.output import OperationContext
+    from meridian.core.reporters import Reporter
+    from meridian.remnawave import MeridianPanel
+    from meridian.ssh import ServerConnection
 
 StepStatus = Literal["ok", "changed", "skipped", "failed"]
 
@@ -34,9 +39,9 @@ class StepResult:
 class ProvisionContext:
     """Carries state through the provisioning pipeline.
 
-    Typed fields for well-known configuration. Dynamic dict-like access
-    for inter-step communication (e.g., ctx["panel"] for a logged-in PanelClient,
-    ctx["credentials"] for ServerCredentials populated by ConfigurePanel).
+    Typed fields for well-known configuration AND typed accessors for
+    inter-step communication. The _state dict is kept for edge cases
+    but typed properties are the preferred interface.
     """
 
     ip: str
@@ -50,19 +55,23 @@ class ProvisionContext:
     hosted_page: bool = False  # serve connection pages via HTTPS on server
     harden: bool = True  # enable SSH hardening + firewall (skip for shared servers)
     creds_dir: str = ""  # local credentials directory path
+    is_panel_host: bool = True  # deploy Remnawave panel on this server
 
     results: list[StepResult] = field(default_factory=list)
 
-    # Mutable state populated by steps:
-    panel_port: int = DEFAULT_PANEL_PORT  # internal panel port
+    # Port layout — Xray ports configured in Remnawave config profile
     xhttp_port: int = 0  # computed from seed
     reality_port: int = 443  # 443 standalone, ~10443 domain mode
     wss_port: int = 0  # computed from seed (domain mode only)
 
-    # 3x-ui image version (pinned to tested release, digest for supply chain integrity)
-    threexui_version: str = "2.8.11@sha256:34c46ea6d838df981c4760bd1fe442413c2b99bbe4bb49dfa3d1bfb8a8a92496"
+    @property
+    def panel_port(self) -> int:
+        """Panel internal port (Remnawave: 3000, legacy 3x-ui: 2053)."""
+        from meridian.config import REMNAWAVE_PANEL_PORT
 
-    # Dynamic inter-step state (PanelClient, credentials, UUIDs, etc.)
+        return REMNAWAVE_PANEL_PORT
+
+    # Dynamic inter-step state
     _state: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
@@ -86,25 +95,43 @@ class ProvisionContext:
     def get(self, key: str, default: Any = None) -> Any:
         return self._state.get(key, default)
 
-    # --- Typed accessors for key inter-step state ---
-    # These document the implicit schema and catch typos at development time.
+    # --- Typed accessors for inter-step state ---
 
     @property
-    def panel(self) -> PanelClient | None:
-        """Logged-in PanelClient, set by LoginToPanel."""
+    def panel_api(self) -> MeridianPanel | None:
+        """Authenticated MeridianPanel client, set after panel setup."""
+        return self._state.get("panel_api")
+
+    @panel_api.setter
+    def panel_api(self, value: MeridianPanel) -> None:
+        self._state["panel_api"] = value
+
+    @property
+    def cluster(self) -> ClusterConfig | None:
+        """ClusterConfig being built during deployment."""
+        return self._state.get("cluster")
+
+    @cluster.setter
+    def cluster(self, value: ClusterConfig) -> None:
+        self._state["cluster"] = value
+
+    # Legacy typed accessors (kept for backward compat during migration)
+    @property
+    def panel(self) -> Any:
+        """Legacy: PanelClient for 3x-ui. Use panel_api for Remnawave."""
         return self._state.get("panel")
 
     @panel.setter
-    def panel(self, value: PanelClient) -> None:
+    def panel(self, value: Any) -> None:
         self._state["panel"] = value
 
     @property
-    def credentials(self) -> ServerCredentials | None:
-        """ServerCredentials, set by ConfigurePanel."""
+    def credentials(self) -> Any:
+        """Legacy: ServerCredentials. Use cluster for 4.0."""
         return self._state.get("credentials")
 
     @credentials.setter
-    def credentials(self, value: ServerCredentials) -> None:
+    def credentials(self, value: Any) -> None:
         self._state["credentials"] = value
 
 
@@ -123,7 +150,8 @@ class Step(TypingProtocol):
     ``Provisioner.run()`` is similarly ``Any``-typed.
     """
 
-    name: str
+    @property
+    def name(self) -> str: ...
 
     def run(self, conn: ServerConnection, ctx: Any) -> StepResult: ...
 
@@ -131,10 +159,18 @@ class Step(TypingProtocol):
 class Provisioner:
     """Runs a list of steps with Rich progress output."""
 
-    def __init__(self, steps: list[Step]) -> None:
-        self.steps = steps
+    def __init__(self, steps: Sequence[Step]) -> None:
+        self.steps = list(steps)
 
-    def run(self, conn: ServerConnection, ctx: Any) -> list[StepResult]:
+    def run(
+        self,
+        conn: ServerConnection,
+        ctx: Any,
+        *,
+        reporter: Reporter | None = None,
+        operation: OperationContext | None = None,
+        render: bool = True,
+    ) -> list[StepResult]:
         """Execute all steps, collecting results. Shows Rich spinner per step.
 
         Accepts any context type (ProvisionContext, RelayContext, etc.)
@@ -148,7 +184,18 @@ class Provisioner:
         for i, step in enumerate(self.steps):
             start = time.monotonic()
             prefix = f"[{i + 1}/{total}]"
-            with Status(f"  [cyan]{prefix} {step.name}[/cyan]", console=console, spinner="dots"):
+            _report_step_event(
+                reporter,
+                operation,
+                "provision.step.started",
+                step.name,
+                index=i + 1,
+                total=total,
+            )
+            if render:
+                with Status(f"  [cyan]{prefix} {step.name}[/cyan]", console=console, spinner="dots"):
+                    result = step.run(conn, ctx)
+            else:
                 result = step.run(conn, ctx)
             elapsed_ms = int((time.monotonic() - start) * 1000)
             result.duration_ms = elapsed_ms
@@ -158,16 +205,83 @@ class Provisioner:
                 ctx.results.append(result)
 
             if result.status == "failed":
+                _report_step_event(
+                    reporter,
+                    operation,
+                    "provision.step.failed",
+                    result.name,
+                    level="error",
+                    index=i + 1,
+                    total=total,
+                    result=result,
+                )
                 detail = f" ({result.detail})" if result.detail else ""
-                console.print(f"  [red bold]\u2717[/red bold] {result.name}{detail}")
+                if render:
+                    console.print(f"  [red bold]\u2717[/red bold] {result.name}{detail}")
                 break
             elif result.status == "skipped":
+                _report_step_event(
+                    reporter,
+                    operation,
+                    "provision.step.completed",
+                    result.name,
+                    index=i + 1,
+                    total=total,
+                    result=result,
+                )
                 detail = f" ({result.detail})" if result.detail else ""
-                console.print(f"  [dim]\u2013 {result.name}{detail}[/dim]")
+                if render:
+                    console.print(f"  [dim]\u2013 {result.name}{detail}[/dim]")
             else:
+                _report_step_event(
+                    reporter,
+                    operation,
+                    "provision.step.completed",
+                    result.name,
+                    index=i + 1,
+                    total=total,
+                    result=result,
+                )
                 # ok or changed
                 marker = "\u2713"
                 detail = f" [dim]({result.detail})[/dim]" if result.detail else ""
-                console.print(f"  [green]{marker}[/green] {result.name}{detail}")
+                if render:
+                    console.print(f"  [green]{marker}[/green] {result.name}{detail}")
 
         return results
+
+
+def _report_step_event(
+    reporter: Reporter | None,
+    operation: OperationContext | None,
+    event_type: CoreEventType,
+    step_name: str,
+    *,
+    level: EventLevel = "info",
+    index: int,
+    total: int,
+    result: StepResult | None = None,
+) -> None:
+    """Emit a provisioning event when a reporter is attached."""
+    if reporter is None or operation is None:
+        return
+    from meridian.core.reporters import emit_event
+
+    data: dict[str, object] = {"step": step_name, "index": index, "total": total}
+    if result is not None:
+        data.update(
+            {
+                "status": result.status,
+                "detail": result.detail,
+                "duration_ms": result.duration_ms,
+            }
+        )
+    emit_event(
+        reporter,
+        operation,
+        event_type,
+        level=level,
+        phase="provision",
+        message=step_name,
+        data=data,
+    )

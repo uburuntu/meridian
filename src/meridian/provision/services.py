@@ -13,7 +13,7 @@ import textwrap
 import time
 from typing import TypeVar
 
-from meridian.config import ACME_SERVER, DEFAULT_FINGERPRINT
+from meridian.config import ACME_SERVER
 from meridian.provision.steps import ProvisionContext, StepResult
 from meridian.ssh import ServerConnection
 
@@ -330,7 +330,7 @@ def _render_nginx_server_block(
             ssl_protocols TLSv1.2 TLSv1.3;
     {extra_locations}
 
-            # --- 3x-ui Panel (management interface on secret path) ---
+            # --- Remnawave Admin UI (management interface on secret path) ---
             location /{panel_web_base_path}/ {{
                 proxy_pass http://127.0.0.1:{panel_internal_port};
                 proxy_http_version 1.1;
@@ -379,144 +379,6 @@ def _render_nginx_server_block(
                 {http_default}
             }}
         }}
-    """)
-
-
-# ---------------------------------------------------------------------------
-# Stats update script template
-# ---------------------------------------------------------------------------
-
-
-def _render_stats_script(panel_internal_port: int) -> str:
-    """Render the stats update Python script."""
-    from meridian.protocols import INBOUND_TYPES
-
-    prefixes_repr = repr({it.email_prefix: key for key, it in INBOUND_TYPES.items()})
-    return textwrap.dedent(f"""\
-        #!/usr/bin/env python3
-        \"\"\"Fetch per-client traffic stats from 3x-ui and write per-client JSON files.
-
-        Each client gets a stats file named by their Reality UUID -- the same UUID
-        that appears in their VLESS connection URL. Only someone with the URL can
-        find their stats file. Runs via cron every 5 minutes.
-        \"\"\"
-        import json, urllib.request, urllib.parse, http.cookiejar, os, time, sys
-
-        CREDS = '/etc/meridian/proxy.yml'
-        STATS_DIR = '/var/www/private/stats'
-        PREFIXES = {prefixes_repr}
-
-        def parse_creds():
-            \"\"\"Parse v2 nested YAML credentials.\"\"\"
-            import json as _json
-            creds = {{}}
-            with open(CREDS) as f:
-                content = f.read()
-            try:
-                import importlib
-                _yaml = importlib.import_module('yaml')
-                data = _yaml.safe_load(content)
-                if isinstance(data, dict):
-                    panel = data.get('panel', {{}})
-                    creds['panel_username'] = panel.get('username', '')
-                    creds['panel_password'] = panel.get('password', '')
-                    creds['panel_web_base_path'] = panel.get('web_base_path', '')
-            except ImportError:
-                with open(CREDS) as f:
-                    for line in f:
-                        line = line.strip()
-                        if ':' in line and not line.startswith('#') and not line.startswith('-'):
-                            key, val = line.split(':', 1)
-                            creds[key.strip()] = val.strip().strip('"')
-            return creds
-
-        def main():
-            creds = parse_creds()
-            wbp = creds.get('panel_web_base_path', '')
-            base = f"http://127.0.0.1:{panel_internal_port}/{{wbp}}"
-
-            cj = http.cookiejar.CookieJar()
-            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
-            login_data = "username={{0}}&password={{1}}".format(
-                urllib.parse.quote(creds.get('panel_username', ''), safe=''),
-                urllib.parse.quote(creds.get('panel_password', ''), safe=''),
-            ).encode()
-            try:
-                opener.open(urllib.request.Request(f"{{base}}/login", data=login_data, method='POST'))
-            except Exception:
-                sys.exit(1)
-
-            try:
-                resp = opener.open(f"{{base}}/panel/api/inbounds/list")
-                inbounds = json.load(resp)
-            except Exception:
-                sys.exit(1)
-
-            if not inbounds.get('success'):
-                sys.exit(1)
-
-            clients = {{}}
-            for inbound in inbounds.get('obj', []):
-                settings = json.loads(inbound['settings'])
-                for client in settings.get('clients', []):
-                    email = client['email']
-                    uuid = client['id']
-                    for prefix, proto_key in PREFIXES.items():
-                        if email.startswith(prefix):
-                            name = email[len(prefix):]
-                            clients.setdefault(name, {{}})
-                            if proto_key == 'reality':
-                                clients[name]['reality_uuid'] = uuid
-                            clients[name].setdefault('emails', []).append(email)
-                            break
-
-            os.makedirs(STATS_DIR, exist_ok=True)
-
-            active_uuids = set()
-            for name, info in clients.items():
-                uuid = info.get('reality_uuid')
-                if not uuid:
-                    continue
-                active_uuids.add(uuid)
-
-                total_up = 0
-                total_down = 0
-                last_online = 0
-
-                for email in info.get('emails', []):
-                    try:
-                        resp = opener.open(f"{{base}}/panel/api/inbounds/getClientTraffics/{{email}}")
-                        data = json.load(resp)
-                        if data.get('success') and data.get('obj'):
-                            obj = data['obj']
-                            total_up += obj.get('up', 0)
-                            total_down += obj.get('down', 0)
-                            lo = obj.get('lastOnline', 0)
-                            if lo > last_online:
-                                last_online = lo
-                    except Exception:
-                        pass
-
-                stats = {{
-                    'up': total_up,
-                    'down': total_down,
-                    'total': total_up + total_down,
-                    'lastOnline': last_online,
-                    'updated': int(time.time() * 1000)
-                }}
-                path = os.path.join(STATS_DIR, f"{{uuid}}.json")
-                with open(path, 'w') as f:
-                    json.dump(stats, f)
-                os.chmod(path, 0o644)
-
-            for fname in os.listdir(STATS_DIR):
-                if fname.endswith('.json'):
-                    uid = fname[:-5]
-                    if uid not in active_uuids:
-                        os.remove(os.path.join(STATS_DIR, fname))
-
-        if __name__ == '__main__':
-            main()
     """)
 
 
@@ -627,15 +489,18 @@ class InstallNginx:
                 f"https://nginx.org/packages/{distro_name} "
                 f"{distro_codename} nginx"
             )
-            conn.run(
-                f"echo {shlex.quote(repo_line)} > /etc/apt/sources.list.d/nginx-official.list",
+            conn.put_text(
+                "/etc/apt/sources.list.d/nginx-official.list",
+                repo_line + "\n",
+                mode="644",
                 timeout=15,
             )
 
             # Pin official nginx packages higher to override distro
-            conn.run(
-                "printf 'Package: nginx*\\nPin: origin nginx.org\\n"
-                "Pin-Priority: 900\\n' > /etc/apt/preferences.d/99nginx",
+            conn.put_text(
+                "/etc/apt/preferences.d/99nginx",
+                "Package: nginx*\nPin: origin nginx.org\nPin-Priority: 900\n",
+                mode="644",
                 timeout=15,
             )
 
@@ -833,10 +698,12 @@ class ConfigureNginx:
             server_ip=server_ip,
             domain=self.domain,
         )
-        q_stream = shlex.quote(stream_config)
-        result = conn.run(
-            f"printf '%s' {q_stream} > /etc/nginx/stream.d/meridian.conf",
+        result = conn.put_text(
+            "/etc/nginx/stream.d/meridian.conf",
+            stream_config,
+            mode="644",
             timeout=15,
+            operation_name="write nginx stream config",
         )
         if result.returncode != 0:
             return StepResult(
@@ -868,10 +735,12 @@ class ConfigureNginx:
                 xhttp_path=xhttp_path,
                 xhttp_internal_port=xhttp_internal_port,
             )
-        q_http = shlex.quote(http_config)
-        result = conn.run(
-            f"printf '%s' {q_http} > /etc/nginx/conf.d/meridian-http.conf",
+        result = conn.put_text(
+            "/etc/nginx/conf.d/meridian-http.conf",
+            http_config,
+            mode="644",
             timeout=15,
+            operation_name="write nginx http config",
         )
         if result.returncode != 0:
             return StepResult(
@@ -883,11 +752,16 @@ class ConfigureNginx:
         # -- Ensure nginx.conf has a stream block --
         check = conn.run("grep -q 'stream {' /etc/nginx/nginx.conf", timeout=15)
         if check.returncode != 0:
-            stream_block = "\\nstream {\\n    include /etc/nginx/stream.d/*.conf;\\n}\\n"
-            conn.run(
-                f"printf '{stream_block}' >> /etc/nginx/nginx.conf",
-                timeout=15,
-            )
+            current = conn.get_text("/etc/nginx/nginx.conf", timeout=15)
+            if current.returncode == 0:
+                stream_block = "\nstream {\n    include /etc/nginx/stream.d/*.conf;\n}\n"
+                conn.put_text(
+                    "/etc/nginx/nginx.conf",
+                    current.stdout.rstrip() + stream_block,
+                    mode="644",
+                    timeout=15,
+                    operation_name="append nginx stream block",
+                )
 
         # -- Remove default site (conflicts with our port 80 listener) --
         conn.run("rm -f /etc/nginx/sites-enabled/default", timeout=15)
@@ -902,13 +776,16 @@ class ConfigureNginx:
             )
 
         # -- Ensure nginx restarts on failure --
-        conn.run(
-            "mkdir -p /etc/systemd/system/nginx.service.d && "
-            "printf '[Service]\\nRestart=on-failure\\nRestartSec=5\\n' "
-            "> /etc/systemd/system/nginx.service.d/restart.conf && "
-            "systemctl daemon-reload",
+        result = conn.put_text(
+            "/etc/systemd/system/nginx.service.d/restart.conf",
+            "[Service]\nRestart=on-failure\nRestartSec=5\n",
+            mode="644",
+            create_parent=True,
             timeout=15,
+            operation_name="write nginx restart override",
         )
+        if result.returncode == 0:
+            conn.run("systemctl daemon-reload", timeout=15)
 
         # -- Start/enable/reload nginx --
         conn.run("systemctl enable nginx", timeout=15)
@@ -1074,8 +951,9 @@ class DeployPWAAssets:
     """Deploy shared PWA static assets to /var/www/private/pwa/.
 
     These assets (JS, CSS, service worker, icon) are identical for all
-    clients and deployed once.  Per-client files (config.json, manifest,
-    index.html, sub.txt) are deployed by DeployConnectionPage.
+    clients and deployed once. Per-client connection pages (index.html,
+    config.json, manifest, sub.txt) are generated by ``meridian client
+    add`` / ``meridian client show`` via the panel API + ``render.py``.
     """
 
     name = "Deploy PWA assets"
@@ -1101,193 +979,6 @@ class DeployPWAAssets:
             name=self.name,
             status="changed",
             detail="Shared PWA assets deployed to /var/www/private/pwa/",
-        )
-
-
-# ---------------------------------------------------------------------------
-# DeployConnectionPage
-# ---------------------------------------------------------------------------
-
-
-class DeployConnectionPage:
-    """Deploy the connection info HTML page and stats infrastructure.
-
-    Generates QR codes on the server using qrencode, deploys the stats update
-    script with a cron job, and renders+uploads the connection-info HTML page
-    for the default client.
-
-    Reads credentials and config from ProvisionContext (populated by
-    ConfigurePanel and earlier steps).
-    """
-
-    name = "Deploy connection page"
-
-    def __init__(
-        self,
-        server_ip: str,
-        fingerprint: str = DEFAULT_FINGERPRINT,
-    ) -> None:
-        self.server_ip = server_ip
-        self.fingerprint = fingerprint
-
-    def run(self, conn: ServerConnection, ctx: ProvisionContext) -> StepResult:
-        # Read credentials from context (populated by ConfigurePanel)
-        creds = ctx.credentials
-        if creds is None:
-            return StepResult(
-                name=self.name,
-                status="failed",
-                detail="No credentials available — ConfigurePanel may have failed",
-            )
-        sni = creds.server.sni or ctx.sni
-        domain = creds.server.domain or ctx.domain
-        reality_uuid = creds.reality.uuid or ""
-        reality_public_key = creds.reality.public_key or ""
-        reality_short_id = creds.reality.short_id or ""
-        wss_uuid = creds.wss.uuid or ""
-        ws_path = creds.wss.ws_path or ""
-        info_page_path = creds.panel.info_page_path or ctx.get("info_page_path", "")
-        panel_internal_port = creds.panel.port or ctx.panel_port
-        first_client_name = ctx.get("first_client_name", "default") or "default"
-        xhttp_enabled = ctx.xhttp_enabled
-        xhttp_path = creds.xhttp.xhttp_path or ctx.get("xhttp_path", "")
-
-        if not reality_uuid:
-            return StepResult(
-                name=self.name,
-                status="failed",
-                detail="No Reality UUID found — ConfigurePanel may have failed",
-            )
-
-        # Build connection URLs
-        encryption = creds.reality.encryption_key or "none"
-        reality_url = (
-            f"vless://{reality_uuid}@{self.server_ip}:443"
-            f"?encryption={encryption}&flow=xtls-rprx-vision"
-            f"&security=reality&sni={sni}&fp={self.fingerprint}"
-            f"&pbk={reality_public_key}&sid={reality_short_id}"
-            f"&type=tcp&headerType=none#VLESS-Reality"
-        )
-
-        wss_url = ""
-        if domain and wss_uuid and ws_path:
-            wss_url = (
-                f"vless://{wss_uuid}@{domain}:443"
-                f"?encryption=none&security=tls&sni={domain}"
-                f"&type=ws&host={domain}&path=%2F{ws_path}#VLESS-WSS-CDN"
-            )
-
-        xhttp_url = ""
-        if xhttp_enabled and xhttp_path:
-            # Use domain if available, otherwise IP
-            xhttp_host = domain or self.server_ip
-            xhttp_url = (
-                f"vless://{reality_uuid}@{xhttp_host}:443"
-                f"?encryption=none&security=tls&sni={xhttp_host}&fp={self.fingerprint}"
-                f"&type=xhttp&path=%2F{xhttp_path}#VLESS-XHTTP"
-            )
-
-        # Generate QR codes as base64 PNG (pure Python, no qrencode binary needed)
-        from meridian.urls import generate_qr_base64
-
-        reality_qr_b64 = generate_qr_base64(reality_url)
-        wss_qr_b64 = generate_qr_base64(wss_url) if wss_url else ""
-        xhttp_qr_b64 = generate_qr_base64(xhttp_url) if xhttp_url else ""
-
-        # Store QR data in context for the HTML template
-        ctx["reality_qr_b64"] = reality_qr_b64
-        ctx["wss_qr_b64"] = wss_qr_b64
-        ctx["xhttp_qr_b64"] = xhttp_qr_b64
-        ctx["reality_url"] = reality_url
-        ctx["wss_url"] = wss_url
-        ctx["xhttp_url"] = xhttp_url
-
-        # Deploy stats update script
-        stats_script = _render_stats_script(panel_internal_port)
-        q_script = shlex.quote(stats_script)
-        conn.run("mkdir -p /etc/meridian", timeout=15)
-        conn.run(f"printf '%s' {q_script} > /etc/meridian/update-stats.py", timeout=15)
-        conn.run("chmod 700 /etc/meridian/update-stats.py", timeout=15)
-
-        # Create stats directory
-        conn.run(
-            "mkdir -p /var/www/private/stats && chown www-data:www-data /var/www/private/stats",
-            timeout=15,
-        )
-
-        # Run stats update once
-        conn.run("python3 /etc/meridian/update-stats.py", timeout=15)
-
-        # Add cron job (idempotent via crontab manipulation), with syslog logging
-        cron_job = "*/5 * * * * python3 /etc/meridian/update-stats.py 2>&1 | logger -t meridian-stats"
-        q_cron = shlex.quote(cron_job)
-        conn.run(
-            f"(crontab -l 2>/dev/null | grep -v 'update-stats.py'; echo {q_cron}) | crontab -",
-            timeout=15,
-        )
-
-        # Deploy health watchdog cron (checks Xray and nginx every 5 min)
-        watchdog_script = (
-            "#!/bin/sh\n"
-            "# Meridian service health watchdog — restarts crashed services\n"
-            "docker exec 3x-ui pgrep -f xray >/dev/null 2>&1 || "
-            '{ logger -t meridian-health "Xray not running, restarting 3x-ui"; '
-            "docker restart 3x-ui; }\n"
-            "systemctl is-active --quiet nginx || "
-            '{ logger -t meridian-health "nginx not running, restarting"; '
-            "systemctl restart nginx; }\n"
-        )
-        q_watchdog = shlex.quote(watchdog_script)
-        conn.run(f"printf '%s' {q_watchdog} > /etc/meridian/health-check.sh", timeout=15)
-        conn.run("chmod 700 /etc/meridian/health-check.sh", timeout=15)
-
-        watchdog_cron = "*/5 * * * * /etc/meridian/health-check.sh 2>&1 | logger -t meridian-health"
-        q_wc = shlex.quote(watchdog_cron)
-        conn.run(
-            f"(crontab -l 2>/dev/null | grep -v 'health-check.sh'; echo {q_wc}) | crontab -",
-            timeout=15,
-        )
-
-        # Build ProtocolURL list with QR data for connection page
-        from meridian.models import ProtocolURL as _PU
-
-        page_urls: list[_PU] = [_PU(key="reality", label="Primary", url=reality_url, qr_b64=reality_qr_b64)]
-        if xhttp_url:
-            page_urls.append(_PU(key="xhttp", label="XHTTP", url=xhttp_url, qr_b64=xhttp_qr_b64))
-        if wss_url:
-            page_urls.append(_PU(key="wss", label="CDN Backup", url=wss_url, qr_b64=wss_qr_b64))
-
-        # Generate and upload PWA per-client files
-        from meridian.pwa import generate_client_files, upload_client_files
-
-        host = domain or self.server_ip
-        page_url = f"https://{host}/{info_page_path}/{reality_uuid}/"
-
-        client_files = generate_client_files(
-            page_urls,
-            server_ip=self.server_ip,
-            domain=domain,
-            client_name=first_client_name,
-            server_name=creds.branding.server_name,
-            server_icon=creds.branding.icon,
-            color=creds.branding.color,
-            page_url=page_url,
-        )
-
-        upload_error = upload_client_files(conn, reality_uuid, client_files)
-        if upload_error:
-            return StepResult(
-                name=self.name,
-                status="failed",
-                detail=upload_error,
-            )
-
-        ctx["hosted_page_url"] = page_url
-
-        return StepResult(
-            name=self.name,
-            status="changed",
-            detail=f"Connection page live at {page_url}",
         )
 
 

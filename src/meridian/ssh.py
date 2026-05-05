@@ -2,12 +2,72 @@
 
 from __future__ import annotations
 
+import logging
+import re
 import shlex
 import shutil
 import subprocess
+import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Iterable
 
 from meridian.console import err_console, info, ok, warn
+
+logger = logging.getLogger("meridian.ssh")
+
+# Patterns to redact from debug log output (env var assignments with secrets)
+_SECRET_PATTERNS = re.compile(
+    r"((?:"
+    r"SECRET_KEY|PASSWORD|PASS|TOKEN|API_TOKEN|REMNAWAVE_API_TOKEN|"
+    r"JWT_AUTH_SECRET|JWT_API_TOKENS_SECRET|POSTGRES_PASSWORD|METRICS_PASS|"
+    r"DATABASE_URL"
+    r")\s*=\s*)\S+",
+    re.IGNORECASE,
+)
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _redact_command(cmd: str) -> str:
+    """Mask secret values in SSH commands for safe debug logging."""
+    return _SECRET_PATTERNS.sub(r"\1***", cmd[:200])
+
+
+@dataclass
+class CommandResult:
+    """Result of a command executed through ServerConnection.
+
+    Keeps the ``subprocess.CompletedProcess`` surface used throughout the
+    codebase while carrying the extra metadata needed for diagnostics.
+    """
+
+    args: Any
+    returncode: int
+    stdout: str = ""
+    stderr: str = ""
+    duration_ms: int = 0
+    attempts: int = 1
+    timed_out: bool = False
+    sudo: bool = False
+    redacted_command: str = ""
+    operation_name: str = ""
+
+    def check_returncode(self) -> None:
+        if self.returncode != 0:
+            raise subprocess.CalledProcessError(
+                self.returncode,
+                self.args,
+                output=self.stdout,
+                stderr=self.stderr,
+            )
+
+
+def _stringify_output(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return value
 
 
 class SSHError(Exception):
@@ -32,6 +92,25 @@ SSH_OPTS: list[str] = [
     "-o",
     "StrictHostKeyChecking=yes",
 ]
+
+# SSH multiplexing: reuse a single TCP connection for multiple commands
+# to the same host. ControlPersist=300 keeps the master alive for 5min
+# after the last command, so sequential provisioner steps don't pay
+# the TCP+auth handshake each time.
+SSH_MULTIPLEX_OPTS: list[str] = [
+    "-o",
+    "ControlMaster=auto",
+    "-o",
+    "ControlPath=~/.meridian/ssh/%r@%h:%p",
+    "-o",
+    "ControlPersist=300",
+]
+
+
+def ensure_multiplex_dir() -> None:
+    """Create the SSH control socket directory if it doesn't exist."""
+    sock_dir = Path.home() / ".meridian" / "ssh"
+    sock_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
 
 def scp_host(ip: str) -> str:
@@ -166,16 +245,41 @@ class ServerConnection:
     Passwordless sudo is required (standard on AWS/GCP/Azure/DO).
     """
 
-    def __init__(self, ip: str, user: str = "root", local_mode: bool = False, port: int = 22) -> None:
+    def __init__(
+        self,
+        ip: str,
+        user: str = "root",
+        local_mode: bool = False,
+        port: int = 22,
+        multiplex: bool = True,
+    ) -> None:
         self.ip = ip
         self.user = user
         self.port = port
         self.local_mode = local_mode
         self.needs_sudo = False  # on-server non-root — run commands via sudo
+        self.multiplex = multiplex
+        if multiplex and not local_mode:
+            ensure_multiplex_dir()
+
+    def __enter__(self) -> ServerConnection:
+        # Several call sites use ``with ServerConnection(...) as conn:``. The
+        # SSH ControlMaster (multiplex) layer manages its own connection
+        # lifetime, so __enter__/__exit__ are no-ops; defining them prevents
+        # AttributeError that was silently swallowed by surrounding try/except
+        # in commands/client.py and commands/recover.py.
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        # Multiplexed connections persist for SSH_MULTIPLEX_OPTS' lifetime;
+        # nothing to release here.
+        return None
 
     @property
     def _ssh_opts(self) -> list[str]:
         opts = list(SSH_OPTS)
+        if self.multiplex and not self.local_mode:
+            opts.extend(SSH_MULTIPLEX_OPTS)
         if self.port != 22:
             opts.extend(["-p", str(self.port)])
         return opts
@@ -184,6 +288,8 @@ class ServerConnection:
     def _scp_opts(self) -> list[str]:
         """SSH options for SCP commands (uses -P for port, not -p)."""
         opts = list(SSH_OPTS)
+        if self.multiplex and not self.local_mode:
+            opts.extend(SSH_MULTIPLEX_OPTS)
         if self.port != 22:
             opts.extend(["-P", str(self.port)])
         return opts
@@ -195,62 +301,167 @@ class ServerConnection:
             return f"[{self.ip}]"
         return self.ip
 
-    def run(self, command: str, timeout: int = 30, *, sudo: bool | None = None) -> subprocess.CompletedProcess[str]:
+    def _prepare_command(
+        self,
+        command: str,
+        *,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> str:
+        """Apply cwd/env wrappers to a shell command."""
+        parts: list[str] = []
+        if cwd:
+            parts.append(f"cd {shlex.quote(cwd)}")
+        if env:
+            assignments = []
+            for key, value in env.items():
+                if not _ENV_KEY_RE.match(key):
+                    raise ValueError(f"Invalid environment variable name: {key!r}")
+                assignments.append(f"{key}={shlex.quote(str(value))}")
+            parts.append("export " + " ".join(assignments))
+        parts.append(command)
+        return " && ".join(parts)
+
+    def _completed_to_result(
+        self,
+        completed: subprocess.CompletedProcess[Any],
+        *,
+        duration_ms: int,
+        attempts: int,
+        timed_out: bool,
+        sudo: bool,
+        redacted_command: str,
+        operation_name: str,
+    ) -> CommandResult:
+        return CommandResult(
+            args=completed.args,
+            returncode=completed.returncode,
+            stdout=_stringify_output(completed.stdout),
+            stderr=_stringify_output(completed.stderr),
+            duration_ms=duration_ms,
+            attempts=attempts,
+            timed_out=timed_out,
+            sudo=sudo,
+            redacted_command=redacted_command,
+            operation_name=operation_name,
+        )
+
+    def run(
+        self,
+        command: str,
+        timeout: int = 30,
+        *,
+        sudo: bool | None = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        retries: int = 1,
+        retry_delay: float = 0.0,
+        ok_codes: Iterable[int] = (0,),
+        sensitive: bool = False,
+        input: str | None = None,
+        operation_name: str = "",
+    ) -> CommandResult:
         """Run a command on the remote server via SSH.
 
         Args:
             command: Shell command to execute.
             timeout: Timeout in seconds.
             sudo: Force sudo wrapping. None = auto (sudo when user != root).
+            cwd: Optional working directory on the target.
+            env: Environment variables to prefix before the command.
+            retries: Number of attempts before returning the last result.
+            retry_delay: Seconds to sleep between failed attempts.
+            ok_codes: Return codes that count as success for retry purposes.
+            sensitive: Hide command content from logs/result metadata.
+            input: Optional stdin text for the process.
+            operation_name: Human-readable operation label for diagnostics.
 
-        Returns a synthetic CompletedProcess with returncode=124 if the
-        command times out (matching GNU ``timeout`` convention), instead
-        of letting ``subprocess.TimeoutExpired`` crash the caller.
+        Returns a CommandResult with returncode=124 if the command times out
+        (matching GNU ``timeout`` convention), instead of letting
+        ``subprocess.TimeoutExpired`` crash the caller.
         """
-        use_sudo = sudo if sudo is not None else (self.user != "root")
+        if retries < 1:
+            raise ValueError("retries must be >= 1")
 
-        if self.local_mode:
-            if self.needs_sudo or use_sudo:
-                cmd = ["sudo", "-n", "bash", "-c", command]
+        command = self._prepare_command(command, cwd=cwd, env=env)
+        use_sudo = sudo if sudo is not None else (self.user != "root")
+        redacted = "<sensitive command>" if sensitive else _redact_command(command)
+        logger.debug("SSH %s@%s: %s", self.user, self.ip, redacted)
+
+        ok_code_set = set(ok_codes)
+        last: CommandResult | None = None
+
+        for attempt in range(1, retries + 1):
+            started = time.monotonic()
+            timed_out = False
+
+            if self.local_mode:
+                if self.needs_sudo or use_sudo:
+                    cmd = ["sudo", "-n", "bash", "-c", command]
+                else:
+                    cmd = ["bash", "-c", command]
+                try:
+                    completed = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout,
+                        stdin=subprocess.DEVNULL if input is None else None,
+                        input=input,
+                    )
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    completed = subprocess.CompletedProcess(
+                        args=cmd,
+                        returncode=124,
+                        stdout="",
+                        stderr=f"Command timed out after {timeout}s",
+                    )
             else:
-                cmd = ["bash", "-c", command]
-            try:
-                return subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                    stdin=subprocess.DEVNULL,
-                )
-            except subprocess.TimeoutExpired:
-                return subprocess.CompletedProcess(
-                    args=cmd,
-                    returncode=124,
-                    stdout="",
-                    stderr=f"Command timed out after {timeout}s",
-                )
-        # Remote SSH
-        if use_sudo and not self.needs_sudo:
-            # Non-root remote user: wrap in sudo via SSH
-            # SSH passes the command string to the remote shell, which handles
-            # the first layer of quoting. sudo -n sh -c adds a second layer.
-            command = f"sudo -n sh -c {shlex.quote(command)}"
-        cmd = ["ssh", *self._ssh_opts, f"{self.user}@{self.ip}", command]
-        try:
-            return subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                stdin=subprocess.DEVNULL,
+                remote_command = command
+                if use_sudo and not self.needs_sudo:
+                    # Non-root remote user: wrap in sudo via SSH. SSH passes
+                    # the command string to the remote shell, which handles the
+                    # first layer of quoting. sudo -n sh -c adds a second layer.
+                    remote_command = f"sudo -n sh -c {shlex.quote(remote_command)}"
+                cmd = ["ssh", *self._ssh_opts, f"{self.user}@{self.ip}", remote_command]
+                try:
+                    completed = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout,
+                        stdin=subprocess.DEVNULL if input is None else None,
+                        input=input,
+                    )
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    completed = subprocess.CompletedProcess(
+                        args=cmd,
+                        returncode=124,
+                        stdout="",
+                        stderr=f"Command timed out after {timeout}s",
+                    )
+
+            duration_ms = int((time.monotonic() - started) * 1000)
+            result = self._completed_to_result(
+                completed,
+                duration_ms=duration_ms,
+                attempts=attempt,
+                timed_out=timed_out,
+                sudo=bool(self.needs_sudo or use_sudo),
+                redacted_command=redacted,
+                operation_name=operation_name,
             )
-        except subprocess.TimeoutExpired:
-            return subprocess.CompletedProcess(
-                args=cmd,
-                returncode=124,
-                stdout="",
-                stderr=f"Command timed out after {timeout}s",
-            )
+            logger.debug("SSH rc=%d attempt=%d/%d", result.returncode, attempt, retries)
+            last = result
+            if result.returncode in ok_code_set:
+                return result
+            if attempt < retries and retry_delay > 0:
+                time.sleep(retry_delay)
+
+        assert last is not None
+        return last
 
     def check_ssh(self) -> None:
         """Verify SSH connectivity. Exits on failure.
@@ -303,23 +514,37 @@ class ServerConnection:
     def detect_local_mode(self) -> bool:
         """Check if we're running on the target server itself.
 
-        Detection is file-based only: /etc/meridian/proxy.yml readable (root)
-        or /etc/meridian/ directory exists (non-root on deployed server).
+        Detection is file-based only: /etc/meridian/node.yml (v4) or
+        /etc/meridian/proxy.yml (v3 compat) readable (root), or
+        /etc/meridian/ directory exists but files not readable (non-root).
 
         Does NOT use public IP matching — that produces false positives when
         the user is connected to the server via TUN mode (VPN), since their
         outbound IP matches the server IP.
         """
-        from meridian.config import SERVER_CREDS_DIR
+        from meridian.config import SERVER_CREDS_DIR, SERVER_NODE_CONFIG
 
+        file_check_failed = False
+
+        # v4: node.yml
+        try:
+            if SERVER_NODE_CONFIG.is_file() and SERVER_NODE_CONFIG.stat().st_size > 0:
+                self.local_mode = True
+                return True
+        except (PermissionError, OSError):
+            file_check_failed = True
+
+        # v3 compat: proxy.yml
         proxy = SERVER_CREDS_DIR / "proxy.yml"
         try:
             if proxy.is_file() and proxy.stat().st_size > 0:
                 self.local_mode = True
                 return True
         except (PermissionError, OSError):
-            # Can't stat the file — check if /etc/meridian/ dir exists
-            # (non-root on a deployed server)
+            file_check_failed = True
+
+        # Dir exists but files not readable → non-root on deployed server
+        if file_check_failed:
             try:
                 if SERVER_CREDS_DIR.is_dir():
                     warn("Running as non-root on the server. Using sudo for commands.")
@@ -328,7 +553,6 @@ class ServerConnection:
                     return True
             except (PermissionError, OSError):
                 pass
-            return False
 
         return False
 
@@ -356,7 +580,7 @@ class ServerConnection:
             return False
 
         try:
-            result = subprocess.run(
+            scp_result = subprocess.run(
                 [
                     "scp",
                     *self._scp_opts,
@@ -368,85 +592,299 @@ class ServerConnection:
                 timeout=30,
                 stdin=subprocess.DEVNULL,
             )
-            if result.returncode == 0:
+            if scp_result.returncode == 0:
                 (local_creds_dir / "proxy.yml").chmod(0o600)
                 return True
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
         return False
 
-    def write_file(self, local_path: Path, remote_path: str) -> bool:
-        """Write a local file to the server, using sudo for non-root users.
+    def _synthetic_result(
+        self,
+        *,
+        args: Any,
+        returncode: int,
+        stdout: str = "",
+        stderr: str = "",
+        started: float | None = None,
+        timed_out: bool = False,
+        sudo: bool = False,
+        redacted_command: str = "",
+        operation_name: str = "",
+    ) -> CommandResult:
+        duration_ms = int((time.monotonic() - started) * 1000) if started is not None else 0
+        return CommandResult(
+            args=args,
+            returncode=returncode,
+            stdout=stdout,
+            stderr=stderr,
+            duration_ms=duration_ms,
+            timed_out=timed_out,
+            sudo=sudo,
+            redacted_command=redacted_command,
+            operation_name=operation_name,
+        )
 
-        SCP can't write to root-owned directories (like /etc/meridian/) as a
-        non-root user.  This method uses SSH + sudo tee instead.
-        For root, plain SCP is used.
-        """
+    def _write_bytes_direct(
+        self,
+        path: str,
+        data: bytes,
+        *,
+        sudo: bool,
+        timeout: int,
+        sensitive: bool,
+        operation_name: str,
+    ) -> CommandResult:
+        """Write bytes to one target path without chmod/chown/mv."""
+        q_path = shlex.quote(path)
+        started = time.monotonic()
+        if sensitive:
+            redacted = f"write {len(data)} bytes to <sensitive path>"
+        else:
+            redacted = f"write {len(data)} bytes to {q_path}"
+        logger.debug("SSH %s@%s: %s", self.user, self.ip, redacted)
+
         if self.local_mode:
-            dst = Path(remote_path)
-            if dst == local_path:
-                return True
-            if self.needs_sudo or self.user != "root":
+            if sudo or self.needs_sudo or self.user != "root":
+                cmd = ["sudo", "-n", "tee", path]
                 try:
-                    result = subprocess.run(
-                        ["sudo", "-n", "tee", remote_path],
-                        input=local_path.read_bytes(),
+                    completed = subprocess.run(
+                        cmd,
+                        input=data,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.PIPE,
-                        timeout=15,
+                        timeout=timeout,
                     )
-                    if result.returncode != 0:
-                        return False
-                    subprocess.run(
-                        ["sudo", "-n", "chmod", "600", remote_path],
-                        capture_output=True,
-                        timeout=5,
-                        stdin=subprocess.DEVNULL,
+                    return self._completed_to_result(
+                        completed,
+                        duration_ms=int((time.monotonic() - started) * 1000),
+                        attempts=1,
+                        timed_out=False,
+                        sudo=True,
+                        redacted_command=redacted,
+                        operation_name=operation_name,
                     )
-                    return True
-                except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-                    return False
+                except subprocess.TimeoutExpired:
+                    return self._synthetic_result(
+                        args=cmd,
+                        returncode=124,
+                        stderr=f"Command timed out after {timeout}s",
+                        started=started,
+                        timed_out=True,
+                        sudo=True,
+                        redacted_command=redacted,
+                        operation_name=operation_name,
+                    )
+                except (FileNotFoundError, OSError) as e:
+                    return self._synthetic_result(
+                        args=cmd,
+                        returncode=1,
+                        stderr=str(e),
+                        started=started,
+                        sudo=True,
+                        redacted_command=redacted,
+                        operation_name=operation_name,
+                    )
             try:
-                shutil.copy2(str(local_path), str(dst))
-                dst.chmod(0o600)
-                return True
-            except (PermissionError, OSError):
-                return False
-
-        if self.user != "root":
-            # Non-root: pipe file content through SSH with sudo tee
-            q_path = shlex.quote(remote_path)
-            remote_cmd = f"sudo -n tee {q_path} > /dev/null"
-            try:
-                result = subprocess.run(
-                    ["ssh", *self._ssh_opts, f"{self.user}@{self.ip}", remote_cmd],
-                    input=local_path.read_bytes(),
-                    capture_output=True,
-                    timeout=15,
+                Path(path).write_bytes(data)
+                return self._synthetic_result(
+                    args=["write", path],
+                    returncode=0,
+                    started=started,
+                    redacted_command=redacted,
+                    operation_name=operation_name,
                 )
-                if result.returncode == 0:
-                    chmod = self.run(f"chmod 600 {q_path}", timeout=5)
-                    return chmod.returncode == 0
-                return False
-            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-                return False
+            except OSError as e:
+                return self._synthetic_result(
+                    args=["write", path],
+                    returncode=1,
+                    stderr=str(e),
+                    started=started,
+                    redacted_command=redacted,
+                    operation_name=operation_name,
+                )
 
-        # Root: SCP works fine
+        remote_cmd = f"cat > {q_path}"
+        if sudo or self.user != "root":
+            remote_cmd = f"sudo -n tee {q_path} > /dev/null"
+        cmd = ["ssh", *self._ssh_opts, f"{self.user}@{self.ip}", remote_cmd]
         try:
-            result = subprocess.run(
-                [
-                    "scp",
-                    *self._scp_opts,
-                    str(local_path),
-                    f"{self.user}@{self._scp_host}:{remote_path}",
-                ],
+            completed = subprocess.run(
+                cmd,
+                input=data,
                 capture_output=True,
-                timeout=15,
-                stdin=subprocess.DEVNULL,
+                timeout=timeout,
             )
-            return result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return False
+            return self._completed_to_result(
+                completed,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                attempts=1,
+                timed_out=False,
+                sudo=bool(sudo or self.user != "root"),
+                redacted_command=redacted,
+                operation_name=operation_name,
+            )
+        except subprocess.TimeoutExpired:
+            return self._synthetic_result(
+                args=cmd,
+                returncode=124,
+                stderr=f"Command timed out after {timeout}s",
+                started=started,
+                timed_out=True,
+                sudo=bool(sudo or self.user != "root"),
+                redacted_command=redacted,
+                operation_name=operation_name,
+            )
+        except (FileNotFoundError, OSError) as e:
+            return self._synthetic_result(
+                args=cmd,
+                returncode=1,
+                stderr=str(e),
+                started=started,
+                sudo=bool(sudo or self.user != "root"),
+                redacted_command=redacted,
+                operation_name=operation_name,
+            )
+
+    def put_bytes(
+        self,
+        remote_path: str,
+        data: bytes,
+        *,
+        mode: str | int | None = None,
+        owner: str | None = None,
+        sudo: bool | None = None,
+        atomic: bool = True,
+        create_parent: bool = False,
+        sensitive: bool = False,
+        timeout: int = 30,
+        operation_name: str = "write file",
+    ) -> CommandResult:
+        """Write bytes to the target, optionally atomically and with metadata.
+
+        Content is passed on stdin, never interpolated into the shell command.
+        """
+        use_sudo = sudo if sudo is not None else (self.user != "root" or self.needs_sudo)
+        q_remote = shlex.quote(remote_path)
+        parent = str(Path(remote_path).parent)
+        if create_parent and parent and parent != ".":
+            mkdir = self.run(
+                f"mkdir -p {shlex.quote(parent)}",
+                timeout=timeout,
+                sudo=use_sudo,
+                sensitive=sensitive,
+                operation_name=f"{operation_name}: mkdir",
+            )
+            if mkdir.returncode != 0:
+                return mkdir
+
+        write_path = remote_path
+        if atomic:
+            write_path = f"{remote_path}.tmp.{int(time.time() * 1000)}"
+
+        mode_s = f"{mode:o}" if isinstance(mode, int) else str(mode) if mode is not None else ""
+        precreate_mode = "600" if sensitive else mode_s
+        if precreate_mode:
+            q_write = shlex.quote(write_path)
+            create = self.run(
+                f"install -m {shlex.quote(precreate_mode)} /dev/null {q_write}",
+                timeout=timeout,
+                sudo=use_sudo,
+                sensitive=sensitive,
+                operation_name=f"{operation_name}: create target",
+            )
+            if create.returncode != 0:
+                return create
+
+        result = self._write_bytes_direct(
+            write_path,
+            data,
+            sudo=use_sudo,
+            timeout=timeout,
+            sensitive=sensitive,
+            operation_name=operation_name,
+        )
+        if result.returncode != 0:
+            return result
+
+        q_write = shlex.quote(write_path)
+        if mode is not None:
+            chmod = self.run(
+                f"chmod {shlex.quote(mode_s)} {q_write}",
+                timeout=timeout,
+                sudo=use_sudo,
+                sensitive=sensitive,
+                operation_name=f"{operation_name}: chmod",
+            )
+            if chmod.returncode != 0:
+                return chmod
+
+        if owner:
+            chown = self.run(
+                f"chown {shlex.quote(owner)} {q_write}",
+                timeout=timeout,
+                sudo=use_sudo,
+                sensitive=sensitive,
+                operation_name=f"{operation_name}: chown",
+            )
+            if chown.returncode != 0:
+                return chown
+
+        if atomic:
+            mv = self.run(
+                f"mv {q_write} {q_remote}",
+                timeout=timeout,
+                sudo=use_sudo,
+                sensitive=sensitive,
+                operation_name=f"{operation_name}: move",
+            )
+            if mv.returncode != 0:
+                self.run(f"rm -f {q_write}", timeout=5, sudo=use_sudo, sensitive=True)
+                return mv
+            return mv
+
+        return result
+
+    def put_text(
+        self,
+        remote_path: str,
+        text: str,
+        *,
+        encoding: str = "utf-8",
+        **kwargs: Any,
+    ) -> CommandResult:
+        """Write text to the target using ``put_bytes``."""
+        return self.put_bytes(remote_path, text.encode(encoding), **kwargs)
+
+    def get_text(self, remote_path: str, *, timeout: int = 30, sudo: bool | None = None) -> CommandResult:
+        """Read a remote text file through the normal command path."""
+        return self.run(f"cat {shlex.quote(remote_path)}", timeout=timeout, sudo=sudo, sensitive=True)
+
+    def get_bytes(self, remote_path: str, *, timeout: int = 30, sudo: bool | None = None) -> bytes:
+        """Read a remote file as bytes.
+
+        This is intentionally small: binary reads are currently needed only for
+        support utilities, while text reads should use ``get_text`` so callers
+        retain return-code and stderr details.
+        """
+        result = self.get_text(remote_path, timeout=timeout, sudo=sudo)
+        if result.returncode != 0:
+            return b""
+        return result.stdout.encode()
+
+    def write_file(self, local_path: Path, remote_path: str) -> bool:
+        """Backward-compatible wrapper around ``put_bytes``."""
+        if self.local_mode and Path(remote_path) == local_path:
+            return True
+        result = self.put_bytes(
+            remote_path,
+            local_path.read_bytes(),
+            mode="600",
+            atomic=False,
+            sensitive=True,
+            operation_name="write local file",
+        )
+        return result.returncode == 0
 
     def _copy_local_credentials(self, local_creds_dir: Path) -> bool:
         """Copy credentials from /etc/meridian/ in local mode.

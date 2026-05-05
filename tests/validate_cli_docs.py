@@ -9,10 +9,22 @@ Usage:
 
 from __future__ import annotations
 
-import re
-import subprocess
-import sys
-from pathlib import Path
+import os
+
+# Force the rich console used by typer's --help renderer to a wide,
+# non-color terminal BEFORE any typer / meridian import. On narrow runners
+# (notably GitHub Actions, where the default terminal width is 80) rich
+# truncates the Options table to the Usage line + description, leaving
+# the regex below with nothing to match — the validator would then
+# silently pass while real drift accumulated. Setting this here, before
+# any typer import, is the only reliable way to override.
+os.environ["COLUMNS"] = "200"
+os.environ["NO_COLOR"] = "1"
+os.environ["TERM"] = "dumb"
+
+import re  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -22,6 +34,8 @@ CLI_REFERENCE = ROOT / "website" / "src" / "content" / "docs" / "en" / "cli-refe
 # Subcommands share a parent section (e.g. "client add" → "### meridian client").
 COMMANDS: dict[str, str] = {
     "deploy": "### meridian deploy",
+    "plan": "### meridian plan",
+    "apply": "### meridian apply",
     "preflight": "### meridian preflight",
     "scan": "### meridian scan",
     "test": "### meridian test",
@@ -45,14 +59,58 @@ COMMANDS: dict[str, str] = {
 # Flags that appear on every command — don't require per-command docs.
 SKIP_FLAGS = {"--help", "--version", "--install-completion", "--show-completion"}
 
+# Lower bound on flags `meridian <cmd> --help` must report. Defends against the
+# regression Codex caught: a previous version shelled out via nested `uv run`
+# inside `uv run` and `get_flags_from_help` returned `set()` whenever the
+# inner invocation failed silently. The validator then treated empty as
+# "command has no flags" and printed OK while real drift accumulated.
+#
+# Set the floor to the count of *required* (non-skipped) flags each command
+# documents today. Any future regression where help extraction silently
+# returns nothing trips this assertion.
+MIN_FLAGS_BY_COMMAND: dict[str, int] = {
+    "deploy": 10,
+    "client remove": 1,
+    "relay deploy": 4,
+    "relay remove": 1,
+    "preflight": 1,
+    "apply": 1,
+    "plan": 1,
+}
+
 
 def get_flags_from_help(command: str) -> set[str]:
-    """Run `meridian <command> --help` and extract all --flag names."""
-    args = ["uv", "run", "meridian"] + command.split() + ["--help"]
-    result = subprocess.run(args, capture_output=True, text=True)
-    output = result.stdout + result.stderr
-    flags = set(re.findall(r"--[a-z][\w-]*", output))
-    return flags - SKIP_FLAGS
+    """Extract --flag names from the typer help for ``meridian <command>``.
+
+    Uses ``typer.testing.CliRunner`` instead of ``subprocess`` because typer
+    auto-detects terminal width / TTY-ness and on CI runners (or under
+    capture_output) it sometimes truncates the Options table to just the
+    Usage line, leaving the regex with nothing to match. CliRunner gives
+    deterministic full-help output regardless of environment.
+
+    Fails loudly on non-zero exit code or extraction below
+    ``MIN_FLAGS_BY_COMMAND``. The empty-stdout silent-pass regression
+    (CI was reporting OK while the same commit failed locally) is the bug
+    this entire helper is built to prevent.
+    """
+    from typer.testing import CliRunner
+
+    from meridian.cli import app
+
+    runner = CliRunner()
+    result = runner.invoke(app, command.split() + ["--help"], color=False)
+    if result.exit_code != 0:
+        raise RuntimeError(f"`meridian {command} --help` exited {result.exit_code}\noutput: {result.output[:500]}")
+    flags = set(re.findall(r"--[a-z][\w-]*", result.output)) - SKIP_FLAGS
+
+    floor = MIN_FLAGS_BY_COMMAND.get(command, 0)
+    if floor and len(flags) < floor:
+        raise RuntimeError(
+            f"`meridian {command} --help` reported only {len(flags)} flag(s) "
+            f"({sorted(flags)}); expected at least {floor}. "
+            f"output (first 800 chars): {result.output[:800]!r}"
+        )
+    return flags
 
 
 def parse_doc_sections(path: Path) -> dict[str, str]:

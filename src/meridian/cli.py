@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import typer
 
 from meridian import __version__
@@ -20,11 +22,17 @@ app = typer.Typer(
 # Subcommand groups
 client_app = typer.Typer(help="Manage proxy clients", no_args_is_help=True)
 server_app = typer.Typer(help="Manage known servers", no_args_is_help=True)
+node_app = typer.Typer(help="Manage proxy nodes in the fleet", no_args_is_help=True)
 relay_app = typer.Typer(help="Manage relay nodes", no_args_is_help=True)
+fleet_app = typer.Typer(help="Fleet health and recovery", no_args_is_help=True)
+api_app = typer.Typer(help="Machine-readable Meridian API contracts", no_args_is_help=True)
 dev_app = typer.Typer(help="Developer tools for testing and debugging", no_args_is_help=True)
 app.add_typer(client_app, name="client")
 app.add_typer(server_app, name="server")
+app.add_typer(node_app, name="node")
 app.add_typer(relay_app, name="relay")
+app.add_typer(fleet_app, name="fleet")
+app.add_typer(api_app, name="api")
 app.add_typer(dev_app, name="dev", hidden=True)
 
 
@@ -32,10 +40,54 @@ app.add_typer(dev_app, name="dev", hidden=True)
 def main_callback(
     ctx: typer.Context,
     version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
+    verbose: bool = typer.Option(False, "--verbose", help="Enable debug logging"),
+    json_mode: bool = typer.Option(False, "--json", help="Output JSON to stdout (for scripting)"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress progress output"),
 ) -> None:
     """Meridian — Censorship-resistant proxy server management."""
     if ctx.resilient_parsing:
         return
+
+    if verbose:
+        import logging
+
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="  %(name)s: %(message)s",
+            handlers=[logging.StreamHandler(sys.stderr)],
+        )
+
+    machine_output = (
+        json_mode
+        or ctx.invoked_subcommand == "api"
+        or _argv_requests_machine_output()
+        or _argv_requests_machine_output(list(ctx.args))
+    )
+    if machine_output:
+        from meridian.console import set_quiet_mode
+
+        set_quiet_mode(True)
+
+    if json_mode:
+        from meridian.console import error_context, fail, set_json_mode
+
+        set_json_mode(True)
+        candidate_args = [list(ctx.args), sys.argv[1:]]
+        if ctx.invoked_subcommand:
+            candidate_args.append([ctx.invoked_subcommand])
+        if not any(args and _argv_supports_global_json(args) for args in candidate_args):
+            command = next((_argv_command_name(args) for args in candidate_args if args), "cli")
+            with error_context(command):
+                fail(
+                    f"JSON output is not yet supported for `{command}`",
+                    hint="Run `meridian api commands --json` to list supported machine-readable commands.",
+                    hint_type="user",
+                )
+
+    if quiet:
+        from meridian.console import set_quiet_mode
+
+        set_quiet_mode(True)
 
     if version:
         print(f"meridian {__version__}")
@@ -45,16 +97,157 @@ def main_callback(
         raise typer.Exit()
 
     # Show banner before subcommands (but not for --help)
-    import sys
-
-    if "--help" not in sys.argv and "-h" not in sys.argv:
+    if not machine_output and "--help" not in sys.argv and "-h" not in sys.argv:
         banner(__version__)
 
     # Auto-update check (skip for meta commands)
-    if not DISABLE_UPDATE_CHECK and ctx.invoked_subcommand not in ("update",):
+    if not DISABLE_UPDATE_CHECK and not machine_output and ctx.invoked_subcommand not in ("update",):
         from meridian.update import check_for_update
 
         check_for_update(__version__)
+
+
+def _enable_json_output() -> None:
+    """Enable JSON output from command-local --json flags."""
+    from meridian.console import set_json_mode, set_quiet_mode
+
+    set_json_mode(True)
+    set_quiet_mode(True)
+
+
+def _argv_requests_machine_output(args: list[str] | None = None) -> bool:
+    """Detect command-local machine-output flags before Typer enters subcommands."""
+    args = args or sys.argv[1:]
+    if "--json" in args or "--envelope" in args:
+        return True
+    if "--events" in args or any(arg.startswith("--events=") for arg in args):
+        return True
+
+    # `meridian api schema NAME` writes raw JSON Schema even without a flag.
+    positionals = [arg for arg in args if not arg.startswith("-")]
+    return len(positionals) >= 2 and positionals[:2] == ["api", "schema"]
+
+
+def _argv_positionals(args: list[str] | None = None) -> list[str]:
+    """Return argv tokens that identify the command path."""
+    args = args or sys.argv[1:]
+    positionals: list[str] = []
+    skip_next = False
+    value_options = {
+        "--config",
+        "--domain",
+        "--server",
+        "--sni",
+        "--user",
+        "--ssh-port",
+        "--prune-extras",
+        "--parallel",
+        "--request",
+        "--events",
+    }
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in value_options:
+            skip_next = True
+            continue
+        if arg.startswith("-"):
+            continue
+        positionals.append(arg)
+    return positionals
+
+
+def _argv_command_name(args: list[str] | None = None) -> str:
+    """Best-effort command name for early global JSON validation."""
+    positionals = _argv_positionals(args)
+    if not positionals:
+        return "cli"
+    if positionals[0] in {"client", "fleet", "api"} and len(positionals) >= 2:
+        return f"{positionals[0]}.{positionals[1]}"
+    return positionals[0]
+
+
+def _argv_supports_global_json(args: list[str] | None = None) -> bool:
+    """Return True when global --json maps to a migrated command envelope."""
+    positionals = _argv_positionals(args)
+    if not positionals:
+        return False
+    if positionals[0] in {"plan", "apply"}:
+        return True
+    if positionals[0] == "deploy":
+        return True
+    if positionals[:2] in (["client", "list"], ["client", "show"], ["fleet", "status"], ["fleet", "inventory"]):
+        return True
+    return positionals[0] == "api"
+
+
+# =============================================================================
+# Plan / Apply (declarative workflow)
+# =============================================================================
+
+
+@app.command("plan")
+def plan_cmd(
+    json_output: bool = typer.Option(False, "--json", help="Emit the plan as JSON for CI consumption"),
+) -> None:
+    """Show what would change — compare desired state with actual.
+
+    Reads desired_nodes, desired_clients, and desired_relays from cluster.yml
+    and compares with the live panel state.
+
+    [dim]Exit codes:[/dim]
+      [green]0[/green] = already converged
+      [yellow]2[/yellow] = changes pending
+    """
+    from meridian.commands.plan import run
+    from meridian.console import is_json_mode
+
+    if json_output:
+        _enable_json_output()
+    run(json_output=json_output or is_json_mode())
+
+
+@app.command("apply")
+def apply_cmd(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts"),
+    prune_extras: str = typer.Option(
+        "ask",
+        "--prune-extras",
+        help="How to handle extras (panel-side resources not in cluster.yml): "
+        "ask (interactive prompt), yes (auto-remove), no (skip removal). "
+        "Defaults to 'ask' interactively or 'no' under --yes for safety.",
+    ),
+    parallel: int = typer.Option(
+        4,
+        "--parallel",
+        help="Max parallel node provisioning threads",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Emit final apply result as JSON"),
+) -> None:
+    """Apply desired state — converge infrastructure to cluster.yml.
+
+    Computes a plan, shows it, asks for confirmation, then executes.
+
+    [dim]Examples:[/dim]
+      [cyan]meridian apply[/cyan]              Show plan and confirm
+      [cyan]meridian apply --yes[/cyan]        Apply without confirmation
+      [cyan]meridian apply --prune-extras=yes[/cyan]   Auto-remove panel resources missing from cluster.yml
+    """
+    from meridian.commands.apply import run
+    from meridian.console import is_json_mode
+
+    if prune_extras not in ("ask", "yes", "no"):
+        from meridian.console import fail
+
+        fail(f"Invalid --prune-extras value: {prune_extras!r}", hint="Use ask, yes, or no", hint_type="user")
+
+    # Parallel node provisioning is temporarily disabled — see executor.py
+    # for the reasoning. The flag is hidden but still accepted.
+    json_enabled = json_output or is_json_mode()
+    if json_enabled:
+        _enable_json_output()
+    run(yes=yes, parallel=parallel, prune_extras=prune_extras, json_output=json_enabled)
 
 
 # =============================================================================
@@ -113,17 +306,26 @@ def deploy_cmd(
         help="Block Russian domains and IPs (geosite:category-ru + geoip:ru)",
     ),
     ssh_port: int = typer.Option(22, "--ssh-port", help="SSH port (if non-standard)"),
+    json_output: bool = typer.Option(False, "--json", help="Emit final deploy result as JSON"),
+    events: str = typer.Option("", "--events", help="Stream progress events as JSONL (use: jsonl)"),
+    request_path: str = typer.Option("", "--request", help="Read deploy-request JSON from file or '-' for stdin"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate and plan without SSH changes"),
 ) -> None:
     """Deploy a VLESS+Reality proxy server. Interactive wizard if no IP provided.
 
     [dim]Examples:[/dim]
       [cyan]meridian deploy[/cyan]                          Interactive wizard
-      [cyan]meridian deploy 1.2.3.4[/cyan]                  Deploy with defaults
-      [cyan]meridian deploy 1.2.3.4 --domain d.io[/cyan]    CDN fallback via Cloudflare
-      [cyan]meridian deploy 1.2.3.4 --no-harden[/cyan]      Skip SSH + firewall hardening
+      [cyan]meridian deploy 198.51.100.10[/cyan]            Deploy with defaults
+      [cyan]meridian deploy 198.51.100.10 --domain vpn.example[/cyan]  CDN fallback via Cloudflare
+      [cyan]meridian deploy 198.51.100.10 --no-harden[/cyan]  Skip SSH + firewall hardening
+      [cyan]meridian deploy --request deploy.json --json --events=jsonl[/cyan]
     """
     from meridian.commands.setup import run
+    from meridian.console import is_json_mode
 
+    json_enabled = json_output or is_json_mode() or bool(events)
+    if json_enabled:
+        _enable_json_output()
     run(
         ip,
         domain,
@@ -141,6 +343,10 @@ def deploy_cmd(
         warp=warp,
         geo_block=geo_block,
         ssh_port=ssh_port,
+        request_path=request_path,
+        json_output=json_enabled,
+        events=events,
+        dry_run=dry_run,
     )
 
 
@@ -171,6 +377,7 @@ def client_show_cmd(
     name: str = typer.Argument(..., help="Client name"),
     server: str = typer.Option("", "--server", help="Target server (name or IP)"),
     user: str = typer.Option("", "--user", "-u", help="SSH user"),
+    json_mode: bool = typer.Option(False, "--json", help="Output JSON to stdout"),
 ) -> None:
     """Show connection info for an existing client.
 
@@ -180,6 +387,8 @@ def client_show_cmd(
     """
     from meridian.commands.client import run_show
 
+    if json_mode:
+        _enable_json_output()
     run_show(name, user, server)
 
 
@@ -187,10 +396,13 @@ def client_show_cmd(
 def client_list_cmd(
     server: str = typer.Option("", "--server", help="Target server (name or IP)"),
     user: str = typer.Option("", "--user", "-u", help="SSH user"),
+    json_mode: bool = typer.Option(False, "--json", help="Output JSON to stdout"),
 ) -> None:
     """List all clients."""
     from meridian.commands.client import run_list
 
+    if json_mode:
+        _enable_json_output()
     run_list(user, server)
 
 
@@ -199,11 +411,12 @@ def client_remove(
     name: str = typer.Argument(..., help="Client name"),
     server: str = typer.Option("", "--server", help="Target server (name or IP)"),
     user: str = typer.Option("", "--user", "-u", help="SSH user"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
     """Remove a client."""
     from meridian.commands.client import run_remove
 
-    run_remove(name, user, server)
+    run_remove(name, user, server, yes=yes)
 
 
 # =============================================================================
@@ -352,6 +565,14 @@ def update_cmd() -> None:
     run_self_update()
 
 
+@app.command("migrate")
+def migrate_cmd() -> None:
+    """Migrate from Meridian 3.x to 4.0 (3x-ui -> Remnawave)."""
+    from meridian.commands.migrate import run_migrate
+
+    run_migrate()
+
+
 # =============================================================================
 # Relay
 # =============================================================================
@@ -414,6 +635,172 @@ def relay_check_cmd(
     from meridian.commands.relay import run_check
 
     run_check(relay_ip, exit, user)
+
+
+# =============================================================================
+# Node (multi-node fleet management)
+# =============================================================================
+
+
+@node_app.command("add")
+def node_add_cmd(
+    ip: str = typer.Argument(..., help="Server IP address"),
+    name: str = typer.Option("", "--name", help="Friendly name for the node"),
+    user: str = typer.Option("root", "--user", "-u", help="SSH user"),
+    sni: str = typer.Option("", "--sni", help="Reality SNI target"),
+    domain: str = typer.Option("", "--domain", help="Domain for WSS/XHTTP (Cloudflare CDN)"),
+    ssh_port: int = typer.Option(22, "--ssh-port", help="SSH port"),
+    harden: bool = typer.Option(True, help="Apply OS hardening (firewall, SSH, etc.)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts"),
+) -> None:
+    """Provision and add a new proxy node to the fleet.
+
+    Connects via SSH, hardens the server, installs Docker and Xray,
+    registers with the panel, and creates host entries.
+
+    [dim]Examples:[/dim]
+      [cyan]meridian node add 1.2.3.4[/cyan]
+      [cyan]meridian node add 1.2.3.4 --name finland --sni www.google.com[/cyan]
+      [cyan]meridian node add 1.2.3.4 --domain proxy.example.com --yes[/cyan]
+    """
+    from meridian.commands.node import run_add
+
+    run_add(ip, name=name, user=user, ssh_port=ssh_port, sni=sni, domain=domain, harden=harden, yes=yes)
+
+
+@node_app.command("list")
+def node_list_cmd() -> None:
+    """List all nodes with health status."""
+    from meridian.commands.node import run_list
+
+    run_list()
+
+
+@node_app.command("check")
+def node_check_cmd(
+    node: str = typer.Argument(..., help="Node IP or name"),
+    user: str = typer.Option("", "--user", "-u", help="SSH user override"),
+) -> None:
+    """Check health of a proxy node."""
+    from meridian.commands.node import run_check
+
+    run_check(node, user=user)
+
+
+@node_app.command("remove")
+def node_remove_cmd(
+    node: str = typer.Argument(..., help="Node IP or name"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+    force: bool = typer.Option(False, "--force", help="Remove even if relays depend on this node"),
+) -> None:
+    """Remove a node from the fleet."""
+    from meridian.commands.node import run_remove
+
+    run_remove(node, yes=yes, force=force)
+
+
+# =============================================================================
+# Fleet (health & recovery)
+# =============================================================================
+
+
+@fleet_app.command("status")
+def fleet_status_cmd(
+    json_mode: bool = typer.Option(False, "--json", help="Output JSON to stdout"),
+) -> None:
+    """Show fleet health overview — nodes, relays, users."""
+    from meridian.commands.fleet import run_status
+
+    if json_mode:
+        _enable_json_output()
+    run_status()
+
+
+@fleet_app.command("inventory")
+def fleet_inventory_cmd(
+    json_mode: bool = typer.Option(False, "--json", help="Output JSON to stdout"),
+) -> None:
+    """Show configured fleet inventory and live panel status."""
+    from meridian.commands.fleet import run_inventory
+
+    if json_mode:
+        _enable_json_output()
+    run_inventory()
+
+
+@fleet_app.command("recover")
+def fleet_recover_cmd(
+    panel_url: str = typer.Option(..., "--panel-url", help="Panel HTTPS URL"),
+    api_token: str = typer.Option(..., "--api-token", help="Remnawave API token (JWT)"),
+) -> None:
+    """Reconstruct cluster.yml from the panel API.
+
+    Use when ~/.meridian/ is lost but the panel is still running.
+
+    [dim]Examples:[/dim]
+      [cyan]meridian fleet recover --panel-url https://1.2.3.4/panel --api-token eyJ...[/cyan]
+    """
+    from meridian.commands.recover import run_recover
+
+    run_recover(panel_url, api_token)
+
+
+# =============================================================================
+# API contracts
+# =============================================================================
+
+
+@api_app.command("schemas")
+def api_schemas_cmd(
+    json_mode: bool = typer.Option(False, "--json", help="Output schema catalog as JSON envelope"),
+    include_schemas: bool = typer.Option(False, "--include-schemas", help="Include full JSON Schemas in JSON output"),
+) -> None:
+    """List meridian-core JSON schemas."""
+    from meridian.commands.api import run_schemas
+
+    if json_mode:
+        _enable_json_output()
+    run_schemas(json_output=json_mode, include_schemas=include_schemas)
+
+
+@api_app.command("commands")
+def api_commands_cmd(
+    json_mode: bool = typer.Option(False, "--json", help="Output command catalog as JSON envelope"),
+    include_schemas: bool = typer.Option(False, "--include-schemas", help="Include envelope and data schemas"),
+) -> None:
+    """List migrated meridian-core command contracts."""
+    from meridian.commands.api import run_commands
+
+    if json_mode:
+        _enable_json_output()
+    run_commands(json_output=json_mode, include_schemas=include_schemas)
+
+
+@api_app.command("schema")
+def api_schema_cmd(
+    name: str = typer.Argument(..., help="Schema name from `meridian api schemas`"),
+    envelope_output: bool = typer.Option(False, "--envelope", help="Wrap schema in meridian.output/v1"),
+    json_mode: bool = typer.Option(False, "--json", help="Alias for --envelope"),
+) -> None:
+    """Print one meridian-core JSON Schema."""
+    from meridian.commands.api import run_schema
+
+    if envelope_output or json_mode:
+        _enable_json_output()
+    run_schema(name, envelope_output=envelope_output or json_mode)
+
+
+@api_app.command("workflow")
+def api_workflow_cmd(
+    name: str = typer.Argument(..., help="Workflow name, e.g. deploy"),
+    json_mode: bool = typer.Option(False, "--json", help="Output workflow plan as JSON envelope"),
+) -> None:
+    """Print one meridian-core workflow plan."""
+    from meridian.commands.api import run_workflow
+
+    if json_mode:
+        _enable_json_output()
+    run_workflow(name, json_output=json_mode)
 
 
 # =============================================================================

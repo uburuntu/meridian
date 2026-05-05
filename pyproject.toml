@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Deploy a censorship-resistant proxy server — hardened by default, shared via QR code"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "uburuntu" }]
 keywords = ["vpn", "proxy", "vless", "reality", "xray"]
 classifiers = [
@@ -16,9 +16,9 @@ classifiers = [
     "Environment :: Console",
     "Topic :: Internet :: Proxy Servers",
     "Topic :: System :: Networking",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "typer>=0.12",
@@ -27,6 +27,9 @@ dependencies = [
     "packaging>=23.0",
     "jinja2>=3.0",
     "segno>=1.5",
+    "httpx>=0.27",
+    "pydantic>=2.11",
+    "remnawave==2.7.1",
 ]
 
 [project.scripts]
@@ -39,6 +42,10 @@ Issues = "https://github.com/uburuntu/meridian/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "ruff>=0.4", "mypy>=1.0", "types-PyYAML>=6.0"]
+# Cloud providers for `meridian.infra` — used by tests/realvm/ harness and
+# (eventually) by `meridian deploy --create-vm <provider>`. Each provider is
+# optional: `pip install meridian-vpn[hetzner]` gets only Hetzner support.
+hetzner = ["hcloud>=2.0"]
 
 [tool.hatch.version]
 path = "VERSION"
@@ -68,7 +75,7 @@ exclude = [
 ]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 120
 
 [tool.ruff.lint]
@@ -76,7 +83,11 @@ select = ["E", "F", "I", "W"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# tests/realvm/ provisions real cloud VMs — opt-in, never auto-collected.
+# Invoke manually via `make real-lab` (see tests/realvm/README.md).
+# tests/systemlab/ uses Docker, orchestrated via `make system-lab`.
+norecursedirs = ["realvm", "systemlab"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 ignore_missing_imports = true

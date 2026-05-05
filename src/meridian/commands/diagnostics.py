@@ -6,6 +6,7 @@ import platform
 import re
 import shlex
 
+from meridian.cluster import ClusterConfig
 from meridian.commands.resolve import (
     ensure_server_connection,
     fetch_credentials,
@@ -13,7 +14,7 @@ from meridian.commands.resolve import (
 )
 from meridian.config import DEFAULT_SNI, SERVERS_FILE
 from meridian.console import err_console, line
-from meridian.credentials import ServerCredentials
+from meridian.facts import ServerFacts
 from meridian.servers import ServerRegistry
 from meridian.ssh import ServerConnection
 
@@ -51,9 +52,9 @@ def run(
     local_os = platform.platform()
 
     # Check deployed version
-    proxy_file = resolved.creds_dir / "proxy.yml"
-    creds = ServerCredentials.load(proxy_file) if proxy_file.exists() else None
-    deployed_with = (creds.server.deployed_with if creds else "") or "unknown"
+    cluster = ClusterConfig.load()
+    node = cluster.find_node(resolved.ip) if cluster.is_configured else None
+    deployed_with = (node.deployed_with if node else "") or "unknown"
 
     local_info = f"OS: {local_os}\nMeridian: {__version__}\nServer deployed with: {deployed_with}"
 
@@ -65,22 +66,34 @@ def run(
     )
 
     # --- Deployment context (for AI enrichment) ---
-    domain = (creds.server.domain if creds else "") or ""
+    domain = (node.domain if node else "") or ""
     mode = "domain" if domain else "IP"
-    has_relays = bool(creds.relays) if creds else False
+    has_relays = bool(cluster.relays) if cluster.is_configured else False
     if has_relays:
-        mode += f" + {len(creds.relays)} relay(s)"  # type: ignore[union-attr]
-    xhttp_path = (creds.xhttp.xhttp_path if creds else "") or ""
-    ws_path = (creds.wss.ws_path if creds else "") or ""
+        mode += f" + {len(cluster.relays)} relay(s)"
     protocols = ["Reality"]
-    if xhttp_path:
+    if node and node.domain:
         protocols.append("XHTTP")
-    if ws_path and domain:
         protocols.append("WSS")
-    client_count = len(creds.clients) if creds else 0
 
-    deployment_info = f"Mode: {mode}\nProtocols: {', '.join(protocols)}\nClients: {client_count}"
+    deployment_info = f"Mode: {mode}\nProtocols: {', '.join(protocols)}"
     sections.append(("Deployment", deployment_info))
+
+    facts = ServerFacts(resolved.conn)
+    os_release = facts.os_release()
+    docker = facts.docker_state()
+    ufw = facts.ufw_state()
+    fact_parts = [
+        f"OS: {os_release.pretty_name or os_release.id}",
+        f"Architecture: {facts.arch() or 'unknown'} / dpkg {facts.dpkg_arch()}",
+        f"SSH ports: {', '.join(str(p) for p in facts.ssh_ports())}",
+        f"Free disk: {facts.free_disk_mb('/') or 'unknown'} MB",
+        f"Docker: {'installed' if docker.installed else 'not installed'}"
+        + (f" ({docker.version})" if docker.version else ""),
+        f"Docker compose: {'available' if docker.compose_available else 'missing'}",
+        f"UFW: {'active' if ufw.active else 'inactive' if ufw.installed else 'not installed'}",
+    ]
+    sections.append(("Server Facts", "\n".join(fact_parts)))
 
     # --- Server info ---
     server_parts = [
@@ -100,18 +113,18 @@ def run(
     sections.append(("Docker", "\n".join(docker_parts)))
 
     # --- Xray process ---
-    xray_pid_raw = resolved.conn.run("docker exec 3x-ui pgrep -f xray 2>/dev/null", timeout=10).stdout.strip()
+    xray_pid_raw = resolved.conn.run("docker exec remnawave-node pgrep -f xray 2>/dev/null", timeout=10).stdout.strip()
     if xray_pid_raw:
         xray_status = f"running (PID {xray_pid_raw.splitlines()[0]})"
     else:
         xray_status = "NOT RUNNING — proxy traffic is not flowing"
     sections.append(("Xray Process", xray_status))
 
-    # --- 3x-ui Logs (redacted) ---
-    log_cmd = "docker logs 3x-ui --tail 50 2>&1 | grep -v '^\\s*$' | sort -u | tail -20"
+    # --- Remnawave Node Logs (redacted) ---
+    log_cmd = "docker logs remnawave-node --tail 50 2>&1 | grep -v '^\\s*$' | sort -u | tail -20"
     xray_logs = resolved.conn.run(log_cmd, timeout=15).stdout.strip() or "container not running"
     xray_logs = _redact_secrets(xray_logs)
-    sections.append(("3x-ui Logs", f"$ {log_cmd}\n{xray_logs}"))
+    sections.append(("Remnawave Node Logs", f"$ {log_cmd}\n{xray_logs}"))
 
     # --- Nginx error log ---
     nginx_cmd = "tail -10 /var/log/nginx/error.log 2>/dev/null"
@@ -137,11 +150,11 @@ def run(
     sections.append(("Firewall (UFW)", _collect("ufw status verbose 2>&1", fallback="ufw not available")))
 
     # --- Geo-blocking ---
-    geo_status = _check_geo_blocking(resolved.conn)
+    geo_status = "managed by Remnawave (check panel settings)"
     sections.append(("Geo-blocking", geo_status))
 
     # --- SNI Target ---
-    sni_host = sni or (creds.server.sni if creds else "") or DEFAULT_SNI
+    sni_host = sni or (node.sni if node else "") or DEFAULT_SNI
     q_sni = shlex.quote(sni_host)
     sni_cmd = (
         f"echo | openssl s_client -connect {q_sni}:443 -servername {q_sni} 2>/dev/null "
@@ -151,11 +164,11 @@ def run(
     sections.append((f"Camouflage Target ({sni_host})", f"$ {sni_cmd}\n{sni_check}"))
 
     # --- Domain DNS ---
-    if creds and creds.server.domain:
-        q_domain = shlex.quote(creds.server.domain)
+    if node and node.domain:
+        q_domain = shlex.quote(node.domain)
         sections.append(
             (
-                f"Domain DNS ({creds.server.domain})",
+                f"Domain DNS ({node.domain})",
                 _collect(f"dig +short {q_domain} @8.8.8.8 2>/dev/null", fallback="dig not available"),
             )
         )
@@ -218,45 +231,6 @@ def _check_cert_expiry(conn: ServerConnection) -> str:
             return f"valid until {expiry_fmt} ({days_left} days)"
     except (ValueError, IndexError):
         return f"raw: {date_str}"
-
-
-def _check_geo_blocking(conn: ServerConnection) -> str:
-    """Check if Xray routing has geo-blocking rules configured."""
-    import json
-
-    result = conn.run(
-        "docker exec 3x-ui cat /app/bin/config.json 2>/dev/null",
-        timeout=10,
-    )
-    raw = result.stdout.strip()
-    if not raw:
-        return "could not read Xray config"
-
-    try:
-        config = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        return "could not parse Xray config"
-
-    # Check outbounds for blocked tag
-    outbounds = config.get("outbounds", [])
-    has_blocked = any(o.get("tag") == "blocked" for o in outbounds)
-
-    # Check routing rules for geoip/geosite
-    routing = config.get("routing", {})
-    rules = routing.get("rules", [])
-    geo_rules = [
-        r
-        for r in rules
-        if r.get("outboundTag") == "blocked"
-        and ("geoip:ru" in r.get("ip", []) or "geosite:category-ru" in r.get("domain", []))
-    ]
-
-    if has_blocked and geo_rules:
-        return f"active ({len(geo_rules)} rules → blackhole)"
-    elif has_blocked:
-        return "blackhole outbound exists but no geo rules"
-    else:
-        return "not configured"
 
 
 def _redact_secrets(text: str) -> str:

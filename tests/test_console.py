@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
 
-from meridian.console import confirm, fail, prompt
+from meridian.console import confirm, fail, prompt, set_json_mode, set_quiet_mode
 
 
 class TestFail:
@@ -16,6 +17,26 @@ class TestFail:
         with pytest.raises(typer.Exit) as exc_info:
             fail("broken")
         assert exc_info.value.exit_code == 1
+
+    def test_fail_user_exit_code_2(self) -> None:
+        with pytest.raises(typer.Exit) as exc_info:
+            fail("bad input", hint_type="user")
+        assert exc_info.value.exit_code == 2
+
+    def test_fail_system_exit_code_3(self) -> None:
+        with pytest.raises(typer.Exit) as exc_info:
+            fail("infra issue", hint_type="system")
+        assert exc_info.value.exit_code == 3
+
+    def test_fail_cancelled_exit_code_130(self) -> None:
+        with pytest.raises(typer.Exit) as exc_info:
+            fail("cancelled", hint_type="cancelled")
+        assert exc_info.value.exit_code == 130
+
+    def test_fail_explicit_exit_code_overrides(self) -> None:
+        with pytest.raises(typer.Exit) as exc_info:
+            fail("custom", hint_type="user", exit_code=42)
+        assert exc_info.value.exit_code == 42
 
     def test_fail_with_hint(self, capsys: pytest.CaptureFixture[str]) -> None:
         """fail() with hint should include both message and hint in stderr."""
@@ -64,6 +85,47 @@ class TestFail:
         captured = capsys.readouterr()
         assert "github.com/uburuntu/meridian/issues" in captured.err
 
+    def test_fail_json_mode_emits_structured_error(self, capsys: pytest.CaptureFixture[str]) -> None:
+        set_json_mode(True)
+        set_quiet_mode(True)
+        try:
+            with pytest.raises(typer.Exit) as exc_info:
+                fail(
+                    "Invalid token api_token=secret-token",
+                    hint="Set password=hunter2 again",
+                    hint_type="user",
+                )
+        finally:
+            set_json_mode(False)
+            set_quiet_mode(False)
+
+        assert exc_info.value.exit_code == 2
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["schema"] == "meridian.output/v1"
+        assert data["command"] == "cli.error"
+        assert data["status"] == "failed"
+        assert data["exit_code"] == 2
+        assert data["errors"][0]["code"] == "MERIDIAN_USER_ERROR"
+        assert data["errors"][0]["category"] == "user"
+        assert "secret-token" not in captured.out
+        assert "hunter2" not in captured.out
+
+    def test_fail_json_mode_emits_cancelled_status(self, capsys: pytest.CaptureFixture[str]) -> None:
+        set_json_mode(True)
+        set_quiet_mode(True)
+        try:
+            with pytest.raises(typer.Exit) as exc_info:
+                fail("Cancelled by user", hint_type="cancelled")
+        finally:
+            set_json_mode(False)
+            set_quiet_mode(False)
+
+        assert exc_info.value.exit_code == 130
+        data = json.loads(capsys.readouterr().out)
+        assert data["status"] == "cancelled"
+        assert data["errors"][0]["category"] == "cancelled"
+
 
 def _make_tty_mock(input_text: str) -> MagicMock:
     """Create a context manager mock that simulates /dev/tty with given input."""
@@ -91,22 +153,18 @@ class TestConfirm:
         with patch("builtins.open", return_value=_make_tty_mock("")):
             assert confirm("Deploy?") is True
 
-    def test_confirm_n_raises_exit(self) -> None:
+    def test_confirm_n_returns_false(self) -> None:
         with patch("builtins.open", return_value=_make_tty_mock("n")):
-            with pytest.raises(typer.Exit) as exc_info:
-                confirm("Deploy?")
-            assert exc_info.value.exit_code == 1
+            assert confirm("Deploy?") is False
 
-    def test_confirm_N_raises_exit(self) -> None:
+    def test_confirm_N_returns_false(self) -> None:
         with patch("builtins.open", return_value=_make_tty_mock("N")):
-            with pytest.raises(typer.Exit):
-                confirm("Deploy?")
+            assert confirm("Deploy?") is False
 
-    def test_confirm_no_tty_defaults_to_reject(self) -> None:
+    def test_confirm_no_tty_returns_false(self) -> None:
         """When /dev/tty is not available (CI), default to reject."""
         with patch("builtins.open", side_effect=OSError("No TTY")):
-            with pytest.raises(typer.Exit):
-                confirm("Deploy?")
+            assert confirm("Deploy?") is False
 
 
 class TestPrompt:

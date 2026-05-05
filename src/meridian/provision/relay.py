@@ -19,6 +19,7 @@ from meridian.config import (
     RELAY_SERVICE_NAME,
 )
 from meridian.provision.common import detect_ssh_ports
+from meridian.provision.recipe import Operation, Recipe, Resource, op
 from meridian.provision.steps import StepResult
 from meridian.ssh import ServerConnection
 
@@ -252,10 +253,13 @@ class ConfigureRealm:
 
         conn.run("mkdir -p /etc/meridian", timeout=15)
 
-        q_config = shlex.quote(config_content)
-        write_config = conn.run(
-            f"printf '%s' {q_config} > {RELAY_CONFIG_PATH}.tmp && mv {RELAY_CONFIG_PATH}.tmp {RELAY_CONFIG_PATH}",
+        write_config = conn.put_text(
+            RELAY_CONFIG_PATH,
+            config_content,
+            mode="600",
+            sensitive=True,
             timeout=15,
+            operation_name="write realm config",
         )
         if write_config.returncode != 0:
             return StepResult(
@@ -263,27 +267,29 @@ class ConfigureRealm:
                 status="failed",
                 detail=f"failed to write config: {write_config.stderr.strip()[:200]}",
             )
-        conn.run(f"chmod 600 {RELAY_CONFIG_PATH}", timeout=15)
 
         # Write relay metadata
         relay_meta = (
             f"role: relay\nexit_ip: {ctx.exit_ip}\nexit_port: {ctx.exit_port}\nlisten_port: {ctx.listen_port}\n"
         )
-        q_meta = shlex.quote(relay_meta)
-        conn.run(
-            f"printf '%s' {q_meta} > /etc/meridian/relay.yml.tmp && "
-            "mv /etc/meridian/relay.yml.tmp /etc/meridian/relay.yml",
+        conn.put_text(
+            "/etc/meridian/relay.yml",
+            relay_meta,
+            mode="600",
+            sensitive=True,
             timeout=15,
+            operation_name="write relay metadata",
         )
-        conn.run("chmod 600 /etc/meridian/relay.yml", timeout=15)
 
         # Write systemd service
         unit_content = _SYSTEMD_UNIT.format(config_path=RELAY_CONFIG_PATH)
-        q_unit = shlex.quote(unit_content)
         service_path = f"/etc/systemd/system/{RELAY_SERVICE_NAME}.service"
-        write_service = conn.run(
-            f"printf '%s' {q_unit} > {service_path}.tmp && mv {service_path}.tmp {service_path}",
+        write_service = conn.put_text(
+            service_path,
+            unit_content,
+            mode="644",
             timeout=15,
+            operation_name="write realm service",
         )
         if write_service.returncode != 0:
             return StepResult(
@@ -370,15 +376,20 @@ class VerifyRelay:
 # ---------------------------------------------------------------------------
 
 
-def build_relay_steps(ctx: RelayContext) -> list:
+def build_relay_steps(ctx: RelayContext) -> list[Operation]:
     """Assemble the relay deployment step pipeline."""
     from meridian.provision.common import ConfigureBBR, InstallPackages
 
-    return [
-        InstallPackages(packages=_RELAY_PACKAGES),
-        ConfigureBBR(),
-        ConfigureRelayFirewall(),
-        InstallRealm(),
-        ConfigureRealm(),
-        VerifyRelay(),
+    operations = [
+        op(InstallPackages(packages=_RELAY_PACKAGES), provides=[Resource.RELAY_PACKAGES, Resource.SYSTEM_PACKAGES]),
+        op(ConfigureBBR(), requires=[Resource.RELAY_PACKAGES], provides=[Resource.BBR_ENABLED]),
+        op(ConfigureRelayFirewall(), requires=[Resource.RELAY_PACKAGES], provides=[Resource.RELAY_FIREWALL]),
+        op(InstallRealm(), requires=[Resource.RELAY_PACKAGES], provides=[Resource.REALM_INSTALLED]),
+        op(
+            ConfigureRealm(),
+            requires=[Resource.REALM_INSTALLED, Resource.RELAY_FIREWALL],
+            provides=[Resource.REALM_CONFIGURED],
+        ),
+        op(VerifyRelay(), requires=[Resource.REALM_CONFIGURED], provides=[Resource.RELAY_VERIFIED]),
     ]
+    return Recipe(tuple(operations)).steps(ctx)

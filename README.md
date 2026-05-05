@@ -31,11 +31,11 @@ See [SECURITY.md](SECURITY.md) for the threat model and what Meridian protects a
 
 Meridian ships the strongest available protocol — today that's VLESS+Reality — and configures it so your server is indistinguishable from any other website. Nothing left open, nothing to give it away.
 
-| | Meridian | Raw 3x-ui | Marzban | Hiddify Manager |
+| | Meridian | Raw Remnawave | Marzban | Hiddify Manager |
 |---|---|---|---|---|
-| Install | One command | Manual Docker + config | Docker + CLI | Script + web UI |
+| Install | One command | Manual Docker + panel config | Docker + CLI | Script + web UI |
 | Client handoff | QR + hosted page | Manual URL sharing | Panel-only | Panel-only |
-| Architecture | nginx+Xray (hardened) | Xray only | Xray+Nginx | Xray+Nginx |
+| Architecture | nginx+Xray+Remnawave (hardened) | Remnawave panel+node | Xray+Nginx | Xray+Nginx |
 | Relay support | Built-in L4 relay | Manual | No | Manual |
 | Rebuild workflow | `deploy NEW_IP` | Start over | Reconfigure | Reconfigure |
 
@@ -136,6 +136,8 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 | Command | Description |
 |---------|-------------|
 | `meridian deploy [IP\|local]` | Deploy proxy server (interactive wizard if no IP) |
+| `meridian plan` | Show the reconciliation plan — diff between `cluster.yml` and actual panel state |
+| `meridian apply [--yes]` | Converge the cluster to the desired state in `cluster.yml` |
 | `meridian client add NAME` | Add a named client key |
 | `meridian client show NAME` | Show connection info (QR code, URLs, shareable link) |
 | `meridian client list` | List all clients |
@@ -144,6 +146,9 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 | `meridian relay list` | List relay nodes |
 | `meridian relay remove RELAY_IP` | Remove a relay node |
 | `meridian relay check RELAY_IP` | Check relay health |
+| `meridian api schemas` | List meridian-core JSON schemas for automation/UI clients |
+| `meridian api commands` | List migrated command contracts and schema bindings |
+| `meridian api schema NAME` | Print one JSON Schema |
 | `meridian server add [IP]` | Add a server to local registry |
 | `meridian server list` | List known servers |
 | `meridian server remove NAME` | Remove a server from registry |
@@ -154,6 +159,12 @@ Meridian deploys [VLESS+Reality](https://github.com/XTLS/Xray-core) — a protoc
 | `meridian doctor [IP]` | Collect info for bug reports (alias: `rage`) |
 | `meridian update` | Update Meridian to the latest version |
 | `meridian teardown [IP]` | Remove proxy from server |
+
+## Automation contract
+
+Meridian is moving toward **meridian-core**: typed install/control APIs with the CLI as one client. Machine output is standardized around a Pydantic-backed `meridian.output/v1` envelope (`schema`, `command`, `operation_id`, `status`, `summary`, `data`, `warnings`, `errors`). For example, `meridian plan --json`, `meridian apply --json`, `meridian client list --json`, `meridian client show --json`, `meridian fleet status --json`, and `meridian fleet inventory --json` return the same top-level shape, with command-specific fields under `data`.
+
+Use top-level `status` for command execution (`ok`, `changed`, `no_changes`, `failed`, `cancelled`), `summary.changed` for plan/apply changes, and command-specific health fields such as `data.summary.health` / `data.summary.needs_attention` for fleet state. `fleet inventory` is topology inventory only; use `plan --json` as the drift authority and `apply --json` for execution results. Keep using process exit codes for shell control flow. Secrets are redacted before JSON leaves the process. Run `meridian api commands --json` to discover command contracts, and `meridian api schema plan-envelope --json` to inspect command-specific schemas.
 
 See the [full CLI reference](https://getmeridian.org/docs/en/cli-reference/) for all commands and flags.
 
