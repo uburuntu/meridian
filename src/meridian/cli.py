@@ -226,6 +226,7 @@ def apply_cmd(
       [cyan]meridian apply --prune-extras=yes[/cyan]   Auto-remove panel resources missing from cluster.yml
     """
     from meridian.commands.apply import run
+    from meridian.console import is_json_mode
 
     if prune_extras not in ("ask", "yes", "no"):
         from meridian.console import fail
@@ -234,9 +235,10 @@ def apply_cmd(
 
     # Parallel node provisioning is temporarily disabled — see executor.py
     # for the reasoning. The flag is hidden but still accepted.
-    if json_output:
+    json_enabled = json_output or is_json_mode()
+    if json_enabled:
         _enable_json_output()
-    run(yes=yes, parallel=parallel, prune_extras=prune_extras, json_output=json_output)
+    run(yes=yes, parallel=parallel, prune_extras=prune_extras, json_output=json_enabled)
 
 
 # =============================================================================

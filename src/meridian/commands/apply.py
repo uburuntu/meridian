@@ -7,6 +7,7 @@ executes. Reuses existing provisioning code via the reconciler executor.
 from __future__ import annotations
 
 import shlex
+from typing import Any
 
 import typer
 
@@ -438,15 +439,23 @@ def _handle_remove_subscription_page(action: PlanAction, panel: object, cluster:
 
 def _emit_apply_json(
     *,
-    plan: object,
+    plan: Any,
     execution_result: ExecutionResult,
     exit_code: int,
     status: OutputStatus,
     operation: OperationContext,
     error: MeridianError | None = None,
+    summary: str | None = None,
+    all_succeeded: bool | None = None,
 ) -> None:
     """Emit a typed apply envelope."""
-    result = build_apply_result(plan, execution_result, exit_code=exit_code)
+    result = build_apply_result(
+        plan,
+        execution_result,
+        exit_code=exit_code,
+        summary=summary,
+        all_succeeded=all_succeeded,
+    )
     emit_json(
         command_envelope(
             command="apply",
@@ -466,7 +475,7 @@ def _emit_apply_json(
 
 def _emit_apply_confirmation_required(
     *,
-    plan: object,
+    plan: Any,
     operation: OperationContext,
     message: str = "Apply requires explicit confirmation",
 ) -> None:
@@ -486,7 +495,51 @@ def _emit_apply_confirmation_required(
         status="failed",
         operation=operation,
         error=error,
+        summary=message,
+        all_succeeded=False,
     )
+
+
+def _emit_apply_drift_decision_required(*, plan: Any, operation: OperationContext) -> None:
+    """Emit a non-interactive apply error when drift handling was not explicit."""
+    message = "Apply requires an explicit drift decision"
+    error = MeridianError(
+        code="MERIDIAN_DRIFT_DECISION_REQUIRED",
+        category="user",
+        message=message,
+        hint="Pass --prune-extras=no to keep drift, or --prune-extras=yes to remove it.",
+        retryable=False,
+        exit_code=2,
+    )
+    _emit_apply_json(
+        plan=plan,
+        execution_result=ExecutionResult(),
+        exit_code=2,
+        status="failed",
+        operation=operation,
+        error=error,
+        summary=message,
+        all_succeeded=False,
+    )
+
+
+def _execute_plan_quietly_for_json(
+    plan: Any,
+    *,
+    panel: Any,
+    cluster: Any,
+    callbacks: dict[PlanActionKind, Any],
+    max_parallel: int,
+) -> ExecutionResult:
+    """Run CLI-backed callbacks without letting nested fail() write JSON fragments."""
+    from meridian.console import is_json_mode, set_json_mode
+
+    previous_json_mode = is_json_mode()
+    set_json_mode(False)
+    try:
+        return execute_plan(plan, panel=panel, cluster=cluster, callbacks=callbacks, max_parallel=max_parallel)
+    finally:
+        set_json_mode(previous_json_mode)
 
 
 def run(
@@ -588,10 +641,11 @@ def _run(
                 # Safety: never silently auto-remove drift under --yes unless
                 # the operator explicitly asked for `--prune-extras=yes`.
                 effective_prune = "no"
-            if json_output and effective_prune == "ask":
-                effective_prune = "no"
 
             if extras_actions:
+                if json_output and prune_extras == "ask":
+                    _emit_apply_drift_decision_required(plan=plan, operation=operation)
+                    raise typer.Exit(2)
                 if effective_prune == "no":
                     plan.actions = [a for a in plan.actions if not a.from_extras]
                     info(
@@ -650,7 +704,16 @@ def _run(
                 PlanActionKind.REMOVE_SUBSCRIPTION_PAGE: _handle_remove_subscription_page,
             }
 
-            result = execute_plan(plan, panel=panel, cluster=cluster, callbacks=callbacks, max_parallel=parallel)
+            if json_output:
+                result = _execute_plan_quietly_for_json(
+                    plan,
+                    panel=panel,
+                    cluster=cluster,
+                    callbacks=callbacks,
+                    max_parallel=parallel,
+                )
+            else:
+                result = execute_plan(plan, panel=panel, cluster=cluster, callbacks=callbacks, max_parallel=parallel)
 
             # Snapshot desired state for next plan's from_extras classification.
             # Only snapshot when ALL actions succeeded — partial failures should
@@ -665,7 +728,30 @@ def _run(
                 if cluster.desired_relays is not None:
                     cluster._extra["desired_relays_applied"] = [r.host for r in cluster.desired_relays]
 
-            cluster.save()
+            try:
+                cluster.save()
+            except Exception as exc:
+                error = MeridianError(
+                    code="MERIDIAN_STATE_SAVE_FAILED",
+                    category="system",
+                    message=f"Apply completed but Meridian could not save cluster state: {exc}",
+                    hint="Resolve the local state file issue, then rerun plan/apply to reconcile.",
+                    retryable=True,
+                    exit_code=3,
+                )
+                if json_output:
+                    _emit_apply_json(
+                        plan=plan,
+                        execution_result=result,
+                        exit_code=3,
+                        status="failed",
+                        operation=operation,
+                        error=error,
+                        summary=error.message,
+                        all_succeeded=False,
+                    )
+                    raise typer.Exit(3) from exc
+                fail(error.message, hint=error.hint, hint_type="system")
 
             if result.all_succeeded:
                 if json_output:

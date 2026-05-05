@@ -292,6 +292,22 @@ class TestCommandLocalJsonQuieting:
         assert result.exit_code == 0
         assert _assert_machine_json_without_banner(result.output) == {"ok": True}
 
+    def test_apply_global_json_passes_json_output(self, monkeypatch) -> None:
+        def fake_run(*_args: object, **kwargs: object) -> None:
+            assert kwargs["json_output"] is True
+            print('{"ok": true}')
+
+        _reset_output_modes()
+        monkeypatch.setattr(cli, "DISABLE_UPDATE_CHECK", True)
+        monkeypatch.setattr(cli.sys, "argv", ["meridian", "--json", "apply", "--yes"])
+        monkeypatch.setattr("meridian.commands.apply.run", fake_run)
+
+        result = runner.invoke(app, ["--json", "apply", "--yes"])
+
+        _reset_output_modes()
+        assert result.exit_code == 0
+        assert _assert_machine_json_without_banner(result.output) == {"ok": True}
+
     def test_client_list_command_json_suppresses_banner(self, monkeypatch) -> None:
         def fake_run_list(*_args: object, **_kwargs: object) -> None:
             print('{"ok": true}')

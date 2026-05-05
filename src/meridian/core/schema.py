@@ -111,6 +111,10 @@ class ApplyOutputEnvelope(
     """Envelope schema for `meridian apply --json`."""
 
 
+class ApplyFailureData(RootModel[ApplyResult | EmptyData]):
+    """Failure data schema for `meridian apply --json`."""
+
+
 class _FleetStatusSuccessEnvelope(_ContractEnvelope):
     command: Literal["fleet.status"]
     status: Literal["ok"]
@@ -329,6 +333,7 @@ _SCHEMAS: dict[str, type[BaseModel]] = {
     "apply-action": ApplyActionResult,
     "apply-counts": ApplyCounts,
     "apply-envelope": ApplyOutputEnvelope,
+    "apply-failure": ApplyFailureData,
     "api-commands": ApiCommandsResult,
     "api-commands-envelope": ApiCommandsOutputEnvelope,
     "api-schema": ApiSchemaResult,
@@ -363,7 +368,7 @@ _COMMAND_CONTRACTS: dict[str, CommandContract] = {
         argv=["apply"],
         envelope_schema="apply-envelope",
         data_schema="apply",
-        failure_data_schema="apply",
+        failure_data_schema="apply-failure",
         error_schema="error",
         statuses=["no_changes", "changed", "failed", "cancelled"],
         outcomes=_apply_outcomes(),

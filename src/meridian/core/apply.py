@@ -54,11 +54,19 @@ def _apply_status(result: Any) -> ApplyActionStatus:
     return "failed"
 
 
-def build_apply_result(plan: Any, execution_result: Any, *, exit_code: int) -> ApplyResult:
+def build_apply_result(
+    plan: Any,
+    execution_result: Any,
+    *,
+    exit_code: int,
+    summary: str | None = None,
+    all_succeeded: bool | None = None,
+) -> ApplyResult:
     """Build a typed, JSON-ready apply result from executor output."""
     raw_actions = list(plan.actions)
     plan_index_by_id = {id(action): index for index, action in enumerate(raw_actions)}
-    execution_order = {id(result.action): index for index, result in enumerate(execution_result.results, start=1)}
+    plan_result = build_plan_result(plan, exit_code=0 if plan.is_empty else 2)
+    execution_order_by_plan_index = {action.plan_index: action.execution_order for action in plan_result.actions}
     actions = []
     for fallback_index, result in enumerate(execution_result.results):
         plan_index = plan_index_by_id.get(id(result.action), fallback_index)
@@ -68,7 +76,7 @@ def build_apply_result(plan: Any, execution_result: Any, *, exit_code: int) -> A
                 action=build_plan_action_result(
                     result.action,
                     plan_index=plan_index,
-                    execution_order=execution_order[id(result.action)],
+                    execution_order=execution_order_by_plan_index.get(plan_index, fallback_index + 1),
                 ),
                 status=status,
                 success=result.success,
@@ -82,10 +90,10 @@ def build_apply_result(plan: Any, execution_result: Any, *, exit_code: int) -> A
         skipped=sum(1 for action in actions if action.status == "skipped"),
     )
     return ApplyResult(
-        all_succeeded=execution_result.all_succeeded,
-        summary=execution_result.summary(),
+        all_succeeded=execution_result.all_succeeded if all_succeeded is None else all_succeeded,
+        summary=execution_result.summary() if summary is None else summary,
         exit_code=exit_code,
-        plan=build_plan_result(plan, exit_code=0 if plan.is_empty else 2),
+        plan=plan_result,
         counts=counts,
         actions=actions,
     )

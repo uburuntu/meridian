@@ -368,7 +368,133 @@ class TestApplyRunFailureSafety:
         assert payload["command"] == "apply"
         assert payload["status"] == "failed"
         assert payload["errors"][0]["code"] == "MERIDIAN_CONFIRMATION_REQUIRED"
+        assert payload["summary"]["text"] == "Apply requires explicit confirmation"
+        assert payload["data"]["all_succeeded"] is False
+        assert payload["data"]["summary"] == "Apply requires explicit confirmation"
         assert payload["data"]["plan"]["actions"][0]["kind"] == "add_client"
+
+    def test_apply_json_requires_explicit_drift_decision(self) -> None:
+        cluster = self._build_cluster_with_desired_clients()
+        extra_remove = PlanAction(
+            kind=PlanActionKind.REMOVE_CLIENT,
+            target="ghost",
+            detail="delete client ghost",
+            destructive=True,
+            from_extras=True,
+        )
+        plan = Plan(actions=[extra_remove])
+        buf = io.StringIO()
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.execute_plan") as execute,
+            redirect_stdout(buf),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                apply_run(yes=True, parallel=1, prune_extras="ask", json_output=True)
+
+        assert exc_info.value.exit_code == 2
+        execute.assert_not_called()
+        payload = json.loads(buf.getvalue())
+        assert payload["status"] == "failed"
+        assert payload["errors"][0]["code"] == "MERIDIAN_DRIFT_DECISION_REQUIRED"
+        assert payload["data"]["all_succeeded"] is False
+        assert payload["data"]["plan"]["actions"][0]["from_extras"] is True
+
+    def test_apply_json_suppresses_nested_fail_json(self) -> None:
+        cluster = self._build_cluster_with_desired_clients()
+        add_action = PlanAction(kind=PlanActionKind.ADD_CLIENT, target="alice", detail="create client alice")
+        plan = Plan(actions=[add_action])
+        buf = io.StringIO()
+
+        def handler_uses_fail(*_args: object, **_kwargs: object) -> None:
+            from meridian.console import fail
+
+            fail("Nested command failure", hint_type="system")
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply._handle_add_client", side_effect=handler_uses_fail),
+            patch.object(ClusterConfig, "save"),
+            redirect_stdout(buf),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                apply_run(yes=True, parallel=1, prune_extras="yes", json_output=True)
+
+        assert exc_info.value.exit_code == 3
+        payload, end = json.JSONDecoder().raw_decode(buf.getvalue())
+        assert buf.getvalue()[end:].strip() == ""
+        assert payload["command"] == "apply"
+        assert payload["status"] == "failed"
+        assert payload["data"]["actions"][0]["status"] == "failed"
+
+    def test_apply_json_state_save_failure_preserves_execution_result(self) -> None:
+        cluster = self._build_cluster_with_desired_clients()
+        add_action = PlanAction(kind=PlanActionKind.ADD_CLIENT, target="alice", detail="create client alice")
+        plan = Plan(actions=[add_action])
+        exec_result = ExecutionResult(results=[ActionResult(action=add_action, success=True)])
+        buf = io.StringIO()
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.execute_plan", return_value=exec_result),
+            patch.object(ClusterConfig, "save", side_effect=OSError("disk full")),
+            redirect_stdout(buf),
+        ):
+            with pytest.raises(typer.Exit) as exc_info:
+                apply_run(yes=True, parallel=1, prune_extras="yes", json_output=True)
+
+        assert exc_info.value.exit_code == 3
+        payload = json.loads(buf.getvalue())
+        assert payload["status"] == "failed"
+        assert payload["errors"][0]["code"] == "MERIDIAN_STATE_SAVE_FAILED"
+        assert payload["data"]["actions"][0]["status"] == "succeeded"
+        assert payload["data"]["all_succeeded"] is False
+
+    def test_apply_result_execution_order_is_stable_even_when_results_finish_out_of_order(self) -> None:
+        cluster = self._build_cluster_with_desired_clients()
+        first = PlanAction(kind=PlanActionKind.ADD_NODE, target="198.51.100.10", detail="provision first")
+        second = PlanAction(kind=PlanActionKind.ADD_NODE, target="198.51.100.11", detail="provision second")
+        plan = Plan(actions=[first, second])
+        exec_result = ExecutionResult(
+            results=[
+                ActionResult(action=second, success=True),
+                ActionResult(action=first, success=True),
+            ]
+        )
+        buf = io.StringIO()
+
+        with (
+            patch.object(ClusterConfig, "load", return_value=cluster),
+            patch("meridian.remnawave.MeridianPanel"),
+            patch("meridian.ssh.ServerConnection"),
+            patch("meridian.commands.apply.build_desired_state"),
+            patch("meridian.commands.apply.build_actual_state"),
+            patch("meridian.commands.apply.compute_plan", return_value=plan),
+            patch("meridian.commands.apply.execute_plan", return_value=exec_result),
+            patch.object(ClusterConfig, "save"),
+            redirect_stdout(buf),
+        ):
+            apply_run(yes=True, parallel=1, prune_extras="yes", json_output=True)
+
+        payload = json.loads(buf.getvalue())
+        by_target = {item["action"]["target"]: item["action"]["execution_order"] for item in payload["data"]["actions"]}
+        assert by_target == {"198.51.100.10": 1, "198.51.100.11": 2}
 
 
 class TestPruneExtras:
